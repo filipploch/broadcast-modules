@@ -20,10 +20,10 @@
     <div class="card-header">
         <h2>Wszystkie Zespoły</h2>
         <div class="actions">
-            <a href="{{ url_for('team.scrape_teams') }}" class="btn btn-success">
+            <a href="{{ url_for('scrape_teams') }}" class="btn btn-success">
                 🔍 Scrapuj nowe zespoły
             </a>
-            <a href="{{ url_for('team.create_team') }}" class="btn btn-primary">
+            <a href="{{ url_for('create_team') }}" class="btn btn-primary">
                 ➕ Dodaj ręcznie
             </a>
         </div>
@@ -53,22 +53,22 @@
                     </a>
                 </td>
                 <td>
-                    <img src="{{ url_for('static', filename=team.logo_path.replace('static/', '')) }}" 
-                         alt="{{ team.name }}" 
+                    <img src="{{ url_for('static', filename=team.logo_path.replace('static/', '')) }}"
+                         alt="{{ team.name }}"
                          style="height: 30px; max-width: 100px; object-fit: contain;">
                 </td>
                 <td>
                     <div class="actions">
-                        <a href="{{ url_for('team.view_team', team_id=team.id) }}" class="btn btn-primary btn-small">
+                        <a href="{{ url_for('view_team', team_id=team.id) }}" class="btn btn-primary btn-small">
                             Widok
                         </a>
-                        <a href="{{ url_for('team.edit_team', team_id=team.id) }}" class="btn btn-secondary btn-small">
+                        <a href="{{ url_for('edit_team', team_id=team.id) }}" class="btn btn-secondary btn-small">
                             Edytuj
                         </a>
-                        <form action="{{ url_for('team.delete_team', team_id=team.id) }}" 
+                        <form action="{{ url_for('delete_team', team_id=team.id) }}"
                               method="POST" 
                               style="display: inline;"
-                              onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ team.name }}?');">
+                              onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ name }}?');">
                             <button type="submit" class="btn btn-danger btn-small">Usuń</button>
                         </form>
                     </div>
@@ -80,7 +80,7 @@
     {% else %}
     <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
         Brak zespołów w bazie danych. 
-        <a href="{{ url_for('team.scrape_teams') }}" style="color: #3498db;">Rozpocznij scrapowanie</a>
+        <a href="{{ url_for('scrape_teams') }}" style="color: #3498db;">Rozpocznij scrapowanie</a>
     </p>
     {% endif %}
 </div>

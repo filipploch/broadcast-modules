@@ -140,7 +140,7 @@
         
         <div class="actions" style="justify-content: center; margin-top: 2rem;">
             {% if status.new_pending > 0 %}
-            <a href="{{ url_for('team.pending_teams') }}" class="btn btn-success">
+            <a href="{{ url_for('pending_teams') }}" class="btn btn-success">
                 📝 Uzupełnij {{ status.new_pending }} nowych zespołów
             </a>
             {% else %}
@@ -149,11 +149,11 @@
             </p>
             {% endif %}
             
-            <a href="{{ url_for('team.list_teams') }}" class="btn btn-primary">
+            <a href="{{ url_for('list_teams') }}" class="btn btn-primary">
                 Zobacz Listę Zespołów
             </a>
             
-            <form action="{{ url_for('team.clear_scrape_status') }}" method="POST" style="display: inline;">
+            <form action="{{ url_for('clear_scrape_status') }}" method="POST" style="display: inline;">
                 <button type="submit" class="btn btn-secondary">Wyczyść Status</button>
             </form>
         </div>
@@ -170,10 +170,10 @@
         </div>
         
         <div class="actions" style="justify-content: center;">
-            <a href="{{ url_for('team.scrape_teams') }}" class="btn btn-primary">
+            <a href="{{ url_for('scrape_teams') }}" class="btn btn-primary">
                 🔄 Spróbuj Ponownie
             </a>
-            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">
                 ← Powrót
             </a>
         </div>
@@ -185,7 +185,7 @@
         <h2 style="text-align: center; color: #7f8c8d;">Brak Aktywnego Scrapowania</h2>
         <p style="text-align: center;">
             Nie trwa żadne scrapowanie. 
-            <a href="{{ url_for('team.scrape_teams') }}">Rozpocznij scrapowanie</a>
+            <a href="{{ url_for('scrape_teams') }}">Rozpocznij scrapowanie</a>
         </p>
         {% endif %}
     </div>
@@ -208,7 +208,7 @@
         </ul>
     </div>
     {% endif %}
-    <form action="{{ url_for('team.stop_scraping') }}" method="POST" style="display: inline;">
+    <form action="{{ url_for('stop_scraping') }}" method="POST" style="display: inline;">
         <button type="submit" class="btn btn-secondary">Zatrzymaj scraping</button>
     </form>
 </div>

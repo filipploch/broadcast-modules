@@ -6,7 +6,7 @@
 <div class="card">
     <div class="card-header">
         <h2>Edytuj Zespół: {{ team.name }}</h2>
-        <a href="{{ url_for('team.view_team', team_id=team.id) }}" class="btn btn-secondary">← Powrót</a>
+        <a href="{{ url_for('view_team', team_id=team.id) }}" class="btn btn-secondary">← Powrót</a>
     </div>
     
     <form method="POST">
@@ -92,7 +92,7 @@
 
         <div class="actions">
             <button type="submit" class="btn btn-success">💾 Zapisz Zmiany</button>
-            <a href="{{ url_for('team.view_team', team_id=team.id) }}" class="btn btn-secondary">Anuluj</a>
+            <a href="{{ url_for('view_team', team_id=team.id) }}" class="btn btn-secondary">Anuluj</a>
         </div>
     </form>
 </div>

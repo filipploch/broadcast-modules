@@ -1,7 +1,7 @@
 """Application factory - UPDATED VERSION"""
 from flask import Flask, Blueprint
 import logging
-from app.app_routes import app_bp
+# from app.app_routes import app_bp
 
 
 
@@ -48,9 +48,6 @@ def create_app(config_name='default'):
 
 
         from app import routes, socketio_events
-        from app.routes import team_bp
-        app.register_blueprint(app_bp)
-        app.register_blueprint(team_bp)
 
     # Initialize managers in background thread
     import threading

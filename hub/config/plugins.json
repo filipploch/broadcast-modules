@@ -32,5 +32,25 @@
     "heartbeat_timeout": 30,
     "is_critical": false,
     "description": "External camera recorder plugin running on Debian machine"
+  },
+  "obs-ws-plugin": {
+    "id": "obs-ws-plugin",
+    "name": "OBS WebSocket Plugin",
+    "type": "local",
+    "executable_path": "../plugins/obs-ws-plugin/obs-ws-plugin.exe",
+    "working_dir": "../plugins/obs-ws-plugin",
+    "args": [],
+    "env": [
+      "PLUGIN_ID=obs-ws-plugin",
+      "HUB_URL=ws://localhost:8080/ws"
+    ],
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 1000,
+    "health_check_interval": 10,
+    "is_critical": true,
+    "description": "Transparent proxy between HUB and OBS Studio WebSocket"
   }
 }

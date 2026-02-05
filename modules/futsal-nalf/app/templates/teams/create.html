@@ -13,7 +13,7 @@
         <p style="margin-top: 0.5rem;">
             Ta opcja pozwala dodać zespół bez scrapowania. Wszystkie pola są wymagane.
             Jeśli chcesz dodać zespoły z NALF, użyj funkcji 
-            <a href="{{ url_for('team.scrape_teams') }}" style="color: #3498db;">scrapowania</a>.
+            <a href="{{ url_for('scrape_teams') }}" style="color: #3498db;">scrapowania</a>.
         </p>
     </div>
     
@@ -98,7 +98,7 @@
         
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Dodaj Zespół</button>
-            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Anuluj</a>
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">Anuluj</a>
         </div>
     </form>
 </div>

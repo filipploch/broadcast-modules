@@ -20,6 +20,7 @@ _hub_client = None
 _game_manager = None
 _recorder_manager = None
 _timer_manager = None
+_scraper_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
 
@@ -36,8 +37,7 @@ def initialize_all_managers(app):
     5. Other managers (Timer/Game/Recorder) lazy init when needed
     """
     # global _plugin_manager, _hub_client, _game_manager, _recorder_manager
-    global _hub_client, _game_manager, _recorder_manager
-    global _timer_manager, _initialized
+    global _hub_client, _game_manager, _recorder_manager, _timer_manager, _scraper_manager, _initialized
 
     with _initialization_lock:
         if _initialized:

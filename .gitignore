@@ -12,3 +12,4 @@ instance/*.*
 !**/static/images/logos/default.png
 *.md
 *.exe*
+*.*~

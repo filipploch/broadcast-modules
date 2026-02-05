@@ -10,7 +10,7 @@
     </div>
     <p style="padding: 1rem;">
         Scraper działa w tle. 
-        <a href="{{ url_for('team.scrape_status') }}" class="btn btn-primary">Zobacz Status →</a>
+        <a href="{{ url_for('scrape_status') }}" class="btn btn-primary">Zobacz Status →</a>
     </p>
 </div>
 {% endif %}
@@ -51,7 +51,7 @@
         
         <div class="actions">
             <button type="submit" class="btn btn-success">🔍 Rozpocznij Scrapowanie</button>
-            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Anuluj</a>
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">Anuluj</a>
         </div>
     </form>
 </div>

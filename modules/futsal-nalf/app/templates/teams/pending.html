@@ -7,13 +7,13 @@
     <div class="card-header">
         <h2>Zespoły Wymagające Uzupełnienia ({{ pending_teams|length }})</h2>
         <div class="actions">
-            <form action="{{ url_for('team.clear_pending') }}" 
+            <form action="{{ url_for('clear_pending') }}"
                   method="POST" 
                   style="display: inline;"
                   onsubmit="return confirm('Czy na pewno chcesz wyczyścić listę? Zespoły nie zostaną dodane do bazy.');">
                 <button type="submit" class="btn btn-danger">🗑️ Wyczyść listę</button>
             </form>
-            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Powrót</a>
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">Powrót</a>
         </div>
     </div>
     
@@ -52,7 +52,7 @@
                     </span>
                 </td>
                 <td>
-                    <a href="{{ url_for('team.complete_team', team_url=team.team_url) }}" class="btn btn-success btn-small">
+                    <a href="{{ url_for('complete_team', team_url=team.team_url) }}" class="btn btn-success btn-small">
                         ✏️ Uzupełnij dane
                     </a>
                 </td>
