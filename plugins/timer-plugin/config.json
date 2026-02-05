@@ -1,0 +1,10 @@
+{
+  "plugin_id": "timer-plugin",
+  "plugin_name": "Timer Plugin",
+  "hub_url": "ws://localhost:8080/ws",
+  "port": 0,
+  "auto_reconnect": true,
+  "max_reconnects": 10,
+  "update_interval_ms": 100,         
+  "broadcast_interval_ms": 1000
+}

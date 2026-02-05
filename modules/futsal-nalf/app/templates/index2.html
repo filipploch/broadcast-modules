@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Panel</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/timer.css') }}">
+</head>
+<body>
+<div id="timers-container" class="module-frame">
+<!--  <div id="section-timer">-->
+<!--   <div class="main-timer">-->
+<!--    <div id="timer-min-setting">-->
+<!--     <button class="small-button" id="btn-plus-1min">+</button>-->
+<!--     <button class="small-button" id="btn-minus-1min">-</button>-->
+<!--    </div>-->
+<!--    <div id="newTimer" class="panel-time-display timer-time data-time-seconds data-time-added-seconds" style="background-color:rgb(247,52,52)">20:00</div>-->
+<!--    <div id="timer-sec-setting">-->
+<!--     <button class="small-button" id="btn-plus-1s">+</button>-->
+<!--     <button class="small-button" id="btn-minus-1s">-</button>-->
+<!--    </div>-->
+<!--   </div>-->
+<!--   <div>-->
+<!--    <button id="start-btn" onclick="startTimer(newTimer);">Start</button>-->
+<!--    <button id="pause-btn" onclick="pauseTimer(newTimer);">Pause</button>-->
+<!--    <button id="reset-btn" onclick="resumeTimer(newTimer);">Resume</button>-->
+<!--   </div>-->
+<!--   <div>-->
+<!--    <button id="btn-start-match">Start:Mecz</button>-->
+<!--    <button id="btn-stop-match" onclick="stopTimer(newTimer);">Stop:Mecz</button>-->
+<!--   </div>-->
+<!--  </div>-->
+ </div>
+ <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <!-- Main app JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/timer.js') }}"></script>
+</body>
+</html>
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 

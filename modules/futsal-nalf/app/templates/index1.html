@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="notifications"></div>
+
+<h2>Status Pluginów</h2>
+
+{% if plugins %}
+<ul class="plugins-list">
+    {% for plugin in plugins %}
+    <li class="plugin-item {{ plugin.status }}" data-plugin-id="{{ plugin.id }}">
+        <div class="plugin-info">
+            <div class="plugin-name">{{ plugin.name }}</div>
+            <div class="plugin-meta">
+                <strong>Type:</strong> {{ plugin.type }} | 
+                <strong>Priority:</strong> {{ plugin.startup_priority }}
+            </div>
+        </div>
+        <span class="plugin-status status-{{ plugin.status }}">{{ plugin.status }}</span>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="alert alert-warning">
+    <p>Brak pluginów w bazie danych. Uruchom: <code>python db_init.py</code></p>
+</div>
+{% endif %}
+
+<h2>Kontrolki</h2>
+
+<div class="controls">
+    <button id="btn-start-recording" class="record">🔴 Start Recording</button>
+    <button id="btn-stop-recording" class="stop">⏹️ Stop Recording</button>
+    <button id="btn-goal-home" class="goal">⚽ Gol Gospodarze</button>
+    <button id="btn-goal-away" class="goal">⚽ Gol Goście</button>
+</div>
+<div class="module-frame">
+ <div id="section-timer">
+ <div class="timer">
+ <div id="timer-min-setting">
+ <button class="small-button" id="add-min-btn">+</button>
+ <button class="small-button" id="sub-min-btn">-</button>
+ </div>
+ <div id="timer-display" class="panel-time-display pause data-time-seconds data-time-added-seconds" style="background-color:rgb(247,52,52)">20:00</div>
+ <div id="timer-sec-setting">
+ <button class="small-button" id="add-sec-btn">+</button>
+ <button class="small-button" id="sub-sec-btn">-</button>
+ </div>
+ </div>
+ <div>
+ <button id="start-btn">Start</button>
+ <button id="pause-btn" disabled>Pause</button>
+ <button id="reset-btn">Reset</button>
+ </div>
+ </div>
+ </div>
+
+{% if match %}
+<h2>Mecz</h2>
+<div class="match-display">
+    <div class="match-teams">
+        <div class="team">
+            <div class="team-name">{{ match.home_team.name }}</div>
+            <div class="team-score" id="score-home">{{ match.score_home }}</div>
+        </div>
+        <div class="match-separator">-</div>
+        <div class="team">
+            <div class="team-name">{{ match.away_team.name }}</div>
+            <div class="team-score" id="score-away">{{ match.score_away }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

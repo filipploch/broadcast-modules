@@ -1,0 +1,124 @@
+{% extends "teams/base.html" %}
+
+{% block title %}{{ team.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>{{ team.name }}</h2>
+        <div class="actions">
+            <a href="{{ url_for('team.edit_team', team_id=team.id) }}" class="btn btn-primary">✏️ Edytuj</a>
+            <form action="{{ url_for('team.delete_team', team_id=team.id) }}" 
+                  method="POST" 
+                  style="display: inline;"
+                  onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ team.name }}? Tej operacji nie można cofnąć.');">
+                <button type="submit" class="btn btn-danger">🗑️ Usuń</button>
+            </form>
+            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">← Powrót</a>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
+        <!-- Logo Section -->
+        <div>
+            <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; text-align: center;">
+                <img src="{{ url_for('static', filename=team.logo_path.replace('static/', '')) }}" 
+                     alt="{{ team.name }}"
+                     style="max-width: 100%; max-height: 200px; object-fit: contain;"
+                     onerror="this.src='{{ url_for('static', filename='images/logos/default.png') }}'">
+            </div>
+            <p style="text-align: center; margin-top: 1rem; color: #7f8c8d; font-size: 0.85rem;">
+                Logo zespołu
+            </p>
+        </div>
+        
+        <!-- Details Section -->
+        <div>
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">Szczegóły Zespołu</h3>
+            <table style="width: 100%;">
+                <tr>
+                    <td style="width: 40%; padding: 0.75rem; font-weight: 600; background: #f8f9fa;">Pełna nazwa:</td>
+                    <td style="padding: 0.75rem;">{{ team.name }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.75rem; font-weight: 600; background: #f8f9fa;">Nazwa skrócona (20):</td>
+                    <td style="padding: 0.75rem;">{{ team.name_20 }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.75rem; font-weight: 600; background: #f8f9fa;">Skrót (TLA):</td>
+                    <td style="padding: 0.75rem;"><strong style="font-size: 1.2rem; color: #3498db;">{{ team.short_name }}</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.75rem; font-weight: 600; background: #f8f9fa;">URL NALF:</td>
+                    <td style="padding: 0.75rem;">
+                        <a href="{{ team.team_url }}" target="_blank" style="color: #3498db; text-decoration: none;">
+                            Zobacz na NALF →
+                        </a>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.75rem; font-weight: 600; background: #f8f9fa;">Ścieżka logo:</td>
+                    <td style="padding: 0.75rem; font-family: monospace; font-size: 0.85rem;">{{ team.logo_path }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Informacje Systemowe</h2>
+    </div>
+    
+    <table>
+        <tr>
+            <td style="width: 30%; font-weight: 600; background: #f8f9fa;">ID w bazie danych:</td>
+            <td>{{ team.id }}</td>
+        </tr>
+        <tr>
+            <td style="font-weight: 600; background: #f8f9fa;">Data utworzenia:</td>
+            <td>{{ team.created_at.strftime('%Y-%m-%d %H:%M:%S') if team.created_at else 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td style="font-weight: 600; background: #f8f9fa;">Ostatnia aktualizacja:</td>
+            <td>{{ team.updated_at.strftime('%Y-%m-%d %H:%M:%S') if team.updated_at else 'N/A' }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Powiązania</h2>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; text-align: center;">
+            <h3 style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem;">
+                {{ team.league_participations.count() }}
+            </h3>
+            <p style="color: #7f8c8d;">Udział w ligach</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; text-align: center;">
+            <h3 style="font-size: 2rem; color: #27ae60; margin-bottom: 0.5rem;">
+                {{ team.home_games.count() }}
+            </h3>
+            <p style="color: #7f8c8d;">Mecze u siebie</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; text-align: center;">
+            <h3 style="font-size: 2rem; color: #e74c3c; margin-bottom: 0.5rem;">
+                {{ team.away_games.count() }}
+            </h3>
+            <p style="color: #7f8c8d;">Mecze wyjazdowe</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; text-align: center;">
+            <h3 style="font-size: 2rem; color: #9b59b6; margin-bottom: 0.5rem;">
+                {{ team.home_games.count() + team.away_games.count() }}
+            </h3>
+            <p style="color: #7f8c8d;">Wszystkie mecze</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

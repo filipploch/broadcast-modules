@@ -1,0 +1,88 @@
+{% extends "teams/base.html" %}
+
+{% block title %}Scrapowanie Zespołów{% endblock %}
+
+{% block content %}
+{% if scraping_status.status == 'in_progress' %}
+<div class="card" style="background: #fff3cd; border: 2px solid #ffc107;">
+    <div class="card-header" style="background: #ffc107; color: #856404;">
+        <h2>⏳ Scrapowanie W Toku</h2>
+    </div>
+    <p style="padding: 1rem;">
+        Scraper działa w tle. 
+        <a href="{{ url_for('team.scrape_status') }}" class="btn btn-primary">Zobacz Status →</a>
+    </p>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h2>Scrapuj Zespoły z NALF</h2>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="league_urls">
+                URL Tabel Ligowych
+                <small>Podaj jeden lub więcej URL (każdy w nowej linii lub oddzielone przecinkami)</small>
+            </label>
+            <textarea 
+                id="league_urls" 
+                name="league_urls" 
+                rows="8" 
+                required
+                placeholder="https://nalffutsal.pl/?page_id=16&#10;https://nalffutsal.pl/?page_id=36">{% for url in default_urls %}{{ url }}
+{% endfor %}</textarea>
+            <small>
+                💡 Domyślne URL-e to strony tabel ligowych NALF. Możesz dodać więcej lub je zmodyfikować.
+            </small>
+        </div>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+            <strong>ℹ️ Jak to działa (⚡ Scraper w tle):</strong>
+            <ol style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                <li>System uruchomi scraper w osobnym wątku (nie blokuje przeglądarki)</li>
+                <li><strong>Auto-update:</strong> Zespoły już istniejące mają nazwy automatycznie aktualizowane</li>
+                <li>Nowe zespoły będą wymagały uzupełnienia danych</li>
+                <li>Możesz zamknąć przeglądarkę - scraper działa w tle na serwerze</li>
+                <li>Status scrapowania możesz sprawdzić na dedykowanej stronie</li>
+            </ol>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">🔍 Rozpocznij Scrapowanie</button>
+            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Przykładowe Strony NALF</h2>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Liga</th>
+                <th>URL</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Ekstraklasa</td>
+                <td><a href="https://nalffutsal.pl/?page_id=16" target="_blank">https://nalffutsal.pl/?page_id=16</a></td>
+            </tr>
+            <tr>
+                <td>I Liga</td>
+                <td><a href="https://nalffutsal.pl/?page_id=36" target="_blank">https://nalffutsal.pl/?page_id=36</a></td>
+            </tr>
+            <tr>
+                <td colspan="2" style="font-style: italic; color: #7f8c8d;">
+                    💡 Możesz dodać dowolną stronę z tabelą ligową NALF używając tego samego formatu
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

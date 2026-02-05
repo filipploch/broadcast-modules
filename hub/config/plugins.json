@@ -1,0 +1,36 @@
+{
+  "timer-plugin": {
+    "id": "timer-plugin",
+    "name": "Timer Plugin",
+    "type": "local",
+    "executable_path": "../plugins/timer-plugin/timer-plugin.exe",
+    "working_dir": "../plugins/timer-plugin",
+    "args": [],
+    "env": [
+      "PLUGIN_ID=timer-plugin",
+      "HUB_URL=ws://localhost:8080/ws"
+    ],
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 1000,
+    "health_check_interval": 10,
+    "is_critical": false
+  },
+  "recorder-plugin": {
+    "id": "recorder-plugin",
+    "name": "Camera Recorder Plugin",
+    "type": "external",
+    "host": "broadcast-hub.local",
+    "port": 8080,
+    "protocol": "ws",
+    "auto_start": false,
+    "restart_on_crash": false,
+    "max_restarts": 0,
+    "health_check_interval": 15,
+    "heartbeat_timeout": 30,
+    "is_critical": false,
+    "description": "External camera recorder plugin running on Debian machine"
+  }
+}

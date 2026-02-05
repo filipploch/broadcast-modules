@@ -1,0 +1,7 @@
+{
+  "plugin_id": "recorder-plugin",
+  "hub_url": "ws://broadcast-hub.local:8080/ws",
+  "heartbeat_interval_ms": 5000,
+  "reconnect_interval_ms": 5000,
+  "max_reconnects": 0
+}

@@ -1,0 +1,90 @@
+{% extends "teams/base.html" %}
+
+{% block title %}Zespoły do Uzupełnienia{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Zespoły Wymagające Uzupełnienia ({{ pending_teams|length }})</h2>
+        <div class="actions">
+            <form action="{{ url_for('team.clear_pending') }}" 
+                  method="POST" 
+                  style="display: inline;"
+                  onsubmit="return confirm('Czy na pewno chcesz wyczyścić listę? Zespoły nie zostaną dodane do bazy.');">
+                <button type="submit" class="btn btn-danger">🗑️ Wyczyść listę</button>
+            </form>
+            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Powrót</a>
+        </div>
+    </div>
+    
+    <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>ℹ️ Instrukcja:</strong>
+        <p style="margin-top: 0.5rem;">
+            Poniżej znajdują się zespoły pobrane ze scrapowania. Kliknij na nazwie zespołu, aby uzupełnić brakujące dane.
+            Po uzupełnieniu zespół zostanie dodany do bazy danych.
+        </p>
+    </div>
+    
+    {% if pending_teams %}
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Nazwa Zespołu</th>
+                <th>Źródło (URL)</th>
+                <th>Status</th>
+                <th>Akcja</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in pending_teams %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ team.name }}</strong></td>
+                <td>
+                    <a href="{{ team.team_url }}" target="_blank" style="color: #3498db; text-decoration: none;">
+                        Strona NALF →
+                    </a>
+                </td>
+                <td>
+                    <span style="background: #ffc107; color: #856404; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.85rem;">
+                        ⏳ Wymaga uzupełnienia
+                    </span>
+                </td>
+                <td>
+                    <a href="{{ url_for('team.complete_team', team_url=team.team_url) }}" class="btn btn-success btn-small">
+                        ✏️ Uzupełnij dane
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak zespołów do uzupełnienia.
+    </p>
+    {% endif %}
+</div>
+
+{% if pending_teams %}
+<div class="card">
+    <div class="card-header">
+        <h2>Postęp</h2>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+            <span>Zespoły do uzupełnienia:</span>
+            <strong>{{ pending_teams|length }}</strong>
+        </div>
+        <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.3s;"></div>
+        </div>
+        <small style="color: #7f8c8d; margin-top: 0.5rem; display: block;">
+            Po uzupełnieniu wszystkich zespołów zostaniesz przekierowany do listy zespołów.
+        </small>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

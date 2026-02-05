@@ -1,0 +1,174 @@
+{% extends "teams/base.html" %}
+
+{% block title %}Uzupełnij Dane Zespołu{% endblock %}
+
+{% block extra_css %}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Uzupełnij Dane Zespołu</h2>
+    </div>
+    
+    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>📋 Dane ze scrapowania:</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>Nazwa:</strong> {{ team.name }}</li>
+            <li><strong>URL:</strong> <a href="{{ team.team_url }}" target="_blank" style="color: #3498db;">{{ team.team_url }}</a></li>
+        </ul>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">
+                Pełna Nazwa Zespołu
+                <small>Ta wartość została pobrana ze scrapowania</small>
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                value="{{ team.name }}" 
+                readonly
+                style="background: #f5f5f5; cursor: not-allowed;">
+        </div>
+        
+        <div class="form-group">
+            <label for="name_20">
+                Nazwa Skrócona (max 20 znaków) *
+                <small>Krótka nazwa do wyświetlania w tabelach i raportach</small>
+            </label>
+            <input 
+                type="text" 
+                id="name_20" 
+                name="name_20" 
+                maxlength="20"
+                required
+                placeholder="np. {{ team.name[:20] }}"
+                value="{{ team.name[:20] }}">
+            <small id="name20_counter">0 / 20 znaków</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="short_name">
+                Skrót 3-literowy (TLA) *
+                <small>Trzyliterowy kod zespołu (np. KRA, WAR, POZ)</small>
+            </label>
+            <input 
+                type="text" 
+                id="short_name" 
+                name="short_name"
+                minlength="3"
+                maxlength="3"
+                required
+                placeholder="np. {{ team.name[:3]|upper }}"
+                value="{{ team.name[:3]|upper }}"
+                style="text-transform: uppercase;">
+            <small>Wpisz dokładnie 3 litery (A-Z)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="logo_path">
+                Ścieżka do Logo
+                <small>Domyślnie: static/images/logos/default.png</small>
+            </label>
+            <input
+                type="text"
+                id="logo_path"
+                name="logo_path"
+                value="static/images/logos/default.png"
+                placeholder="static/images/logos/nazwa_zespolu.png">
+            <div id="selected-logo-preview">
+                <img src="/static/images/logos/default.png" alt="Domyślne logo" style="max-width: 200px;">
+            </div>
+            <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
+
+            <small>
+                💡 Możesz później zmienić logo w edycji zespołu.
+                Logo powinno być umieszczone w katalogu static/images/logos/
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label>
+                Podgląd
+            </label>
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; border: 1px solid #e0e0e0;">
+                <table style="width: 100%;">
+                    <tr>
+                        <td style="width: 30%; font-weight: 600;">Skrót:</td>
+                        <td><span id="preview_short_name" style="font-weight: bold; color: #2c3e50;">---</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Nazwa 20:</td>
+                        <td><span id="preview_name_20" style="color: #2c3e50;">---</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Pełna nazwa:</td>
+                        <td>{{ team.name }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Dodaj Zespół do Bazy</button>
+            <a href="{{ url_for('team.pending_teams') }}" class="btn btn-secondary">Powrót do Listy</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>💡 Wskazówki</h2>
+    </div>
+    
+    <ul style="margin-left: 1.5rem; line-height: 2;">
+        <li><strong>Nazwa 20:</strong> Używana w raportach i tabelach gdzie brakuje miejsca na pełną nazwę</li>
+        <li><strong>Skrót 3-literowy:</strong> Unikalny kod zespołu (TLA - Three Letter Acronym)</li>
+        <li><strong>Logo:</strong> Możesz użyć domyślnego logo i zmienić je później podczas edycji</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block modal_content %}
+    <div id="logos-container" class="modal-content nodisplayed">
+        {% if logos %}
+            {% for logo in logos %}
+                <div class="logo-option">
+                    <input type="radio" class="invisible" id="logo-{{ loop.index }}" name="selected-logo" value="{{ logo.path[1:] }}">
+                    <label for="logo-{{ loop.index }}">
+                        <img src="{{ url_for('static', filename=logo.path[8:]) }}"
+                             alt="{{ logo.filename[:-4] }}"
+                             ondblclick="getSelectedLogo();"
+                             class="logo-image">
+                        <br>
+                        {{ logo.filename[:-4] }}
+                    </label>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Brak dostępnych logo w folderze.</p>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Live preview
+    document.getElementById('name_20').addEventListener('input', function() {
+        const value = this.value;
+        document.getElementById('preview_name_20').textContent = value || '---';
+        document.getElementById('name20_counter').textContent = value.length + ' / 20 znaków';
+    });
+    
+    document.getElementById('short_name').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+        document.getElementById('preview_short_name').textContent = this.value || '---';
+    });
+    
+    // Initialize preview
+    document.getElementById('name_20').dispatchEvent(new Event('input'));
+    document.getElementById('short_name').dispatchEvent(new Event('input'));
+</script>
+{% endblock %}

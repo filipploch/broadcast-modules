@@ -1,0 +1,141 @@
+/* ============================================
+   OVERLAY STYLES - For OBS Browser Source
+   ============================================ */
+
+body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    overflow: hidden;
+}
+
+/* === SCOREBOARD OVERLAY === */
+.scoreboard {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 20px 30px;
+    border-radius: 12px;
+    color: white;
+    font-size: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    min-width: 250px;
+}
+
+.scoreboard-title {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.scoreboard-score {
+    font-size: 2em;
+    font-weight: 700;
+    text-align: center;
+    color: #10b981;
+}
+
+.scoreboard-teams {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 0.8em;
+    opacity: 0.9;
+}
+
+/* === TIMER OVERLAY === */
+.timer-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 15px 25px;
+    border-radius: 10px;
+    color: white;
+    font-size: 48px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.timer-overlay.running {
+    color: #10b981;
+}
+
+.timer-overlay.paused {
+    color: #f59e0b;
+}
+
+.timer-overlay.stopped {
+    color: #ef4444;
+}
+
+/* === PLAYER STATS OVERLAY === */
+.player-stats {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 15px 30px;
+    border-radius: 10px;
+    color: white;
+    display: flex;
+    gap: 30px;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 2em;
+    font-weight: 700;
+    color: #10b981;
+}
+
+.stat-label {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    opacity: 0.8;
+    margin-top: 5px;
+}
+
+/* === ANIMATIONS === */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.scoreboard,
+.timer-overlay {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Pulse animation for timer when running */
+.timer-overlay.running {
+    animation: pulse 2s ease-in-out infinite;
+}

@@ -1,0 +1,142 @@
+{% extends "teams/base.html" %}
+
+{% block title %}Dodaj Zespół Ręcznie{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Dodaj Nowy Zespół Ręcznie</h2>
+    </div>
+    
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>⚠️ Uwaga:</strong>
+        <p style="margin-top: 0.5rem;">
+            Ta opcja pozwala dodać zespół bez scrapowania. Wszystkie pola są wymagane.
+            Jeśli chcesz dodać zespoły z NALF, użyj funkcji 
+            <a href="{{ url_for('team.scrape_teams') }}" style="color: #3498db;">scrapowania</a>.
+        </p>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">
+                Pełna Nazwa Zespołu *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                required
+                maxlength="100"
+                placeholder="np. IGLOMEN Kraków">
+        </div>
+        
+        <div class="form-group">
+            <label for="name_20">
+                Nazwa Skrócona (max 20 znaków) *
+            </label>
+            <input 
+                type="text" 
+                id="name_20" 
+                name="name_20" 
+                maxlength="20"
+                required
+                placeholder="np. IGLOMEN">
+            <small id="name20_counter">0 / 20 znaków</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="short_name">
+                Skrót 3-literowy (TLA) *
+            </label>
+            <input 
+                type="text" 
+                id="short_name" 
+                name="short_name" 
+                minlength="3"
+                maxlength="3"
+                required
+                placeholder="np. IGL"
+                style="text-transform: uppercase;">
+            <small>Wpisz dokładnie 3 litery (A-Z)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="team_url">
+                URL Zespołu NALF *
+            </label>
+            <input 
+                type="url" 
+                id="team_url" 
+                name="team_url" 
+                required
+                placeholder="https://nalffutsal.pl/?sp_team=nazwa-zespolu">
+            <small>Unikalny URL ze strony NALF</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="logo_path">
+                Ścieżka do Logo
+                <small>Domyślnie: static/images/logos/default.png</small>
+            </label>
+            <input
+                type="text"
+                id="logo_path"
+                name="logo_path"
+                value="static/images/logos/default.png"
+                placeholder="static/images/logos/nazwa_zespolu.png">
+            <div id="selected-logo-preview">
+                <img src="/static/images/logos/default.png" alt="Domyślne logo" style="max-width: 200px;">
+            </div>
+            <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
+
+            <small>
+                💡 Możesz później zmienić logo w edycji zespołu.
+                Logo powinno być umieszczone w katalogu static/images/logos/
+            </small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Dodaj Zespół</button>
+            <a href="{{ url_for('team.list_teams') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block modal_content %}
+    <div id="logos-container" class="modal-content nodisplayed">
+        {% if logos %}
+            {% for logo in logos %}
+                <div class="logo-option">
+                    <input type="radio" class="invisible" id="logo-{{ loop.index }}" name="selected-logo" value="{{ logo.path[1:] }}">
+                    <label for="logo-{{ loop.index }}">
+                        <img src="{{ url_for('static', filename=logo.path[8:]) }}"
+                             alt="{{ logo.filename[:-4] }}"
+                             ondblclick="getSelectedLogo();"
+                             class="logo-image">
+                        <br>
+                        {{ logo.filename[:-4] }}
+                    </label>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Brak dostępnych logo w folderze.</p>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Character counter for name_20
+    document.getElementById('name_20').addEventListener('input', function() {
+        const value = this.value;
+        document.getElementById('name20_counter').textContent = value.length + ' / 20 znaków';
+    });
+    
+    // Auto-uppercase for short_name
+    document.getElementById('short_name').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+    });
+</script>
+{% endblock %}

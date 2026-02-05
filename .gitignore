@@ -1,0 +1,14 @@
+**/.vs/
+**/.vscode/
+**/_pobrane/
+**/_work/
+**/__pycache__/
+**/.venv/
+**/.idea/
+instance/*.*
+*.zip
+*.db
+**/static/images/logos/*
+!**/static/images/logos/default.png
+*.md
+*.exe*

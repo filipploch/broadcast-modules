@@ -1,0 +1,21 @@
+.nodisplayed {
+  display: none !important;
+}
+
+.invisible {
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.small-button {
+  width: 24px;
+  font-weight: bold;
+  height: 22px;
+}
+
+.header-button {
+  right: 3px;
+  position: absolute;
+  top: 3px;
+}
