@@ -8,7 +8,7 @@ import (
 // serveHome serves a simple home page
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	
+
 	html := `
 <!DOCTYPE html>
 <html>
@@ -111,21 +111,41 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 // serveStatus serves hub status as JSON
 func serveStatus(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
-	status := hub.GetPluginStatus()
-	
+
+	hub.mu.RLock()
+	status := map[string]interface{}{
+		"main_module_connected": hub.MainModule != nil && hub.MainModule.IsActive,
+		"total_plugins":         len(hub.Plugins),
+		"expected_plugins":      len(hub.ExpectedPlugins),
+	}
+
+	// List connected plugins
+	connectedPlugins := make([]string, 0, len(hub.Plugins))
+	for id := range hub.Plugins {
+		connectedPlugins = append(connectedPlugins, id)
+	}
+	status["connected_plugins"] = connectedPlugins
+
+	// List expected plugins
+	expectedPlugins := make([]string, 0, len(hub.ExpectedPlugins))
+	for id := range hub.ExpectedPlugins {
+		expectedPlugins = append(expectedPlugins, id)
+	}
+	status["expected_plugins"] = expectedPlugins
+	hub.mu.RUnlock()
+
 	// Add plugin manager status if available
 	if hub.PluginManager != nil {
 		status["plugin_manager"] = hub.PluginManager.GetAllStatus()
 	}
-	
+
 	json.NewEncoder(w).Encode(status)
 }
 
 // serveHealth serves health monitoring status as JSON
 func serveHealth(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if hub.HealthMonitor == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -133,11 +153,11 @@ func serveHealth(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	health := map[string]interface{}{
 		"summary": hub.HealthMonitor.GetHealthSummary(),
 		"plugins": hub.HealthMonitor.GetAllHealth(),
 	}
-	
+
 	json.NewEncoder(w).Encode(health)
 }

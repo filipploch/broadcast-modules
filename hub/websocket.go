@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -23,4 +24,7 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	module := NewModule(hub, conn)
 	hub.Register <- module
+
+	go module.ReadPump()  // ← TO MUSI BYĆ!
+	go module.WritePump() // ← TO MUSI BYĆ!
 }

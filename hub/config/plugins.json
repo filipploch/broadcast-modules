@@ -18,21 +18,6 @@
     "health_check_interval": 10,
     "is_critical": false
   },
-  "recorder-plugin": {
-    "id": "recorder-plugin",
-    "name": "Camera Recorder Plugin",
-    "type": "external",
-    "host": "broadcast-hub.local",
-    "port": 8080,
-    "protocol": "ws",
-    "auto_start": false,
-    "restart_on_crash": false,
-    "max_restarts": 0,
-    "health_check_interval": 15,
-    "heartbeat_timeout": 30,
-    "is_critical": false,
-    "description": "External camera recorder plugin running on Debian machine"
-  },
   "obs-ws-plugin": {
     "id": "obs-ws-plugin",
     "name": "OBS WebSocket Plugin",
@@ -50,7 +35,21 @@
     "restart_delay_ms": 3000,
     "startup_delay_ms": 1000,
     "health_check_interval": 10,
-    "is_critical": true,
-    "description": "Transparent proxy between HUB and OBS Studio WebSocket"
+    "is_critical": true
+  },
+  "recorder-plugin": {
+    "id": "recorder-plugin",
+    "name": "Camera Recorder Plugin",
+    "type": "external",
+    "discovery_mode": "reverse",
+    "discovery_hostname": "debian.local",
+    "discovery_port": 9999,
+    "auto_start": true,
+    "restart_on_crash": false,
+    "max_restarts": 0,
+    "health_check_interval": 15,
+    "heartbeat_timeout": 30,
+    "is_critical": false,
+    "description": "External camera recorder plugin on Debian with reverse discovery"
   }
 }

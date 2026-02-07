@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -14,40 +13,52 @@ import (
 
 // PluginConfig represents plugin configuration
 type PluginConfig struct {
-	ID                  string   `json:"id"`
-	Name                string   `json:"name"`
-	Type                string   `json:"type"` // "local", "external"
-	ExecutablePath      string   `json:"executable_path"`
-	WorkingDir          string   `json:"working_dir"`
-	Args                []string `json:"args"`
-	Env                 []string `json:"env"`
-	AutoStart           bool     `json:"auto_start"`
-	RestartOnCrash      bool     `json:"restart_on_crash"`
-	MaxRestarts         int      `json:"max_restarts"`
-	RestartDelay        int      `json:"restart_delay_ms"`      // milliseconds
-	StartupDelay        int      `json:"startup_delay_ms"`      // milliseconds
-	HealthCheckInterval int      `json:"health_check_interval"` // seconds
-	IsCritical          bool     `json:"is_critical"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"` // "local" or "external"
+
+	// Local plugin fields
+	ExecutablePath string   `json:"executable_path"`
+	WorkingDir     string   `json:"working_dir"`
+	Args           []string `json:"args"`
+	Env            []string `json:"env"`
+	AutoStart      bool     `json:"auto_start"`
+	RestartOnCrash bool     `json:"restart_on_crash"`
+	MaxRestarts    int      `json:"max_restarts"`
+	RestartDelay   int      `json:"restart_delay_ms"`
+	StartupDelay   int      `json:"startup_delay_ms"`
+
+	// External plugin fields
+	DiscoveryMode     string `json:"discovery_mode"`
+	DiscoveryHostname string `json:"discovery_hostname"`
+	DiscoveryPort     int    `json:"discovery_port"`
+
+	// Common fields
+	HealthCheckInterval int    `json:"health_check_interval"`
+	HeartbeatTimeout    int    `json:"heartbeat_timeout"`
+	IsCritical          bool   `json:"is_critical"`
+	Description         string `json:"description"`
 }
 
-// PluginProcess represents a running plugin process
+// PluginProcess represents a running local plugin process
 type PluginProcess struct {
 	Config       PluginConfig
 	Process      *exec.Cmd
-	Status       string // "stopped", "starting", "online", "error"
+	Status       string // "stopped", "starting", "online", "offline", "error"
 	LastError    error
 	RestartCount int
 	StartedAt    time.Time
-	exitChan     chan struct{} // Channel to signal process exit
+	exitChan     chan struct{}
 }
 
-// PluginManager manages plugin processes
+// PluginManager manages plugin processes (LOCAL PLUGINS ONLY!)
 type PluginManager struct {
 	hub          *Hub
 	configPath   string
-	plugins      map[string]*PluginProcess
+	plugins      map[string]*PluginProcess // Only LOCAL plugins
+	allConfigs   map[string]PluginConfig   // All plugin configs (local + external)
 	mu           sync.RWMutex
-	shuttingDown bool // Flag to prevent auto-restarts during shutdown
+	shuttingDown bool
 }
 
 // NewPluginManager creates a new plugin manager
@@ -56,6 +67,7 @@ func NewPluginManager(hub *Hub) *PluginManager {
 		hub:        hub,
 		configPath: "config/plugins.json",
 		plugins:    make(map[string]*PluginProcess),
+		allConfigs: make(map[string]PluginConfig),
 	}
 }
 
@@ -72,7 +84,7 @@ func (pm *PluginManager) LoadConfig() error {
 	}
 
 	// Read config file
-	data, err := ioutil.ReadFile(pm.configPath)
+	data, err := os.ReadFile(pm.configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
@@ -83,34 +95,44 @@ func (pm *PluginManager) LoadConfig() error {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	// Initialize plugin processes (skip external plugins)
+	// Store all configs
+	pm.allConfigs = configs
+
+	// Initialize LOCAL plugin processes only
+	localCount := 0
+	externalCount := 0
+
 	for id, config := range configs {
 		config.ID = id // Ensure ID matches key
 
-		// Skip external plugins - they connect on their own
-		if config.Type == "external" {
-			log.Printf("   Skipped external plugin: %s (managed remotely)", id)
-			continue
+		if config.Type == "local" {
+			// This is a LOCAL plugin - PluginManager will manage its process
+			pm.plugins[id] = &PluginProcess{
+				Config:   config,
+				Status:   "stopped",
+				exitChan: make(chan struct{}),
+			}
+			localCount++
+			log.Printf("   ✅ Loaded LOCAL plugin: %s", id)
+		} else if config.Type == "external" {
+			// This is an EXTERNAL plugin - PluginManager just tracks config
+			externalCount++
+			log.Printf("   📡 Loaded EXTERNAL plugin config: %s", id)
+		} else {
+			log.Printf("   ⚠️  Unknown plugin type '%s' for: %s", config.Type, id)
 		}
-
-		pm.plugins[id] = &PluginProcess{
-			Config:   config,
-			Status:   "stopped",
-			exitChan: make(chan struct{}),
-		}
-		log.Printf("   Loaded config for: %s", id)
 	}
 
-	log.Printf("✅ Loaded %d plugin configurations", len(pm.plugins))
+	log.Printf("✅ Loaded %d plugin configurations (%d local, %d external)",
+		len(configs), localCount, externalCount)
+
 	return nil
 }
 
 // createDefaultConfig creates a default plugin configuration
 func (pm *PluginManager) createDefaultConfig() error {
-	// Create config directory
 	os.MkdirAll("config", 0755)
 
-	// Default configuration
 	defaultConfigs := map[string]PluginConfig{
 		"timer-plugin": {
 			ID:                  "timer-plugin",
@@ -119,34 +141,65 @@ func (pm *PluginManager) createDefaultConfig() error {
 			ExecutablePath:      "../plugins/timer-plugin/timer-plugin.exe",
 			WorkingDir:          "../plugins/timer-plugin",
 			Args:                []string{},
-			Env:                 []string{},
-			AutoStart:           false,
+			Env:                 []string{"PLUGIN_ID=timer-plugin", "HUB_URL=ws://localhost:8080/ws"},
+			AutoStart:           true,
 			RestartOnCrash:      true,
-			MaxRestarts:         3,
+			MaxRestarts:         10,
 			RestartDelay:        3000,
 			StartupDelay:        1000,
 			HealthCheckInterval: 10,
 			IsCritical:          false,
 		},
+		"obs-ws-plugin": {
+			ID:                  "obs-ws-plugin",
+			Name:                "OBS WebSocket Plugin",
+			Type:                "local",
+			ExecutablePath:      "../plugins/obs-ws-plugin/obs-ws-plugin.exe",
+			WorkingDir:          "../plugins/obs-ws-plugin",
+			Args:                []string{},
+			Env:                 []string{"PLUGIN_ID=obs-ws-plugin", "HUB_URL=ws://localhost:8080/ws"},
+			AutoStart:           true,
+			RestartOnCrash:      true,
+			MaxRestarts:         10,
+			RestartDelay:        3000,
+			StartupDelay:        1000,
+			HealthCheckInterval: 10,
+			IsCritical:          true,
+		},
+		"recorder-plugin": {
+			ID:                  "recorder-plugin",
+			Name:                "Camera Recorder Plugin",
+			Type:                "external",
+			DiscoveryMode:       "reverse",
+			DiscoveryHostname:   "debian.local",
+			DiscoveryPort:       9999,
+			HealthCheckInterval: 15,
+			HeartbeatTimeout:    30,
+			IsCritical:          false,
+			Description:         "External camera recorder plugin on Debian",
+		},
 	}
 
-	// Marshal to JSON
 	data, err := json.MarshalIndent(defaultConfigs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Write to file
-	if err := ioutil.WriteFile(pm.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(pm.configPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	// Initialize plugins
+	// Store configs
+	pm.allConfigs = defaultConfigs
+
+	// Initialize LOCAL plugins only
 	for id, config := range defaultConfigs {
-		pm.plugins[id] = &PluginProcess{
-			Config:   config,
-			Status:   "stopped",
-			exitChan: make(chan struct{}),
+		if config.Type == "local" {
+			pm.plugins[id] = &PluginProcess{
+				Config:   config,
+				Status:   "stopped",
+				exitChan: make(chan struct{}),
+			}
 		}
 	}
 
@@ -154,21 +207,23 @@ func (pm *PluginManager) createDefaultConfig() error {
 	return nil
 }
 
-// StartPlugin starts a specific plugin
+// IsLocalPlugin checks if a plugin is managed locally
+func (pm *PluginManager) IsLocalPlugin(pluginID string) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	_, exists := pm.plugins[pluginID]
+	return exists
+}
+
+// StartPlugin starts a specific LOCAL plugin
 func (pm *PluginManager) StartPlugin(pluginID string) error {
 	pm.mu.Lock()
 	pluginProc, exists := pm.plugins[pluginID]
 	if !exists {
 		pm.mu.Unlock()
-		return fmt.Errorf("plugin not found in config: %s", pluginID)
+		return fmt.Errorf("plugin not found or not local: %s", pluginID)
 	}
-
-	// ✅ Check if this is an external plugin
-	if pluginProc.Config.Type == "external" {
-		pm.mu.Unlock()
-		return fmt.Errorf("cannot start external plugin %s - external plugins connect on their own", pluginID)
-	}
-
 	pm.mu.Unlock()
 
 	// Check if already running
@@ -177,9 +232,7 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 		return nil
 	}
 
-	// ✅ FIX: Check restart limit ONLY if this is a RESTART (not first start)
-	// RestartCount starts at 0, so first start is OK
-	// After first start, RestartCount becomes 1, then we check if 1 > MaxRestarts
+	// Check restart limit
 	if pluginProc.RestartCount > 0 && pluginProc.RestartCount >= pluginProc.Config.MaxRestarts {
 		return fmt.Errorf("plugin %s exceeded max restarts (%d)",
 			pluginID, pluginProc.Config.MaxRestarts)
@@ -207,18 +260,13 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	// Create command
 	cmd := exec.Command(execPath, config.Args...)
 
-	// Set working directory
 	if config.WorkingDir != "" {
 		cmd.Dir = config.WorkingDir
 	}
 
-	// Set environment variables
 	cmd.Env = append(os.Environ(), config.Env...)
-
-	// Add plugin ID to environment
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PLUGIN_ID=%s", pluginID))
 
-	// Set output
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -235,7 +283,7 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	pluginProc.Status = "starting"
 	pluginProc.StartedAt = time.Now()
 	pluginProc.RestartCount++
-	pluginProc.exitChan = make(chan struct{}) // Reset exit channel for new process
+	pluginProc.exitChan = make(chan struct{})
 	pm.mu.Unlock()
 
 	log.Printf("✅ Plugin %s started (PID: %d)", pluginID, cmd.Process.Pid)
@@ -258,30 +306,26 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 	pm.mu.Lock()
 	pluginProc := pm.plugins[pluginID]
 
-	// Signal that process has exited - check if channel is still open
 	if pluginProc.exitChan != nil {
 		close(pluginProc.exitChan)
-		pluginProc.exitChan = nil // Prevent double close
+		pluginProc.exitChan = nil
 	}
-
 	pm.mu.Unlock()
 
 	if err != nil {
 		log.Printf("❌ Plugin %s exited with error: %v", pluginID, err)
-
 		pm.mu.Lock()
 		pluginProc.Status = "error"
 		pluginProc.LastError = err
 		pm.mu.Unlock()
 	} else {
 		log.Printf("🔌 Plugin %s exited normally", pluginID)
-
 		pm.mu.Lock()
 		pluginProc.Status = "stopped"
 		pm.mu.Unlock()
 	}
 
-	// Auto-restart if configured and NOT shutting down
+	// Auto-restart if configured
 	pm.mu.Lock()
 	shouldRestart := !pm.shuttingDown &&
 		pluginProc.Config.RestartOnCrash &&
@@ -297,10 +341,17 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 		if err := pm.StartPlugin(pluginID); err != nil {
 			log.Printf("❌ Failed to restart plugin %s: %v", pluginID, err)
 		}
-	} else if pm.shuttingDown {
-		log.Printf("ℹ️  Plugin %s exited during shutdown, not restarting", pluginID)
-	} else if pluginProc.RestartCount >= pluginProc.Config.MaxRestarts {
-		log.Printf("⚠️  Plugin %s exceeded max restarts, not restarting", pluginID)
+	}
+}
+
+// UpdatePluginStatus updates plugin status when it connects/disconnects via WebSocket
+func (pm *PluginManager) UpdatePluginStatus(pluginID string, status string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if pluginProc, exists := pm.plugins[pluginID]; exists {
+		pluginProc.Status = status
+		log.Printf("🟢 Plugin %s status: %s", pluginID, status)
 	}
 }
 
@@ -321,81 +372,43 @@ func (pm *PluginManager) StopPlugin(pluginID string) error {
 
 	log.Printf("⏹️  Stopping plugin: %s", pluginID)
 
-	// Try to send termination signal
-	// On Windows, os.Interrupt is not supported, so we go directly to Kill
-	// Check if Process is not nil before accessing Process.Process
 	if pluginProc.Process != nil && pluginProc.Process.Process != nil {
-		signalErr := pluginProc.Process.Process.Signal(os.Kill)
-		if signalErr != nil {
-			log.Printf("⚠️  Failed to send kill signal: %v", signalErr)
-			// Process might already be dead, continue to wait
-		}
+		pluginProc.Process.Process.Signal(os.Kill)
 	}
 
-	// Wait for process to exit via exitChan (which is closed by monitorProcess)
-	// or timeout after 5 seconds
 	pm.mu.Lock()
 	exitChan := pluginProc.exitChan
 	pm.mu.Unlock()
 
-	if exitChan == nil {
-		// Process already exited
-		log.Printf("✅ Plugin %s already stopped", pluginID)
-		pm.mu.Lock()
-		pluginProc.Status = "stopped"
-		pluginProc.Process = nil
-		pm.mu.Unlock()
-		return nil
-	}
-
-	select {
-	case <-exitChan:
-		log.Printf("✅ Plugin %s stopped", pluginID)
-	case <-time.After(5 * time.Second):
-		log.Printf("⚠️  Plugin %s did not stop in time, giving up", pluginID)
-		// At this point the process is stuck, but we've done our best
+	if exitChan != nil {
+		select {
+		case <-exitChan:
+			log.Printf("✅ Plugin %s stopped", pluginID)
+		case <-time.After(5 * time.Second):
+			log.Printf("⚠️  Plugin %s did not stop in time", pluginID)
+		}
 	}
 
 	pm.mu.Lock()
 	pluginProc.Status = "stopped"
 	pluginProc.Process = nil
-	pluginProc.exitChan = nil // Mark as closed
+	pluginProc.exitChan = nil
 	pm.mu.Unlock()
 
 	return nil
-}
-
-// RestartPlugin restarts a plugin
-func (pm *PluginManager) RestartPlugin(pluginID string) error {
-	log.Printf("🔄 Restarting plugin: %s", pluginID)
-
-	// Stop plugin
-	if err := pm.StopPlugin(pluginID); err != nil {
-		log.Printf("⚠️  Failed to stop plugin %s: %v", pluginID, err)
-	}
-
-	// Wait a bit
-	time.Sleep(1 * time.Second)
-
-	// Start plugin
-	return pm.StartPlugin(pluginID)
 }
 
 // StopAllPlugins stops all running plugins
 func (pm *PluginManager) StopAllPlugins() {
 	log.Println("⏹️  Stopping all plugins...")
 
-	// Set shutdown flag to prevent auto-restarts
 	pm.mu.Lock()
 	pm.shuttingDown = true
-	pm.mu.Unlock()
-
-	pm.mu.RLock()
 	pluginIDs := make([]string, 0, len(pm.plugins))
 	for id := range pm.plugins {
 		pluginIDs = append(pluginIDs, id)
 	}
-	pm.mu.RUnlock()
+	pm.mu.Unlock()
 
 	for _, id := range pluginIDs {
 		if err := pm.StopPlugin(id); err != nil {
@@ -406,67 +419,93 @@ func (pm *PluginManager) StopAllPlugins() {
 	log.Println("✅ All plugins stopped")
 }
 
-// GetPluginStatus returns status of a plugin
+// GetPluginStatus returns status of a plugin (local or external)
 func (pm *PluginManager) GetPluginStatus(pluginID string) (map[string]interface{}, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	pluginProc, exists := pm.plugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	// Check if it's a local plugin
+	if pluginProc, exists := pm.plugins[pluginID]; exists {
+		status := map[string]interface{}{
+			"id":            pluginProc.Config.ID,
+			"name":          pluginProc.Config.Name,
+			"type":          "local",
+			"status":        pluginProc.Status,
+			"restart_count": pluginProc.RestartCount,
+			"max_restarts":  pluginProc.Config.MaxRestarts,
+		}
+
+		if pluginProc.Process != nil {
+			status["pid"] = pluginProc.Process.Process.Pid
+		}
+
+		if !pluginProc.StartedAt.IsZero() {
+			status["uptime"] = time.Since(pluginProc.StartedAt).Seconds()
+		}
+
+		if pluginProc.LastError != nil {
+			status["last_error"] = pluginProc.LastError.Error()
+		}
+
+		return status, nil
 	}
 
-	status := map[string]interface{}{
-		"id":            pluginProc.Config.ID,
-		"name":          pluginProc.Config.Name,
-		"status":        pluginProc.Status,
-		"restart_count": pluginProc.RestartCount,
-		"max_restarts":  pluginProc.Config.MaxRestarts,
+	// Check if it's an external plugin in config
+	if config, exists := pm.allConfigs[pluginID]; exists && config.Type == "external" {
+		// External plugin - status comes from Hub's Plugins map
+		return map[string]interface{}{
+			"id":   config.ID,
+			"name": config.Name,
+			"type": "external",
+		}, nil
 	}
 
-	if pluginProc.Process != nil {
-		status["pid"] = pluginProc.Process.Process.Pid
-	}
-
-	if !pluginProc.StartedAt.IsZero() {
-		status["uptime"] = time.Since(pluginProc.StartedAt).Seconds()
-	}
-
-	if pluginProc.LastError != nil {
-		status["last_error"] = pluginProc.LastError.Error()
-	}
-
-	return status, nil
+	return nil, fmt.Errorf("plugin not found: %s", pluginID)
 }
 
-// GetAllStatus returns status of all plugins
-func (pm *PluginManager) GetAllStatus() []map[string]interface{} {
+// GetAllConfigs returns all plugin configs (for reverse discovery, etc.)
+func (pm *PluginManager) GetAllConfigs() map[string]PluginConfig {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	statuses := make([]map[string]interface{}, 0, len(pm.plugins))
-
-	for id := range pm.plugins {
-		if status, err := pm.GetPluginStatus(id); err == nil {
-			statuses = append(statuses, status)
-		}
+	// Return a copy
+	configs := make(map[string]PluginConfig)
+	for id, config := range pm.allConfigs {
+		configs[id] = config
 	}
-
-	return statuses
+	return configs
 }
 
-// ResetRestartCount resets restart counter for a plugin
-func (pm *PluginManager) ResetRestartCount(pluginID string) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+// GetAllStatus returns status of all plugins
+func (pm *PluginManager) GetAllStatus() map[string]interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
 
-	pluginProc, exists := pm.plugins[pluginID]
-	if !exists {
-		return fmt.Errorf("plugin not found: %s", pluginID)
+	result := make(map[string]interface{})
+
+	// Local plugins
+	localPlugins := make(map[string]interface{})
+	for id, pluginProc := range pm.plugins {
+		localPlugins[id] = map[string]interface{}{
+			"status": pluginProc.Status,
+			"pid":    0,
+		}
+		if pluginProc.Process != nil && pluginProc.Process.Process != nil {
+			localPlugins[id].(map[string]interface{})["pid"] = pluginProc.Process.Process.Pid
+		}
 	}
+	result["local_plugins"] = localPlugins
 
-	pluginProc.RestartCount = 0
-	log.Printf("✅ Reset restart count for plugin: %s", pluginID)
+	// External plugins (from config only)
+	externalPlugins := make(map[string]interface{})
+	for id, config := range pm.allConfigs {
+		if config.Type == "external" {
+			externalPlugins[id] = map[string]interface{}{
+				"status": "waiting",
+			}
+		}
+	}
+	result["external_plugins"] = externalPlugins
 
-	return nil
+	return result
 }

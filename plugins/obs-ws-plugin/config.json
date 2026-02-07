@@ -1,0 +1,19 @@
+{
+  "plugin": {
+    "id": "obs-ws-plugin",
+    "name": "OBS WebSocket Plugin",
+    "version": "1.0.0"
+  },
+  "obs": {
+    "host": "localhost",
+    "port": 4445,
+    "password": "",
+    "auto_reconnect": true,
+    "reconnect_interval_ms": 5000,
+    "max_reconnect_attempts": 0,
+    "connection_timeout_ms": 10000
+  },
+  "logging": {
+    "level": "info"
+  }
+}

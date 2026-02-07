@@ -1,7 +1,21 @@
 {
   "plugin_id": "recorder-plugin",
-  "hub_url": "ws://broadcast-hub.local:8080/ws",
-  "heartbeat_interval_ms": 5000,
-  "reconnect_interval_ms": 5000,
-  "max_reconnects": 0
+  "plugin_name": "Camera Recorder Plugin",
+  "discovery_port": 9999,
+  "discovery_retry": true,
+  "hub_url": "",
+  "recording": {
+    "output_dir": "/srv/samba/public/recorder",
+    "temp_dir": "/tmp/recorder",
+    "format": "mp4",
+    "quality": "high"
+  },
+  "cameras": [
+    {
+      "id": "camera1",
+      "name": "Main Camera",
+      "url": "rtsp://camera1.local/stream",
+      "enabled": true
+    }
+  ]
 }

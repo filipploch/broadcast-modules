@@ -134,6 +134,11 @@ func (hm *HealthMonitor) UpdateHeartbeat(pluginID string) {
 	}
 }
 
+// RecordHeartbeat is an alias for UpdateHeartbeat
+func (hm *HealthMonitor) RecordHeartbeat(pluginID string) {
+	hm.UpdateHeartbeat(pluginID)
+}
+
 // checkAllPlugins checks health of all registered plugins
 func (hm *HealthMonitor) checkAllPlugins() {
 	hm.mu.Lock()
@@ -214,9 +219,18 @@ func (hm *HealthMonitor) handleUnhealthyPlugin(pluginID string) {
 			}
 			hm.mu.Unlock()
 
-			// Restart plugin
-			if err := hm.hub.PluginManager.RestartPlugin(id); err != nil {
-				log.Printf("❌ Failed to restart plugin %s: %v", id, err)
+			// Restart local plugin only
+			if hm.hub.PluginManager.IsLocalPlugin(id) {
+				log.Printf("🔄 Attempting to restart plugin: %s", id)
+				if err := hm.hub.PluginManager.StopPlugin(id); err != nil {
+					log.Printf("⚠️  Failed to stop plugin %s: %v", id, err)
+				}
+				time.Sleep(1 * time.Second)
+				if err := hm.hub.PluginManager.StartPlugin(id); err != nil {
+					log.Printf("❌ Failed to restart plugin %s: %v", id, err)
+				}
+			} else {
+				log.Printf("⚠️  Cannot restart external plugin: %s", id)
 			}
 		}(pluginID)
 	}
@@ -297,39 +311,34 @@ func (hm *HealthMonitor) broadcastHealthStatus() {
 	summary := hm.GetHealthSummary()
 
 	// Get info about local plugins (from PluginManager)
-	localPlugins := make(map[string]interface{})
+	localPluginsStatus := make(map[string]interface{}) // ← Zmień nazwę
 	if hm.hub.PluginManager != nil {
 		for pluginID := range hm.hub.ExpectedPlugins {
 			if status, err := hm.hub.PluginManager.GetPluginStatus(pluginID); err == nil {
-				localPlugins[pluginID] = status
+				localPluginsStatus[pluginID] = status
 			}
 		}
 	}
 
-	// Get info about external plugins
-	externalPlugins := make(map[string]interface{})
+	// Get info about connected plugins (all - local and external)
+	connectedPlugins := make(map[string]interface{})
 	hm.hub.mu.RLock()
-	for pluginID, extPlugin := range hm.hub.ExternalPlugins {
-		extPlugin.mu.RLock()
-		externalPlugins[pluginID] = map[string]interface{}{
-			"plugin_id":               extPlugin.PluginID,
-			"ip":                      extPlugin.IP,
-			"status":                  extPlugin.Status,
-			"connected_at":            extPlugin.ConnectedAt.Format(time.RFC3339),
-			"last_heartbeat":          extPlugin.LastHeartbeat.Format(time.RFC3339),
-			"seconds_since_heartbeat": time.Since(extPlugin.LastHeartbeat).Seconds(),
+	for pluginID, plugin := range hm.hub.Plugins {
+		connectedPlugins[pluginID] = map[string]interface{}{
+			"plugin_id": plugin.ID,
+			"name":      plugin.Name,
+			"is_active": plugin.IsActive,
 		}
-		extPlugin.mu.RUnlock()
 	}
 	hm.hub.mu.RUnlock()
 
 	// Create message payload
 	payload := map[string]interface{}{
-		"health_summary":   summary,
-		"plugin_health":    allHealth,
-		"local_plugins":    localPlugins,
-		"external_plugins": externalPlugins,
-		"timestamp":        time.Now().Unix(),
+		"health_summary":        summary,
+		"plugin_health":         allHealth,
+		"plugin_manager_status": localPluginsStatus,
+		"connected_plugins":     connectedPlugins,
+		"timestamp":             time.Now().Unix(),
 	}
 
 	// Send to main module if connected
