@@ -110,6 +110,29 @@ func (h *Hub) handleUnregister(module *Module) {
 		log.Printf("🔌 Plugin disconnected: %s", module.ID)
 		delete(h.Plugins, module.ID)
 
+		// ✅ If expected external plugin - try to reconnect
+		if h.ExpectedPlugins[module.ID] {
+			if h.PluginManager != nil && !h.PluginManager.IsLocalPlugin(module.ID) {
+				log.Printf("🔄 Expected external plugin disconnected, will re-announce")
+
+				go func(id string) {
+					time.Sleep(5 * time.Second) // Wait a bit
+
+					configs := h.PluginManager.GetAllConfigs()
+					if config, ok := configs[id]; ok && config.Type == "external" {
+						if config.DiscoveryMode == "reverse" {
+							rdConfig := ReverseDiscoveryConfig{
+								PluginID: config.ID,
+								Hostname: config.DiscoveryHostname,
+								Port:     config.DiscoveryPort,
+							}
+							h.AnnounceToPlugin(rdConfig)
+						}
+					}
+				}(module.ID)
+			}
+		}
+
 		// Notify main module
 		if h.MainModule != nil && h.MainModule.IsActive {
 			notification := NewMessage("hub", "futsal-nalf", "plugin_status", map[string]interface{}{
@@ -315,6 +338,68 @@ func (h *Hub) handleDeclareRequiredPlugins(msg *Message) {
 				// External plugin - just wait for it to connect
 				log.Printf("⏳ Waiting for external plugin to connect: %s", id)
 			}
+		}
+	}
+	go h.monitorExternalPlugins()
+}
+
+// monitorExternalPlugins periodically announces to disconnected external plugins
+func (h *Hub) monitorExternalPlugins() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			h.mu.RLock()
+			expectedPlugins := make(map[string]bool)
+			for id := range h.ExpectedPlugins {
+				expectedPlugins[id] = true
+			}
+			h.mu.RUnlock()
+
+			// Check each expected plugin
+			for pluginID := range expectedPlugins {
+				// Skip if plugin is connected
+				h.mu.RLock()
+				plugin, exists := h.Plugins[pluginID]
+				isConnected := exists && plugin.IsActive
+				h.mu.RUnlock()
+
+				if isConnected {
+					continue
+				}
+
+				// Check if it's local (PluginManager will handle it)
+				if h.PluginManager != nil && h.PluginManager.IsLocalPlugin(pluginID) {
+					continue
+				}
+
+				// External plugin not connected - announce!
+				log.Printf("🔍 External plugin %s not connected, re-announcing...", pluginID)
+
+				// Get plugin config
+				if h.PluginManager != nil {
+					configs := h.PluginManager.GetAllConfigs()
+					if config, ok := configs[pluginID]; ok && config.Type == "external" {
+						// Announce to this specific plugin
+						if config.DiscoveryMode == "reverse" {
+							// ✅ Poprawione - metoda Hub
+							go func(cfg PluginConfig) {
+								rdConfig := ReverseDiscoveryConfig{
+									PluginID: cfg.ID,
+									Hostname: cfg.DiscoveryHostname,
+									Port:     cfg.DiscoveryPort,
+								}
+								h.AnnounceToPlugin(rdConfig)
+							}(config)
+						}
+					}
+				}
+			}
+
+		case <-h.shutdown:
+			return
 		}
 	}
 }
@@ -584,7 +669,7 @@ func (h *Hub) broadcastToClass(msg *Message, className string) {
 		}
 	}
 
-	// Check plugins
+	// Check plugins (INCLUDING overlays that registered!)
 	for _, plugin := range h.Plugins {
 		if plugin.IsActive && h.hasCapability(plugin, className) {
 			select {

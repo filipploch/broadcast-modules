@@ -371,6 +371,7 @@ func (p *Plugin) handleResetTimer(msg *Message) {
 				"timer_id":     timerID,
 				"elapsed_time": displayTime.Milliseconds(),
 				"state":        "idle",
+				"limit":        timerInfo.Limit.Microseconds(),
 			},
 		})
 	}
@@ -416,6 +417,7 @@ func (p *Plugin) handleAdjustTime(msg *Message) {
 				"timer_id":     timerID,
 				"elapsed_time": displayTime.Milliseconds(),
 				"state":        string(timerInfo.State),
+				"limit":        timerInfo.Limit.Microseconds(),
 			},
 		})
 	}
@@ -570,6 +572,7 @@ func (p *Plugin) broadcastTimerStarted(internalID, externalID string, displayTim
 			"timer_id":     externalID,
 			"elapsed_time": displayTime.Milliseconds(),
 			"state":        string(timerInfo.State),
+			"limit":        timerInfo.Limit.Microseconds(),
 		},
 	})
 
@@ -590,6 +593,7 @@ func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, displayTim
 			"timer_id":     externalID,
 			"elapsed_time": displayTime.Milliseconds(),
 			"state":        string(timerInfo.State),
+			"limit":        timerInfo.Limit.Microseconds(),
 		},
 	})
 
@@ -610,6 +614,7 @@ func (p *Plugin) broadcastTimerPaused(internalID, externalID string, displayTime
 			"timer_id":     externalID,
 			"elapsed_time": displayTime.Milliseconds(),
 			"state":        string(timerInfo.State),
+			"limit":        timerInfo.Limit.Microseconds(),
 		},
 	})
 
@@ -631,6 +636,7 @@ func (p *Plugin) broadcastLimitReached(internalID, externalID string, displayTim
 			"elapsed_time":   displayTime.Milliseconds(),
 			"state":          string(timerInfo.State),
 			"pause_at_limit": timerInfo.PauseAtLimit,
+			"limit":          timerInfo.Limit.Microseconds(),
 		},
 	})
 

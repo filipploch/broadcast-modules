@@ -14,16 +14,19 @@ class HubClient:
         self.app = app  # ⭐ Store Flask app instance
         self.ws = None
         self.module_id = None
+        self.module_name = None
         self.connected = False
         self.message_handlers = []
         self._lock = threading.Lock()
-
-        # ✅ NEW: Subscribe classes support
         self.subscribe_classes = []
+        self.required_plugins = []
+        self._should_reconnect = True  # Kontrola reconnect
+        self._reconnect_delay = 3  # Sekundy między próbami
 
     def connect(self):
         """Connect to Hub"""
         self._log("info", f"Connecting to Hub: {self.hub_url}")
+        self._should_reconnect = True  # ✅ Włącz reconnect
 
         try:
             self.ws = websocket.WebSocketApp(
@@ -54,19 +57,37 @@ class HubClient:
             raise
 
     def _run_forever(self):
-        """Run WebSocket connection"""
-        while True:
+        """Run WebSocket connection with auto-reconnect"""
+        attempt = 0
+        
+        while self._should_reconnect:  # ✅ Zmieniono warunek
             try:
+                if attempt > 0:
+                    self._log("info", f"Reconnect attempt {attempt}...")
+                
                 self.ws.run_forever()
+                
             except Exception as e:
                 self._log("error", f"WebSocket error: {e}")
 
-            # Reconnect after delay
-            if not self.connected:
+            # If disconnected and should reconnect
+            if not self.connected and self._should_reconnect:
+                attempt += 1
+                self._log("info", f"Reconnecting to Hub in {self._reconnect_delay}s...")
+                time.sleep(self._reconnect_delay)
+                
+                # ✅ Re-create WebSocket
+                self.ws = websocket.WebSocketApp(
+                    self.hub_url,
+                    on_message=self._on_message,
+                    on_error=self._on_error,
+                    on_close=self._on_close,
+                    on_open=self._on_open
+                )
+            else:
                 break
-
-            self._log("info", "Reconnecting to Hub...")
-            time.sleep(3)
+        
+        self._log("info", "WebSocket thread stopped")
 
     def register_as_main_module(self, module_id, module_name, required_plugins=None, subscribe_classes=None):
         """
@@ -79,6 +100,13 @@ class HubClient:
             subscribe_classes: List of classes to subscribe to (optional)
         """
         self.module_id = module_id
+        self.module_name = module_name
+
+        # ✅ Zapisz parametry dla reconnect
+        if required_plugins:
+            self.required_plugins = required_plugins
+        if subscribe_classes:
+            self.subscribe_classes = subscribe_classes
 
         self._log("info", f"Registering as main module: {module_id}")
 
@@ -111,6 +139,7 @@ class HubClient:
         #     self.declare_required_plugins(required_plugins)
 
     def declare_required_plugins(self, plugins):
+        self.required_plugins = plugins
         """Declare required plugins to Hub"""
         self._log("info", f"Declaring {len(plugins)} required plugins")
 
@@ -181,6 +210,8 @@ class HubClient:
         """
         if not isinstance(classes, list):
             classes = [classes]
+
+        self.subscribe_classes = classes
 
         self._log("info", f"Subscribing to classes: {', '.join(classes)}")
 
@@ -377,20 +408,72 @@ class HubClient:
         """Handle WebSocket error - RUNS IN WEBSOCKET THREAD"""
         self._log("error", f"WebSocket error: {error}")
 
-    def _on_close(self, ws, close_status_code, close_msg):
-        """Handle WebSocket close - RUNS IN WEBSOCKET THREAD"""
-        self.connected = False
-        self._log("warning", f"WebSocket closed: {close_msg} (code: {close_status_code})")
-
     def _on_open(self, ws):
-        """Handle WebSocket open - RUNS IN WEBSOCKET THREAD"""
+        """Handle WebSocket open"""
         self.connected = True
         self._log("info", "WebSocket connection opened")
+        
+        # ✅ Re-register after reconnect
+        if self.module_id:
+            self._log("info", f"Re-registering as: {self.module_id}")
+            
+            # 1. Register
+            app_port = self._get_config('APP_PORT', 8081)
+            self.send({
+                'from': self.module_id,
+                'to': 'hub',
+                'type': 'register',
+                'payload': {
+                    'id': self.module_id,
+                    'name': self.module_name or 'FUTSAL NALF',
+                    'component_type': 'main_module',
+                    'host': 'localhost',
+                    'port': str(app_port),
+                    'type': 'local'
+                }
+            })
+            
+            # Wait a bit for registration
+            time.sleep(0.5)
+            
+            # 2. Declare required plugins
+            if self.required_plugins:
+                self._log("info", f"Re-declaring {len(self.required_plugins)} required plugins")
+                self.send({
+                    'from': self.module_id,
+                    'to': 'hub',
+                    'type': 'declare_required_plugins',
+                    'payload': {
+                        'owner_id': self.module_id,
+                        'plugins': self.required_plugins
+                    }
+                })
+                
+                time.sleep(0.5)
+            
+            # 3. Subscribe to classes
+            if self.subscribe_classes:
+                self._log("info", f"Re-subscribing to classes: {', '.join(self.subscribe_classes)}")
+                self.send({
+                    'from': self.module_id,
+                    'to': 'hub',
+                    'type': 'subscribe',
+                    'payload': {
+                        'class': self.subscribe_classes
+                    }
+                })
+
+    def _on_close(self, ws, close_status_code, close_msg):
+        """Handle WebSocket close"""
+        self.connected = False
+        self._log("warning", f"WebSocket closed: {close_msg} (code: {close_status_code})")
+        # ✅ Auto-reconnect wykryje disconnection i spróbuje ponownie
 
     def disconnect(self):
         """Disconnect from Hub"""
         self._log("info", "Disconnecting from Hub...")
 
+        self._should_reconnect = False  # ✅ Wyłącz reconnect
         self.connected = False
         if self.ws:
             self.ws.close()

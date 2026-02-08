@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -37,21 +38,30 @@ func main() {
 	discoveryServer := NewDiscoveryServer(discoveryPort)
 
 	var hubURL string
+	var hubURLMutex sync.Mutex
 	discoveryDone := make(chan bool, 1)
 
 	err := discoveryServer.Start(func(url string) {
+		hubURLMutex.Lock()
 		hubURL = url
+		hubURLMutex.Unlock()
+
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		log.Printf("🎯 HUB URL RECEIVED: %s", hubURL)
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		discoveryDone <- true
+
+		// ✅ Połącz się TUTAJ w callback!
+		go func() {
+			connectToHub(hubURL, config)
+			discoveryDone <- true
+		}()
 	})
 
 	if err != nil {
 		log.Fatalf("❌ Failed to start discovery server: %v", err)
 	}
 
-	// Wait for discovery (with timeout)
+	// Wait for discovery
 	log.Println("")
 	log.Println("⏳ Waiting for HUB announcement...")
 	log.Println("   Timeout: 60 seconds")
@@ -59,41 +69,18 @@ func main() {
 
 	select {
 	case <-discoveryDone:
-		log.Println("✅ Discovery complete!")
+		log.Println("✅ Connection established!")
 
 	case <-time.After(60 * time.Second):
 		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		log.Println("⚠️  No HUB announcement received after 60s")
 
-		// Check if we have fallback URL in config
 		if config.HubURL != "" {
-			log.Printf("   Using fallback URL from config: %s", config.HubURL)
-			hubURL = config.HubURL
+			log.Printf("   Using fallback URL: %s", config.HubURL)
+			connectToHub(config.HubURL, config)
 		} else {
 			log.Println("   No fallback URL configured")
-			log.Println("   Will retry discovery every 30s...")
-			log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-			// Keep running discovery server and retry periodically
-			if config.DiscoveryRetry {
-				go retryDiscovery(discoveryServer, &hubURL, discoveryDone)
-			}
-		}
-	}
-
-	// If we have HUB URL, connect
-	if hubURL != "" {
-		connectToHub(hubURL, config)
-	} else {
-		log.Println("⏳ Running in discovery-only mode...")
-		log.Println("   Waiting for HUB to announce...")
-	}
-
-	// Wait for discovery callback if still waiting
-	if hubURL == "" {
-		<-discoveryDone
-		if hubURL != "" {
-			connectToHub(hubURL, config)
+			log.Println("   Will keep discovery server running...")
 		}
 	}
 

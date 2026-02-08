@@ -483,8 +483,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Loaded ${data.count} timers`);
         if(!data.count) {
             createTimer('newTimer', timer_type = 'independent', options = {
-                "limit_time": 30000,
-                "pause_at_limit": true,
+                "limit_time": 3000000,
+                "pause_at_limit": false,
                 "initial_time": 0,
                 "state": "idle",
                 "metadata": {

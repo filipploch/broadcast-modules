@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -58,14 +57,9 @@ func main() {
 		serveHealth(hub, w, r)
 	})
 
-	// Start HTTP server
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	log.Printf("🌐 Starting HTTP server on %s", addr)
-
-	server := &http.Server{
-		Addr:    addr,
-		Handler: http.DefaultServeMux,
-	}
+	// Start HTTP server using setupHTTPServer
+	log.Printf("🌐 Starting HTTP server on port %d", port)
+	server := setupHTTPServer(hub)
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

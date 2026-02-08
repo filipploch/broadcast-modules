@@ -2,7 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 // serveHome serves a simple home page
@@ -160,4 +164,73 @@ func serveHealth(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(health)
+}
+
+// setupHTTPServer sets up HTTP routes
+func setupHTTPServer(hub *Hub) *http.Server {
+	mux := http.NewServeMux()
+
+	// WebSocket endpoint
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hub, w, r)
+	})
+
+	// Status endpoints
+	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		serveStatus(hub, w, r)
+	})
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		serveHealth(hub, w, r)
+	})
+
+	// ✅ DODAJ: Overlay file server
+	overlaysDir := "./overlays"
+	if _, err := os.Stat(overlaysDir); os.IsNotExist(err) {
+		log.Printf("⚠️  Overlays directory not found, creating: %s", overlaysDir)
+		os.MkdirAll(overlaysDir, 0755)
+	}
+
+	// Custom file server with proper MIME types
+	fileServer := http.FileServer(http.Dir(overlaysDir))
+	mux.Handle("/overlays/", http.StripPrefix("/overlays/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set proper MIME types based on file extension
+		ext := filepath.Ext(r.URL.Path)
+		switch ext {
+		case ".js":
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		case ".css":
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		case ".html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		case ".json":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		case ".png":
+			w.Header().Set("Content-Type", "image/png")
+		case ".jpg", ".jpeg":
+			w.Header().Set("Content-Type", "image/jpeg")
+		case ".svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+		case ".woff":
+			w.Header().Set("Content-Type", "font/woff")
+		case ".woff2":
+			w.Header().Set("Content-Type", "font/woff2")
+		case ".md":
+			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		}
+		fileServer.ServeHTTP(w, r)
+	})))
+
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("📡 Overlay URL:")
+	log.Printf("   http://localhost:%d/overlays/futsal-nalf/timer.html", hub.Port)
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	addr := fmt.Sprintf("0.0.0.0:%d", hub.Port)
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	return server
 }

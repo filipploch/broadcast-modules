@@ -94,6 +94,7 @@ func (hc *HubClient) Connect() error {
 	// Start goroutines for reading and writing
 	go hc.readPump()
 	go hc.writePump()
+	go hc.sendHeartbeat()
 
 	// Register plugin with Hub
 	log.Printf("📤 Registering with HUB...")
@@ -313,6 +314,41 @@ func (hc *HubClient) AutoReconnect(maxAttempts int) {
 
 		case <-hc.done:
 			return
+		}
+	}
+}
+
+// sendHeartbeat sends periodic heartbeat messages
+func (hc *HubClient) sendHeartbeat() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-hc.done:
+			return
+
+		case <-ticker.C:
+			hc.mu.RLock()
+			connected := hc.connected
+			hc.mu.RUnlock()
+
+			if !connected {
+				return
+			}
+
+			err := hc.Send(&Message{
+				From: hc.PluginID,
+				To:   "hub",
+				Type: "heartbeat",
+				Payload: map[string]interface{}{
+					"status": "alive",
+				},
+			})
+
+			if err != nil {
+				log.Printf("⚠️  Failed to send heartbeat: %v", err)
+			}
 		}
 	}
 }

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Overlay - Futsal NALF</title>
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
+</head>
+<body>
+    <div id="connection-status"></div>
+    
+    <div id="timer-container">
+        <div id="timer-state">STOPPED</div>
+        <div id="timer-display">00:00</div>
+    </div>
+
+    <script src="/overlays/futsal-nalf/js/formatters.js"></script>
+    
+    <script>
+        // WebSocket z rejestracją jako overlay + subskrypcja timer
+        const overlayId = 'overlay-timer-' + Math.random().toString(36).substr(2, 9);
+        const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
+        
+        const display = document.getElementById('timer-display');
+        const stateEl = document.getElementById('timer-state');
+        const statusEl = document.getElementById('connection-status');
+        
+        let registered = false;
+        
+        ws.onopen = () => {
+            console.log('✅ Connected to HUB');
+            statusEl.classList.add('connected');
+            
+            // 1. REJESTRACJA jako overlay
+            ws.send(JSON.stringify({
+                type: 'register',
+                from: overlayId,
+                to: 'hub',
+                payload: {
+                    id: overlayId,
+                    component_type: 'overlay',
+                    type: 'overlay'
+                }
+            }));
+        };
+        
+        ws.onclose = () => {
+            console.log('❌ Disconnected from HUB');
+            statusEl.classList.remove('connected');
+            setTimeout(() => location.reload(), 3000);
+        };
+        
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            console.log('📨 Received:', msg.type, msg);
+            
+            // Po rejestracji → subskrybuj timer
+            if (msg.type === 'registered' && !registered) {
+                registered = true;
+                console.log('✅ Registered! Now subscribing to timer...');
+                
+                ws.send(JSON.stringify({
+                    type: 'subscribe',
+                    from: overlayId,
+                    to: 'hub',
+                    payload: {
+                        class: ['timer', 'timer_update_receiver']  // Subskrybuj klasę "timer"
+                    }
+                }));
+            }
+            
+            // Po subskrypcji
+            if (msg.type === 'subscribed') {
+                console.log('✅ Subscribed to classes!');
+            }
+            
+            // Odbieraj timer_updated
+            if (msg.type === 'timer_updated') {
+                const data = msg.payload || msg.data;
+                
+                // Update display
+                const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time);
+                display.textContent = formatted;
+                stateEl.textContent = (data.state || 'stopped').toUpperCase();
+                
+                // Update styling
+                display.classList.remove('timer-running', 'timer-paused', 'timer-stopped');
+                display.classList.add('timer-' + data.state);
+                
+                console.log(`⏱️ Timer: ${formatted} [${data.state}]`);
+            }
+        };
+    </script>
+</body>
+</html>

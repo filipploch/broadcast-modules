@@ -25,6 +25,6 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	module := NewModule(hub, conn)
 	hub.Register <- module
 
-	go module.ReadPump()  // ← TO MUSI BYĆ!
-	go module.WritePump() // ← TO MUSI BYĆ!
+	go module.ReadPump()
+	go module.WritePump()
 }
