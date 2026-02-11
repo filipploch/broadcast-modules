@@ -55,18 +55,18 @@
  </div>
  </div>
 
-{% if match %}
+{% if game %}
 <h2>Mecz</h2>
-<div class="match-display">
-    <div class="match-teams">
+<div class="game-display">
+    <div class="game-teams">
         <div class="team">
-            <div class="team-name">{{ match.home_team.name }}</div>
-            <div class="team-score" id="score-home">{{ match.score_home }}</div>
+            <div class="team-name">{{ game.home_team.name }}</div>
+            <div class="team-score" id="score-home">{{ game.score_home }}</div>
         </div>
-        <div class="match-separator">-</div>
+        <div class="game-separator">-</div>
         <div class="team">
-            <div class="team-name">{{ match.away_team.name }}</div>
-            <div class="team-score" id="score-away">{{ match.score_away }}</div>
+            <div class="team-name">{{ game.away_team.name }}</div>
+            <div class="team-score" id="score-away">{{ game.score_away }}</div>
         </div>
     </div>
 </div>

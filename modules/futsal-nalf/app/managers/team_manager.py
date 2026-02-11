@@ -52,8 +52,13 @@ class TeamManager:
         """Get team by team_url (unique identifier)"""
         return Team.query.filter_by(team_url=team_url).first()
     
+    def get_team_by_name(self, name: str) -> Optional[Team]:
+        """Get team by team_url (unique identifier)"""
+        return Team.query.filter_by(name=name).first()
+    
     def create_team(self, name: str, name_20: str, short_name: str, 
-                   team_url: str, logo_path: str = 'static/images/logos/default.png') -> Team:
+                   team_url: str, logo_path: str = 'static/images/logos/default.png',
+                   foreign_id: str = None) -> Team:
         """
         Create new team
         
@@ -63,6 +68,7 @@ class TeamManager:
             short_name: 3-letter abbreviation
             team_url: Unique URL from NALF
             logo_path: Path to logo image
+            foreign_id: Optional external ID for integration
         
         Returns:
             Created Team object
@@ -72,7 +78,8 @@ class TeamManager:
             name_20=name_20,
             short_name=short_name.upper(),
             team_url=team_url,
-            logo_path=logo_path
+            logo_path=logo_path,
+            foreign_id=foreign_id
         )
         
         db.session.add(team)

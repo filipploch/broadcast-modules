@@ -1,0 +1,104 @@
+# view.html
+{% extends "base/base.html" %}
+
+{% block title %}{{ stats.league.name }}{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ stats.total_teams }}</h3>
+        <p>Drużyn w lidze</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+        <h3>{{ stats.total_games }}</h3>
+        <p>Meczów w sumie</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+        <h3>{{ stats.finished_games }}</h3>
+        <p>Rozegranych</p>
+    </div>
+    {% if stats.total_groups > 1 %}
+    <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+        <h3>{{ stats.total_groups }}</h3>
+        <p>Grup</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>{{ stats.league.name }}</h2>
+        <div class="actions">
+            <a href="{{ url_for('league_teams', league_id=stats.league.id) }}" class="btn btn-success">
+                👥 Zarządzaj Drużynami
+            </a>
+            <a href="{{ url_for('create_game', league_id=stats.league.id) }}" class="btn btn-primary">
+                ➕ Dodaj Mecz
+            </a>
+            <a href="{{ url_for('edit_league', league_id=stats.league.id) }}" class="btn btn-secondary">
+                ✏️ Edytuj
+            </a>
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <p><strong>Sezon:</strong> 
+            <a href="{{ url_for('view_season', season_id=stats.league.season_id) }}" style="color: #3498db;">
+                {{ stats.league.season_name }}
+            </a>
+        </p>
+        <p><strong>Utworzono:</strong> {{ stats.league.created_at[:10] if stats.league.created_at else '-' }}</p>
+    </div>
+
+    {% if stats.live_games > 0 %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>⚡ Na żywo:</strong> {{ stats.live_games }} {{ 'mecz' if stats.live_games == 1 else 'mecze' if stats.live_games < 5 else 'meczów' }}
+    </div>
+    {% endif %}
+
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Drużyny:</h3>
+    
+    {% if stats.teams %}
+    <table>
+        <thead>
+            <tr>
+                <th>Skrót</th>
+                <th>Nazwa</th>
+                {% if stats.total_groups > 1 %}<th>Grupa</th>{% endif %}
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in stats.teams %}
+            <tr>
+                <td><strong>{{ team.team_short_name }}</strong></td>
+                <td>{{ team.team_name }}</td>
+                {% if stats.total_groups > 1 %}
+                <td>Grupa {{ team.group_nr }}</td>
+                {% endif %}
+                <td>
+                    <a href="{{ url_for('view_team', team_id=team.team_id) }}" class="btn btn-primary btn-small">
+                        Widok
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak drużyn w tej lidze. 
+        <a href="{{ url_for('league_teams', league_id=stats.league.id) }}" style="color: #3498db;">Dodaj drużyny</a>
+    </p>
+    {% endif %}
+    
+    <div class="actions" style="margin-top: 2rem;">
+        <a href="{{ url_for('list_games', league_id=stats.league.id) }}" class="btn btn-primary">
+            📅 Zobacz Wszystkie Mecze
+        </a>
+        <a href="{{ url_for('list_leagues', season_id=stats.league.season_id) }}" class="btn btn-secondary">
+            ← Powrót do lig sezonu
+        </a>
+    </div>
+</div>
+{% endblock %}

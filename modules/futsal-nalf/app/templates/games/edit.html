@@ -1,0 +1,84 @@
+{% extends "base/base.html" %}
+{% block title %}Edytuj Mecz{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header"><h2>Edytuj Mecz</h2></div>
+    <form method="POST">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="home_team_id">Gospodarz *</label>
+                <select id="home_team_id" name="home_team_id" required readonly>
+                    {% for team in teams %}<option value="{{ team.id }}" {% if team.id == game.home_team_id %}selected{% endif %}>{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="away_team_id">Gość *</label>
+                <select id="away_team_id" name="away_team_id" required readonly>
+                    {% for team in teams %}<option value="{{ team.id }}" {% if team.id == game.away_team_id %}selected{% endif %}>{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="is_home_team_lost_by_wo">Porażka przez WO</label>
+                <input id="is_home_team_lost_by_wo" name="is_home_team_lost_by_wo" type="checkbox"
+                {% if game.is_home_team_lost_by_wo == 1 %} value="1" checked {% else %} value="0" {% endif %}
+                >
+                </input>
+            </div>
+            <div class="form-group">
+                <label for="home_team_goals">Bramki</label>
+                <input type="number" id="home_team_goals" name="home_team_goals" value="{{ game.home_team_goals }}">
+            </div>
+            <div class="form-group">
+                <label for="away_team_goals">Bramki</label>
+                <input type="number" id="away_team_goals" name="away_team_goals" value="{{ game.away_team_goals }}">
+            </div>
+            <div class="form-group">
+                <label for="is_away_team_lost_by_wo">Porażka przez WO</label>
+                <input id="is_away_team_lost_by_wo" name="is_away_team_lost_by_wo" type="checkbox"
+                {% if game.is_away_team_lost_by_wo == 1 %} value="1" checked {% else %} value="0" {% endif %}
+                >
+                </input>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="stadium_id">Stadion *</label>
+            <select id="stadium_id" name="stadium_id" required>
+                {% for stadium in stadiums %}<option value="{{ stadium.id }}" {% if stadium.id == game.stadium_id %}selected{% endif %}>{{ stadium.name }}, {{ stadium.city }}</option>{% endfor %}
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="round">Kolejka *</label>
+                <input type="number" id="round" name="round" value="{{ game.round }}" required min="1">
+            </div>
+            <div class="form-group">
+                <label for="group_nr">Grupa</label>
+                <input type="number" id="group_nr" name="group_nr" value="{{ game.group_nr }}" min="1" max="10">
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="date">Data</label>
+                <input type="date" id="date" name="date" value="{{ game.date.strftime('%Y-%m-%d') if game.date else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="time">Godzina</label>
+                <input type="time" id="time" name="time" value="{{ game.date.strftime('%H:%M') if game.date else '' }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small></label>
+            <input type="text" id="foreign_id" name="foreign_id" value="{{ game.foreign_id or '' }}" maxlength="500" placeholder="np. external-game-789" style="background: #f8f9fa; cursor: pointer;" ondblclick="enableElementToEdit(this)" readonly>
+            <small style="color: #6c757d;">Kliknij dwukrotnie aby edytować</small>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz Zmiany</button>
+            <a href="{{ url_for('view_game', game_id=game.id) }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+{% endblock %}

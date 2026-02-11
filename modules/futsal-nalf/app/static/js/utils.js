@@ -24,3 +24,16 @@ function removeClassName(element, className) {
     return false;
   }
 }
+
+function enableElementToEdit(element) {
+    element.removeAttribute("readonly");
+    element.style.background = "#fff";
+    element.style.cursor = "text";
+    element.focus();
+    element.select();
+    element.onblur = function() {
+        this.setAttribute("readonly", "readonly");
+        this.style.background = "#f8f9fa";
+        this.style.cursor = "pointer";
+    };
+}

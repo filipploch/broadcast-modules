@@ -103,7 +103,7 @@ func (pm *PluginManager) LoadConfig() error {
 	externalCount := 0
 
 	for id, config := range configs {
-		config.ID = id // Ensure ID matches key
+		config.ID = id // Ensure ID games key
 
 		if config.Type == "local" {
 			// This is a LOCAL plugin - PluginManager will manage its process

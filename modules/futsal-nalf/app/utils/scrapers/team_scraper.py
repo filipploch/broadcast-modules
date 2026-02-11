@@ -7,28 +7,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class NALFScraper:
+class TeamScraper:
     """Scraper for NALF Futsal league tables"""
     
     BASE_URL = "https://nalffutsal.pl"
     
     def __init__(self):
-        # self._stop_event = None
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
 
-    # def set_stop_event(self, stop_event):
-        # """Set the stop event for cooperative stopping"""
-        # self._stop_event = stop_event
-
-    # def stop_scraping(self):
-        # """Stop scraping immediately"""
-        # # Tutaj możesz dodać kod do zatrzymania aktywnych operacji
-        # # np. zamknąć sesję requests, przerwać pętle, etc.
-        # if hasattr(self, 'session'):
-            # self.session.close()
     
     def scrape_league_table(self, page_url: str) -> List[Dict[str, str]]:
         """
@@ -48,7 +37,6 @@ class NALFScraper:
             teams = []
             
             # Find table body
-            # tbodies = soup.find_all('tbody')
 
             tbody = soup.find('tbody')
             if not tbody:

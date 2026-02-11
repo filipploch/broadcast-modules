@@ -3,17 +3,26 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 # from app.models import Plugin
 
 from app.managers.team_manager import TeamManager
-from app.managers.scraper_manager import ScraperManager
+from app.managers.team_scraper_manager import TeamScraperManager
+from app.managers.game_manager import GameManager
+from app.managers.game_scraper_manager import GameScraperManager
+from app.managers.league_manager import LeagueManager
 from app.models.team import Team
 import logging
 import time
 import os
 
+# Import CRUD routes for Season, League, Game
+from app import routes_crud  # noqa: F401
+
 
 logger = logging.getLogger(__name__)
 
 team_manager = TeamManager()
-scraper_manager = ScraperManager()
+team_scraper_manager = TeamScraperManager()
+game_manager = GameManager()
+game_scraper_manager = GameScraperManager()
+league_manager = LeagueManager()
 
 @current_app.route('/')
 def index():
@@ -43,13 +52,24 @@ def api_status():
         'module_id': current_app.config['MODULE_ID']
     })
 
+@current_app.route('/games/')
+def list_games():
+    """List all games in database"""
+    games = game_manager.get_all_games()
+    stats = game_scraper_manager.get_statistics()
+    scraping_status = game_scraper_manager.get_scraping_status()
+
+    return render_template('games/list.html',
+                           games=games,
+                           stats=stats,
+                           scraping_status=scraping_status)
 
 @current_app.route('/teams/')
 def list_teams():
     """List all teams in database"""
     teams = team_manager.get_all_teams()
-    stats = scraper_manager.get_statistics()
-    scraping_status = scraper_manager.get_scraping_status()
+    stats = team_scraper_manager.get_statistics()
+    scraping_status = team_scraper_manager.get_scraping_status()
 
     return render_template('teams/list.html',
                            teams=teams,
@@ -158,15 +178,82 @@ def delete_team(team_id):
 # Scraping Workflow (Async)
 # =========================
 
+@current_app.route('/games/scrape', methods=['GET', 'POST'])
+@current_app.route('/leagues/<int:league_id>/games/scrape', methods=['GET', 'POST'])
+def scrape_games(league_id=None):
+    """Scrape games from NALF league pages (async)"""
+    selected_league_id = int(request.form.get('league_id', league_id or 0))
+    league = league_manager.get_league_by_id(selected_league_id)
+    teams = Team.query.order_by(Team.name).all()
+    if request.method == 'POST':
+        try:
+            
+            # Check if scraping already in progress
+            if game_scraper_manager.is_scraping_in_progress():
+                flash('Scrapowanie już trwa. Poczekaj na zakończenie.', 'info')
+                return redirect(url_for('game_scrape_status'))
+
+            # Get URLs from form (comma or newline separated)
+            urls = []
+            urls.append(league.games_url)
+
+            if not urls:
+                flash('Podaj przynajmniej jeden URL do tabeli ligi', 'error')
+                return render_template('games/scrape.html')
+            
+            print(f'urls: {urls}')
+
+            # Start async scraping
+            if game_scraper_manager.scrape_games_async(urls):
+                flash(f'Rozpoczęto scrapowanie {len(urls)} lig w tle...', 'info')
+                return redirect(url_for('game_scrape_status'))
+            else:
+                flash('Nie udało się rozpocząć scrapowania', 'error')
+
+        except Exception as e:
+            logger.error(f"Error starting scraping: {e}")
+            flash(f'Błąd podczas rozpoczynania scrapowania: {str(e)}', 'error')
+
+    # Default URLs for quick scraping
+    default_urls = [
+        'https://nalffutsal.pl/?page_id=34',  # Dywizja A
+        'https://nalffutsal.pl/?page_id=52',  # Dywizja B
+        'https://nalffutsal.pl/?page_id=32',  # Puchar Ligi
+    ]
+
+    scraping_status = game_scraper_manager.get_scraping_status()
+
+    return render_template('games/scrape.html',
+                           default_urls=default_urls,
+                           league=league,
+                           scraping_status=scraping_status)
+
+@current_app.route('/game/scrape/status')
+def game_scrape_status():
+    """Show scraping status page"""
+    status = game_scraper_manager.get_scraping_status()
+    stats = game_scraper_manager.get_statistics()
+
+    return render_template('games/scrape_status.html',
+                           status=status,
+                           stats=stats)
+
+@current_app.route('/games/scrape/clear-status', methods=['POST'])
+def clear_games_scrape_status():
+    """Clear scraping status"""
+    game_scraper_manager.clear_scraping_status()
+    flash('Wyczyszczono status scrapowania', 'info')
+    return redirect(url_for('list_games'))
+
 @current_app.route('/teams/scrape', methods=['GET', 'POST'])
 def scrape_teams():
     """Scrape teams from NALF league pages (async)"""
     if request.method == 'POST':
         try:
             # Check if scraping already in progress
-            if scraper_manager.is_scraping_in_progress():
+            if team_scraper_manager.is_scraping_in_progress():
                 flash('Scrapowanie już trwa. Poczekaj na zakończenie.', 'info')
-                return redirect(url_for('scrape_status'))
+                return redirect(url_for('teams_scrape_status'))
 
             # Get URLs from form (comma or newline separated)
             urls_input = request.form.get('league_urls', '')
@@ -177,9 +264,9 @@ def scrape_teams():
                 return render_template('teams/scrape.html')
 
             # Start async scraping
-            if scraper_manager.scrape_leagues_async(urls):
+            if team_scraper_manager.scrape_leagues_async(urls):
                 flash(f'Rozpoczęto scrapowanie {len(urls)} lig w tle...', 'info')
-                return redirect(url_for('scrape_status'))
+                return redirect(url_for('teams_scrape_status'))
             else:
                 flash('Nie udało się rozpocząć scrapowania', 'error')
 
@@ -193,7 +280,7 @@ def scrape_teams():
         'https://nalffutsal.pl/?page_id=36',  # I Liga
     ]
 
-    scraping_status = scraper_manager.get_scraping_status()
+    scraping_status = team_scraper_manager.get_scraping_status()
 
     return render_template('teams/scrape.html',
                            default_urls=default_urls,
@@ -201,10 +288,10 @@ def scrape_teams():
 
 
 @current_app.route('/teams/scrape/status')
-def scrape_status():
+def teams_scrape_status():
     """Show scraping status page"""
-    status = scraper_manager.get_scraping_status()
-    stats = scraper_manager.get_statistics()
+    status = team_scraper_manager.get_scraping_status()
+    stats = team_scraper_manager.get_statistics()
 
     return render_template('teams/scrape_status.html',
                            status=status,
@@ -212,9 +299,9 @@ def scrape_status():
 
 
 @current_app.route('/teams/scrape/clear-status', methods=['POST'])
-def clear_scrape_status():
+def clear_teams_scrape_status():
     """Clear scraping status"""
-    scraper_manager.clear_scraping_status()
+    team_scraper_manager.clear_scraping_status()
     flash('Wyczyszczono status scrapowania', 'info')
     return redirect(url_for('list_teams'))
 
@@ -222,7 +309,7 @@ def clear_scrape_status():
 @current_app.route('/teams/pending')
 def pending_teams():
     """List pending teams from scraping that need completion"""
-    pending = scraper_manager.get_pending_teams()
+    pending = team_scraper_manager.get_pending_teams()
     logos = team_manager.get_all_logos()
 
     if not pending:
@@ -236,7 +323,7 @@ def pending_teams():
 def complete_team(team_url):
     """Complete scraped team with additional data"""
     # Get pending team
-    pending_team = scraper_manager.get_pending_team_by_url(team_url)
+    pending_team = team_scraper_manager.get_pending_team_by_url(team_url)
     logos = team_manager.get_all_logos()
 
     if not pending_team:
@@ -245,7 +332,7 @@ def complete_team(team_url):
 
     if request.method == 'POST':
         try:
-            team = scraper_manager.complete_team_from_scraping(
+            team = team_scraper_manager.complete_team_from_scraping(
                 team_url=team_url,
                 name_20=request.form['name_20'],
                 short_name=request.form['short_name'],
@@ -256,7 +343,7 @@ def complete_team(team_url):
                 flash(f'Dodano zespół: {team.name}', 'success')
 
                 # Check if there are more pending teams
-                remaining = len(scraper_manager.get_pending_teams())
+                remaining = len(team_scraper_manager.get_pending_teams())
                 if remaining > 0:
                     flash(f'Pozostało jeszcze {remaining} zespołów do uzupełnienia', 'info')
                     return redirect(url_for('pending_teams'))
@@ -275,7 +362,7 @@ def complete_team(team_url):
 @current_app.route('/teams/pending/clear', methods=['POST'])
 def clear_pending():
     """Clear all pending teams"""
-    scraper_manager.clear_pending_teams()
+    team_scraper_manager.clear_pending_teams()
     flash('Wyczyszczono listę zespołów do uzupełnienia', 'info')
     return redirect(url_for('list_teams'))
 
@@ -307,18 +394,18 @@ def api_get_team(team_id):
 @current_app.route('/api/teams/stats')
 def api_stats():
     """API: Get team statistics"""
-    return jsonify(scraper_manager.get_statistics())
+    return jsonify(team_scraper_manager.get_statistics())
 
 
 @current_app.route('/api/teams/scraping/status')
-def api_scrape_status():
+def api_teams_scrape_status():
     """API: Get scraping status"""
-    status = scraper_manager.get_scraping_status()
+    status = team_scraper_manager.get_scraping_status()
     return jsonify(status)
 
 
 @current_app.route('/teams/scraping/stop', methods=['POST'])
 def stop_scraping():
-    if scraper_manager.stop_scraping():
+    if team_scraper_manager.stop_scraping():
         return jsonify({'success': True, 'message': 'Stop requested'})
     return jsonify({'success': False, 'message': 'No scraping in progress'})

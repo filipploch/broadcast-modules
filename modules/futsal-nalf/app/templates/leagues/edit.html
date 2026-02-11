@@ -1,0 +1,113 @@
+{% extends "base/base.html" %}
+
+{% block title %}Edytuj Ligę - {{ league.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Edytuj Ligę: {{ league.name }}</h2>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">
+                Nazwa Ligi/Rozgrywek *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                value="{{ league.name }}"
+                required
+                maxlength="50"
+                placeholder="np. Dywizja A, Puchar Ligi">
+        </div>
+        
+        <div class="form-group">
+            <label for="games_url">
+                URL Tabeli Meczów *
+            </label>
+            <input 
+                type="url" 
+                id="games_url" 
+                name="games_url" 
+                value="{{ league.games_url }}"
+                required>
+        </div>
+        
+        <div class="form-group">
+            <label for="table_url">
+                URL Tabeli Ligowej
+            </label>
+            <input 
+                type="url" 
+                id="table_url" 
+                name="table_url" 
+                value="{{ league.table_url or '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="scorers_url">
+                URL Tabeli Strzelców *
+            </label>
+            <input 
+                type="url" 
+                id="scorers_url" 
+                name="scorers_url" 
+                value="{{ league.scorers_url }}"
+                required>
+        </div>
+        
+        <div class="form-group">
+            <label for="assists_url">
+                URL Tabeli Asystentów *
+            </label>
+            <input 
+                type="url" 
+                id="assists_url" 
+                name="assists_url" 
+                value="{{ league.assists_url }}"
+                required>
+        </div>
+        
+        <div class="form-group">
+            <label for="canadian_url">
+                URL Klasyfikacji Kanadyjskiej *
+            </label>
+            <input 
+                type="url" 
+                id="canadian_url" 
+                name="canadian_url" 
+                value="{{ league.canadian_url }}"
+                required>
+        </div>
+        
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
+            </label>
+            <input 
+                type="text" 
+                id="foreign_id" 
+                name="foreign_id" 
+                value="{{ league.foreign_id or '' }}"
+                maxlength="500"
+                placeholder="np. external-league-456"
+                readonly
+                style="background: #f8f9fa; cursor: pointer;"
+                ondblclick="enableElementToEdit(this)">
+            <small style="color: #6c757d;">Kliknij dwukrotnie aby edytować</small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz Zmiany</button>
+            <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+
+{% endblock %}

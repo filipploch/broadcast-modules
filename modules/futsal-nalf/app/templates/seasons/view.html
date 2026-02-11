@@ -1,0 +1,91 @@
+{% extends "base/base.html" %}
+
+{% block title %}{{ stats.season.name }}{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ stats.total_leagues }}</h3>
+        <p>Lig w sezonie</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+        <h3>{{ stats.total_teams }}</h3>
+        <p>Drużyn gra</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+        <h3>{{ stats.total_games }}</h3>
+        <p>Meczów w sumie</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+        <h3>{{ stats.finished_games }}</h3>
+        <p>Rozegranych</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>{{ stats.season.name }} (Sezon #{{ stats.season.number }})</h2>
+        <div class="actions">
+            <a href="{{ url_for('create_league', season_id=stats.season.id) }}" class="btn btn-success">
+                ➕ Dodaj Ligę
+            </a>
+            <a href="{{ url_for('edit_season', season_id=stats.season.id) }}" class="btn btn-secondary">
+                ✏️ Edytuj
+            </a>
+            <a href="{{ url_for('list_seasons') }}" class="btn btn-primary">
+                ← Powrót
+            </a>
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <p><strong>Utworzono:</strong> {{ stats.season.created_at[:10] if stats.season.created_at else '-' }}</p>
+        <p><strong>Zaktualizowano:</strong> {{ stats.season.updated_at[:10] if stats.season.updated_at else '-' }}</p>
+    </div>
+
+    {% if stats.live_games > 0 %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>⚡ Na żywo:</strong> {{ stats.live_games }} {{ 'mecz' if stats.live_games == 1 else 'mecze' if stats.live_games < 5 else 'meczów' }}
+    </div>
+    {% endif %}
+
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Ligi w sezonie:</h3>
+    
+    {% if stats.leagues %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nazwa ligi</th>
+                <th>Liczba drużyn</th>
+                <th>Liczba meczów</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for league in stats.leagues %}
+            <tr>
+                <td><strong>{{ league.name }}</strong></td>
+                <td>{{ league.total_teams }}</td>
+                <td>{{ league.total_games }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-primary btn-small">
+                            Widok
+                        </a>
+                        <a href="{{ url_for('list_games', league_id=league.id) }}" class="btn btn-success btn-small">
+                            Mecze
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak lig w tym sezonie. 
+        <a href="{{ url_for('create_league', season_id=stats.season.id) }}" style="color: #3498db;">Dodaj pierwszą ligę</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

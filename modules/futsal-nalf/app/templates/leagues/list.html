@@ -1,0 +1,88 @@
+{% extends "base/base.html" %}
+
+{% block title %}{% if season %}Ligi - {{ season.name }}{% else %}Wszystkie Ligi{% endif %}{% endblock %}
+
+{% block content %}
+{% if season %}
+<div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+    <strong>🏆 Sezon:</strong> {{ season.name }} (#{{ season.number }})
+    <a href="{{ url_for('view_season', season_id=season.id) }}" style="margin-left: 1rem; color: #3498db;">Zobacz szczegóły sezonu →</a>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h2>{% if season %}Ligi w sezonie: {{ season.name }}{% else %}Wszystkie Ligi{% endif %}</h2>
+        <div class="actions">
+            {% if season %}
+            <a href="{{ url_for('create_league', season_id=season.id) }}" class="btn btn-primary">
+                ➕ Nowa Liga
+            </a>
+            {% else %}
+            <a href="{{ url_for('create_league') }}" class="btn btn-primary">
+                ➕ Nowa Liga
+            </a>
+            {% endif %}
+            {% if season %}
+            <a href="{{ url_for('view_season', season_id=season.id) }}" class="btn btn-secondary">
+                ← Powrót do sezonu
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if leagues %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nazwa</th>
+                {% if not season %}<th>Sezon</th>{% endif %}
+                <th>Drużyny</th>
+                <th>Mecze</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for league in leagues %}
+            <tr>
+                <td><strong>{{ league.name }}</strong></td>
+                {% if not season %}
+                <td>{{ league.season.name if league.season else '-' }}</td>
+                {% endif %}
+                <td>{{ league.total_teams }}</td>
+                <td>{{ league.total_games }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-primary btn-small">
+                            Widok
+                        </a>
+                        <a href="{{ url_for('league_teams', league_id=league.id) }}" class="btn btn-success btn-small">
+                            Drużyny
+                        </a>
+                        <a href="{{ url_for('league_games', league_id=league.id) }}" class="btn btn-secondary btn-small">
+                            Mecze
+                        </a>
+                        <form action="{{ url_for('delete_league', league_id=league.id) }}"
+                              method="POST" 
+                              style="display: inline;"
+                              onsubmit="return confirm('Czy na pewno chcesz usunąć ligę {{ league.name }}? UWAGA: Usunięte zostaną również wszystkie mecze!');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak lig {% if season %}w tym sezonie{% else %}w bazie danych{% endif %}. 
+        {% if season %}
+        <a href="{{ url_for('create_league', season_id=season.id) }}" style="color: #3498db;">Utwórz pierwszą ligę</a>
+        {% else %}
+        <a href="{{ url_for('create_league') }}" style="color: #3498db;">Utwórz pierwszą ligę</a>
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

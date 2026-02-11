@@ -1,0 +1,125 @@
+{% extends "base/base.html" %}
+
+{% block title %}Utwórz Ligę{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Utwórz Nową Ligę/Rozgrywki</h2>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="season_id">
+                Sezon *
+            </label>
+            <select id="season_id" name="season_id" required>
+                <option value="">-- Wybierz sezon --</option>
+                {% for season in seasons %}
+                <option value="{{ season.id }}" {% if selected_season_id == season.id %}selected{% endif %}>
+                    {{ season.name }} (Sezon #{{ season.number }})
+                </option>
+                {% endfor %}
+            </select>
+            <small>W którym sezonie odbędą się te rozgrywki?</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="name">
+                Nazwa Ligi/Rozgrywek *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                required
+                maxlength="50"
+                placeholder="np. Dywizja A, Puchar Ligi">
+            <small>Nazwa rozgrywek (max 50 znaków)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="games_url">
+                URL Tabeli Meczów *
+            </label>
+            <input 
+                type="url" 
+                id="games_url" 
+                name="games_url" 
+                required
+                placeholder="https://nalffutsal.pl/?page_id=...">
+            <small>Link do tabeli z meczami na stronie NALF</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="table_url">
+                URL Tabeli Ligowej
+            </label>
+            <input 
+                type="url" 
+                id="table_url" 
+                name="table_url" 
+                placeholder="https://nalffutsal.pl/?page_id=...">
+            <small>Link do tabeli ligowej (opcjonalnie, np. dla pucharów może nie być)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="scorers_url">
+                URL Tabeli Strzelców *
+            </label>
+            <input 
+                type="url" 
+                id="scorers_url" 
+                name="scorers_url" 
+                required
+                placeholder="https://nalffutsal.pl/?page_id=...">
+            <small>Link do klasyfikacji strzelców</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="assists_url">
+                URL Tabeli Asystentów *
+            </label>
+            <input 
+                type="url" 
+                id="assists_url" 
+                name="assists_url" 
+                required
+                placeholder="https://nalffutsal.pl/?page_id=...">
+            <small>Link do klasyfikacji asystentów</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="canadian_url">
+                URL Klasyfikacji Kanadyjskiej *
+            </label>
+            <input 
+                type="url" 
+                id="canadian_url" 
+                name="canadian_url" 
+                required
+                placeholder="https://nalffutsal.pl/?page_id=...">
+            <small>Link do klasyfikacji kanadyjskiej (gole + asysty)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie)</small>
+            </label>
+            <input 
+                type="text" 
+                id="foreign_id" 
+                name="foreign_id" 
+                maxlength="500"
+                placeholder="np. external-league-456">
+            <small>Zewnętrzny identyfikator dla integracji</small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Utwórz Ligę</button>
+            <a href="{{ url_for('list_leagues') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

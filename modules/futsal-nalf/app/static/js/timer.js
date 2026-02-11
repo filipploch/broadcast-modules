@@ -125,7 +125,7 @@ document.getElementById('btn-minus-1s')?.addEventListener('click', () => {
  */
 function createMatchTimer(matchId, durationMinutes = 40) {
     socket.emit('match_timer_create', {
-        match_id: matchId,
+        game_id: matchId,
         duration_minutes: durationMinutes
     });
 }

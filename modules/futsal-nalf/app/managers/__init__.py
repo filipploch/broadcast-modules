@@ -7,7 +7,7 @@ Managers:
 - PluginManager: Loads plugin metadata from database
 - HubClient: Connects to HUB, declares required plugins
 - TimerManager: Business logic for timers (lazy init)
-- GameManager: Business logic for games (lazy init)
+- CurrentGameManager: Business logic for games (lazy init)
 - RecorderManager: Business logic for recording (lazy init)
 """
 from flask import current_app
@@ -17,10 +17,10 @@ import time
 # Global instances
 # _plugin_manager = None
 _hub_client = None
-_game_manager = None
+_current_game_manager = None
 _recorder_manager = None
 _timer_manager = None
-_scraper_manager = None
+_team_scraper_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
 
@@ -36,8 +36,8 @@ def initialize_all_managers(app):
     4. HubClient declares required plugins → HUB STARTS THEM!
     5. Other managers (Timer/Game/Recorder) lazy init when needed
     """
-    # global _plugin_manager, _hub_client, _game_manager, _recorder_manager
-    global _hub_client, _game_manager, _recorder_manager, _timer_manager, _scraper_manager, _initialized
+    # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
+    global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _team_scraper_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -146,16 +146,16 @@ def get_timer_manager():
     return _timer_manager
 
 
-def get_game_manager():
+def get_current_game_manager():
     """Get Game Manager instance (lazy initialization)"""
-    global _game_manager
+    global _current_game_manager
 
-    if _game_manager is None:
-        from app.managers.game_manager import GameManager
-        _game_manager = GameManager(get_hub_client())
+    if _current_game_manager is None:
+        from app.managers.current_game_manager import CurrentGameManager
+        _current_game_manager = CurrentGameManager(get_hub_client())
         current_app.logger.info("✅ Game Manager initialized (lazy)")
 
-    return _game_manager
+    return _current_game_manager
 
 
 def get_recorder_manager():
@@ -176,8 +176,8 @@ def shutdown_all_managers():
 
     Note: We DON'T stop plugin processes - HUB manages them!
     """
-    # global _plugin_manager, _hub_client, _game_manager
-    global _hub_client, _game_manager
+    # global _plugin_manager, _hub_client, _current_game_manager
+    global _hub_client, _current_game_manager
     global _recorder_manager, _timer_manager, _initialized
 
     current_app.logger.info("=" * 60)
@@ -194,7 +194,7 @@ def shutdown_all_managers():
     # Clear references
     # _plugin_manager = None
     _hub_client = None
-    _game_manager = None
+    _current_game_manager = None
     _recorder_manager = None
     _timer_manager = None
     _initialized = False
@@ -208,8 +208,27 @@ __all__ = [
     'initialize_all_managers',
     # 'get_plugin_manager',
     'get_hub_client',
-    'get_game_manager',
+    'get_current_game_manager',
     'get_recorder_manager',
     'get_timer_manager',
     'shutdown_all_managers'
 ]
+
+# Direct imports for simple managers (no dependencies on HUB)
+from app.managers.team_manager import TeamManager
+from app.managers.season_manager import SeasonManager
+from app.managers.league_manager import LeagueManager
+from app.managers.game_manager import GameManager
+from app.managers.team_scraper_manager import TeamScraperManager
+from app.managers.camera_manager import CameraManager
+from app.managers.period_manager import PeriodManager
+from app.managers.game_camera_manager import GameCameraManager
+from app.managers.penalty_manager import PenaltyManager
+from app.managers.player_manager import PlayerManager
+from app.managers.player_game_manager import PlayerGameManager
+from app.managers.event_manager import EventManager
+from app.managers.game_event_manager import GameEventManager
+from app.managers.commentator_manager import CommentatorManager
+from app.managers.game_commentator_manager import GameCommentatorManager
+from app.managers.commentator_manager import CommentatorManager
+from app.managers.game_commentator_manager import GameCommentatorManager

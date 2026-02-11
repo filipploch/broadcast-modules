@@ -1,4 +1,4 @@
-{% extends "teams/base.html" %}
+{% extends "base/base.html" %}
 
 {% block title %}Dodaj Zespół Ręcznie{% endblock %}
 
@@ -59,6 +59,20 @@
                 placeholder="np. IGL"
                 style="text-transform: uppercase;">
             <small>Wpisz dokładnie 3 litery (A-Z)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small>Opcjonalnie - ID zewnętrzne dla integracji</small>
+            </label>
+            <input
+                type="text"
+                id="foreign_id"
+                name="foreign_id"
+                maxlength="500"
+                placeholder="np. external-team-999">
+            <small>Zewnętrzny identyfikator dla integracji z innymi systemami</small>
         </div>
         
         <div class="form-group">

@@ -1,6 +1,7 @@
 """Season model - Football seasons"""
 from app.extensions import db
 from datetime import datetime
+from app.models.league import League
 
 
 class Season(db.Model):
@@ -10,6 +11,7 @@ class Season(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.Integer, unique=True, nullable=False, index=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    foreign_id = db.Column(db.String(500), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -38,6 +40,7 @@ class Season(db.Model):
             'id': self.id,
             'number': self.number,
             'name': self.name,
+            'foreign_id': self.foreign_id,
             'total_leagues': self.total_leagues,
             'total_games': self.total_games,
             'created_at': self.created_at.isoformat() if self.created_at else None,

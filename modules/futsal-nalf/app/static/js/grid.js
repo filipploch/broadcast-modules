@@ -135,7 +135,7 @@ function setTimerTime(timerId, elapsedMs) {
  */
 function createMatchTimer(matchId, durationMinutes = 40) {
     socket.emit('match_timer_create', {
-        match_id: matchId,
+        game_id: matchId,
         duration_minutes: durationMinutes
     });
 }

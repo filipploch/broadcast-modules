@@ -1,0 +1,75 @@
+{% extends "base/base.html" %}
+{% block title %}Utwórz Mecz{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header"><h2>Utwórz Nowy Mecz</h2></div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="league_id">Liga *</label>
+            <select id="league_id" name="league_id" required>
+                <option value="">-- Wybierz ligę --</option>
+                {% for league in leagues %}<option value="{{ league.id }}" {% if selected_league_id == league.id %}selected{% endif %}>{{ league.name }} ({{ league.season.name if league.season else '-' }})</option>{% endfor %}
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="home_team_id">Gospodarz *</label>
+                <select id="home_team_id" name="home_team_id" required>
+                    <option value="">-- Wybierz drużynę --</option>
+                    {% for team in teams %}<option value="{{ team.id }}">{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="away_team_id">Gość *</label>
+                <select id="away_team_id" name="away_team_id" required>
+                    <option value="">-- Wybierz drużynę --</option>
+                    {% for team in teams %}<option value="{{ team.id }}">{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="stadium_id">Stadion *</label>
+            <select id="stadium_id" name="stadium_id" required>
+                <option value="">-- Wybierz stadion --</option>
+                {% for stadium in stadiums %}<option value="{{ stadium.id }}">{{ stadium.name }}, {{ stadium.city }}</option>{% endfor %}
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="round">Kolejka *</label>
+                <input type="number" id="round" name="round" required min="1" placeholder="1">
+            </div>
+            <div class="form-group">
+                <label for="group_nr">Grupa</label>
+                <input type="number" id="group_nr" name="group_nr" value="1" min="1" max="10">
+            </div>
+            <div></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="date">Data</label>
+                <input type="date" id="date" name="date">
+            </div>
+            <div class="form-group">
+                <label for="time">Godzina</label>
+                <input type="time" id="time" name="time">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie)</small></label>
+            <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
+            <small>Zewnętrzny identyfikator dla integracji</small>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Utwórz Mecz</button>
+            <a href="{{ url_for('list_games') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+        <div class="form-group">
+            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie)</small></label>
+            <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
+            <small>Zewnętrzny identyfikator dla integracji</small>
+        </div>

@@ -1,4 +1,4 @@
-{% extends "teams/base.html" %}
+{% extends "base/base.html" %}
 
 {% block title %}Lista Zespołów{% endblock %}
 
@@ -8,11 +8,15 @@
         <h3>{{ stats.total_teams }}</h3>
         <p>Zespołów w bazie</p>
     </div>
+
     {% if stats.pending_teams > 0 %}
-    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-        <h3>{{ stats.pending_teams }}</h3>
-        <p>Do uzupełnienia</p>
-    </div>
+    <a href="{{ url_for('pending_teams') }}" {% if request.endpoint == 'pending_teams' %}class="active"{% endif %}>
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <h3>{{ stats.pending_teams }}</h3>
+            <p>Do uzupełnienia</p>
+        </div>
+    </a>
+    
     {% endif %}
 </div>
 

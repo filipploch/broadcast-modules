@@ -291,18 +291,18 @@ class TimerManager:
     # HIGH-LEVEL BUSINESS LOGIC
     # ========================================================================
     
-    def create_match_timer(self, match_id, duration_minutes=40):
+    def create_game_timer(self, game_id, duration_minutes=40):
         """
         Create a timer for a match
         
         Args:
-            match_id: Match identifier
+            game_id: Match identifier
             duration_minutes: Match duration in minutes
         
         Returns:
             str: Timer ID
         """
-        timer_id = f'match-{match_id}'
+        timer_id = f'match-{game_id}'
         
         self.create_timer(
             timer_id=timer_id,
@@ -311,7 +311,7 @@ class TimerManager:
             pause_at_limit=False,
             update_interval_ms=100,
             metadata={
-                'match_id': match_id,
+                'game_id': game_id,
                 'type': 'match',
                 'duration_minutes': duration_minutes
             }

@@ -1,4 +1,4 @@
-{% extends "teams/base.html" %}
+{% extends "base/base.html" %}
 
 {% block title %}Scrapowanie Zespołów{% endblock %}
 
@@ -10,7 +10,7 @@
     </div>
     <p style="padding: 1rem;">
         Scraper działa w tle. 
-        <a href="{{ url_for('scrape_status') }}" class="btn btn-primary">Zobacz Status →</a>
+        <a href="{{ url_for('teams_scrape_status') }}" class="btn btn-primary">Zobacz Status →</a>
     </p>
 </div>
 {% endif %}

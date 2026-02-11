@@ -1,4 +1,4 @@
-"""Game model - Football matches"""
+"""Game model - Football games"""
 from app.extensions import db
 from datetime import datetime
 
@@ -16,6 +16,7 @@ class Game(db.Model):
     WALKOVER_SCORE = 5
 
     id = db.Column(db.Integer, primary_key=True)
+    foreign_id = db.Column(db.String(500), nullable=True)
 
     # Teams
     home_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
@@ -39,7 +40,7 @@ class Game(db.Model):
     group_nr = db.Column(db.Integer, nullable=False, default=1)
 
     # Stadium
-    stadium_id = db.Column(db.Integer, db.ForeignKey('stadiums.id'), nullable=False)
+    stadium_id = db.Column(db.Integer, db.ForeignKey('stadiums.id'), nullable=False, default=1)
 
     # Schedule
     date = db.Column(db.DateTime, nullable=True, index=True)
@@ -50,6 +51,13 @@ class Game(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships defined via backref in Team, League, Stadium
+    # New relationships
+    periods = db.relationship('Period', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='Period.period_order')
+    game_cameras = db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    penalty = db.relationship('Penalty', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
+    player_games = db.relationship('PlayerGame', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.time')
+    game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
 
     # Indexes
     __table_args__ = (
@@ -164,6 +172,120 @@ class Game(db.Model):
         self.is_away_team_lost_by_wo = False
         self.updated_at = datetime.utcnow()
 
+    @property
+    def total_periods(self):
+        """Get total number of periods for this game"""
+        return self.periods.count()
+
+    @property
+    def total_cameras(self):
+        """Get total number of cameras assigned to this game"""
+        return self.game_cameras.count()
+
+    @property
+    def has_penalty_shootout(self):
+        """Check if game has penalty shootout"""
+        return self.penalty is not None
+
+    @property
+    def full_score_string(self):
+        """
+        Get full score string including penalty shootout if exists
+        
+        Examples:
+        - "2 : 1" (regular game)
+        - "2 : 2 k. 4:3" (with penalty shootout)
+        - "2 : 1 (WO)" (walkover)
+        """
+        base_score = self.score_string
+        
+        if self.has_penalty_shootout:
+            return f"{base_score} k. {self.penalty.score_string}"
+        
+        return base_score
+
+    def get_periods_list(self):
+        """Get ordered list of periods"""
+        return self.periods.order_by('period_order').all()
+
+    def get_cameras_list(self):
+        """Get list of cameras with locations"""
+        return self.game_cameras.all()
+
+    def get_current_period(self):
+        """Get currently active period (status=PENDING)"""
+        from app.models.period import Period
+        return self.periods.filter_by(status=Period.STATUS_PENDING).first()
+
+    def get_penalty_winner_id(self):
+        """Get winner ID from penalty shootout (if exists)"""
+        if self.has_penalty_shootout:
+            return self.penalty.winner_id
+        return None
+
+    def get_players_list(self, team_id=None):
+        """
+        Get list of players in this game
+        
+        Args:
+            team_id: Optional filter by team
+        
+        Returns:
+            List of PlayerGame objects
+        """
+        query = self.player_games
+        if team_id:
+            query = query.filter_by(team_id=team_id)
+        return query.all()
+
+    def get_events_list(self, period_id=None, event_id=None):
+        """
+        Get list of events in this game
+        
+        Args:
+            period_id: Optional filter by period
+            event_id: Optional filter by event type
+        
+        Returns:
+            List of GameEvent objects ordered by time
+        """
+        query = self.game_events
+        if period_id:
+            query = query.filter_by(period_id=period_id)
+        if event_id:
+            query = query.filter_by(event_id=event_id)
+        return query.order_by('time').all()
+
+    def get_referees_list(self, referee_type=None):
+        """
+        Get list of referees for this game
+        
+        Args:
+            referee_type: Optional filter by type ("Główny", "Asystent")
+        
+        Returns:
+            List of GameReferee objects
+        """
+        query = self.game_referees
+        if referee_type:
+            query = query.filter_by(type=referee_type)
+        return query.all()
+
+    @property
+    def total_players(self):
+        """Get total number of players assigned to this game"""
+        return self.player_games.count()
+
+    @property
+    def total_events(self):
+        """Get total number of events in this game"""
+        return self.game_events.count()
+
+    @property
+    def total_referees(self):
+        """Get total number of referees for this game"""
+        return self.game_referees.count()
+
     def get_team_stats(self, team_id, include_live=False):
         """
         Calculate statistics for a specific team from this game.
@@ -266,6 +388,7 @@ class Game(db.Model):
         """Convert to dictionary"""
         return {
             'id': self.id,
+            'foreign_id': self.foreign_id,
             'home_team': {
                 'id': self.home_team_id,
                 'name': self.home_team.name if self.home_team else None,
@@ -298,6 +421,19 @@ class Game(db.Model):
             'round': self.round,
             'score_string': self.score_string,
             'winner_id': self.winner_id,
+            'total_periods': self.total_periods,
+            'total_cameras': self.total_cameras,
+            'has_penalty_shootout': self.has_penalty_shootout,
+            'full_score_string': self.full_score_string,
+            'periods': [p.to_dict() for p in self.get_periods_list()],
+            'cameras': [gc.to_dict() for gc in self.get_cameras_list()],
+            'penalty': self.penalty.to_dict() if self.penalty else None,
+            'total_players': self.total_players,
+            'total_events': self.total_events,
+            'total_referees': self.total_referees,
+            'players': [pg.to_dict() for pg in self.get_players_list()],
+            'events': [ge.to_dict() for ge in self.get_events_list()],
+            'referees': [gr.to_dict() for gr in self.get_referees_list()],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

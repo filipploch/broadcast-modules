@@ -1,0 +1,83 @@
+{% extends "base/base.html" %}
+
+{% block title %}Utwórz Sezon{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Utwórz Nowy Sezon</h2>
+    </div>
+    
+    <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>ℹ️ Informacja:</strong>
+        <p style="margin-top: 0.5rem;">
+            Sezon to kontener dla wszystkich rozgrywek w danym okresie (np. "Jesień 2025").
+            Po utworzeniu sezonu będziesz mógł dodać do niego ligi i puchary.
+        </p>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="number">
+                Numer Sezonu *
+            </label>
+            <input 
+                type="number" 
+                id="number" 
+                name="number" 
+                required
+                min="1"
+                placeholder="np. 1">
+            <small>Unikalny numer identyfikujący sezon (liczba całkowita)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="name">
+                Nazwa Sezonu *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                required
+                maxlength="100"
+                placeholder="np. Jesień 2025">
+            <small>Opisowa nazwa sezonu (max 100 znaków)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie - ID zewnętrzne dla integracji)</small>
+            </label>
+            <input 
+                type="text" 
+                id="foreign_id" 
+                name="foreign_id" 
+                maxlength="500"
+                placeholder="np. external-season-123">
+            <small>Zewnętrzny identyfikator dla integracji z innymi systemami</small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Utwórz Sezon</button>
+            <a href="{{ url_for('list_seasons') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Suggest name based on current year
+    document.addEventListener('DOMContentLoaded', function() {
+        const nameInput = document.getElementById('name');
+        if (!nameInput.value) {
+            const year = new Date().getFullYear();
+            const month = new Date().getMonth();
+            const season = month >= 6 ? 'Jesień' : 'Wiosna';
+            nameInput.placeholder = `np. ${season} ${year}`;
+        }
+    });
+</script>
+{% endblock %}

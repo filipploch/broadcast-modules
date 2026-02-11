@@ -189,7 +189,7 @@ button:disabled:hover {
 }
 
 /* === MATCH DISPLAY === */
-.match-display {
+.game-display {
     background: #2a2a2a;
     border-radius: 12px;
     padding: 20px;
@@ -197,7 +197,7 @@ button:disabled:hover {
     text-align: center;
 }
 
-.match-teams {
+.game-teams {
     display: flex;
     justify-content: space-around;
     align-items: center;
@@ -221,7 +221,7 @@ button:disabled:hover {
     color: #10b981;
 }
 
-.match-separator {
+.game-separator {
     font-size: 2em;
     color: #666;
 }
@@ -285,7 +285,7 @@ code {
         width: 100%;
     }
 
-    .match-teams {
+    .game-teams {
         flex-direction: column;
         gap: 20px;
     }

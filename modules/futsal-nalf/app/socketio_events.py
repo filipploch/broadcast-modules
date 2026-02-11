@@ -262,13 +262,13 @@ def handle_timer_set_time(data):
 # ============================================================================
 
 @socketio.on('match_timer_create')
-def handle_match_timer_create(data):
+def handle_game_timer_create(data):
     """
     Create match timer with penalty support
     
     Client sends:
     {
-        'match_id': 123,
+        'game_id': 123,
         'duration_minutes': 40
     }
     """
@@ -277,13 +277,13 @@ def handle_match_timer_create(data):
         emit('error', {'message': 'Timer manager not available'})
         return
     
-    match_id = data.get('match_id')
+    game_id = data.get('game_id')
     duration_minutes = data.get('duration_minutes', 40)
     
-    timer_id = timer_manager.create_match_timer(match_id, duration_minutes)
+    timer_id = timer_manager.create_game_timer(game_id, duration_minutes)
     
     emit('match_timer_created', {
-        'match_id': match_id,
+        'game_id': game_id,
         'timer_id': timer_id
     }, broadcast=True)
 

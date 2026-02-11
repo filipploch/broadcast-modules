@@ -1,0 +1,207 @@
+{% extends "base/base.html" %}
+
+{% block title %}Status Scrapowania{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .status-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    .status-icon {
+        font-size: 4rem;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    
+    .status-in-progress {
+        color: #3498db;
+        animation: pulse 1.5s infinite;
+    }
+    
+    .status-completed {
+        color: #27ae60;
+    }
+    
+    .status-error {
+        color: #e74c3c;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 30px;
+        background: #e0e0e0;
+        border-radius: 15px;
+        overflow: hidden;
+        margin: 1.5rem 0;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        transition: width 0.3s;
+        animation: progress-animation 1.5s infinite;
+    }
+    
+    @keyframes progress-animation {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+    
+    .stat-box {
+        text-align: center;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .stat-box h3 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        color: #2c3e50;
+    }
+    
+    .stat-box p {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="status-container">
+    <div class="status-card">
+        {% if status.status == 'in_progress' %}
+        <div class="status-icon status-in-progress">
+            🔄
+        </div>
+        <h2 style="text-align: center; color: #3498db;">Scrapowanie w toku...</h2>
+        <p style="text-align: center; color: #7f8c8d;">Proszę czekać. Scraper działa w tle.</p>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 100%; background-size: 200% 100%;"></div>
+        </div>
+        
+        <p style="text-align: center; margin-top: 1rem;">
+            <small>Ta strona odświeży się automatycznie...</small>
+        </p>
+        
+        {% elif status.status == 'completed' %}
+        <div class="status-icon status-completed">
+            ✅
+        </div>
+        <h2 style="text-align: center; color: #27ae60;">Scrapowanie Zakończone!</h2>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <h3>{{ status.total_scraped }}</h3>
+                <p>Znalezionych</p>
+            </div>
+            <div class="stat-box">
+                <h3 style="color: #3498db;">{{ status.updated }}</h3>
+                <p>Zaktualizowanych</p>
+            </div>
+            <div class="stat-box">
+                <h3 style="color: #f39c12;">{{ status.new_pending }}</h3>
+                <p>Nowych</p>
+            </div>
+        </div>
+        
+        {% if status.updated > 0 %}
+        <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+            <strong>✨ Automatyczna Aktualizacja:</strong>
+            <p style="margin-top: 0.5rem;">
+                Zaktualizowano nazwy {{ status.updated }} istniejących zespołów w bazie danych.
+            </p>
+        </div>
+        {% endif %}
+        
+        <div class="actions" style="justify-content: center; margin-top: 2rem;">
+            <a href="{{ url_for('list_games') }}" class="btn btn-primary">
+                Zobacz Listę Spotkań
+            </a>
+            
+            <form action="{{ url_for('clear_games_scrape_status') }}" method="POST" style="display: inline;">
+                <button type="submit" class="btn btn-secondary">Wyczyść Status</button>
+            </form>
+        </div>
+        
+        {% elif status.status == 'error' %}
+        <div class="status-icon status-error">
+            ❌
+        </div>
+        <h2 style="text-align: center; color: #e74c3c;">Błąd Scrapowania</h2>
+        
+        <div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 1rem; border-radius: 4px; margin: 1.5rem 0;">
+            <strong>Błąd:</strong>
+            <p style="margin-top: 0.5rem; font-family: monospace;">{{ status.error }}</p>
+        </div>
+        
+        <div class="actions" style="justify-content: center;">
+            <a href="{{ url_for('scrape_games') }}" class="btn btn-primary">
+                🔄 Spróbuj Ponownie
+            </a>
+            <a href="{{ url_for('list_games') }}" class="btn btn-secondary">
+                ← Powrót
+            </a>
+        </div>
+        
+        {% else %}
+        <div class="status-icon">
+            ℹ️
+        </div>
+        <h2 style="text-align: center; color: #7f8c8d;">Brak Aktywnego Scrapowania</h2>
+        <p style="text-align: center;">
+            Nie trwa żadne scrapowanie. 
+            <a href="{{ url_for('scrape_games') }}">Rozpocznij scrapowanie</a>
+        </p>
+        {% endif %}
+    </div>
+    
+    {% if status.status == 'completed' or status.status == 'error' %}
+    <div class="card">
+        <div class="card-header">
+            <h2>Co dalej?</h2>
+        </div>
+        
+        <ul style="margin-left: 1.5rem; line-height: 2;">
+            {% if status.new_pending > 0 %}
+            <li>Uzupełnij dane dla {{ status.new_pending }} nowych zespołów</li>
+            {% endif %}
+            {% if status.updated > 0 %}
+            <li>Sprawdź zaktualizowane nazwy zespołów na liście</li>
+            {% endif %}
+            <li>Możesz rozpocząć kolejne scrapowanie w dowolnym momencie</li>
+            <li>Użyj CLI: <code>python manage_games.py scrape</code></li>
+        </ul>
+    </div>
+    {% endif %}
+    <form action="{{ url_for('stop_scraping') }}" method="POST" style="display: inline;">
+        <button type="submit" class="btn btn-secondary">Zatrzymaj scraping</button>
+    </form>
+</div>
+{% endblock %}
+
+

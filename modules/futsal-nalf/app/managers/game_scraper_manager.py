@@ -1,9 +1,12 @@
-"""Team Manager - handles CRUD operations and scraping workflow with threading"""
+"""Game Scraper Manager - handles CRUD operations and scraping workflow with threading"""
 from typing import List, Dict, Optional, Callable
 from flask import session, current_app
 from app.extensions import db
 from app.models.team import Team
+from app.models.game import Game
 from app.managers.team_manager import TeamManager
+from app.managers.game_manager import GameManager
+from datetime import datetime
 import threading
 import logging
 import os
@@ -11,11 +14,12 @@ import os
 logger = logging.getLogger(__name__)
 
 team_manager = TeamManager()
+game_manager = GameManager()
 
-class ScraperManager:
-    """Manager for Team CRUD operations and scraping workflow"""
+class GameScraperManager:
+    """Manager for Game CRUD operations and scraping workflow"""
     
-    SCRAPED_TEAMS_SESSION_KEY = 'scraped_teams'
+    SCRAPED_GAMES_SESSION_KEY = 'scraped_games'
     SCRAPING_STATUS_KEY = 'scraping_status'
     
     def __init__(self):
@@ -69,7 +73,7 @@ class ScraperManager:
             # return True
     
     # def _scrape_worker(self, league_urls: List[str], callback: Optional[Callable] = None):
-    def scrape_leagues_async(self, league_urls: List[str],
+    def scrape_games_async(self, league_urls: List[str],
                              callback: Optional[Callable] = None):
         """
         Worker function that runs in separate thread
@@ -83,17 +87,17 @@ class ScraperManager:
 
             try:
                 # Import here to avoid circular imports
-                from app.utils.scrapers import NALFScraper
+                from app.utils.scrapers import GameScraper
                 
-                scraper = NALFScraper()
+                scraper = GameScraper()
                 
                 logger.info("Scraping started in thread")
                 
                 # Scrape teams
-                scraped_teams = scraper.scrape_multiple_leagues(league_urls)
+                scraped_games = scraper.scrape_multiple_leagues(league_urls)
                 
                 # Process scraped teams
-                stats = self._process_scraped_teams(scraped_teams)
+                stats = self._process_scraped_games(scraped_games)
                 
                 # Update status
                 session[self.SCRAPING_STATUS_KEY] = {
@@ -154,50 +158,71 @@ class ScraperManager:
         session.pop(self.SCRAPING_STATUS_KEY, None)
         session.modified = True
     
-    def _process_scraped_teams(self, scraped_teams: List[Dict[str, str]]) -> Dict[str, int]:
+    def _process_scraped_games(self, scraped_games: List[Dict[str, str]]) -> Dict[str, int]:
         """
         Process scraped teams: update existing teams' names and collect new teams
         
         CRITICAL: This updates the 'name' field for existing teams automatically!
         
         Args:
-            scraped_teams: List of team dictionaries from scraper
+            scraped_games: List of team dictionaries from scraper
         
         Returns:
             Statistics dictionary
         """
         updated_count = 0
-        new_teams = []
+        new_games = []
 
-        for team_data in scraped_teams:
-            team_url = team_data['team_url']
-            team_name = team_data['name']
+        for game_data in scraped_games:
+            foreign_id = game_data['foreign_id']
+            home_team_id = team_manager.get_team_by_name(game_data['home_team_name']).id
+            away_team_id = team_manager.get_team_by_name(game_data['away_team_name']).id
+            home_team_goals = game_data['home_team_goals']
+            away_team_goals = game_data['away_team_goals']
+            status = game_data['status']
+            league_id = game_data['league_id']
+            date = game_data['date']
+            round = game_data['round']
+
+            print(f'game_data: {game_data}')
             
             # Check if team exists in database
-            existing_team = team_manager.get_team_by_url(team_url)
+            existing_game = game_manager.get_game_by_foreign_id(foreign_id)
             
-            if existing_team:
-                # Team exists → ALWAYS update name (names can change)
-                if existing_team.name != team_name:
-                    old_name = existing_team.name
-                    existing_team.name = team_name
-                    db.session.commit()
-                    updated_count += 1
-                    logger.info(f"Updated team name: '{old_name}' → '{team_name}'")
-                else:
-                    logger.debug(f"Team name unchanged: {team_name}")
+            if existing_game:
+                existing_game.home_team_id = home_team_id
+                existing_game.away_team_id = away_team_id
+                existing_game.home_team_goals = home_team_goals
+                existing_game.away_team_goals = away_team_goals
+                existing_game.status = status
+                # db.session.commit()
+                updated_count += 1
+                
             else:
-                # Team is new → add to pending list
-                new_teams.append(team_data)
-        
+                date_format = '%Y-%m-%d %H:%M:%S%z'
+                game = Game()
+                game.foreign_id = foreign_id
+                game.home_team_id = home_team_id
+                game.away_team_id = away_team_id
+                game.home_team_goals = home_team_goals
+                game.away_team_goals = away_team_goals
+                game.status = status
+                game.league_id = league_id
+                game.stadium_id = 1
+                game.date = datetime.strptime(date.replace('T', ' '), date_format)
+                game.round = round
+                db.session.add(game)
+                # db.session.commit()
+                new_games.append(game_data)
+        db.session.commit()
         # Store new teams in session
-        session[self.SCRAPED_TEAMS_SESSION_KEY] = new_teams
+        session[self.SCRAPED_GAMES_SESSION_KEY] = new_games
         session.modified = True
         
         return {
-            'total_scraped': len(scraped_teams),
+            'total_scraped': len(scraped_games),
             'updated': updated_count,
-            'new_pending': len(new_teams)
+            'new_pending': len(new_games)
         }
     
     # def get_pending_teams(self) -> List[Dict[str, str]]:
@@ -208,7 +233,7 @@ class ScraperManager:
         Returns:
             List of team dictionaries from session
         """
-        return session.get(self.SCRAPED_TEAMS_SESSION_KEY, [])
+        return session.get(self.SCRAPED_GAMES_SESSION_KEY, [])
     
     def get_pending_team_by_url(self, team_url: str) -> Optional[Dict[str, str]]:
         """
@@ -240,7 +265,7 @@ class ScraperManager:
         updated_teams = [t for t in pending_teams if t['team_url'] != team_url]
         
         if len(updated_teams) < len(pending_teams):
-            session[self.SCRAPED_TEAMS_SESSION_KEY] = updated_teams
+            session[self.SCRAPED_GAMES_SESSION_KEY] = updated_teams
             session.modified = True
             return True
         
@@ -248,11 +273,12 @@ class ScraperManager:
     
     def clear_pending_teams(self):
         """Clear all pending teams from session"""
-        session.pop(self.SCRAPED_TEAMS_SESSION_KEY, None)
+        session.pop(self.SCRAPED_GAMES_SESSION_KEY, None)
         session.modified = True
     
     def complete_team_from_scraping(self, team_url: str, name_20: str, 
-                                   short_name: str, logo_path: str = None) -> Optional[Team]:
+                                   short_name: str, logo_path: str = None,
+                                   foreign_id: str = None) -> Optional[Team]:
         """
         Complete a scraped team with additional data and save to database
         
@@ -261,6 +287,7 @@ class ScraperManager:
             name_20: Shortened name (max 20 chars)
             short_name: 3-letter abbreviation
             logo_path: Optional logo path (defaults to default.png)
+            foreign_id: Optional external ID (auto-extracted from team_url if not provided)
         
         Returns:
             Created Team object or None if scraped data not found
@@ -278,6 +305,11 @@ class ScraperManager:
             self.remove_pending_team(team_url)
             return existing_team
         
+        # Auto-extract foreign_id from team_url if not provided
+        if foreign_id is None and 'sp_team=' in team_url:
+            foreign_id = team_url.split('sp_team=')[1]
+            logger.info(f"Auto-extracted foreign_id: {foreign_id}")
+        
         # Create team with complete data
         if logo_path is None:
             logo_path = 'static/images/logos/default.png'
@@ -287,7 +319,8 @@ class ScraperManager:
             name_20=name_20,
             short_name=short_name,
             team_url=team_url,
-            logo_path=logo_path
+            logo_path=logo_path,
+            foreign_id=foreign_id
         )
         
         # Remove from pending list

@@ -1,4 +1,4 @@
-{% extends "teams/base.html" %}
+{% extends "base/base.html" %}
 
 {% block title %}Uzupełnij Dane Zespołu{% endblock %}
 
@@ -67,6 +67,24 @@
             <small>Wpisz dokładnie 3 litery (A-Z)</small>
         </div>
         
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
+            </label>
+            <input
+                type="text"
+                id="foreign_id"
+                name="foreign_id"
+                value="{{ team.foreign_id or '' }}"
+                maxlength="500"
+                placeholder="np. external-team-999"
+                readonly
+                style="background: #f8f9fa; cursor: pointer;"
+                ondblclick="enableForeignIdComplete(this)">
+            <small style="color: #6c757d;">Zewnętrzny identyfikator - kliknij dwukrotnie aby edytować</small>
+        </div>
+
         <div class="form-group">
             <label for="logo_path">
                 Ścieżka do Logo
@@ -155,6 +173,31 @@
 
 {% block extra_js %}
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const teamUrl = "{{ team.team_url }}";
+        if (teamUrl && teamUrl.includes('sp_team=')) {
+            const foreignId = teamUrl.split('sp_team=')[1];
+            foreignIdInput = document.getElementById('foreign_id')
+            foreignIdInput.value = foreignId;
+            foreignIdInput.setAttribute('readonly', 'readonly');
+            foreignIdInput.style.background = '#f8f9fa';
+            foreignIdInput.style.cursor = 'pointer';
+        }
+    });
+
+    function enableForeignIdComplete(input) {
+        input.removeAttribute('readonly');
+        input.style.background = '#fff';
+        input.style.cursor = 'text';
+        input.focus();
+        input.select();
+        
+        input.onblur = function() {
+            this.setAttribute('readonly', 'readonly');
+            this.style.background = '#f8f9fa';
+            this.style.cursor = 'pointer';
+        };
+    }
     // Live preview
     document.getElementById('name_20').addEventListener('input', function() {
         const value = this.value;

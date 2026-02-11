@@ -10,6 +10,7 @@ class League(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=False, index=True)
     name = db.Column(db.String(50), nullable=False)
+    foreign_id = db.Column(db.String(500), nullable=True)
 
     # URLs to external resources
     games_url = db.Column(db.String(500), nullable=False)
@@ -59,6 +60,7 @@ class League(db.Model):
             'season_id': self.season_id,
             'season_name': self.season.name if self.season else None,
             'name': self.name,
+            'foreign_id': self.foreign_id,
             'games_url': self.games_url,
             'table_url': self.table_url,
             'scorers_url': self.scorers_url,

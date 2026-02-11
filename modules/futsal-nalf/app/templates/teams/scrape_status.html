@@ -1,4 +1,4 @@
-{% extends "teams/base.html" %}
+{% extends "base/base.html" %}
 
 {% block title %}Status Scrapowania{% endblock %}
 
@@ -153,7 +153,7 @@
                 Zobacz Listę Zespołów
             </a>
             
-            <form action="{{ url_for('clear_scrape_status') }}" method="POST" style="display: inline;">
+            <form action="{{ url_for('clear_teams_scrape_status') }}" method="POST" style="display: inline;">
                 <button type="submit" class="btn btn-secondary">Wyczyść Status</button>
             </form>
         </div>

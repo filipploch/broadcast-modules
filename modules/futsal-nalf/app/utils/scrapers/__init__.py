@@ -1,4 +1,5 @@
 """Scrapers module - Web scraping functionality"""
-from .nalf_scraper import NALFScraper
+from .team_scraper import TeamScraper
+from .game_scraper import GameScraper
 
-__all__ = ['NALFScraper']
+__all__ = ['TeamScraper', 'GameScraper']

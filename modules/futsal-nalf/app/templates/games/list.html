@@ -1,0 +1,49 @@
+{% extends "base/base.html" %}
+{% block title %}{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}{% endblock %}
+{% block content %}
+{% if league %}
+<div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+    <strong>⚽ Liga:</strong> {{ league.name }} | <strong>Sezon:</strong> {{ league.season.name if league.season else '-' }}
+    <a href="{{ url_for('view_league', league_id=league.id) }}" style="margin-left: 1rem; color: #3498db;">Zobacz szczegóły ligi →</a>
+</div>
+{% endif %}
+<div class="card">
+    <div class="card-header">
+        <h2>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</h2>
+        <div class="actions">
+            {% if league %}
+                <a href="{{ url_for('scrape_games', league_id=league.id) }}" class="btn btn-success">
+                    🔍 Scrapuj mecze
+                </a>
+                <a href="{{ url_for('create_game', league_id=league.id) }}" class="btn btn-primary">➕ Nowy Mecz</a>
+            {% else %}
+                <a href="{{ url_for('create_game') }}" class="btn btn-primary">➕ Nowy Mecz</a>
+            {% endif %}
+        </div>
+    </div>
+    {% if games %}
+    <table>
+        <thead><tr><th>Data</th><th>Mecz</th><th>Wynik</th><th>Status</th><th>Akcje</th></tr></thead>
+        <tbody>
+            {% for game in games %}
+            <tr>
+                <td>{{ game.date.strftime('%Y-%m-%d %H:%M') if game.date else '-' }}</td>
+                <td><strong>{{ game.home_team.short_name if game.home_team else '?' }}</strong> vs <strong>{{ game.away_team.short_name if game.away_team else '?' }}</strong></td>
+                <td class="game-score">{{ game.score_string }}</td>
+                <td><span class="game-status status-{{ 'live' if game.status == 1 else 'finished' if game.status == 2 else 'upcoming' }}">{{ game.get_status_text() }}</span></td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_game', game_id=game.id) }}" class="btn btn-primary btn-small">Widok</a>
+                        <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary btn-small">Edytuj</a>
+                        <form action="{{ url_for('delete_game', game_id=game.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Czy na pewno chcesz usunąć ten mecz?');"><button type="submit" class="btn btn-danger btn-small">Usuń</button></form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">Brak meczów. <a href="{{ url_for('create_game', league_id=league.id) if league else url_for('create_game') }}" style="color: #3498db;">Dodaj pierwszy mecz</a></p>
+    {% endif %}
+</div>
+{% endblock %}

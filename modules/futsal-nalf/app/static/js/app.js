@@ -130,12 +130,12 @@ function goalAway() {
 
 function startMatch() {
     console.log('Starting match...');
-    socket.emit('start_match');
+    socket.emit('start_game');
 }
 
 function finishMatch() {
     console.log('Finishing match...');
-    socket.emit('finish_match');
+    socket.emit('finish_game');
 }
 
 function changeScene(sceneName) {

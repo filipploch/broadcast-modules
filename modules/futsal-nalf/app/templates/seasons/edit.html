@@ -1,0 +1,96 @@
+{% extends "base/base.html" %}
+
+{% block title %}Edytuj Sezon - {{ season.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Edytuj Sezon: {{ season.name }}</h2>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="number">
+                Numer Sezonu *
+            </label>
+            <input 
+                type="number" 
+                id="number" 
+                name="number" 
+                value="{{ season.number }}"
+                required
+                min="1"
+                placeholder="np. 1">
+            <small>Unikalny numer identyfikujący sezon</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="name">
+                Nazwa Sezonu *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                value="{{ season.name }}"
+                required
+                maxlength="100"
+                placeholder="np. Jesień 2025">
+            <small>Opisowa nazwa sezonu (max 100 znaków)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
+            </label>
+            <div style="position: relative;">
+                <input 
+                    type="text" 
+                    id="foreign_id" 
+                    name="foreign_id" 
+                    value="{{ season.foreign_id or '' }}"
+                    maxlength="500"
+                    placeholder="np. external-season-123"
+                    readonly
+                    style="background: #f8f9fa; cursor: pointer;"
+                    ondblclick="enableElementToEdit(this)">
+                <small style="color: #6c757d;">Zewnętrzny identyfikator - kliknij dwukrotnie aby edytować</small>
+            </div>
+        </div>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+            <strong>⚠️ Uwaga:</strong>
+            <p style="margin-top: 0.5rem;">
+                Ten sezon zawiera <strong>{{ season.total_leagues }}</strong> {{ 'ligę' if season.total_leagues == 1 else 'ligi' if season.total_leagues < 5 else 'lig' }} 
+                i <strong>{{ season.total_games }}</strong> {{ 'mecz' if season.total_games == 1 else 'mecze' if season.total_games < 5 else 'meczów' }}.
+                Edycja nie wpłynie na te dane, ale zmiana numeru lub nazwy może wpłynąć na identyfikację.
+            </p>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz Zmiany</button>
+            <a href="{{ url_for('view_season', season_id=season.id) }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function enableForeignIdEdit(input) {
+    input.removeAttribute('readonly');
+    input.style.background = '#fff';
+    input.style.cursor = 'text';
+    input.focus();
+    input.select();
+    
+    // Po opuszczeniu pola, ustaw z powrotem jako readonly
+    input.onblur = function() {
+        this.setAttribute('readonly', 'readonly');
+        this.style.background = '#f8f9fa';
+        this.style.cursor = 'pointer';
+    };
+}
+</script>
+{% endblock %}

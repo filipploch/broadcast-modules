@@ -1,0 +1,64 @@
+{% extends "base/base.html" %}
+
+{% block title %}Lista Sezonów{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Wszystkie Sezony</h2>
+        <div class="actions">
+            <a href="{{ url_for('create_season') }}" class="btn btn-primary">
+                ➕ Nowy Sezon
+            </a>
+        </div>
+    </div>
+    
+    {% if seasons %}
+    <table>
+        <thead>
+            <tr>
+                <th>Numer</th>
+                <th>Nazwa</th>
+                <th>Liczba Lig</th>
+                <th>Utworzono</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for season in seasons %}
+            <tr>
+                <td><strong>#{{ season.number }}</strong></td>
+                <td>{{ season.name }}</td>
+                <td>{{ season.total_leagues }}</td>
+                <td>{{ season.created_at.strftime('%Y-%m-%d') if season.created_at else '-' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_season', season_id=season.id) }}" class="btn btn-primary btn-small">
+                            Widok
+                        </a>
+                        <a href="{{ url_for('list_leagues', season_id=season.id) }}" class="btn btn-success btn-small">
+                            Ligi
+                        </a>
+                        <a href="{{ url_for('edit_season', season_id=season.id) }}" class="btn btn-secondary btn-small">
+                            Edytuj
+                        </a>
+                        <form action="{{ url_for('delete_season', season_id=season.id) }}"
+                              method="POST" 
+                              style="display: inline;"
+                              onsubmit="return confirm('Czy na pewno chcesz usunąć sezon {{ season.name }}? UWAGA: Usunięte zostaną również wszystkie ligi i mecze tego sezonu!');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak sezonów w bazie danych. 
+        <a href="{{ url_for('create_season') }}" style="color: #3498db;">Utwórz pierwszy sezon</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

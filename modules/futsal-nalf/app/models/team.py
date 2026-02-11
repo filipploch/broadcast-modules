@@ -13,6 +13,7 @@ class Team(db.Model):
     short_name = db.Column(db.String(3), nullable=False, index=True)  # 3-letter abbreviation
     team_url = db.Column(db.String(500), nullable=False)
     logo_path = db.Column(db.String(500), default='static/images/logos/default.png')
+    foreign_id = db.Column(db.String(500), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -22,6 +23,7 @@ class Team(db.Model):
     league_participations = db.relationship('LeagueTeam', backref='team', lazy='dynamic', cascade='all, delete-orphan')
     home_games = db.relationship('Game', foreign_keys='Game.home_team_id', backref='home_team', lazy='dynamic')
     away_games = db.relationship('Game', foreign_keys='Game.away_team_id', backref='away_team', lazy='dynamic')
+    players = db.relationship('Player', backref='team', lazy='dynamic', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Team {self.short_name}: {self.name}>'
@@ -56,6 +58,7 @@ class Team(db.Model):
             'short_name': self.short_name,
             'team_url': self.team_url,
             'logo_path': self.logo_path,
+            'foreign_id': self.foreign_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -1,0 +1,39 @@
+{% extends "base/base.html" %}
+{% block title %}{{ game.home_team.name if game.home_team else '?' }} vs {{ game.away_team.name if game.away_team else '?' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Mecz: {{ game.home_team.short_name if game.home_team else '?' }} vs {{ game.away_team.short_name if game.away_team else '?' }}</h2>
+        <div class="actions">
+            <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">✏️ Edytuj</a>
+            <a href="{{ url_for('list_games', league_id=game.league_id) }}" class="btn btn-primary">← Powrót</a>
+        </div>
+    </div>
+    <div style="text-align: center; padding: 2rem;">
+        <h3 style="font-size: 2rem; margin-bottom: 1rem;">
+            <strong>{{ game.home_team.name if game.home_team else '?' }}</strong>
+            <span style="margin: 0 2rem; color: #e74c3c;" class="game-score">{{ game.score_string }}</span>
+            <strong>{{ game.away_team.name if game.away_team else '?' }}</strong>
+        </h3>
+        <p><span class="game-status status-{{ 'live' if game.status == 1 else 'finished' if game.status == 2 else 'upcoming' }}">{{ game.get_status_text() }}</span></p>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+        <div>
+            <p><strong>🏆 Liga:</strong> <a href="{{ url_for('view_league', league_id=game.league_id) }}" style="color: #3498db;">{{ game.league.name if game.league else '-' }}</a></p>
+            <p><strong>🏟️ Stadion:</strong> {{ game.stadium.name if game.stadium else '-' }}, {{ game.stadium.city if game.stadium else '' }}</p>
+            <p><strong>📅 Data:</strong> {{ game.date.strftime('%Y-%m-%d %H:%M') if game.date else '-' }}</p>
+        </div>
+        <div>
+            <p><strong>Kolejka:</strong> {{ game.round }}</p>
+            <p><strong>Grupa:</strong> {{ game.group_nr }}</p>
+            <p><strong>Faule Gospodarzy:</strong> {{ game.home_team_fouls }}</p>
+            <p><strong>Faule Gości:</strong> {{ game.away_team_fouls }}</p>
+        </div>
+    </div>
+    {% if game.is_walkover %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-top: 1.5rem;">
+        <strong>⚠️ Walkower:</strong> {% if game.is_double_walkover %}Obydwie drużyny przegrały walkowerem{% elif game.is_home_team_lost_by_wo %}Gospodarze przegrali walkowerem{% else %}Goście przegrali walkowerem{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
