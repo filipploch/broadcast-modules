@@ -206,8 +206,8 @@ def init_database():
 
             settings = Settings(
                 id=1,
-                actual_season_id=1,
-                actual_game_id=1
+                current_season_id=1,
+                current_game_id=1
             )
             db.session.add(settings)
             print(f"      ✅ Default settings (Season: {season.name}, Game: {game.id})")
@@ -310,9 +310,9 @@ def show_database_info():
         settings = Settings.query.first()
         if settings:
             print(f"\n⚙️  Current Settings:")
-            print(f"   - Active Season: {settings.actual_season.name if settings.actual_season else 'None'}")
-            if settings.actual_game:
-                game = settings.actual_game
+            print(f"   - Active Season: {settings.current_season.name if settings.current_season else 'None'}")
+            if settings.current_game:
+                game = settings.current_game
                 print(f"   - Active Game:   {game.home_team.short_name} vs {game.away_team.short_name} (ID: {game.id})")
 
     print("\n" + "=" * 80)

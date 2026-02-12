@@ -1,6 +1,5 @@
 var timerStates = ['idle', 'running', 'stopped', 'paused', 'limit_reached'];
 
-
 // Wersja addClassName z obsługą błędów
 
 
@@ -21,7 +20,7 @@ function adjustMainControlButtonsToTimerState(timerId, state) {
 }
 
 function adjustDsElementsToState(timerId, state) {
-	const className = `ds-${timerId}-element`;
+	const className = `ds-${convertToClassName(timerId)}-element`;
 	dsElements = document.querySelectorAll(`.${className}`);
 	if(state === 'stopped' || state === 'limit_reached') {
 	    state = 'paused'
@@ -40,7 +39,7 @@ function adjustDsElementsToState(timerId, state) {
  * Update timer state indicator
  */
 function updateTimerStateIndicator(timerId, state) {
-    const stateElement = document.getElementById(`${timerId}-header`);
+    const stateElement = document.getElementById(`${convertToClassName(timerId)}-header`);
 	if (state === 'limit_reached' || state === 'stopped') {
 		state = 'paused';
 	}
@@ -93,6 +92,10 @@ function resumeTimer(timerId) {
  */
 function stopTimer(timerId) {
     socket.emit('timer_stop', { timer_id: timerId });
+}
+
+function removeTimer(timerId) {
+    socket.emit('timer_remove', { timer_id: timerId});
 }
 
 // ============================================================================
@@ -369,9 +372,9 @@ socket.on('timer_resumed', (data) => {
  * Update timer display in UI
  */
 function updateTimerDisplay(timerId, elapsedMs) {
-    const minutesDisplay = document.getElementById(`${timerId}-min-display`);
-    const secondsDisplay = document.getElementById(`${timerId}-sec-display`);
-    const dsecondsDisplay = document.getElementById(`${timerId}-ds-display`);
+    const minutesDisplay = document.getElementById(`${convertToClassName(timerId)}-min-display`);
+    const secondsDisplay = document.getElementById(`${convertToClassName(timerId)}-sec-display`);
+    const dsecondsDisplay = document.getElementById(`${convertToClassName(timerId)}-ds-display`);
     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
     console.log(elapsedMs);
     // Format time as MM:SS.CS
@@ -409,13 +412,13 @@ function addTimerToUI(timer) {
         <div class="timer-display-container">
           <button onclick="adjustTimer('${timer.timer_id}', 60000);" class="timer-button" data-timer-id="${timer.timer_id}"></button>
           <button onclick="adjustTimer('${timer.timer_id}', 1000);" class="timer-button" data-timer-id="${timer.timer_id}"></button>
-          <button onclick="adjustTimer('${timer.timer_id}', 100);" class="timer-button ds-${timer.timer_id}-element" data-timer-id="${timer.timer_id}"></button>
-          <div id="${timer.timer_id}-min-display" class="timer-display">102</div>
-          <div id="${timer.timer_id}-sec-display" class="timer-display">27</div>
-          <div id="${timer.timer_id}-ds-display" class="timer-display ds-${timer.timer_id}-element">4</div>
+          <button onclick="adjustTimer('${timer.timer_id}', 100);" class="timer-button ds-${convertToClassName(timer.timer_id)}-element" data-timer-id="${timer.timer_id}"></button>
+          <div id="${convertToClassName(timer.timer_id)}-min-display" class="timer-display">102</div>
+          <div id="${convertToClassName(timer.timer_id)}-sec-display" class="timer-display">27</div>
+          <div id="${convertToClassName(timer.timer_id)}-ds-display" class="timer-display ds-${convertToClassName(timer.timer_id)}-element">4</div>
           <button onclick="adjustTimer('${timer.timer_id}', -60000);" class="timer-button" data-timer-id="${timer.timer_id}"></button>
           <button onclick="adjustTimer('${timer.timer_id}', -1000);" class="timer-button" data-timer-id="${timer.timer_id}"></button>
-          <button onclick="adjustTimer('${timer.timer_id}', -100);" class="timer-button ds-${timer.timer_id}-element" data-timer-id="${timer.timer_id}"></button>
+          <button onclick="adjustTimer('${timer.timer_id}', -100);" class="timer-button ds-${convertToClassName(timer.timer_id)}-element" data-timer-id="${timer.timer_id}"></button>
         </div>
         <div class="timer-controllers-container">
           <div class="timer-small-controllers">
@@ -473,6 +476,36 @@ function showNotification(message) {
 // INITIALIZATION
 // ============================================================================
 
+// function finishPeriod() {
+//     // 1. Pobierz listę timerów
+//     socket.once('all_timers', (data) => {
+//         // 2. Zatrzymaj wszystkie timery (oprócz aktualnego)
+//         const stopPromises = data.timers
+//             .filter(timer => timer.timer_id !== period.main_timer_name)
+//             .map(timer => {
+//                 return new Promise((resolve) => {
+//                     socket.once(`timer_stopped_${timer.timer_id}`, () => resolve());
+//                     socket.emit('stop_timer', { timerId: timer.timer_id });
+//                 });
+//             });
+        
+//         // 3. Poczekaj aż wszystkie się zatrzymają
+//         Promise.all(stopPromises)
+//             .then(() => {
+//                 console.log('All timers stopped');
+//                 // 4. Przekieruj na główną
+//                 window.location.href = `/period/${period.period_order}/finish`;
+//             })
+//             .catch(error => {
+//                 console.error('Error stopping timers:', error);
+//                 window.location.href = `/period/${period.period_order}/finish`; // i tak przekieruj
+//             });
+//     });
+    
+//     // 5. Wyślij żądanie pobrania timerów
+//     socket.emit('timers_get_all');
+// }
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Timer controls initialized');
     
@@ -481,22 +514,36 @@ document.addEventListener('DOMContentLoaded', () => {
     
     socket.on('all_timers', (data) => {
         console.log(`Loaded ${data.count} timers`);
-        if(!data.count) {
-            createTimer('newTimer', timer_type = 'independent', options = {
-                "limit_time": 3000000,
-                "pause_at_limit": false,
-                "initial_time": 0,
+        // KROK 1: Najpierw wykonaj removeTimer() na wszystkich spełniających warunek
+        data.timers.forEach(timer => {
+            console.log(timer.timer_id, 'vs', period.main_timer_name);
+            if(timer.timer_id != period.main_timer_name) {
+                removeTimer(timer.timer_id);
+            }
+        });
+
+        // KROK 2: Następnie usuń wszystkie elementy z data.timers, które spełniają warunek
+        data.timers = data.timers.filter(timer => timer.timer_id === period.main_timer_name);
+        console.log('po kroku 2:', data.timers);
+        
+        if (!data.timers.length) {
+            createTimer(period.main_timer_name, timer_type = 'independent', options = {
+                "limit_time": period.limit_time,
+                "pause_at_limit": period.pause_at_limit,
+                "initial_time": period.initial_time,
                 "state": "idle",
                 "metadata": {
-                  "description": "Main game timer",
-                  "period": 1
+                    "description": period.description,
+                    "period": period.period_order
                 }
-          })
+            })
+        } else {
+            data.timers.forEach(timer => {
+                addTimerToUI(timer);
+                updateTimerDisplay(timer.timer_id, timer.elapsed_time);
+                updateTimerUI(timer.timer_id, timer.state);
+            })
         }
-        data.timers.forEach(timer => {
-            addTimerToUI(timer);
-            updateTimerDisplay(timer.timer_id, timer.elapsed_time);
-            updateTimerUI(timer.timer_id, timer.state);
-        });
     });
 });
+    

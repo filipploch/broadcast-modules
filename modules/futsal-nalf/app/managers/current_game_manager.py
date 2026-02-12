@@ -15,7 +15,7 @@ class CurrentGameManager:
     def get_current_game(self):
         """Get current active game"""
         settings = Settings.query.get(id=1).first()
-        self.current_game_id = settings.actual_game_id
+        self.current_game_id = settings.current_game_id
 
         game = Game.query.get(self.current_game_id)
 

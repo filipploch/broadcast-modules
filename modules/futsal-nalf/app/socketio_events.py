@@ -162,8 +162,17 @@ def handle_timer_reset(data):
 
     if success:
         emit('timer_reset', {'timer_id': timer_id}, broadcast=True)
-    else:
-        emit('error', {'message': f'Failed to reset timer {timer_id}'})
+        
+@socketio.on('timer_remove')
+def handle_timer_remove(data):
+    timer_manager = get_timer_manager()
+    if not timer_manager:
+        emit('error', {'message': 'Timer manager not available'})
+        return
+
+    timer_id = data.get('timer_id')
+    success = timer_manager.remove_timer(timer_id)
+    return success
 
 # @socketio.on('timer_stop')
 # def handle_timer_stop(data):

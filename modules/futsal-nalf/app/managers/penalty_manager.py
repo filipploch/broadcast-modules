@@ -11,15 +11,15 @@ logger = logging.getLogger(__name__)
 class PenaltyManager:
     """Manager for Penalty (penalty shootout) operations"""
 
-    def create_penalty_shootout(self, game_id: int, home_goals: int = 0, 
-                                away_goals: int = 0) -> Optional[Penalty]:
+    def create_penalty_shootout(self, game_id: int, home_penalties: int = 0, 
+                                away_penalties: int = 0) -> Optional[Penalty]:
         """
         Create penalty shootout for a game
         
         Args:
             game_id: Game ID
-            home_goals: Home team penalty goals (default: 0)
-            away_goals: Away team penalty goals (default: 0)
+            home_penalties: Home team penalty goals (default: 0)
+            away_penalties: Away team penalty goals (default: 0)
         
         Returns:
             Penalty object or None if error
@@ -40,13 +40,13 @@ class PenaltyManager:
         try:
             penalty = Penalty(
                 game_id=game_id,
-                home_team_goals=home_goals,
-                away_team_goals=away_goals
+                home_team_penalties=home_penalties,
+                away_team_penalties=away_penalties
             )
             db.session.add(penalty)
             db.session.commit()
             
-            logger.info(f"Created penalty shootout for game {game_id}: {home_goals}:{away_goals}")
+            logger.info(f"Created penalty shootout for game {game_id}: {home_penalties}:{away_penalties}")
             return penalty
         
         except Exception as e:
@@ -62,15 +62,15 @@ class PenaltyManager:
         """Get penalty shootout by ID"""
         return Penalty.query.get(penalty_id)
 
-    def update_penalty_score(self, penalty_id: int, home_goals: int, 
-                            away_goals: int) -> Optional[Penalty]:
+    def update_penalty_score(self, penalty_id: int, home_penalties: int, 
+                            away_penalties: int) -> Optional[Penalty]:
         """
         Update penalty shootout score
         
         Args:
             penalty_id: Penalty ID
-            home_goals: Home team penalty goals
-            away_goals: Away team penalty goals
+            home_penalties: Home team penalty goals
+            away_penalties: Away team penalty goals
         
         Returns:
             Updated Penalty object or None if error
@@ -81,10 +81,10 @@ class PenaltyManager:
             return None
         
         try:
-            penalty.update_score(home_goals, away_goals)
+            penalty.update_score(home_penalties, away_penalties)
             db.session.commit()
             
-            logger.info(f"Updated penalty {penalty_id} score: {home_goals}:{away_goals}")
+            logger.info(f"Updated penalty {penalty_id} score: {home_penalties}:{away_penalties}")
             return penalty
         
         except Exception as e:
@@ -110,9 +110,9 @@ class PenaltyManager:
         
         try:
             if team.lower() == 'home':
-                penalty.increment_home_goals()
+                penalty.increment_home_penalties()
             elif team.lower() == 'away':
-                penalty.increment_away_goals()
+                penalty.increment_away_penalties()
             else:
                 raise ValueError(f"Invalid team: {team}. Must be 'home' or 'away'")
             

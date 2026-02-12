@@ -88,6 +88,8 @@ class PeriodManager:
             limit_time=1200000,  # 20 minutes
             pause_at_limit=True
         )
+        period1.update_timer_name()
+        db.session.commit()
         periods.append(period1)
         
         # Second half
@@ -98,6 +100,8 @@ class PeriodManager:
             limit_time=1200000,  # 20 minutes
             pause_at_limit=True
         )
+        period2.update_timer_name()
+        db.session.commit()
         periods.append(period2)
         
         logger.info(f"Created default 2 periods for game {game_id}")

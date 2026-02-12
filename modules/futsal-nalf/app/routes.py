@@ -1,5 +1,6 @@
 """All routes - MINIMAL"""
 from flask import render_template, jsonify, current_app, flash, redirect, url_for, request
+from app.extensions import db
 # from app.models import Plugin
 
 from app.managers.team_manager import TeamManager
@@ -8,6 +9,8 @@ from app.managers.game_manager import GameManager
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.league_manager import LeagueManager
 from app.models.team import Team
+from app.models.period import Period
+from app.models.settings import Settings
 import logging
 import time
 import os
@@ -24,18 +27,167 @@ game_manager = GameManager()
 game_scraper_manager = GameScraperManager()
 league_manager = LeagueManager()
 
-@current_app.route('/')
-def index():
-    """Main dashboard"""
+@current_app.route('/ui')
+def ui_dashboard():
+    """Main UI dashboard"""
     # try:
     #     plugins = Plugin.query.order_by(Plugin.startup_priority).all()
     # except:
     #     plugins = []
     plugins = current_app.config['REQUIRED_PLUGINS']
+    settings = Settings.query.get(1)
+    current_period = Period.query.get(settings.current_period_id)
 
-    return render_template('index.html',
+    return render_template('ui.html',
+                           period=current_period.to_dict(),
                            plugins=plugins,
                            module_name=current_app.config['MODULE_NAME'])
+
+
+@current_app.route('/')
+def index():
+    """Broadcast control panel - manage periods and game state"""
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.models.period import Period
+    
+    settings = Settings.get_settings()
+    
+    # Get actual game
+    game = None
+    periods = []
+    penalty = None
+    
+    if settings.current_game_id:
+        game = Game.query.get(settings.current_game_id)
+        if game:
+            periods = game.get_periods_list()
+            penalty = game.penalty
+    
+    return render_template('index.html',
+                          game=game,
+                          periods=periods,
+                          penalty=penalty,
+                          settings=settings)
+
+
+@current_app.route('/period/<int:period_id>/start')
+def start_period(period_id):
+    """Start a period and redirect to UI dashboard"""
+    from app.managers.period_manager import PeriodManager
+    from app.models.settings import Settings
+    from app.models.game import Game
+    
+    period_manager = PeriodManager()
+    period = period_manager.get_period_by_id(period_id)
+    
+    if not period:
+        flash('Nie znaleziono okresu', 'error')
+        return redirect(url_for('index'))
+    
+    # Check if this period can be started
+    game = Game.query.get(period.game_id)
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('index'))
+    
+    # Check if previous period is finished (if not first period)
+    if period.period_order > 1:
+        previous_periods = Period.query.filter_by(
+            game_id=period.game_id
+        ).filter(
+            Period.period_order < period.period_order
+        ).all()
+        
+        for prev_period in previous_periods:
+            if prev_period.status != Period.STATUS_FINISHED:
+                flash(f'Nie można rozpocząć {period.description}. Poprzedni okres nie został zakończony.', 'error')
+                return redirect(url_for('index'))
+    
+    try:
+        # Start the period
+        period_manager.start_period(period_id)
+        
+        # Set period as actual in settings
+        Settings.set_current_period(period_id)
+        
+        # If this is first period, set game as PENDING
+        if period.period_order == 1:
+            game.set_live()
+            db.session.commit()
+        
+        flash(f'Rozpoczęto {period.description}', 'success')
+        return redirect(url_for('ui_dashboard'))
+        
+    except Exception as e:
+        logger.error(f"Error starting period: {e}")
+        flash(f'Błąd podczas rozpoczynania okresu: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+
+@current_app.route('/period/<int:period_id>/finish')
+def finish_period(period_id):
+    """Finish a period and return to broadcast control"""
+    from app.managers.period_manager import PeriodManager
+    from app.models.settings import Settings
+    from app.models.game import Game
+    
+    period_manager = PeriodManager()
+    period = period_manager.get_period_by_id(period_id)
+    
+    if not period:
+        flash('Nie znaleziono okresu', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        # Finish the period
+        period_manager.finish_period(period_id)
+        
+        # Clear actual period in settings
+        Settings.set_current_period(None)
+        
+        # Check if this was the last period
+        game = Game.query.get(period.game_id)
+        if game:
+            all_periods = game.get_periods_list()
+            all_finished = all(p.status == Period.STATUS_FINISHED for p in all_periods)
+            
+            if all_finished:
+                # All periods finished - finish the game
+                game.set_finished()
+                db.session.commit()
+                flash(f'Zakończono {period.description}. Mecz zakończony!', 'success')
+            else:
+                flash(f'Zakończono {period.description}', 'success')
+        
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        logger.error(f"Error finishing period: {e}")
+        flash(f'Błąd podczas kończenia okresu: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+
+@current_app.route('/period/<int:period_id>/reset-status')
+def reset_period_status(period_id):
+    """Reset period status to NOT_STARTED (for error correction)"""
+    from app.managers.period_manager import PeriodManager
+    
+    period_manager = PeriodManager()
+    period = period_manager.get_period_by_id(period_id)
+    
+    if not period:
+        flash('Nie znaleziono okresu', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        period_manager.set_period_status(period_id, Period.STATUS_NOT_STARTED)
+        flash(f'Zresetowano status okresu: {period.description}', 'success')
+    except Exception as e:
+        logger.error(f"Error resetting period status: {e}")
+        flash(f'Błąd podczas resetowania statusu: {str(e)}', 'error')
+    
+    return redirect(url_for('index'))
 
 
 @current_app.route('/overlay/scoreboard')

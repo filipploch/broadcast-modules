@@ -1,25 +1,159 @@
-<!-- 
-Online HTML, CSS and JavaScript editor to run code online.
--->
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base/base.html" %}
+{% block title %}Kontrola Transmisji{% endblock %}
+{% block content %}
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/grid.css') }}">
-  <!-- <link rel="stylesheet" href="grid.css" /> -->
-  <title>Browser</title>
-</head>
+<div class="card">
+    <div class="card-header">
+        <h2>🎥 Kontrola Transmisji</h2>
+    </div>
+    
+    {% if not game %}
+    <div style="padding: 2rem; text-align: center;">
+        <p style="color: #7f8c8d; font-size: 1.2rem;">Nie wybrano meczu do transmisji</p>
+        <a href="{{ url_for('list_games') }}" class="btn btn-primary">Wybierz mecz</a>
+    </div>
+    {% else %}
+    
+    <!-- Game info -->
+    <div style="padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+        <h3 style="margin: 0;">
+            {{ game.home_team.name }} vs {{ game.away_team.name }}
+        </h3>
+        <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
+            Liga: {{ game.league.name }} | Kolejka: {{ game.round }} | Status: {{ game.get_status_text() }}
+        </p>
+    </div>
+    
+    <!-- Periods control -->
+    <div style="padding: 1.5rem;">
+        <h4>Okresy meczu:</h4>
+        
+        {% if periods|length == 0 %}
+        <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
+            <strong>⚠️ Uwaga:</strong> Ten mecz nie ma utworzonych okresów. 
+            <a href="{{ url_for('edit_game', game_id=game.id) }}">Przejdź do edycji</a> i przygotuj mecz do transmisji.
+        </div>
+        {% else %}
+        
+        <div style="display: grid; gap: 1rem; margin-top: 1rem;">
+            {% for period in periods %}
+            <div class="period-card" style="border: 2px solid 
+                {% if period.status == 0 %}#dee2e6
+                {% elif period.status == 1 %}#28a745
+                {% else %}#6c757d{% endif %}; 
+                border-radius: 8px; padding: 1.5rem; background: #fff;">
+                
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+                    <div>
+                        <h5 style="margin: 0 0 0.5rem 0;">
+                            {{ period.description }}
+                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-left: 0.5rem;
+                                background: {% if period.status == 0 %}#e9ecef
+                                {% elif period.status == 1 %}#28a745
+                                {% else %}#6c757d{% endif %};
+                                color: {% if period.status == 1 %}#fff{% else %}#495057{% endif %};">
+                                {{ period.get_status_text() }}
+                            </span>
+                        </h5>
+                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                            Timer: {{ period.main_timer_name or 'Nie ustawiono' }}<br>
+                            Czas początkowy: {{ (period.initial_time / 1000 / 60) | int }} min | 
+                            Limit czasu: {{ (period.limit_time / 1000 / 60) | int }} min<br>
+                            Wynik okresu: {{ period.home_team_goals }}:{{ period.away_team_goals }}
+                        </p>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                        {% if period.status == 0 %}
+                            <!-- Not started - can start -->
+                            <a href="{{ url_for('start_period', period_id=period.id) }}" 
+                               class="btn btn-success" style="white-space: nowrap;">
+                                ▶️ Rozpocznij okres
+                            </a>
+                        {% elif period.status == 1 %}
+                            <!-- Pending - can finish -->
+                            <a href="{{ url_for('finish_period', period_id=period.id) }}" 
+                               class="btn btn-warning" style="white-space: nowrap;">
+                                ⏹️ Zakończ okres
+                            </a>
+                        {% else %}
+                            <!-- Finished - can reset if needed -->
+                            <button class="btn btn-secondary" disabled style="white-space: nowrap;">
+                                ✅ Zakończony
+                            </button>
+                            <a href="{{ url_for('reset_period_status', period_id=period.id) }}" 
+                               class="btn btn-outline-secondary" 
+                               style="font-size: 0.85rem; white-space: nowrap;"
+                               onclick="return confirm('Czy na pewno chcesz zresetować status tego okresu?');">
+                                🔄 Resetuj
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% endif %}
+        
+        <!-- Penalty shootout if exists -->
+        {% if penalty %}
+        <div style="margin-top: 2rem;">
+            <h4>Rzuty karne:</h4>
+            <div class="period-card" style="border: 2px solid #ffc107; border-radius: 8px; padding: 1.5rem; background: #fff; margin-top: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+                    <div>
+                        <h5 style="margin: 0 0 0.5rem 0;">Konkurs rzutów karnych</h5>
+                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                            Wynik: {{ penalty.home_team_penalties }}:{{ penalty.away_team_penalties }}
+                        </p>
+                    </div>
+                    <div>
+                        <span style="padding: 0.5rem 1rem; background: #ffc107; border-radius: 4px; font-weight: bold;">
+                            K
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Actions -->
+    <div style="padding: 1rem; border-top: 1px solid #dee2e6; background: #f8f9fa; display: flex; gap: 1rem;">
+        <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">
+            ✏️ Edytuj mecz
+        </a>
+        <a href="{{ url_for('list_games') }}" class="btn btn-secondary">
+            📋 Lista meczy
+        </a>
+    </div>
+    
+    {% endif %}
+</div>
 
-<body>
-  <div id="timers-container" class="module-frame">
-  </div>
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/grid.js') }}"></script>
-  <!-- <script src="grid.js"></script> -->
-  </body>  
-</html>
+<!-- Info box -->
+<div class="card" style="margin-top: 1rem;">
+    <div class="card-header">
+        <h3>ℹ️ Instrukcje</h3>
+    </div>
+    <div style="padding: 1rem;">
+        <ol style="margin: 0; padding-left: 1.5rem;">
+            <li>Wybierz mecz i przygotuj go do transmisji (utworzy okresy)</li>
+            <li>Wybierz mecz jako aktywny dla transmisji</li>
+            <li>Rozpocznij pierwszy okres - zostaniesz przekierowany do interfejsu /ui</li>
+            <li>Po zakończeniu okresu kliknij "Zakończ okres" - wrócisz do panelu kontroli</li>
+            <li>Rozpocznij kolejny okres</li>
+            <li>Po zakończeniu wszystkich okresów mecz automatycznie zmieni status na "Zakończony"</li>
+        </ol>
+        <p style="margin-top: 1rem; color: #dc3545;">
+            <strong>Uwaga:</strong> Drugi okres automatycznie rozpoczyna liczenie czasu od miejsca, w którym zakończył się pierwszy okres (np. jeśli pierwszy okres to 20 minut, drugi zaczyna od 20:00).
+        </p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+
+{% endblock %}

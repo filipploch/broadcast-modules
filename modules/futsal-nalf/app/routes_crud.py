@@ -384,6 +384,8 @@ def create_game(league_id=None):
 @current_app.route('/games/<int:game_id>/edit', methods=['GET', 'POST'])
 def edit_game(game_id):
     """Edit existing game"""
+    from app.managers.penalty_manager import PenaltyManager
+    
     game = game_manager.get_game_by_id(game_id)
     
     if not game:
@@ -392,6 +394,7 @@ def edit_game(game_id):
     
     teams = Team.query.order_by(Team.name).all()
     stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
+    penalty_manager = PenaltyManager()
     
     if request.method == 'POST':
         try:
@@ -415,6 +418,18 @@ def edit_game(game_id):
                 group_nr=int(request.form.get('group_nr')) if request.form.get('group_nr') else None
             )
             
+            # Update penalty shootout if exists
+            if game.penalty:
+                home_penalties = request.form.get('home_team_penalties')
+                away_penalties = request.form.get('away_team_penalties')
+                
+                if home_penalties is not None and away_penalties is not None:
+                    penalty_manager.update_penalty_score(
+                        penalty_id=game.penalty.id,
+                        home_penalties=int(home_penalties),
+                        away_penalties=int(away_penalties)
+                    )
+            
             flash(f'Zaktualizowano mecz', 'success')
             return redirect(url_for('view_game', game_id=game.id))
             
@@ -428,6 +443,92 @@ def edit_game(game_id):
                           game=game,
                           teams=teams,
                           stadiums=stadiums)
+
+
+@current_app.route('/games/<int:game_id>/prepare-broadcast')
+def prepare_game_for_broadcast(game_id):
+    """Prepare game for broadcast by creating default periods"""
+    from app.managers.period_manager import PeriodManager
+    
+    game = game_manager.get_game_by_id(game_id)
+    
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('list_games'))
+    
+    # Check if game already has periods
+    if game.periods.count() > 0:
+        flash('Mecz ma już utworzone okresy', 'warning')
+        return redirect(url_for('edit_game', game_id=game_id))
+    
+    period_manager = PeriodManager()
+    
+    try:
+        periods = period_manager.create_default_periods(game_id=game_id)
+        flash(f'Utworzono {len(periods)} okresy dla meczu. Mecz gotowy do transmisji.', 'success')
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        logger.error(f"Error preparing game for broadcast: {e}")
+        flash(f'Błąd podczas przygotowania meczu: {str(e)}', 'error')
+    
+    return redirect(url_for('edit_game', game_id=game_id))
+
+
+@current_app.route('/games/<int:game_id>/select-broadcast')
+def select_game_for_broadcast(game_id):
+    """Select game as current broadcast game"""
+    from app.models.settings import Settings
+    
+    game = game_manager.get_game_by_id(game_id)
+    
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('list_games'))
+    
+    # Check if game has periods
+    if game.periods.count() == 0:
+        flash('Mecz nie ma utworzonych okresów. Najpierw przygotuj mecz do transmisji.', 'error')
+        return redirect(url_for('edit_game', game_id=game_id))
+    
+    try:
+        Settings.set_current_game(game_id)
+        flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
+        return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"Error selecting game for broadcast: {e}")
+        flash(f'Błąd podczas wyboru meczu: {str(e)}', 'error')
+        return redirect(url_for('edit_game', game_id=game_id))
+
+
+@current_app.route('/games/<int:game_id>/add-penalty-shootout')
+def add_penalty_shootout(game_id):
+    """Add penalty shootout to game"""
+    from app.managers.penalty_manager import PenaltyManager
+    
+    game = game_manager.get_game_by_id(game_id)
+    
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('list_games'))
+    
+    # Check if penalty shootout already exists
+    if game.penalty:
+        flash('Rzuty karne są już dodane do tego meczu', 'warning')
+        return redirect(url_for('edit_game', game_id=game_id))
+    
+    penalty_manager = PenaltyManager()
+    
+    try:
+        penalty_manager.create_penalty_shootout(game_id=game_id)
+        flash('Dodano rzuty karne do meczu', 'success')
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        logger.error(f"Error adding penalty shootout: {e}")
+        flash(f'Błąd podczas dodawania rzutów karnych: {str(e)}', 'error')
+    
+    return redirect(url_for('edit_game', game_id=game_id))
 
 
 @current_app.route('/games/<int:game_id>/delete', methods=['POST'])

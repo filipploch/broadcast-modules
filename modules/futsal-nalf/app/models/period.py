@@ -20,6 +20,7 @@ class Period(db.Model):
     # Period configuration
     period_order = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
     description = db.Column(db.String(100), nullable=False)  # "1. połowa", "2. połowa", etc.
+    main_timer_name = db.Column(db.String(200), nullable=True)  # Timer name for this period
     
     # Scores for this period
     home_team_goals = db.Column(db.Integer, default=0, nullable=False)
@@ -46,6 +47,25 @@ class Period(db.Model):
 
     def __repr__(self):
         return f'<Period {self.period_order} for game_id={self.game_id}: {self.description}>'
+    
+    def generate_timer_name(self):
+        """
+        Generate timer name based on game teams and period order
+        Format: '{home_team_short}x{away_team_short} p:{period_order}'
+        Example: 'TORxLEG p:1'
+        """
+        if not self.game:
+            return None
+        
+        home_short = self.game.home_team.short_name if self.game.home_team else '???'
+        away_short = self.game.away_team.short_name if self.game.away_team else '???'
+        
+        return f'{home_short}x{away_short} p:{self.period_order}'
+    
+    def update_timer_name(self):
+        """Update main_timer_name based on current game state"""
+        self.main_timer_name = self.generate_timer_name()
+        self.updated_at = datetime.utcnow()
 
     def get_status_text(self):
         """Get human-readable status text"""
@@ -73,6 +93,7 @@ class Period(db.Model):
             'game_id': self.game_id,
             'period_order': self.period_order,
             'description': self.description,
+            'main_timer_name': self.main_timer_name,
             'home_team_goals': self.home_team_goals,
             'away_team_goals': self.away_team_goals,
             'home_team_fouls': self.home_team_fouls,
