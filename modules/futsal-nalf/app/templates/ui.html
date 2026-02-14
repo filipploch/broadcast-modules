@@ -9,14 +9,73 @@ Online HTML, CSS and JavaScript editor to run code online.
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/grid.css') }}">
-  <!-- <link rel="stylesheet" href="grid.css" /> -->
-  <title>Browser</title>
+  <style>
+    /* Navigation buttons - fixed position at top */
+    .nav-buttons {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    
+    .nav-buttons button,
+    .nav-buttons a {
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-index {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .btn-index:hover {
+      background: #5a6268;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    
+    .btn-finish {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .btn-finish:hover {
+      background: #c82333;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+  </style>
+  <title>UI - Timer Control</title>
 </head>
 
 <body>
-  <button type="button" ondblclick="finishPeriod()">Zakończ część meczu</button>
+  <!-- Navigation buttons -->
+  <div class="nav-buttons">
+    <a href="{{ url_for('index') }}" class="btn-index">
+      🏠 Panel kontroli
+    </a>
+    <button type="button" class="btn-finish" ondblclick="finishPeriod()">
+      ⏹️ Zakończ część meczu (2x klik)
+    </button>
+  </div>
+
+  <!-- Timers container -->
   <div id="timers-container" class="module-frame">
   </div>
+
   <script>
     var period = {{ period|tojson }};
   </script>
@@ -24,6 +83,5 @@ Online HTML, CSS and JavaScript editor to run code online.
   <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/grid.js') }}"></script>
-  <!-- <script src="grid.js"></script> -->
-  </body>  
+</body>  
 </html>

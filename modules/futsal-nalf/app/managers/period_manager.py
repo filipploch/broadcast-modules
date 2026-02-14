@@ -169,11 +169,147 @@ class PeriodManager:
         return self.update_period(period_id, status=status)
 
     def start_period(self, period_id: int) -> Optional[Period]:
-        """Start a period (set status to PENDING)"""
-        return self.set_period_status(period_id, Period.STATUS_PENDING)
+        """
+        Start a period (set status to PENDING) and setup timers
+        
+        This method:
+        1. Sets period status to PENDING
+        2. Creates/updates main timer in Settings (state: idle, NOT started)
+        3. Restores penalty timers if they exist (for periods > 1)
+        4. Removes penalty timers with limit_reached status
+        """
+        from app.models.settings import Settings
+        from app.managers import get_timer_manager
+        
+        period = self.set_period_status(period_id, Period.STATUS_PENDING)
+        if not period:
+            return None
+        
+        timer_manager = get_timer_manager()
+        
+        # Prepare main timer data
+        main_timer_data = {
+            "timer_id": period.main_timer_name,
+            "timer_type": "independent",
+            "initial_time": period.initial_time,
+            "limit_time": period.limit_time,
+            "pause_at_limit": period.pause_at_limit,
+            "state": "idle",
+            "metadata": {
+                "description": period.description,
+                "period": period.period_order,
+                "timer_class": "main"
+            }
+        }
+        
+        # If this is not the first period, handle penalty timers
+        if period.period_order > 1:
+            # Remove penalty timers with limit_reached status
+            Settings.remove_limit_reached_penalties()
+            
+            # Get remaining penalty timers
+            current_timers = Settings.get_current_timers()
+            remaining_penalties = current_timers.get("penalties", [])
+            
+            # Create main timer
+            timer_manager.create_timer(
+                timer_id=period.main_timer_name,
+                timer_type="independent",
+                initial_time=period.initial_time,
+                limit_time=period.limit_time,
+                pause_at_limit=period.pause_at_limit,
+                metadata={
+                    "description": period.description,
+                    "period": period.period_order,
+                    "timer_class": "main"
+                }
+            )
+            
+            # Update main timer in Settings
+            Settings.update_main_timer(main_timer_data)
+            
+            # Recreate penalty timers as dependent
+            for penalty in remaining_penalties:
+                penalty_metadata = penalty.get("metadata", {})
+                timer_manager.create_timer(
+                    timer_id=penalty.get("timer_id"),
+                    timer_type="dependent",
+                    parent_id=period.main_timer_name,
+                    initial_time=penalty.get("initial_time", 0),
+                    limit_time=penalty.get("limit_time", 120000),
+                    metadata=penalty_metadata
+                )
+        else:
+            # First period - just create main timer
+            timer_manager.create_timer(
+                timer_id=period.main_timer_name,
+                timer_type="independent",
+                initial_time=period.initial_time,
+                limit_time=period.limit_time,
+                pause_at_limit=period.pause_at_limit,
+                metadata={
+                    "description": period.description,
+                    "period": period.period_order,
+                    "timer_class": "main"
+                }
+            )
+            
+            # Update main timer in Settings
+            Settings.update_main_timer(main_timer_data)
+        
+        # DO NOT start the timer automatically - leave it in idle state
+        # User will start it manually from UI
+        
+        return period
 
     def finish_period(self, period_id: int) -> Optional[Period]:
-        """Finish a period (set status to FINISHED)"""
+        """
+        Finish a period (set status to FINISHED)
+        
+        This method:
+        1. Stops all running timers
+        2. Updates timer states in Settings with current elapsed times
+        3. Sets period status to FINISHED
+        """
+        from app.models.settings import Settings
+        from app.managers import get_timer_manager
+        
+        period = self.get_period_by_id(period_id)
+        if not period:
+            return None
+        
+        timer_manager = get_timer_manager()
+        current_timers = Settings.get_current_timers()
+        
+        # Stop main timer if running
+        main_timer = current_timers.get("main")
+        if main_timer and main_timer.get("timer_id"):
+            timer_state = timer_manager.get_timer_state(main_timer["timer_id"])
+            if timer_state and timer_state.get("state") == "running":
+                timer_manager.pause_timer(main_timer["timer_id"])
+            
+            # Update main timer with current state
+            if timer_state:
+                main_timer["state"] = timer_state.get("state", "paused")
+                main_timer["initial_time"] = timer_state.get("elapsed_time", main_timer.get("initial_time", 0))
+                Settings.update_main_timer(main_timer)
+        
+        # Stop and update all penalty timers
+        penalties = current_timers.get("penalties", [])
+        for i, penalty in enumerate(penalties):
+            timer_id = penalty.get("timer_id")
+            if timer_id:
+                timer_state = timer_manager.get_timer_state(timer_id)
+                if timer_state and timer_state.get("state") == "running":
+                    timer_manager.pause_timer(timer_id)
+                
+                # Update penalty timer with current state
+                if timer_state:
+                    penalty["state"] = timer_state.get("state", "paused")
+                    penalty["initial_time"] = timer_state.get("elapsed_time", penalty.get("initial_time", 0))
+                    Settings.update_penalty_timer(timer_id, penalty)
+        
+        # Set period status to FINISHED
         return self.set_period_status(period_id, Period.STATUS_FINISHED)
 
     def delete_period(self, period_id: int) -> bool:

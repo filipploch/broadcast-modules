@@ -71,7 +71,11 @@
                                 ▶️ Rozpocznij okres
                             </a>
                         {% elif period.status == 1 %}
-                            <!-- Pending - can finish -->
+                            <!-- Pending - can finish or go to UI -->
+                            <a href="{{ url_for('ui_dashboard') }}" 
+                               class="btn btn-primary" style="white-space: nowrap;">
+                                🎮 Przejdź do UI
+                            </a>
                             <a href="{{ url_for('finish_period', period_id=period.id) }}" 
                                class="btn btn-warning" style="white-space: nowrap;">
                                 ⏹️ Zakończ okres
@@ -127,6 +131,11 @@
         <a href="{{ url_for('list_games') }}" class="btn btn-secondary">
             📋 Lista meczy
         </a>
+        {% if settings.current_period_id %}
+        <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary">
+            🎮 Przejdź do UI
+        </a>
+        {% endif %}
     </div>
     
     {% endif %}
@@ -142,6 +151,7 @@
             <li>Wybierz mecz i przygotuj go do transmisji (utworzy okresy)</li>
             <li>Wybierz mecz jako aktywny dla transmisji</li>
             <li>Rozpocznij pierwszy okres - zostaniesz przekierowany do interfejsu /ui</li>
+            <li><strong>Możesz przechodzić między /ui a panelem kontroli bez wpływu na działanie timera</strong></li>
             <li>Po zakończeniu okresu kliknij "Zakończ okres" - wrócisz do panelu kontroli</li>
             <li>Rozpocznij kolejny okres</li>
             <li>Po zakończeniu wszystkich okresów mecz automatycznie zmieni status na "Zakończony"</li>

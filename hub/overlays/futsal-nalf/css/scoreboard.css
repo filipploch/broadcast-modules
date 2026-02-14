@@ -1,0 +1,61 @@
+#scoreboard-container {
+    position: fixed;
+    top: 0px;
+    right: 20px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.scoreboard-row {
+    display: grid;
+    grid-template-columns: 80px 50px 30px 30px 50px;
+    align-items: center; /* ← Dodane: wyśrodkowanie w pionie wszystkich elementów w gridzie */
+}
+
+#top-scoreboard-container {
+    height: 25px;
+}
+
+#main-scoreboard-container {
+    height: 40px;
+    background: rgba(0, 0, 0, 0.8);
+    display: grid; /* ← Dodane: ustawienie display:grid dla kontenera */
+    align-items: center; /* ← Dodane: wyśrodkowanie zawartości w pionie */
+}
+
+.penalty-timer {
+    height: 15px;
+    display: flex; /* ← Dodane: użyj flexbox dla lepszej kontroli */
+    align-items: center; /* ← Dodane: wyśrodkowanie w pionie */
+    justify-content: center; /* ← Dodane: wyśrodkowanie w poziomie (opcjonalnie) */
+    background-color: red;
+    color: white;
+    padding: 2px 3px;
+	font-size: 15px;
+}
+
+.team-fouls {
+	text-align: left;
+	color: red;
+	font-size: 29px;
+}
+
+/* #bottom-scoreboard-container {
+    display: grid;
+    grid-template-columns: 80px 50px 30px 30px 50px;
+    align-items: center; /* ← Dodane: wyśrodkowanie w pionie wszystkich elementów */
+} */
+
+/* Opcjonalnie: jeśli chcesz wyśrodkować tekst w konkretnych elementach */
+.team-name, .team-score, .team-fouls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%; /* Zapewnia, że element zajmuje całą wysokość kontenera */
+}
+
+.team-score {
+	font-size: 25px;
+}

@@ -1,28 +1,8 @@
-/* Timer Overlay Styles */
-body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Arial', sans-serif;
-    background: transparent;
-    color: white;
-}
-
-#timer-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 20px 30px;
-    border-radius: 10px;
-    font-size: 48px;
-    font-weight: bold;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-#timer-display {
+#main-timer-display {
     font-family: 'Courier New', monospace;
     letter-spacing: 2px;
+    font-weight: 500;
+    text-align: right;
 }
 
 .timer-paused {
@@ -40,26 +20,4 @@ body {
 .timer-overtime {
     color: #ff9800 !important;
     animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
-/* Connection status indicator */
-#connection-status {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: #f44336;
-    box-shadow: 0 0 10px rgba(244, 67, 54, 0.5);
-}
-
-#connection-status.connected {
-    background: #4CAF50;
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
 }

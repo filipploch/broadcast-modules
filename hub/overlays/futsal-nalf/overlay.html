@@ -4,14 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Timer Overlay - Futsal NALF</title>
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/main.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
 </head>
 <body>
-    <div id="connection-status"></div>
-    
-    <div id="timer-container">
-        <div id="timer-state">STOPPED</div>
-        <div id="timer-display">00:00</div>
+    <div id="connection-status" class="connected"></div>
+    <div id="scoreboard-container">
+        <div id="top-scoreboard-container" class="scoreboard-row">
+            <div></div>
+            <div id="home-team-fouls" class="team-fouls">·····</div>
+            <div></div>
+            <div></div>
+            <div id="away-team-fouls" class="team-fouls">·····</div>
+        </div>
+        <div id="main-scoreboard-container" class="scoreboard-row">
+            <div id="main-timer-display">00:00</div>
+            <div id="home-team-name" class="team-name">TEA</div>
+            <div id="home-team-score" class="team-score">1</div>
+            <div id="away-team-score" class="team-score">1</div>
+            <div id="away-team-name" class="team-name">TEB</div>
+        </div>
+        <div id="bottom-scoreboard-container" class="scoreboard-row">
+            <div></div>
+            <div id="home-team-penalty-timer-container" class="penalty-timer-container">
+                <div class="penalty-timer">1:15</div>
+            </div>
+            <div></div>
+            <div></div>
+            <div id="away-team-penalty-timer-container" class="penalty-timer-container">
+                <div class="penalty-timer">0:35</div>
+            </div>
+        </div>
     </div>
 
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
@@ -21,8 +45,8 @@
         const overlayId = 'overlay-timer-' + Math.random().toString(36).substr(2, 9);
         const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
         
-        const display = document.getElementById('timer-display');
-        const stateEl = document.getElementById('timer-state');
+        const display = document.getElementById('main-timer-display');
+        // const stateEl = document.getElementById('timer-state');
         const statusEl = document.getElementById('connection-status');
         
         let registered = false;
@@ -81,7 +105,7 @@
                 // Update display
                 const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time);
                 display.textContent = formatted;
-                stateEl.textContent = (data.state || 'stopped').toUpperCase();
+                // stateEl.textContent = (data.state || 'stopped').toUpperCase();
                 
                 // Update styling
                 display.classList.remove('timer-running', 'timer-paused', 'timer-stopped');
@@ -91,5 +115,6 @@
             }
         };
     </script>
+	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>

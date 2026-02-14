@@ -473,6 +473,20 @@ function showNotification(message) {
 } */
 
 // ============================================================================
+// FINISH PERIOD FUNCTION
+// ============================================================================
+
+function finishPeriod() {
+    if (!confirm('Czy na pewno chcesz zakończyć tę część meczu?')) {
+        return;
+    }
+    
+    console.log('Finishing period:', period.id);
+    // Redirect to finish period endpoint
+    window.location.href = `/period/${period.id}/finish`;
+}
+
+// ============================================================================
 // INITIALIZATION
 // ============================================================================
 
@@ -546,4 +560,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-    

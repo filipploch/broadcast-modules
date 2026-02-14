@@ -29,19 +29,41 @@ league_manager = LeagueManager()
 
 @current_app.route('/ui')
 def ui_dashboard():
-    """Main UI dashboard"""
-    # try:
-    #     plugins = Plugin.query.order_by(Plugin.startup_priority).all()
-    # except:
-    #     plugins = []
-    plugins = current_app.config['REQUIRED_PLUGINS']
-    settings = Settings.query.get(1)
-    current_period = Period.query.get(settings.current_period_id)
-
-    return render_template('ui.html',
-                           period=current_period.to_dict(),
-                           plugins=plugins,
-                           module_name=current_app.config['MODULE_NAME'])
+    """
+    Main UI dashboard with Jinja2 rendering
+    
+    Renders timers server-side from Settings.current_timers
+    JavaScript only handles WebSocket updates, not timer creation
+    """
+    from app.models.settings import Settings
+    from app.models.period import Period
+    from app.models.game import Game
+    
+    settings = Settings.get_settings()
+    
+    # Get current period
+    period = None
+    game = None
+    if settings.current_period_id:
+        period = Period.query.get(settings.current_period_id)
+        if period:
+            game = Game.query.get(period.game_id)
+    
+    # Get current timers from Settings
+    current_timers = settings.get_current_timers()
+    main_timer = current_timers.get('main')
+    penalties = current_timers.get('penalties', [])
+    
+    # Log for debugging
+    current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
+    current_app.logger.info(f"Main timer: {main_timer.get('timer_id') if main_timer else None}")
+    current_app.logger.info(f"Penalties: {len(penalties)}")
+    
+    return render_template('ui-jinja.html',
+                          period=period,
+                          game=game,
+                          main_timer=main_timer,
+                          penalties=penalties)
 
 
 @current_app.route('/')
@@ -68,7 +90,7 @@ def index():
                           game=game,
                           periods=periods,
                           penalty=penalty,
-                          settings=settings)
+                          settings=settings)  # ADDED: Pass settings to template
 
 
 @current_app.route('/period/<int:period_id>/start')
@@ -561,3 +583,42 @@ def stop_scraping():
     if team_scraper_manager.stop_scraping():
         return jsonify({'success': True, 'message': 'Stop requested'})
     return jsonify({'success': False, 'message': 'No scraping in progress'})
+
+"""
+API Endpoint to add to routes.py
+Place this at the end of the API endpoints section
+"""
+
+@current_app.route('/api/settings/current-timers')
+def api_current_timers():
+    """
+    Get current timers from Settings
+    
+    Returns JSON:
+    {
+        "main": {
+            "timer_id": "...",
+            "state": "...",
+            ...
+        },
+        "penalties": [...]
+    }
+    """
+    from app.models.settings import Settings
+    
+    timers = Settings.get_current_timers()
+    return jsonify(timers)
+
+
+@current_app.route('/api/settings/current-timers/clear', methods=['POST'])
+def api_clear_current_timers():
+    """
+    Clear all current timers (for testing/reset)
+    """
+    from app.models.settings import Settings
+    
+    Settings.clear_timers()
+    return jsonify({
+        'success': True,
+        'message': 'Timers cleared'
+    })

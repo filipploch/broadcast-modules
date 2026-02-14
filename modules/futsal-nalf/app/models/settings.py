@@ -1,6 +1,7 @@
 """Settings model - Application global settings"""
 from app.extensions import db
 from datetime import datetime
+import json
 
 
 class Settings(db.Model):
@@ -11,6 +12,7 @@ class Settings(db.Model):
     current_season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)
     current_game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
     current_period_id = db.Column(db.Integer, db.ForeignKey('periods.id'), nullable=True)
+    current_timers = db.Column(db.Text, nullable=True)  # JSON: {"main": {...}, "penalties": [{...}]}
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -80,3 +82,98 @@ class Settings(db.Model):
             return False
         
         return period.game_id == settings.current_game_id
+    
+    @classmethod
+    def get_current_timers(cls):
+        """
+        Get current_timers as dictionary
+        
+        Returns:
+            dict: {"main": {...}, "penalties": [...]} or default structure if empty
+        """
+        settings = cls.get_settings()
+        if not settings.current_timers:
+            return {"main": None, "penalties": []}
+        try:
+            return json.loads(settings.current_timers)
+        except (json.JSONDecodeError, TypeError):
+            return {"main": None, "penalties": []}
+    
+    @classmethod
+    def set_current_timers(cls, timers_data):
+        """
+        Set current_timers from dictionary
+        
+        Args:
+            timers_data: dict with structure {"main": {...}, "penalties": [...]}
+        """
+        settings = cls.get_settings()
+        settings.current_timers = json.dumps(timers_data)
+        settings.updated_at = datetime.utcnow()
+        db.session.commit()
+    
+    @classmethod
+    def update_main_timer(cls, timer_data):
+        """
+        Update main timer in current_timers
+        
+        Args:
+            timer_data: dict with timer information
+        """
+        timers = cls.get_current_timers()
+        timers["main"] = timer_data
+        cls.set_current_timers(timers)
+    
+    @classmethod
+    def add_penalty_timer(cls, timer_data):
+        """
+        Add penalty timer to current_timers
+        
+        Args:
+            timer_data: dict with penalty timer information
+        """
+        timers = cls.get_current_timers()
+        if "penalties" not in timers:
+            timers["penalties"] = []
+        timers["penalties"].append(timer_data)
+        cls.set_current_timers(timers)
+    
+    @classmethod
+    def update_penalty_timer(cls, timer_id, timer_data):
+        """
+        Update specific penalty timer
+        
+        Args:
+            timer_id: ID of the timer to update
+            timer_data: dict with updated timer information
+        """
+        timers = cls.get_current_timers()
+        if "penalties" not in timers:
+            timers["penalties"] = []
+        
+        for i, penalty in enumerate(timers["penalties"]):
+            if penalty.get("timer_id") == timer_id:
+                timers["penalties"][i] = timer_data
+                break
+        
+        cls.set_current_timers(timers)
+    
+    @classmethod
+    def remove_limit_reached_penalties(cls):
+        """
+        Remove all penalty timers with status 'limit_reached'
+        """
+        timers = cls.get_current_timers()
+        if "penalties" not in timers:
+            return
+        
+        timers["penalties"] = [
+            p for p in timers["penalties"] 
+            if p.get("state") != "limit_reached"
+        ]
+        cls.set_current_timers(timers)
+    
+    @classmethod
+    def clear_timers(cls):
+        """Clear all timers"""
+        cls.set_current_timers({"main": None, "penalties": []})

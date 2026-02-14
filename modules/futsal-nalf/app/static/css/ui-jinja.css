@@ -1,0 +1,328 @@
+/* 
+ * UI-JINJA.CSS - Styles for Jinja2-rendered timer UI
+ * Place this in app/static/css/ui-jinja.css
+ */
+
+/* ============================================================================
+   TIMER CARDS
+   ============================================================================ */
+
+.timer-card {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.timer-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Main timer - larger and highlighted */
+.timer-card.main-timer {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    margin-bottom: 30px;
+}
+
+.timer-card.main-timer .timer-display {
+    font-size: 72px;
+    color: white;
+}
+
+/* Penalty timer */
+.timer-card.penalty-timer {
+    border-left: 5px solid #dc3545;
+}
+
+.timer-card.penalty-timer[data-team="home"] {
+    border-left-color: #28a745;
+}
+
+.timer-card.penalty-timer[data-team="away"] {
+    border-left-color: #007bff;
+}
+
+/* ============================================================================
+   TIMER HEADER
+   ============================================================================ */
+
+.timer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.timer-header h3,
+.timer-header h4 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.main-timer .timer-header h3 {
+    color: white;
+}
+
+/* ============================================================================
+   TIMER BADGES
+   ============================================================================ */
+
+.timer-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.timer-badge-idle {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.timer-badge-running {
+    background: #28a745;
+    color: white;
+    animation: pulse 2s infinite;
+}
+
+.timer-badge-paused {
+    background: #ffc107;
+    color: #000;
+}
+
+.timer-badge-limit_reached {
+    background: #dc3545;
+    color: white;
+}
+
+.main-timer .timer-badge {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* ============================================================================
+   TIMER DISPLAY
+   ============================================================================ */
+
+.timer-display {
+    font-size: 56px;
+    font-weight: bold;
+    text-align: center;
+    font-family: 'Courier New', monospace;
+    margin: 20px 0;
+    color: #2c3e50;
+}
+
+.penalty-timer .timer-display {
+    font-size: 42px;
+}
+
+/* ============================================================================
+   TIMER INFO
+   ============================================================================ */
+
+.timer-info {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.main-timer .timer-info {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* ============================================================================
+   TIMER CONTROLS
+   ============================================================================ */
+
+.timer-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.timer-adjust {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #000;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #545b62;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* ============================================================================
+   TIMER METADATA
+   ============================================================================ */
+
+.timer-metadata {
+    text-align: center;
+    color: #6c757d;
+    font-size: 13px;
+}
+
+.main-timer .timer-metadata {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ============================================================================
+   PENALTIES SECTION
+   ============================================================================ */
+
+.penalties-section {
+    margin-top: 30px;
+}
+
+.penalties-section > h3 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   ADD PENALTY SECTION
+   ============================================================================ */
+
+.add-penalty-section {
+    text-align: center;
+    margin-top: 30px;
+    padding: 20px;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .timer-display {
+        font-size: 42px;
+    }
+    
+    .main-timer .timer-display {
+        font-size: 56px;
+    }
+    
+    .timer-controls {
+        flex-direction: column;
+    }
+    
+    .timer-controls button {
+        width: 100%;
+    }
+    
+    .timer-adjust {
+        flex-direction: column;
+    }
+    
+    .timer-adjust button {
+        width: 100%;
+    }
+}
+
+/* ============================================================================
+   LOADING STATE
+   ============================================================================ */
+
+.timer-card.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.timer-card.loading::after {
+    content: "Ładowanie...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+}

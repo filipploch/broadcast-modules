@@ -223,7 +223,7 @@ func setupHTTPServer(hub *Hub) *http.Server {
 
 	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Printf("📡 Overlay URL:")
-	log.Printf("   http://localhost:%d/overlays/futsal-nalf/timer.html", hub.Port)
+	log.Printf("   http://localhost:%d/overlays/futsal-nalf/overlay.html", hub.Port)
 	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	addr := fmt.Sprintf("0.0.0.0:%d", hub.Port)

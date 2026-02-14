@@ -643,12 +643,34 @@ class TimerManager:
         })
 
     def on_limit_reached(self, msg):
+        from app.models.settings import Settings
+        
         msg_type = msg.get('type')
         payload = msg.get('payload')
         timer_id = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time')
         state = payload.get('state')
         pause_at_limit = payload.get('pause_at_limit')
+        
+        # Update timer state in Settings
+        current_timers = Settings.get_current_timers()
+        main_timer = current_timers.get("main")
+        
+        if main_timer and main_timer.get("timer_id") == timer_id:
+            # Main timer reached limit
+            main_timer["state"] = state
+            main_timer["initial_time"] = elapsed_time
+            Settings.update_main_timer(main_timer)
+        else:
+            # Penalty timer reached limit
+            penalties = current_timers.get("penalties", [])
+            for penalty in penalties:
+                if penalty.get("timer_id") == timer_id:
+                    penalty["state"] = state
+                    penalty["initial_time"] = elapsed_time
+                    Settings.update_penalty_timer(timer_id, penalty)
+                    break
+        
         if pause_at_limit:
             self._emit_to_ui(msg_type, {
                 'timer_id': timer_id,

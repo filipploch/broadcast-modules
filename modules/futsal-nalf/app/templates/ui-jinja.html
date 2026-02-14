@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/grid.css') }}">
+  <style>
+    /* Navigation buttons - fixed position at top */
+    .nav-buttons {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    
+    .nav-buttons button,
+    .nav-buttons a {
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-index {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .btn-index:hover {
+      background: #5a6268;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    
+    .btn-finish {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .btn-finish:hover {
+      background: #c82333;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Timer info banner */
+    .period-info {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .period-info h2 {
+      margin: 0 0 10px 0;
+      font-size: 24px;
+    }
+
+    .period-info .game-info {
+      font-size: 16px;
+      opacity: 0.9;
+    }
+
+    /* No timers message */
+    .no-timers {
+      text-align: center;
+      padding: 60px 20px;
+      color: #6c757d;
+    }
+
+    .no-timers h3 {
+      margin-bottom: 10px;
+    }
+  </style>
+  <title>UI - {{ period.description if period else 'Timer Control' }}</title>
+</head>
+
+<body>
+  <!-- Navigation buttons -->
+  <div class="nav-buttons">
+    <a href="{{ url_for('index') }}" class="btn-index">
+      🏠 Panel kontroli
+    </a>
+    {% if period %}
+    <button type="button" class="btn-finish" ondblclick="finishPeriod()">
+      ⏹️ Zakończ część meczu (2x klik)
+    </button>
+    {% endif %}
+  </div>
+
+  {% if not period %}
+  <!-- No active period -->
+  <div class="no-timers">
+    <h3>⚠️ Brak aktywnego okresu</h3>
+    <p>Rozpocznij okres z panelu kontroli</p>
+    <a href="{{ url_for('index') }}" class="btn-index" style="margin-top: 20px; display: inline-flex;">
+      🏠 Przejdź do panelu kontroli
+    </a>
+  </div>
+  {% else %}
+
+  <!-- Period info banner -->
+  <div class="period-info">
+    <h2>{{ period.description }}</h2>
+    {% if game %}
+    <div class="game-info">
+      {{ game.home_team.name }} vs {{ game.away_team.name }} | 
+      Wynik okresu: {{ period.home_team_goals }}:{{ period.away_team_goals }}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Timers container -->
+  <div id="timers-container" class="module-frame">
+    
+    {% if main_timer %}
+    <!-- Main timer -->
+    <div class="timer-card main-timer" 
+         data-timer-id="{{ main_timer.timer_id }}"
+         data-timer-type="main">
+      
+      <div class="timer-header">
+        <h3>{{ main_timer.timer_id }}</h3>
+        <span class="timer-badge timer-badge-{{ main_timer.state }}">
+          {{ main_timer.state | upper }}
+        </span>
+      </div>
+
+      <div class="timer-display" data-timer-id="{{ main_timer.timer_id }}" data-display-for="{{ main_timer.timer_id }}">
+        00:00
+      </div>
+
+      <div class="timer-info">
+        <span>Czas początkowy: {{ (main_timer.initial_time / 1000 / 60) | int }}:{{ '%02d' | format(((main_timer.initial_time / 1000) % 60) | int) }}</span>
+        <span>Limit: {{ (main_timer.limit_time / 1000 / 60) | int }}:{{ '%02d' | format(((main_timer.limit_time / 1000) % 60) | int) }}</span>
+      </div>
+
+      <div class="timer-controls">
+        <button onclick="startTimer('{{ main_timer.timer_id }}')" class="btn btn-success">
+          ▶️ Start
+        </button>
+        <button onclick="pauseTimer('{{ main_timer.timer_id }}')" class="btn btn-warning">
+          ⏸️ Pause
+        </button>
+        <button onclick="resumeTimer('{{ main_timer.timer_id }}')" class="btn btn-primary">
+          ▶️ Resume
+        </button>
+        <button onclick="resetTimer('{{ main_timer.timer_id }}')" class="btn btn-secondary">
+          🔄 Reset
+        </button>
+      </div>
+
+      <div class="timer-adjust">
+        <button onclick="adjustTimer('{{ main_timer.timer_id }}', 60000)" class="btn btn-sm">
+          +1 min
+        </button>
+        <button onclick="adjustTimer('{{ main_timer.timer_id }}', 10000)" class="btn btn-sm">
+          +10 sec
+        </button>
+        <button onclick="adjustTimer('{{ main_timer.timer_id }}', -10000)" class="btn btn-sm">
+          -10 sec
+        </button>
+        <button onclick="adjustTimer('{{ main_timer.timer_id }}', -60000)" class="btn btn-sm">
+          -1 min
+        </button>
+      </div>
+
+      <div class="timer-metadata">
+        {% if main_timer.metadata %}
+        <small>
+          Okres: {{ main_timer.metadata.period }} | 
+          {{ main_timer.metadata.description }}
+        </small>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if penalties and penalties | length > 0 %}
+    <!-- Penalty timers -->
+    <div class="penalties-section">
+      <h3>Kary czasowe ({{ penalties | length }})</h3>
+      
+      {% for penalty in penalties %}
+      <div class="timer-card penalty-timer" 
+           data-timer-id="{{ penalty.timer_id }}"
+           data-timer-type="penalty"
+           data-team="{{ penalty.metadata.team if penalty.metadata else 'unknown' }}">
+        
+        <div class="timer-header">
+          <h4>
+            Kara - {{ penalty.metadata.team_name if penalty.metadata and penalty.metadata.team_name else 'Drużyna' }}
+            ({{ penalty.metadata.team | upper if penalty.metadata and penalty.metadata.team else '?' }})
+          </h4>
+          <span class="timer-badge timer-badge-{{ penalty.state }}">
+            {{ penalty.state | upper }}
+          </span>
+        </div>
+
+        <div class="timer-display" data-timer-id="{{ penalty.timer_id }}" data-display-for="{{ penalty.timer_id }}">
+          00:00
+        </div>
+
+        <div class="timer-info">
+          <span>Czas: {{ (penalty.initial_time / 1000 / 60) | int }}:{{ '%02d' | format(((penalty.initial_time / 1000) % 60) | int) }}</span>
+          <span>Limit: {{ (penalty.limit_time / 1000 / 60) | int }}:{{ '%02d' | format(((penalty.limit_time / 1000) % 60) | int) }}</span>
+        </div>
+
+        <div class="timer-controls">
+          <button onclick="adjustTimer('{{ penalty.timer_id }}', 10000, true)" class="btn btn-sm">
+            +10s
+          </button>
+          <button onclick="adjustTimer('{{ penalty.timer_id }}', -10000, true)" class="btn btn-sm">
+            -10s
+          </button>
+          <button onclick="removeTimerFromUI('{{ penalty.timer_id }}')" class="btn btn-sm btn-danger">
+            🗑️ Usuń
+          </button>
+        </div>
+
+        <div class="timer-metadata">
+          <small>
+            {% if penalty.metadata %}
+            Czas kary: {{ penalty.metadata.duration_minutes if penalty.metadata.duration_minutes else 2 }} min
+            {% endif %}
+          </small>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Add penalty button -->
+    {% if main_timer %}
+    <div class="add-penalty-section">
+      <button onclick="showAddPenaltyDialog()" class="btn btn-primary">
+        ➕ Dodaj karę czasową
+      </button>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Add penalty dialog -->
+  <div id="penalty-dialog" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 2000;">
+    <h3>Dodaj karę czasową</h3>
+    <form id="penalty-form" onsubmit="addPenalty(event)">
+      <div style="margin-bottom: 15px;">
+        <label>Drużyna:</label><br>
+        <select id="penalty-team" required style="width: 100%; padding: 8px; margin-top: 5px;">
+          <option value="home">Gospodarze{% if game %} ({{ game.home_team.name }}){% endif %}</option>
+          <option value="away">Goście{% if game %} ({{ game.away_team.name }}){% endif %}</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label>Czas kary (minuty):</label><br>
+        <input type="number" id="penalty-duration" value="2" min="1" max="10" required style="width: 100%; padding: 8px; margin-top: 5px;">
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button type="submit" class="btn btn-success">Dodaj</button>
+        <button type="button" onclick="hideAddPenaltyDialog()" class="btn btn-secondary">Anuluj</button>
+      </div>
+    </form>
+  </div>
+  <div id="penalty-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1999;" onclick="hideAddPenaltyDialog()"></div>
+
+  {% endif %}
+
+  <!-- JavaScript variables from Jinja2 -->
+  <script>
+    // Period data
+    var period = {{ period.to_dict() | tojson if period else 'null' }};
+    
+    // Game data
+    var game = {{ game.to_dict() | tojson if game else 'null' }};
+    
+    // Main timer data
+    var mainTimerData = {{ main_timer | tojson if main_timer else 'null' }};
+    
+    // Penalties data
+    var penaltiesData = {{ penalties | tojson if penalties else '[]' }};
+  </script>
+
+  <!-- Scripts -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+  <!-- <script src="{{ url_for('static', filename='js/app.js') }}"></script> -->
+  <script src="{{ url_for('static', filename='js/ui-jinja.js') }}"></script>
+</body>  
+</html>
