@@ -1,0 +1,12 @@
+.status-false {
+    color:dimgray;
+    background-color: lightgray;
+}
+
+.status-plugin-active {
+    color: rgb(255, 157, 0) !important;
+}
+
+.status-plugin-healthy {
+    background-color: chartreuse !important;
+}

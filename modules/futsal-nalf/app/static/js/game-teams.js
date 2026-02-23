@@ -28,7 +28,7 @@ socket.on('initial_data', (data) => {
 
     let timer = appState.mainTimer;
     console.log('initial_data timer: ', timer);
-    updateTimerDisplay(timer.timer_id, timer.elapsed_time, timer.limit);
+    updateTimerDisplay(timer);
     fillPenaltiesTimersContainer('home');
     fillPenaltiesTimersContainer('away');
     // appState.gameTimerRunning = data.gameTimerRunning; // potrzebne do ewentualnego wyświetlania

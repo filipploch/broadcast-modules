@@ -243,7 +243,7 @@ func (m *Manager) Reset(timerID string) error {
 	return nil
 }
 
-// Remove removes a timer
+// Remove removes a timer, stopping it first if it is running
 func (m *Manager) Remove(timerID string) error {
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
@@ -255,8 +255,8 @@ func (m *Manager) Remove(timerID string) error {
 
 	t.mu.Lock()
 	if t.state == StateRunning {
-		t.mu.Unlock()
-		return fmt.Errorf("cannot remove running timer, pause it first")
+		// Stop the ticker goroutine before removing
+		close(t.stopChan)
 	}
 	t.state = StateStopped
 	t.mu.Unlock()

@@ -292,7 +292,7 @@ class PeriodManager:
             # Update main timer with current state
             if timer_state:
                 main_timer["state"] = timer_state.get("state", "paused")
-                main_timer["initial_time"] = timer_state.get("elapsed_time", main_timer.get("initial_time", 0))
+                main_timer["elapsed_time"] = timer_state.get("elapsed_time", main_timer.get("elapsed_time", 0))
                 Settings.update_main_timer(main_timer)
         
         # Stop and update all penalty timers
@@ -308,7 +308,7 @@ class PeriodManager:
                 # Update penalty timer with current state
                 if timer_state:
                     penalty["state"] = timer_state.get("state", "paused")
-                    penalty["initial_time"] = timer_state.get("elapsed_time", penalty.get("initial_time", 0))
+                    penalty["elapsed_time"] = timer_state.get("elapsed_time", penalty.get("elapsed_time", 0))
                     Settings.update_penalty_timer(timer_id, penalty)
         
         # Set period status to FINISHED

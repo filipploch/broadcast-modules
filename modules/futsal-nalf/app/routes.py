@@ -38,6 +38,7 @@ def ui_dashboard():
     from app.models.settings import Settings
     from app.models.period import Period
     from app.models.game import Game
+    from app.models.team import Team
     
     settings = Settings.get_settings()
     current_period_id = settings.current_period_id
@@ -49,6 +50,10 @@ def ui_dashboard():
         period = Period.query.filter_by(id=current_period_id).first()
         if period:
             game = Game.query.get(period.game_id)
+            teams = {
+                'home': Team.query.get(game.home_team_id),
+                'away': Team.query.get(game.away_team_id)
+            }
     
     # Get current timers from Settings
     current_timers = settings.get_current_timers()
@@ -64,6 +69,7 @@ def ui_dashboard():
                           period=period,
                           game=game,
                           main_timer=main_timer,
+                          teams=teams,
                           penalties=penalties)
 
 

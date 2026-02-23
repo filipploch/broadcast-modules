@@ -197,7 +197,7 @@ def handle_timer_pause(data):
         timer_state = timer_manager.get_timer_state(timer_id)
         if timer_state:
             main_timer["state"] = "paused"
-            main_timer["initial_time"] = timer_state.get("elapsed_time", main_timer.get("initial_time", 0))
+            main_timer["elapsed_time"] = timer_state.get("elapsed_time", main_timer.get("elapsed_time", 0))
             Settings.update_main_timer(main_timer)
             
             # Pause all penalty timers (dependent)
@@ -211,7 +211,7 @@ def handle_timer_pause(data):
                     penalty_state = timer_manager.get_timer_state(penalty_id)
                     if penalty_state:
                         penalty["state"] = "paused"
-                        penalty["initial_time"] = penalty_state.get("elapsed_time", penalty.get("initial_time", 0))
+                        penalty["elapsed_time"] = penalty_state.get("elapsed_time", penalty.get("elapsed_time", 0))
                         Settings.update_penalty_timer(penalty_id, penalty)
     else:
         # Penalty timer paused
@@ -222,7 +222,7 @@ def handle_timer_pause(data):
                 timer_state = timer_manager.get_timer_state(timer_id)
                 if timer_state:
                     penalty["state"] = "paused"
-                    penalty["initial_time"] = timer_state.get("elapsed_time", penalty.get("initial_time", 0))
+                    penalty["elapsed_time"] = timer_state.get("elapsed_time", penalty.get("elapsed_time", 0))
                     Settings.update_penalty_timer(timer_id, penalty)
                 break
     
@@ -425,7 +425,7 @@ def handle_timer_adjust(data):
             timer_state = timer_manager.get_timer_state(timer_id)
             if timer_state:
                 main_timer["state"] = timer_state.get("state", main_timer.get("state"))
-                main_timer["initial_time"] = timer_state.get("elapsed_time", main_timer.get("initial_time", 0))
+                main_timer["elapsed_time"] = timer_state.get("elapsed_time", main_timer.get("elapsed_time", 0))
                 Settings.update_main_timer(main_timer)
                 
                 # If main timer was adjusted back from limit_reached, update penalties
@@ -439,7 +439,7 @@ def handle_timer_adjust(data):
                     timer_state = timer_manager.get_timer_state(timer_id)
                     if timer_state:
                         penalty["state"] = timer_state.get("state", penalty.get("state"))
-                        penalty["initial_time"] = timer_state.get("elapsed_time", penalty.get("initial_time", 0))
+                        penalty["elapsed_time"] = timer_state.get("elapsed_time", penalty.get("elapsed_time", 0))
                         Settings.update_penalty_timer(timer_id, penalty)
                     break
         
@@ -896,8 +896,12 @@ def handle_timer_plugin_request_all_timers():
     
     # Send request to timer-plugin
     # The response will come via hub message handler -> on_all_timers()
-    timer_manager.get_all_timers()
-    current_app.logger.info('📤 Request sent to timer-plugin')
+    success = timer_manager.get_all_timers()
+    if success:
+        current_app.logger.info('📤 Request sent to timer-plugin')
+    else:
+        # Plugin is offline - inform UI immediately so it doesn't wait for timeout
+        emit('timer_plugin_offline', {'message': 'Timer plugin is not connected'})
 
 
 @socketio.on('timer_plugin_create_timer')

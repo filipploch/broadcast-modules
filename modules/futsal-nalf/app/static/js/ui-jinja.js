@@ -48,46 +48,70 @@ function formatTime(milliseconds) {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-/**
- * Update timer display element
- */
-// function updateTimerDisplay(timerId, elapsedTime) {
-//     // Use data attribute selector instead of ID
-//     const displayElement = document.querySelector(`[data-display-for="${timerId}"]`);
-//     if (displayElement) {
-//         displayElement.textContent = formatTime(elapsedTime);
-//     } else {
-//         console.warn(`Display element not found for timer: ${timerId}`);
-//     }
-// }
-
-function updateTimerDisplay(timerId, elapsedMs, timerLimit=0) {
-    let elapsedTime = elapsedMs;
-    if(!timerLimit==0){
-        elapsedTime = timerLimit - elapsedMs;
-    }
-    const minutesDisplay = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
-    const secondsDisplay = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
+function updateTimerDisplay(timerData) {
+    console.log("timerData:", timerData);
+    const timerId = timerData.timer_id;
+    const elapsedMs = timerData.elapsed_time;
+    const timerLimit = timerData.limit;
+    const timerState = timerData.state;
+    const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
+    const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
     const dsecondsDisplay = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
-    console.log(elapsedMs);
-    // Format time as MM:SS.CS
-    const minutes = Math.floor(elapsedTime / 60000);
-    const seconds = Math.floor((elapsedTime % 60000) / 1000);
-    const dseconds = Math.floor((elapsedTime % 1000) / 100);
-    
-    const minutesString = minutes.toString().padStart(2, '0');
-    const secondsString = seconds.toString().padStart(2, '0');
-    const dsecondsString = dseconds.toString();
-    
-    minutesDisplay.textContent = minutesString;
-    secondsDisplay.textContent = secondsString;
-    dsecondsDisplay.textContent = dsecondsString;
-//    timerElement.querySelector('.timer-state').textContent = state;
-//
-//    // Add state class for styling
-//    timerElement.className = `timer timer-${state}`;
+
+    const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
+
+    let displayTime;
+    if (timerLimit > 0) {
+        // Odliczanie malejąco — pokaż następną pełną sekundę która będzie wyświetlona
+        // Math.floor na elapsed zaokrągla w dół do pełnej sekundy, więc display zmienia się
+        // dokładnie co sekundę i jest spójny przy pauzie/resume
+        const elapsedSeconds = Math.floor(elapsed / 100) * 100;
+        displayTime = Math.max(0, timerLimit - elapsedSeconds - 1);
+        if(timerState === 'idle'){
+            displayTime = Math.max(0, timerLimit - elapsedSeconds);
+        }
+    } else {
+        displayTime = elapsed;
+    }
+
+    const minutes  = Math.floor(displayTime / 60000);
+    const seconds  = Math.floor((displayTime % 60000) / 1000);
+    const dseconds = Math.floor((displayTime % 1000) / 100);
+
+    minutesDisplay.textContent  = minutes.toString().padStart(2, '0');
+    secondsDisplay.textContent  = seconds.toString().padStart(2, '0');
+    dsecondsDisplay.textContent = dseconds.toString();
 }
+
+
+// function updateTimerDisplay(timerId, elapsedMs, timerLimit = 0) {
+//     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
+//     const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
+//     const dsecondsDisplay = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
+//     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
+
+//     const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
+
+//     let displayTime;
+//     if (timerLimit > 0) {
+//         // Odliczanie malejąco — pokaż następną pełną sekundę która będzie wyświetlona
+//         // Math.floor na elapsed zaokrągla w dół do pełnej sekundy, więc display zmienia się
+//         // dokładnie co sekundę i jest spójny przy pauzie/resume
+//         const elapsedSeconds = Math.floor(elapsed / 100) * 100;
+//         displayTime = Math.max(0, timerLimit - elapsedSeconds - 1);
+//     } else {
+//         displayTime = elapsed;
+//     }
+
+//     const minutes  = Math.floor(displayTime / 60000);
+//     const seconds  = Math.floor((displayTime % 60000) / 1000);
+//     const dseconds = Math.floor((displayTime % 1000) / 100);
+
+//     minutesDisplay.textContent  = minutes.toString().padStart(2, '0');
+//     secondsDisplay.textContent  = seconds.toString().padStart(2, '0');
+//     dsecondsDisplay.textContent = dseconds.toString();
+// }
 
 /**
  * Update timer state badge
@@ -115,9 +139,10 @@ function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit) {
     // console.log('updatePenaltyTimerDisplay');
     const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
     let elapsedTime = elapsedMs;
-    if(!timerLimit==0){
+    if(timerLimit>0){
         elapsedTime = timerLimit - elapsedMs;
     }
+    console.log('updatePenalty', elapsedTime);
     if (!penaltyDisplay) return;
     // Format time as MM:SS.CS
     const minutes = Math.floor(elapsedTime / 60000);
@@ -143,7 +168,7 @@ socket.on('timer_updated', (data) => {
         if(data.timer_id.startsWith('penalty')){
             updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
         } else {
-            updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+            updateTimerDisplay(data);
         }
     }
     if (data.state) {
@@ -157,7 +182,7 @@ socket.on('timer_updated', (data) => {
 socket.on('timer_started', (data) => {
     console.log('Timer started:', data);
     if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -170,7 +195,7 @@ socket.on('timer_started', (data) => {
 socket.on('timer_paused', (data) => {
     console.log('Timer paused:', data);
     if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -182,7 +207,7 @@ socket.on('timer_paused', (data) => {
  */
 socket.on('timer_reset', (data) => {
     console.log('Timer reset:', data);
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+        updateTimerDisplay(data);
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
     }
@@ -202,7 +227,7 @@ socket.on('timer_adjusted', (data) => {
 socket.on('limit_reached', (data) => {
     console.log('Timer limit reached:', data);
     if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);

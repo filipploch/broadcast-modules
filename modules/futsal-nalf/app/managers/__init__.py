@@ -20,6 +20,7 @@ _hub_client = None
 _current_game_manager = None
 _recorder_manager = None
 _timer_manager = None
+_plugin_manager = None
 _team_scraper_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
@@ -37,7 +38,7 @@ def initialize_all_managers(app):
     5. Other managers (Timer/Game/Recorder) lazy init when needed
     """
     # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
-    global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _team_scraper_manager, _initialized
+    global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, _team_scraper_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -144,6 +145,17 @@ def get_timer_manager():
         current_app.logger.info("✅ Timer Manager initialized (lazy)")
 
     return _timer_manager
+
+def get_plugin_manager():
+    """Get Timer Manager instance (lazy initialization)"""
+    global _plugin_manager
+
+    if _plugin_manager is None:
+        from app.managers.plugin_manager import PluginManager
+        _plugin_manager = PluginManager(get_hub_client())
+        current_app.logger.info("✅ Plugin Manager initialized (lazy)")
+
+    return _plugin_manager
 
 
 def get_current_game_manager():

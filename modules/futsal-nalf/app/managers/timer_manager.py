@@ -267,6 +267,10 @@ class TimerManager:
             current_app.logger.info(
                 "Signal 'get_all_timers' sent to Timer Plugin"
             )
+        else:
+            current_app.logger.warning("Timer Plugin is offline - cannot fetch timers")
+
+        return success
     
     def update_timer_state(self, timer_id, updates):
         """
@@ -453,10 +457,12 @@ class TimerManager:
         timer_id = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time')
         state = payload.get('state', 'unknown')
+        limit = payload.get('limit', 0)
 
         self.update_timer_state(timer_id, {
             'elapsed_time': elapsed_time,
             'state': state,
+            'limit': limit,
             'last_update': datetime.now().isoformat()
         })
 
@@ -464,6 +470,7 @@ class TimerManager:
         self._emit_to_ui(msg_type, {
             'timer_id': timer_id,
             'elapsed_time': elapsed_time,
+            'limit': limit,
             'state': state
         })
 
@@ -479,10 +486,12 @@ class TimerManager:
         timer_id = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time')
         state = payload.get('state', 'unknown')
+        limit = payload.get('limit', 0)
 
         self.update_timer_state(timer_id, {
             'elapsed_time': elapsed_time,
             'state': state,
+            'limit': limit,
             'last_update': datetime.now().isoformat()
         })
 
@@ -490,6 +499,7 @@ class TimerManager:
         self._emit_to_ui(msg_type, {
             'timer_id': timer_id,
             'elapsed_time': elapsed_time,
+            'limit': limit,
             'state': state
         })
 
@@ -505,10 +515,12 @@ class TimerManager:
         timer_id = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time')
         state = payload.get('state', 'unknown')
+        limit = payload.get('limit', 0)
 
         self.update_timer_state(timer_id, {
             'elapsed_time': elapsed_time,
             'state': state,
+            'limit': limit,
             'last_update': datetime.now().isoformat()
         })
 
@@ -516,6 +528,7 @@ class TimerManager:
         self._emit_to_ui(msg_type, {
             'timer_id': timer_id,
             'elapsed_time': elapsed_time,
+            'limit': limit,
             'state': state
         })
 
@@ -531,10 +544,12 @@ class TimerManager:
         timer_id = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time', 0)
         state = payload.get('state', 'idle')
+        limit = payload.get('limit', 0)
 
         self.update_timer_state(timer_id, {
             'elapsed_time': elapsed_time,
             'state': state,
+            'limit': limit,
             'last_update': datetime.now().isoformat()
         })
 
@@ -542,6 +557,7 @@ class TimerManager:
         self._emit_to_ui(msg_type, {
             'timer_id': timer_id,
             'elapsed_time': elapsed_time,
+            'limit': limit,
             'state': state
         })
 
@@ -593,7 +609,7 @@ class TimerManager:
         payload = msg.get('payload')
         timer_id = payload.get('timer_id')
         initial_time = payload.get('initial_time')
-        limit = payload.get('limit')
+        limit = payload.get('limit', 0)
         state = payload.get('state', 'idle')
 
         print(f'on_timer_created msg: {msg}')
@@ -601,6 +617,7 @@ class TimerManager:
         self.update_timer_state(timer_id, {
             'initial_time': initial_time,
             'state': state,
+            'limit': limit,
             'last_update': datetime.now().isoformat()
         })
 
@@ -622,14 +639,22 @@ class TimerManager:
 
             timer_type = "dependent"
             team_name = payload.get('team_name')
+            # Sync initial state with main timer state
+            main_timer = game_timers.get('main', {})
+            main_state = main_timer.get('state', 'idle') if main_timer else 'idle'
+            if main_state == 'limit_reached':
+                penalty_state = 'paused'
+            else:
+                penalty_state = main_state
             # Add to Settings.current_timers
             penalty_data = {
                 "timer_id": timer_id,
                 "timer_type": timer_type,
                 "parent_id": game_timer_id,
                 "initial_time": 0,
+                "elapsed_time": 0,
                 "limit": limit,
-                "state": state,
+                "state": penalty_state,
                 "metadata": {
                     "team": team,
                     "team_name": team_name,
@@ -638,6 +663,11 @@ class TimerManager:
                 }
             }
             Settings.add_penalty_timer(team, penalty_data)
+
+            # Auto-start penalty timer if main timer is running
+            if main_state == 'running':
+                self.start_timer(timer_id)
+
             updated_timers = Settings.get_current_timers()
             home_penalties = updated_timers['penalties']['home']
             away_penalties = updated_timers['penalties']['away']
@@ -670,6 +700,7 @@ class TimerManager:
                 'elapsed_time': initial_time,
                 'initial_time': initial_time,
                 'state': state,
+                'limit': limit,
                 'game_timers': game_timers
             })
     
@@ -735,8 +766,28 @@ class TimerManager:
         if main_timer and main_timer.get("timer_id") == timer_id:
             # Main timer reached limit
             main_timer["state"] = state
-            main_timer["initial_time"] = elapsed_time
+            main_timer["elapsed_time"] = elapsed_time
             Settings.update_main_timer(main_timer)
+
+            # Pause all penalty timers that have not reached their limit yet
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
+            for penalty in penalties:
+                if penalty.get("state") != "limit_reached":
+                    penalty_id = penalty.get("timer_id")
+                    if penalty_id:
+                        self.pause_timer(penalty_id)
+                        penalty_state = self.get_timer_state(penalty_id)
+                        penalty["state"] = "paused"
+                        penalty["elapsed_time"] = (
+                            penalty_state.get("elapsed_time", penalty.get("elapsed_time", 0))
+                            if penalty_state else penalty.get("elapsed_time", 0)
+                        )
+                        Settings.update_penalty_timer(penalty_id, penalty)
+
+            self._emit_to_ui('reload_penalty_timers', {
+                'penalties': Settings.get_current_timers().get("penalties", {"home": [], "away": []})
+            })
         else:
             # Penalty timer reached limit
             _penalties = current_timers.get("penalties", {"home": [], "away": []})
@@ -744,10 +795,10 @@ class TimerManager:
             for penalty in penalties:
                 if penalty.get("timer_id") == timer_id:
                     penalty["state"] = state
-                    penalty["initial_time"] = elapsed_time
+                    penalty["elapsed_time"] = elapsed_time
                     Settings.update_penalty_timer(timer_id, penalty)
                     break
-        
+
         if pause_at_limit:
             self._emit_to_ui(msg_type, {
                 'timer_id': timer_id,

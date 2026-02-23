@@ -33,10 +33,10 @@
         }
 
         // Usuń istniejący timer w kontenerze (jeśli istnieje)
-        const existingTimer = container.querySelector('.penalty-timer');
-        if (existingTimer) {
-            container.removeChild(existingTimer);
-        }
+        // const existingTimer = container.querySelector('.penalty-timer');
+        // if (existingTimer) {
+        //     container.removeChild(existingTimer);
+        // }
 
         // Utwórz nowy element timera
         const timerElement = document.createElement('div');

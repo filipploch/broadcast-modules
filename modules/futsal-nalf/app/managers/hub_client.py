@@ -317,7 +317,9 @@ class HubClient:
             # self._with_app_context(self._on_plugin_offline, plugin_id)
 
         elif msg_type == 'health_status':
-            pass
+            from app.managers import get_plugin_manager
+            plugin_manager = get_plugin_manager()
+            plugin_manager.on_plugins_state_received(msg)
             # print(f"health_status: {msg}")
 
         # elif msg_type == 'timer_updated':

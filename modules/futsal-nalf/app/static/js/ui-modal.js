@@ -31,7 +31,7 @@ function fillPenaltiesTimersContainer(team){
             <div class="penalty-element" data-timer-id="${penalty.timer_id}">
             <div class="penalty-element-content">
             <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${penalty.timer_id}')">X</button>
-            <div class="penalty-display data-display-for="${penalty.timer_id}"></div>
+            <div class="penalty-display" data-display-for="${penalty.timer_id}"></div>
             </div>
             <div class="penalty-element-controllers">
             <div class="gap"></div>

@@ -210,8 +210,10 @@ func (p *Plugin) handleCreateTimer(msg *Message) {
 	config.Metadata["timer_id"] = timerID
 	config.Metadata["creator"] = msg.From
 
-	// Set update interval from plugin config
-	if p.config.UpdateInterval > 0 {
+	// Set update interval: prefer per-timer value from payload, fallback to plugin config
+	if intervalMs, ok := msg.Payload["update_interval_ms"].(float64); ok && intervalMs > 0 {
+		config.UpdateInterval = time.Duration(intervalMs) * time.Millisecond
+	} else if p.config.UpdateInterval > 0 {
 		config.UpdateInterval = time.Duration(p.config.UpdateInterval) * time.Millisecond
 	}
 
@@ -247,7 +249,7 @@ func (p *Plugin) handleCreateTimer(msg *Message) {
 			"internal_id":  internalID,
 			"initial_time": initialTime.Milliseconds(),
 			"state":        string(timerState.State),
-			"limit":        int(timerState.Limit),
+			"limit":        timerState.Limit.Milliseconds(),
 		},
 	})
 
@@ -525,11 +527,24 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 		return
 	}
 
+	// Step 1: Broadcast timer_stopped to all overlay receivers before removing
+	p.hubClient.Send(&Message{
+		From: p.ID,
+		To:   "broadcast:timer_state_receiver",
+		Type: "timer_updated",
+		Payload: map[string]interface{}{
+			"timer_id": timerID,
+			"state":    "stopped",
+		},
+	})
+
+	// Step 2: Remove timer (stops goroutine and deletes from map)
 	if err := p.manager.Remove(internalID); err != nil {
 		p.sendError(msg.From, "remove_timer", err.Error())
 		return
 	}
 
+	// Step 3: Confirm removal to the requester
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   msg.From,

@@ -17,6 +17,7 @@ class TimerRecovery {
         this.settings = null;
         this.pluginTimers = null;
         this.recoveryInProgress = false;
+        this.recoveryDone = false; // Guard against multiple runs (e.g. socket reconnects)
     }
 
     /**
@@ -24,6 +25,12 @@ class TimerRecovery {
      * Called when UI loads
      */
     async init() {
+        // Only run once per page load - reconnects should not trigger recovery again
+        if (this.recoveryDone) {
+            console.log('ℹ️  Recovery already completed this session - skipping');
+            return;
+        }
+
         console.log('🔄 Starting timer recovery check...');
         
         try {
@@ -32,25 +39,27 @@ class TimerRecovery {
             
             if (!this.settings || !this.settings.current_timers) {
                 console.log('ℹ️  No timers in settings - nothing to recover');
+                this.recoveryDone = true;
                 return;
             }
 
             const mainTimer = this.settings.current_timers.main;
-            const penalties = this.settings.current_timers.penalties || [];
+            const penalties = this.settings.current_timers.penalties || { home: [], away: [] };
+            const hasPenalties = penalties.home.length > 0 || penalties.away.length > 0;
             
-            if (!mainTimer && penalties.length === 0) {
+            if (!mainTimer && !hasPenalties) {
                 console.log('ℹ️  No active timers - nothing to recover');
+                this.recoveryDone = true;
                 return;
             }
 
             // Step 2: Request timer states from plugin
             await this.requestPluginTimers();
             
-            // Step 3: Wait for plugin response, then compare and restore
-            // This happens in handlePluginTimersResponse()
-            
         } catch (error) {
             console.error('❌ Timer recovery failed:', error);
+        } finally {
+            this.recoveryDone = true;
         }
     }
 
@@ -81,16 +90,35 @@ class TimerRecovery {
         return new Promise((resolve) => {
             // Set timeout in case plugin doesn't respond
             const timeout = setTimeout(() => {
-                console.warn('⚠️  Plugin did not respond within 3 seconds');
+                console.warn('⚠️  Plugin did not respond within 3 seconds - treating as offline');
+                this.socket.off('timer_plugin_offline', offlineHandler);
+                this.socket.off('timer_plugin_all_timers', allTimersHandler);
+                // Plugin offline/unresponsive - skip restore, timers will be
+                // recreated when plugin comes back online via timer_plugin_online event
+                console.warn('⚠️  Skipping restore - plugin is not available');
                 resolve(null);
             }, 3000);
 
-            // Listen for response
-            this.socket.once('timer_plugin_all_timers', (data) => {
+            // Handle immediate offline response from backend
+            const offlineHandler = () => {
                 clearTimeout(timeout);
+                this.socket.off('timer_plugin_all_timers', allTimersHandler);
+                console.warn('⚠️  Timer plugin is offline - skipping restore');
+                // Do NOT call performRecovery([]) here - plugin is offline so
+                // create_timer events would be lost. Recovery will run when plugin reconnects.
+                resolve(null);
+            };
+
+            // Listen for successful response
+            const allTimersHandler = (data) => {
+                clearTimeout(timeout);
+                this.socket.off('timer_plugin_offline', offlineHandler);
                 this.handlePluginTimersResponse(data);
                 resolve(data);
-            });
+            };
+
+            this.socket.once('timer_plugin_all_timers', allTimersHandler);
+            this.socket.once('timer_plugin_offline', offlineHandler);
 
             // Send request
             this.socket.emit('timer_plugin_request_all_timers');
@@ -130,32 +158,32 @@ class TimerRecovery {
         const mainTimer = settingsTimers.main;
         const homePenaltyTimers = settingsTimers.penalties['home'] || [];
         const awayPenaltyTimers = settingsTimers.penalties['away'] || [];
-        const penaltyTimers = homePenaltyTimers.concat(awayPenaltyTimers) || [];
+        const penaltyTimers = homePenaltyTimers.concat(awayPenaltyTimers);
 
-        // Create a map of plugin timer IDs for quick lookup
-        const pluginTimerIds = new Set(
-            pluginTimers.map(t => t.timer_id)
-        );
+        // Create a set of plugin timer IDs for quick lookup
+        const pluginTimerIds = new Set(pluginTimers.map(t => t.timer_id));
+
+        console.log('🔍 Plugin has timers:', [...pluginTimerIds]);
 
         const timersToRestore = [];
 
         // Check main timer
-        if (mainTimer && !pluginTimerIds.has(mainTimer.timer_id)) {
-            console.log(`⚠️  Main timer missing in plugin: ${mainTimer.timer_id}`);
-            timersToRestore.push({
-                type: 'main',
-                data: mainTimer
-            });
+        if (mainTimer) {
+            if (pluginTimerIds.has(mainTimer.timer_id)) {
+                console.log(`✅ Main timer already in plugin: ${mainTimer.timer_id}`);
+            } else {
+                console.log(`⚠️  Main timer missing in plugin: ${mainTimer.timer_id}`);
+                timersToRestore.push({ type: 'main', data: mainTimer });
+            }
         }
 
         // Check penalty timers
         penaltyTimers.forEach(penalty => {
-            if (!pluginTimerIds.has(penalty.timer_id)) {
+            if (pluginTimerIds.has(penalty.timer_id)) {
+                console.log(`✅ Penalty timer already in plugin: ${penalty.timer_id}`);
+            } else {
                 console.log(`⚠️  Penalty timer missing in plugin: ${penalty.timer_id}`);
-                timersToRestore.push({
-                    type: 'penalty',
-                    data: penalty
-                });
+                timersToRestore.push({ type: 'penalty', data: penalty });
             }
         });
 
@@ -192,18 +220,15 @@ class TimerRecovery {
         const payload = {
             timer_id: timerData.timer_id,
             timer_type: timerData.timer_type || 'independent',
-            initial_time: timerData.initial_time || 0,
+            initial_time: timerData.elapsed_time || timerData.initial_time || 0,
             limit: timerData.limit,
             pause_at_limit: timerData.pause_at_limit !== false,
             metadata: timerData.metadata || {}
         };
 
-        // Send create_timer event
         this.socket.emit('timer_plugin_create_timer', payload);
         
-        // If timer was running, restore its state
         if (timerData.state === 'running') {
-            // Wait a bit for timer to be created, then start it
             setTimeout(() => {
                 this.socket.emit('timer_plugin_start_timer', {
                     timer_id: timerData.timer_id
@@ -223,15 +248,13 @@ class TimerRecovery {
             timer_id: timerData.timer_id,
             timer_type: 'dependent',
             parent_id: timerData.parent_id,
-            initial_time: timerData.initial_time || 0,
+            initial_time: timerData.elapsed_time || timerData.initial_time || 0,
             limit: timerData.limit || 120000,
             metadata: timerData.metadata || {}
         };
 
-        // Send create_timer event
         this.socket.emit('timer_plugin_create_timer', payload);
         
-        // If timer was running, restore its state
         if (timerData.state === 'running') {
             setTimeout(() => {
                 this.socket.emit('timer_plugin_start_timer', {
@@ -247,6 +270,8 @@ class TimerRecovery {
      */
     manualRecovery() {
         console.log('🔄 Manual recovery triggered');
+        this.recoveryDone = false;
+        this.recoveryInProgress = false;
         this.init();
     }
 }
@@ -260,13 +285,14 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('connect', () => {
         console.log('✅ Socket connected - initializing timer recovery');
         
-        // Initialize recovery after a short delay to ensure everything is ready
-        setTimeout(() => {
-            timerRecovery = new TimerRecovery(socket);
-            timerRecovery.init();
-        }, 500);
+        if (!timerRecovery) {
+            // First connection - create instance and run recovery
+            setTimeout(() => {
+                timerRecovery = new TimerRecovery(socket);
+                timerRecovery.init();
+                window.timerRecovery = timerRecovery;
+            }, 500);
+        }
+        // Subsequent reconnects - instance already exists, recoveryDone=true blocks re-run
     });
 });
-
-// Export for global access (debugging)
-window.timerRecovery = timerRecovery;
