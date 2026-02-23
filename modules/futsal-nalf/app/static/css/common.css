@@ -15,7 +15,47 @@
 }
 
 .header-button {
-  right: 3px;
-  position: absolute;
-  top: 3px;
+    right: 0px;
+    position: absolute;
+    top: 0px;
+    height: 15px;
+    width: 15px;
+    padding: 0;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+.bg_red {
+    background-color: red;
+    color: white;
+}
+
+.thin-wide-button {
+    text-align: center;
+    font-size: 9px;
+    width: 100%;
+}
+
+.wingdings {
+  font-family: "Wingdings";
+}
+
+.flex1 {
+    flex: 1;
+}
+
+.flex2 {
+    flex: 2;
+}
+
+.flex3 {
+    flex: 3;
+}
+
+.flex4 {
+    flex: 4;
+}
+
+.flex5 {
+    flex: 5;
 }

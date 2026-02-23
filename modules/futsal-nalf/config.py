@@ -21,7 +21,7 @@ class Config:
     APP_PORT = 8081
 
     REQUIRED_PLUGINS = ['timer-plugin', 'recorder-plugin', 'obs-ws-plugin']
-    SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_status_receiver']
+    SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver']
 
     HUB_EXECUTABLE = '../../hub/hub.exe'
     PLUGINS_DIR = '../../plugins'

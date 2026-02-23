@@ -21,3 +21,52 @@
     color: #ff9800 !important;
     animation: pulse 1s infinite;
 }
+
+/* Dodaj do timer.css */
+.penalty-timer {
+    transition: all 0.3s ease;
+}
+
+@keyframes showPenaltyTimer {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes hidePenaltyTimer {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes updatePenaltyTimer {
+    0% {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.show-penalty-timer {
+    animation: showPenaltyTimer 0.3s ease forwards;
+}
+
+.hide-penalty-timer {
+    animation: hidePenaltyTimer 0.3s ease forwards;
+}
+
+.timer-updated {
+    animation: updatePenaltyTimer 0.2s ease;
+}
+

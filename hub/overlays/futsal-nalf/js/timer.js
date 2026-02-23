@@ -4,7 +4,7 @@
  * Handles timer display and updates from HUB
  */
 
-class TimerOverlay {
+class StreamOverlay {
     constructor(wsClient, formatters) {
         this.wsClient = wsClient;
         this.formatters = formatters;
@@ -121,22 +121,22 @@ class TimerOverlay {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize WebSocket client with UNIQUE ID per instance
-    const wsClient = new WSClient({
+    const wsClient = new wsClient({
         // overlayId: auto-generated unique ID
         overlayName: 'Timer Overlay',
         moduleOwner: 'futsal-nalf',
-        subscribeClasses: ['timer'],
+        subscribeClasses: ['timer', 'timer_update_receiver', 'timer_state_receiver'],
         debug: true
     });
     
     // Initialize timer overlay with formatters
-    const timerOverlay = new TimerOverlay(wsClient, window.FutsalFormatters);
+    const streamOverlay = new StreamOverlay(wsClient, window.FutsalFormatters);
     
     // Connect to HUB
     wsClient.connect();
     
     // Make available globally for debugging
-    window.timerOverlay = timerOverlay;
+    window.streamOverlay = streamOverlay;
     window.wsClient = wsClient;
     
     console.log('🚀 Timer overlay ready');

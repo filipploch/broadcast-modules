@@ -45,7 +45,7 @@
 /* #bottom-scoreboard-container {
     display: grid;
     grid-template-columns: 80px 50px 30px 30px 50px;
-    align-items: center; /* ← Dodane: wyśrodkowanie w pionie wszystkich elementów */
+    align-items: center;
 } */
 
 /* Opcjonalnie: jeśli chcesz wyśrodkować tekst w konkretnych elementach */

@@ -135,7 +135,7 @@ function createMatchTimer(matchId, durationMinutes = 40) {
  */
 function createPenaltyTimer(matchTimerId, playerNumber, playerName, durationMinutes = 2) {
     socket.emit('penalty_timer_create', {
-        match_timer_id: matchTimerId,
+        game_timer_id: matchTimerId,
         player_number: playerNumber,
         player_name: playerName,
         duration_minutes: durationMinutes
@@ -356,9 +356,9 @@ function addTimerToUI(timerId) {
            </div>
         <div class="timer-controls">
             <div>
-                <button id="start-btn" onclick="startTimer('newTimer');">Start</button>
-                <button id="pause-btn" onclick="pauseTimer('newTimer');">Pause</button>
-                <button id="reset-btn" onclick="resumeTimer('newTimer');">Resume</button>
+                <button id="start-button" onclick="startTimer('newTimer');">Start</button>
+                <button id="pause-button" onclick="pauseTimer('newTimer');">Pause</button>
+                <button id="reset-button" onclick="resumeTimer('newTimer');">Resume</button>
             </div>
             <div>
                 <button id="btn-start-match">Start:Mecz</button>
@@ -409,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Loaded ${data.count} timers`);
         if(!data.count) {
             createTimer('newTimer', type = 'independent', options = {
-                "limit_time": 300000,
+                "limit": 300000,
                 "pause_at_limit": true,
                 "initial_time": 0,
                 "metadata": {

@@ -72,9 +72,12 @@ function updateTimerDisplay(timerId, elapsedMs, timerLimit=0) {
     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
     console.log(elapsedMs);
     // Format time as MM:SS.CS
-    const minutes = Math.floor(elapsedTime / 60000);
-    const seconds = Math.floor((elapsedTime % 60000) / 1000);
-    const dseconds = Math.floor((elapsedTime % 1000) / 100);
+    const minutes = Math.ceil(elapsedTime / 60000);
+    const seconds = Math.ceil((elapsedTime % 60000) / 1000);
+    let dseconds = Math.ceil((elapsedTime % 1000) / 100);
+    if(dseconds === 10){
+        dseconds = 0;
+    }
     
     const minutesString = minutes.toString().padStart(2, '0');
     const secondsString = seconds.toString().padStart(2, '0');
@@ -214,69 +217,6 @@ socket.on('limit_reached', (data) => {
     }
 });
 
-/**
- * Handle timer created event (for penalties added during period)
- */
-socket.on('penalty_timer_created', (data) => {
-    console.log('Penalty timer created:', data);
-    
-    // Reload page to get new penalty in DOM
-    // Alternative: Could dynamically create DOM element, but Jinja2 is cleaner
-    setTimeout(() => {
-        window.location.reload();
-    }, 500);
-});
-
-socket.on('home_penalty_timer_created', (data) => {
-    // 1. Pobierz element div id="away"
-    console.log("socket.on 'home_penalty_timer_created'");
-    const homeDiv = document.getElementById('home-team-penalties-timers-container');
-    
-    if (!homeDiv) {
-        console.error('Nie znaleziono elementu div id="home-(...)"');
-        return;
-    }
-    
-    // 2. Sprawdź ile divów class="penalty-timer" jest wewnątrz pobranego diva
-    const penaltyTimers = homeDiv.querySelectorAll('.penalty-element');
-    const timerCount = penaltyTimers.length;
-    
-    console.log(`Liczba timerów kary: ${timerCount}`);
-    
-    // 3. Jeśli ilość divów o klasie "penalty-timer" jest mniejsza od 2
-    if (timerCount < 2) {
-        // Generuj unikalne ID dla timera (możesz użyć data.timer_id lub timestamp)
-        const timerId = data?.timer_id || `penalty_home_${Date.now()}`;
-        
-        // Tworzenie nowego diva penalty-timer z pełną strukturą
-        const newPenaltyTimer = document.createElement('div');
-        // newPenaltyTimer.className = 'timer-card penalty-timer';
-        
-        // Wypełnienie wewnętrznej struktury HTML
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-        `;
-        
-        // Dodaj nowy timer do diva away
-        homeDiv.appendChild(newPenaltyTimer);
-        
-        console.log(`Dodano nowy timer kary z ID: ${timerId}`);
-        return timerId;
-    } else {
-        console.log('Osiągnięto maksymalną liczbę timerów kary (2)');
-        return false;
-    }
-});
 
 socket.on('flash_msg', (data) => {
     
@@ -304,73 +244,6 @@ socket.on('flash_msg', (data) => {
     }
 });
 
-socket.on('away_penalty_timer_created', (data) => {
-
-    // 1. Pobierz element div id="away"
-    const awayDiv = document.getElementById('away-team-penalties-timers-container');
-    
-    if (!awayDiv) {
-        console.error('Nie znaleziono elementu div id="away-(...)"');
-        return;
-    }
-    
-    // 2. Sprawdź ile divów class="penalty-timer" jest wewnątrz pobranego diva
-    const penaltyTimers = awayDiv.querySelectorAll('.penalty-element');
-    const timerCount = penaltyTimers.length;
-
-    const addPenaltyButton = awayDiv.querySelector('add-penalty-button');
-    
-    console.log(`Liczba timerów kary: ${timerCount}`);
-    
-    // 3. Jeśli ilość divów o klasie "penalty-timer" jest mniejsza od 2
-    // Generuj unikalne ID dla timera (możesz użyć data.timer_id lub timestamp)
-    const timerId = data?.timer_id || `penalty_away_${Date.now()}`;
-    
-    // Tworzenie nowego diva penalty-timer z pełną strukturą
-    const newPenaltyTimer = document.createElement('div');
-    newPenaltyTimer.className = 'timer-card penalty-timer';
-    
-    if (timerCount === 0) {
-        // Wypełnienie wewnętrznej struktury HTML
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-            ${addPenaltyButton.getHTML}
-        `;
-        
-    } else if(timerCount < 2) {
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-        `;
-    } else {
-        console.log('Osiągnięto maksymalną liczbę timerów kary (2)');
-        return false;
-    }
-    // Dodaj nowy timer do diva away
-    awayDiv.appendChild(newPenaltyTimer);
-    addPenaltyButton.remove();
-    console.log(`Dodano nowy timer kary z ID: ${timerId}`);
-    return timerId;
-});
 
 // ============================================================================
 // TIMER CONTROL FUNCTIONS

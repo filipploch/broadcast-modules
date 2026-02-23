@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
 </head>
 <body>
-    <div id="connection-status" class="connected"></div>
+    <!-- <div id="connection-status" class="connected"></div> -->
     <div id="scoreboard-container">
         <div id="top-scoreboard-container" class="scoreboard-row">
             <div></div>
@@ -28,12 +28,10 @@
         <div id="bottom-scoreboard-container" class="scoreboard-row">
             <div></div>
             <div id="home-team-penalty-timer-container" class="penalty-timer-container">
-                <div class="penalty-timer">1:15</div>
             </div>
             <div></div>
             <div></div>
             <div id="away-team-penalty-timer-container" class="penalty-timer-container">
-                <div class="penalty-timer">0:35</div>
             </div>
         </div>
     </div>
@@ -41,80 +39,130 @@
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
     
     <script>
-        // WebSocket z rejestracją jako overlay + subskrypcja timer
-        const overlayId = 'overlay-timer-' + Math.random().toString(36).substr(2, 9);
-        const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
+    // WebSocket z rejestracją jako overlay + subskrypcja timer
+    const overlayId = 'stream-overlay';
+    const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
+    
+    const display = document.getElementById('main-timer-display');
+    
+    let registered = false;
+    
+    ws.onopen = () => {
+        console.log('✅ Connected to HUB');
         
-        const display = document.getElementById('main-timer-display');
-        // const stateEl = document.getElementById('timer-state');
-        const statusEl = document.getElementById('connection-status');
+        ws.send(JSON.stringify({
+            type: 'register',
+            from: overlayId,
+            to: 'hub',
+            payload: {
+                id: overlayId,
+                component_type: 'overlay',
+                type: 'overlay'
+            }
+        }));
+    };
+    
+    ws.onclose = () => {
+        console.log('❌ Disconnected from HUB');
+        setTimeout(() => location.reload(), 3000);
+    };
+    
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log('📨 Received:', msg.type, msg);
         
-        let registered = false;
-        
-        ws.onopen = () => {
-            console.log('✅ Connected to HUB');
-            statusEl.classList.add('connected');
+        // Po rejestracji → subskrybuj timer
+        if (msg.type === 'registered' && !registered) {
+            registered = true;
+            console.log('✅ Registered! Now subscribing to timer...');
             
-            // 1. REJESTRACJA jako overlay
             ws.send(JSON.stringify({
-                type: 'register',
+                type: 'subscribe',
                 from: overlayId,
                 to: 'hub',
                 payload: {
-                    id: overlayId,
-                    component_type: 'overlay',
-                    type: 'overlay'
+                    class: ['timer', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
-        };
+        }
         
-        ws.onclose = () => {
-            console.log('❌ Disconnected from HUB');
-            statusEl.classList.remove('connected');
-            setTimeout(() => location.reload(), 3000);
-        };
+        // Po subskrypcji
+        if (msg.type === 'subscribed') {
+            console.log('✅ Subscribed to classes!');
+        }
         
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            console.log('📨 Received:', msg.type, msg);
+        // OBSŁUGA TIMERÓW
+        if (msg.type === 'timer_updated') {
+            const data = msg.payload || msg.data;
             
-            // Po rejestracji → subskrybuj timer
-            if (msg.type === 'registered' && !registered) {
-                registered = true;
-                console.log('✅ Registered! Now subscribing to timer...');
+            // Sprawdź czy to timer karny
+            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
+                const timerId = data.timer_id;
+                const currentTime = data.elapsed_time_formatted || 
+                                   FutsalFormatters.formatElapsedTime(data.elapsed_time);
                 
-                ws.send(JSON.stringify({
-                    type: 'subscribe',
-                    from: overlayId,
-                    to: 'hub',
-                    payload: {
-                        class: ['timer', 'timer_update_receiver']  // Subskrybuj klasę "timer"
+                if (data.state === 'running' || data.state === 'paused') {
+                    // Utwórz lub zaktualizuj timer
+                    const existingTimer = window.PenaltyTimers?.create(timerId, currentTime);
+                    if (existingTimer) {
+                        // Jeśli timer już istniał, funkcja create zwróci istniejący element
+                        // i nie utworzy nowego, więc musimy zaktualizować czas
+                        if (penaltyTimers?.has(timerId)) {
+                            window.PenaltyTimers.update(timerId, currentTime);
+                        }
                     }
-                }));
-            }
-            
-            // Po subskrypcji
-            if (msg.type === 'subscribed') {
-                console.log('✅ Subscribed to classes!');
-            }
-            
-            // Odbieraj timer_updated
-            if (msg.type === 'timer_updated') {
-                const data = msg.payload || msg.data;
-                
-                // Update display
+                } else if (data.state === 'stopped') {
+                    // Usuń timer jeśli jest zatrzymany
+                    window.PenaltyTimers?.remove(timerId);
+                }
+            } else {
+                // To jest główny timer meczu
                 const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time);
                 display.textContent = formatted;
-                // stateEl.textContent = (data.state || 'stopped').toUpperCase();
-                
-                // Update styling
-                display.classList.remove('timer-running', 'timer-paused', 'timer-stopped');
-                display.classList.add('timer-' + data.state);
-                
-                console.log(`⏱️ Timer: ${formatted} [${data.state}]`);
+                console.log(`⏱️ Main Timer: ${formatted} [${data.state}]`);
             }
-        };
-    </script>
+        }
+        
+        // OBSŁUGA SYGNAŁU LIMIT_REACHED
+        if (msg.type === 'limit_reached') {
+            const data = msg.payload || msg.data;
+            
+            // Sprawdź czy to dotyczy timera karnego
+            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
+                console.log(`🏁 Limit reached for penalty timer: ${data.timer_id}`);
+                window.PenaltyTimers?.remove(data.timer_id);
+            }
+        }
+        
+        // NOWA OBSŁUGA: SYGNAŁ TIMER_REMOVED
+        if (msg.type === 'timer_removed') {
+            const data = msg.payload || msg.data;
+            
+            // Sprawdź czy to dotyczy timera karnego
+            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
+                console.log(`🗑️ Timer removed signal for: ${data.timer_id}`);
+                window.PenaltyTimers?.remove(data.timer_id);
+            }
+        }
+
+        if (msg.type === 'game_data') {
+            const data = msg.payload || msg.data;
+            console.log('game_data', data);
+            let homeTeamScoreElement = document.getElementById('home-team-score');
+            let awayTeamScoreElement = document.getElementById('away-team-score');
+            let homeTeamFoulsElement = document.getElementById('home-team-fouls');
+            let awayTeamFoulsElement = document.getElementById('away-team-fouls');
+
+            homeTeamScoreElement.textContent = data.home_team.goals;
+            awayTeamScoreElement.textContent = data.away_team.goals;
+        }
+    };
+
+    // Opcjonalnie: czyszczenie timerów przy odświeżeniu strony
+    // window.addEventListener('beforeunload', () => {
+    //     window.PenaltyTimers?.clearAll();
+    // });
+</script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>

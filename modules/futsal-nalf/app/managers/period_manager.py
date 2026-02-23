@@ -12,7 +12,7 @@ class PeriodManager:
     """Manager for Period CRUD operations"""
 
     def create_period(self, game_id: int, period_order: int, description: str,
-                     limit_time: int = 1200000, pause_at_limit: bool = True,
+                     limit: int = 1200000, pause_at_limit: bool = True,
                      auto_calculate_initial_time: bool = True) -> Optional[Period]:
         """
         Create new period for a game
@@ -21,7 +21,7 @@ class PeriodManager:
             game_id: Game ID
             period_order: Period order (1, 2, 3, etc.)
             description: Period description (e.g., "1. połowa", "2. połowa")
-            limit_time: Time limit in milliseconds (default: 1200000 = 20 minutes)
+            limit: Time limit in milliseconds (default: 1200000 = 20 minutes)
             pause_at_limit: Whether to pause at time limit (default: True)
             auto_calculate_initial_time: Auto-calculate initial_time from previous periods (default: True)
 
@@ -53,7 +53,7 @@ class PeriodManager:
                 period_order=period_order,
                 description=description,
                 initial_time=initial_time,
-                limit_time=limit_time,
+                limit=limit,
                 pause_at_limit=pause_at_limit,
                 status=Period.STATUS_NOT_STARTED
             )
@@ -85,7 +85,7 @@ class PeriodManager:
             game_id=game_id,
             period_order=1,
             description="1. połowa",
-            limit_time=1200000,  # 20 minutes
+            limit=1200000,  # 20 minutes
             pause_at_limit=True
         )
         period1.update_timer_name()
@@ -97,7 +97,7 @@ class PeriodManager:
             game_id=game_id,
             period_order=2,
             description="2. połowa",
-            limit_time=1200000,  # 20 minutes
+            limit=1200000,  # 20 minutes
             pause_at_limit=True
         )
         period2.update_timer_name()
@@ -116,7 +116,7 @@ class PeriodManager:
         return Period.query.get(period_id)
 
     def update_period(self, period_id: int, description: str = None, 
-                     limit_time: int = None, pause_at_limit: bool = None,
+                     limit: int = None, pause_at_limit: bool = None,
                      status: int = None) -> Optional[Period]:
         """
         Update period
@@ -124,7 +124,7 @@ class PeriodManager:
         Args:
             period_id: Period ID
             description: New description (optional)
-            limit_time: New time limit in milliseconds (optional)
+            limit: New time limit in milliseconds (optional)
             pause_at_limit: New pause setting (optional)
             status: New status (optional)
 
@@ -139,8 +139,8 @@ class PeriodManager:
         try:
             if description is not None:
                 period.description = description
-            if limit_time is not None:
-                period.limit_time = limit_time
+            if limit is not None:
+                period.limit = limit
             if pause_at_limit is not None:
                 period.pause_at_limit = pause_at_limit
             if status is not None:
@@ -192,7 +192,7 @@ class PeriodManager:
             "timer_id": period.main_timer_name,
             "timer_type": "independent",
             "initial_time": period.initial_time,
-            "limit_time": period.limit_time,
+            "limit": period.limit,
             "pause_at_limit": period.pause_at_limit,
             "state": "idle",
             "metadata": {
@@ -209,14 +209,15 @@ class PeriodManager:
             
             # Get remaining penalty timers
             current_timers = Settings.get_current_timers()
-            remaining_penalties = current_timers.get("penalties", [])
+            _remaining_penalties = current_timers.get("penalties", {"home": [], "away": []})
+            remaining_penalties = _remaining_penalties['home'] + _remaining_penalties['away']
             
             # Create main timer
             timer_manager.create_timer(
                 timer_id=period.main_timer_name,
                 timer_type="independent",
                 initial_time=period.initial_time,
-                limit_time=period.limit_time,
+                limit=period.limit,
                 pause_at_limit=period.pause_at_limit,
                 metadata={
                     "description": period.description,
@@ -236,7 +237,7 @@ class PeriodManager:
                     timer_type="dependent",
                     parent_id=period.main_timer_name,
                     initial_time=penalty.get("initial_time", 0),
-                    limit_time=penalty.get("limit_time", 120000),
+                    limit=penalty.get("limit", 120000),
                     metadata=penalty_metadata
                 )
         else:
@@ -245,7 +246,7 @@ class PeriodManager:
                 timer_id=period.main_timer_name,
                 timer_type="independent",
                 initial_time=period.initial_time,
-                limit_time=period.limit_time,
+                limit=period.limit,
                 pause_at_limit=period.pause_at_limit,
                 metadata={
                     "description": period.description,
@@ -295,7 +296,8 @@ class PeriodManager:
                 Settings.update_main_timer(main_timer)
         
         # Stop and update all penalty timers
-        penalties = current_timers.get("penalties", [])
+        _penalties = current_timers.get("penalties", {"home": [], "away": []})
+        penalties = _penalties['home'] + _penalties['away']
         for i, penalty in enumerate(penalties):
             timer_id = penalty.get("timer_id")
             if timer_id:
@@ -337,13 +339,26 @@ class PeriodManager:
             db.session.rollback()
             logger.error(f"Error deleting period: {e}")
             return False
+        
+    #   ORYGINAŁ:
+    # def get_current_period(self, game_id: int) -> Optional[Period]:
+    #     """Get currently active period for a game"""
+    #     return Period.query.filter_by(
+    #         game_id=game_id,
+    #         status=Period.STATUS_PENDING
+    #     ).first()
 
     def get_current_period(self, game_id: int) -> Optional[Period]:
         """Get currently active period for a game"""
         return Period.query.filter_by(
-            game_id=game_id,
-            status=Period.STATUS_PENDING
+            game_id=game_id
         ).first()
+    
+    def get_all_game_periods(self, game_id: int) -> Optional[Period]:
+        """Get currently active period for a game"""
+        return Period.query.filter_by(
+            game_id=game_id
+        ).all()
 
     def update_period_score(self, period_id: int, home_goals: int, away_goals: int,
                            auto_sync: bool = True) -> Optional[Period]:
@@ -413,7 +428,7 @@ class PeriodManager:
             logger.error(f"Error updating period fouls: {e}")
             return None
 
-    def increment_period_goal(self, period_id: int, team: str, auto_sync: bool = True) -> Optional[Period]:
+    def increment_period_goal(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True) -> Optional[Period]:
         """
         Increment goal for a team in a period
         
@@ -432,9 +447,9 @@ class PeriodManager:
 
         try:
             if team.lower() == 'home':
-                period.increment_home_goals()
+                period.increment_home_goals(value)
             elif team.lower() == 'away':
-                period.increment_away_goals()
+                period.increment_away_goals(value)
             else:
                 raise ValueError(f"Invalid team: {team}. Must be 'home' or 'away'")
             
@@ -451,7 +466,7 @@ class PeriodManager:
             logger.error(f"Error incrementing goal: {e}")
             return None
 
-    def increment_period_foul(self, period_id: int, team: str, auto_sync: bool = True) -> Optional[Period]:
+    def increment_period_foul(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True) -> Optional[Period]:
         """
         Increment foul for a team in a period
         
@@ -470,9 +485,9 @@ class PeriodManager:
 
         try:
             if team.lower() == 'home':
-                period.increment_home_fouls()
+                period.increment_home_fouls(value)
             elif team.lower() == 'away':
-                period.increment_away_fouls()
+                period.increment_away_fouls(value)
             else:
                 raise ValueError(f"Invalid team: {team}. Must be 'home' or 'away'")
             

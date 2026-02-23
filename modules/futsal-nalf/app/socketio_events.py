@@ -4,11 +4,47 @@ from flask_socketio import emit
 from app.extensions import socketio
 from app.managers import get_hub_client
 from app.managers import get_timer_manager
+import json
 
 @socketio.on('connect')
 def handle_connect():
     current_app.logger.info('🔌 UI client connected')
     emit('connected', {'status': 'ok'})
+
+@socketio.on('request_initial_data')
+def handle_request_initial_data():
+    from app.models.settings import Settings
+    from app.models.period import Period
+    from app.models.game import Game
+    from app.models.team import Team
+
+    settings = Settings.get_settings()
+    current_period_id = settings.current_period_id
+    current_period = Period.query.get(current_period_id)
+    current_timers = Settings.get_current_timers()
+    home_penalties = current_timers['penalties']['home']
+    away_penalties = current_timers['penalties']['away']
+    penalties = {'home': home_penalties, 'away': away_penalties}
+    main_timer = current_timers['main']
+    is_reversed = bool(settings.is_scoreboard_reversed)
+    current_game = Game.query.get(current_period.game_id).to_dict()
+    # home_team_id = current_game.home_team_id
+    home_team = current_game['home_team']
+    # away_team_id = current_game.away_team_id
+    away_team = current_game['away_team']
+
+    emit('initial_data', {
+        'scores': {'home': home_team['goals'], 'away': away_team['goals']},
+        'fouls': {'home': home_team['fouls'], 'away': away_team['fouls']},
+        'penalties': penalties,
+        'teams': {'home': home_team, 'away': away_team},
+        'main_timer': main_timer,
+        'is_reversed': is_reversed
+        })
+
+
+
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -49,7 +85,7 @@ def handle_timer_create(data):
     {
         'timer_id': 'match-123',
         'timer_type': 'independent',
-        'limit_time': 2400000,
+        'limit': 2400000,
         'update_interval_ms': 100,
         'metadata': {'sport': 'futsal'}
     }
@@ -66,8 +102,8 @@ def handle_timer_create(data):
     kwargs = {}
     if 'parent_id' in data:
         kwargs['parent_id'] = data['parent_id']
-    if 'limit_time' in data:
-        kwargs['limit_time'] = data['limit_time']
+    if 'limit' in data:
+        kwargs['limit'] = data['limit']
     if 'pause_at_limit' in data:
         kwargs['pause_at_limit'] = data['pause_at_limit']
     if 'initial_time' in data:
@@ -111,7 +147,8 @@ def handle_timer_start(data):
             Settings.update_main_timer(main_timer)
             
             # Start all penalty timers (dependent)
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 penalty_id = penalty.get("timer_id")
                 if penalty_id:
@@ -121,7 +158,8 @@ def handle_timer_start(data):
                     Settings.update_penalty_timer(penalty_id, penalty)
         else:
             # Penalty timer started
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 if penalty.get("timer_id") == timer_id:
                     penalty["state"] = "running"
@@ -163,7 +201,8 @@ def handle_timer_pause(data):
             Settings.update_main_timer(main_timer)
             
             # Pause all penalty timers (dependent)
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 penalty_id = penalty.get("timer_id")
                 if penalty_id:
@@ -176,7 +215,8 @@ def handle_timer_pause(data):
                         Settings.update_penalty_timer(penalty_id, penalty)
     else:
         # Penalty timer paused
-        penalties = current_timers.get("penalties", [])
+        _penalties = current_timers.get("penalties", {"home": [], "away": []})
+        penalties = _penalties['home'] + _penalties['away']
         for penalty in penalties:
             if penalty.get("timer_id") == timer_id:
                 timer_state = timer_manager.get_timer_state(timer_id)
@@ -220,7 +260,8 @@ def handle_timer_resume(data):
             Settings.update_main_timer(main_timer)
             
             # Resume all penalty timers (dependent)
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 penalty_id = penalty.get("timer_id")
                 if penalty_id and penalty.get("state") == "paused":
@@ -230,7 +271,8 @@ def handle_timer_resume(data):
                     Settings.update_penalty_timer(penalty_id, penalty)
         else:
             # Penalty timer resumed
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 if penalty.get("timer_id") == timer_id:
                     penalty["state"] = "running"
@@ -285,20 +327,28 @@ def handle_timer_remove(data):
     if success:
         # Remove from Settings.current_timers
         current_timers = Settings.get_current_timers()
-        penalties = current_timers.get("penalties", [])
-        
-        current_app.logger.info(f"Current penalties before removal: {[p.get('timer_id') for p in penalties]}")
+        penalties = current_timers.get("penalties", {"home": [], "away": []})
+        # home_penalties = penalties['home']
+        # away_penalties = penalties['away']        
+        current_app.logger.info(f"Current home penalties before removal: {[p.get('timer_id') for p in penalties['home']]}")
+        current_app.logger.info(f"Current away penalties before removal: {[p.get('timer_id') for p in penalties['away']]}")
         
         # Filter out the removed penalty
-        updated_penalties = [p for p in penalties if p.get("timer_id") != timer_id]
+        updated_home_penalties = [p for p in penalties['home'] if p.get("timer_id") != timer_id]
+        updated_away_penalties = [p for p in penalties['away'] if p.get("timer_id") != timer_id]
         
-        if len(updated_penalties) < len(penalties):
+        if len(updated_home_penalties + updated_away_penalties) < len(penalties):
             # Penalty was found and removed
-            current_timers["penalties"] = updated_penalties
+            current_timers["penalties"]["home"] = updated_home_penalties
+            current_timers["penalties"]["away"] = updated_away_penalties
             Settings.set_current_timers(current_timers)
+            home_penalties = current_timers['penalties']['home']
+            away_penalties = current_timers['penalties']['away']
+            penalties = {'home': home_penalties, 'away': away_penalties}
             
             current_app.logger.info(f"✅ Penalty removed from Settings: {timer_id}")
-            emit('timer_removed', {'timer_id': timer_id}, broadcast=True)
+            # emit('timer_removed', {'timer_id': timer_id}, broadcast=True)
+            emit('reload_penalty_timers', {'penalties': penalties}, broadcast=True)
             return True
         else:
             # Timer not found in penalties (might be main timer - don't allow removal)
@@ -382,7 +432,8 @@ def handle_timer_adjust(data):
                 # Penalties will be adjusted automatically by timer plugin (dependent timers)
         else:
             # This is a penalty timer - update its state in Settings
-            penalties = current_timers.get("penalties", [])
+            _penalties = current_timers.get("penalties", {"home": [], "away": []})
+            penalties = _penalties['home'] + _penalties['away']
             for penalty in penalties:
                 if penalty.get("timer_id") == timer_id:
                     timer_state = timer_manager.get_timer_state(timer_id)
@@ -468,7 +519,7 @@ def handle_penalty_timer_create(data):
     
     Client sends:
     {
-        'match_timer_id': 'match-123',
+        'game_timer_id': 'match-123',
         'team': 'home' or 'away',
         'team_name': 'Torpedo Zielona Góra',
         'duration_minutes': 2
@@ -481,76 +532,111 @@ def handle_penalty_timer_create(data):
         emit('error', {'message': 'Timer manager not available'})
         return
     
-    match_timer_id = data.get('match_timer_id')
+    game_timer_id = data.get('game_timer_id')
     team = data.get('team', 'home')  # 'home' or 'away'
     team_name = data.get('team_name', '')
     duration_minutes = data.get('duration_minutes', 2)
-    
-    # Generate unique penalty timer ID
-    import time
-    penalty_timer_id = f"penalty_{team}_{int(time.time() * 1000)}"
-    
-    # Create penalty timer
-    timer_manager.create_timer(
-        timer_id=penalty_timer_id,
-        timer_type='dependent',
-        parent_id=match_timer_id,
-        initial_time=0,
-        limit_time=duration_minutes * 60000,  # Convert to milliseconds
-        pause_at_limit=True,
-        metadata={
-            'team': team,
-            'team_name': team_name,
-            'timer_class': 'penalty',
-            'duration_minutes': duration_minutes
-        }
-    )
-    
-    # ALWAYS sync penalty state with parent state
-    parent_state = timer_manager.get_timer_state(match_timer_id)
-    
-    if parent_state:
-        # Copy parent's state to penalty
-        current_parent_state = parent_state.get('state', 'idle')
+
+    all_current_penalties_timers = Settings.get_current_timers()['penalties']
+    current_penalties_timers = all_current_penalties_timers['home'] + all_current_penalties_timers['away']
+    team_penalties_timers_number = 0
+    for timer in current_penalties_timers:
+        print(f'timer in current: {timer}')
+        if timer and timer['timer_id'].startswith(f'penalty_{team}'):
+            team_penalties_timers_number += 1
+
+    if team_penalties_timers_number < 2:
+        # Generate unique penalty timer ID
+        import time
+        penalty_timer_id = f"penalty_{team}_{int(time.time() * 1000)}"
         
-        if current_parent_state == 'running':
-            # Parent is running - start penalty immediately
-            timer_manager.start_timer(penalty_timer_id)
-            penalty_state = 'running'
-        elif current_parent_state == 'paused':
-            # Parent is paused - start penalty then immediately pause it
-            timer_manager.start_timer(penalty_timer_id)
-            timer_manager.pause_timer(penalty_timer_id)
-            penalty_state = 'paused'
-        else:
-            # Parent is idle or other state
-            penalty_state = current_parent_state
-    else:
-        # No parent state found - default to idle
-        penalty_state = 'idle'
+        # Create penalty timer
+        timer_manager.create_timer(
+            timer_id=penalty_timer_id,
+            timer_type='dependent',
+            parent_id=game_timer_id,
+            initial_time=0,
+            limit=duration_minutes * 60000,  # Convert to milliseconds
+            pause_at_limit=True,
+            metadata={
+                'team': team,
+                'team_name': team_name,
+                'timer_class': 'penalty',
+                'duration_minutes': duration_minutes
+            }
+        )
     
-    # Add to Settings.current_timers
-    penalty_data = {
-        "timer_id": penalty_timer_id,
-        "timer_type": "dependent",
-        "parent_id": match_timer_id,
-        "initial_time": 0,
-        "limit_time": duration_minutes * 60000,
-        "state": penalty_state,
-        "metadata": {
-            "team": team,
-            "team_name": team_name,
-            "timer_class": "penalty",
-            "duration_minutes": duration_minutes
-        }
-    }
-    Settings.add_penalty_timer(penalty_data)
+@socketio.on('change_game_value')
+def handle_change_game_value(data):
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.managers.period_manager import PeriodManager
+
+    period_manager = PeriodManager()
+    current_game_id = Settings.get_settings().current_game_id
+    current_period_id = period_manager.get_current_period(current_game_id).id
+    team_type = data.get('team_type')
+    value_type = data.get('value_type')
+    value = data.get('value')
+    period = None
+
+    if value_type == "score":
+        period = period_manager.increment_period_goal(current_period_id, team_type, value)
+    elif value_type == "fouls":
+        period = period_manager.increment_period_foul(current_period_id, team_type, value)
+
+    if period:
+        game = Game.query.filter_by(id=period.game_id).first()
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.broadcast_to_class('game_data_receiver', 'game_data', game.to_dict())
+            emit('game_data', {'payload': game.to_dict()})
     
-    emit('penalty_timer_created', {
-        'timer_id': penalty_timer_id,
-        'team': team,
-        'team_name': team_name
-    }, broadcast=True)
+    # # ALWAYS sync penalty state with parent state
+    # parent_state = timer_manager.get_timer_state(game_timer_id)
+    
+    # if parent_state:
+    #     # Copy parent's state to penalty
+    #     current_parent_state = parent_state.get('state', 'idle')
+        
+    #     if current_parent_state == 'running':
+    #         # Parent is running - start penalty immediately
+    #         timer_manager.start_timer(penalty_timer_id)
+    #         penalty_state = 'running'
+    #     elif current_parent_state == 'paused':
+    #         # Parent is paused - start penalty then immediately pause it
+    #         timer_manager.start_timer(penalty_timer_id)
+    #         timer_manager.pause_timer(penalty_timer_id)
+    #         penalty_state = 'paused'
+    #     else:
+    #         # Parent is idle or other state
+    #         penalty_state = current_parent_state
+    # else:
+    #     # No parent state found - default to idle
+    #     penalty_state = 'idle'
+    
+    # # Add to Settings.current_timers
+    # penalty_data = {
+    #     "timer_id": penalty_timer_id,
+    #     "timer_type": "dependent",
+    #     "parent_id": game_timer_id,
+    #     "initial_time": 0,
+    #     "limit": duration_minutes * 60000,
+    #     "state": penalty_state,
+    #     "metadata": {
+    #         "team": team,
+    #         "team_name": team_name,
+    #         "timer_class": "penalty",
+    #         "duration_minutes": duration_minutes
+    #     }
+    # }
+    # Settings.add_penalty_timer(penalty_data)
+    
+    # emit('penalty_timer_created', {
+    #     'timer_id': penalty_timer_id,
+    #     'team': team,
+    #     'team_name': team_name
+    # }, broadcast=True)
 
 
 # ============================================================================
@@ -688,3 +774,213 @@ def handle_timers_get_all():
     #     'timers': list(timers.values()),
     #     'count': len(timers)
     # })
+
+# @socketio.on('timer_plugin_request_all_timers')
+# def handle_timer_plugin_request_all_timers():
+#     """
+#     Request all timers from timer-plugin
+#     UI will use this to check which timers are running after crash/restart
+    
+#     Flow:
+#     1. UI sends 'timer_plugin_request_all_timers'
+#     2. Backend sends request to timer-plugin via hub
+#     3. Timer-plugin responds via hub -> backend
+#     4. Backend emits 'timer_plugin_all_timers' back to UI
+#     """
+#     current_app.logger.info('📥 UI requested all timers from plugin')
+    
+#     timer_manager = get_timer_manager()
+#     if not timer_manager:
+#         emit('error', {'message': 'Timer manager not available'})
+#         return
+    
+#     # Send request to timer-plugin
+#     # The response will come via hub message handler
+#     timer_manager.get_all_timers()
+#     current_app.logger.info('📤 Request sent to timer-plugin')
+
+
+# @socketio.on('timer_plugin_create_timer')
+# def handle_timer_plugin_create_timer(data):
+#     """
+#     Create timer in timer-plugin (recovery)
+    
+#     Client sends:
+#     {
+#         'timer_id': 'main-p1',
+#         'timer_type': 'independent',
+#         'initial_time': 0,
+#         'limit': 1200000,
+#         'pause_at_limit': true,
+#         'metadata': {...}
+#     }
+#     """
+#     current_app.logger.info(f'📥 UI requested timer creation: {data.get("timer_id")}')
+    
+#     timer_manager = get_timer_manager()
+#     if not timer_manager:
+#         emit('error', {'message': 'Timer manager not available'})
+#         return
+    
+#     timer_id = data.get('timer_id')
+#     timer_type = data.get('timer_type', 'independent')
+    
+#     # Extract parameters
+#     kwargs = {}
+#     if 'parent_id' in data:
+#         kwargs['parent_id'] = data['parent_id']
+#     if 'limit' in data:
+#         kwargs['limit'] = data['limit']
+#     if 'pause_at_limit' in data:
+#         kwargs['pause_at_limit'] = data['pause_at_limit']
+#     if 'initial_time' in data:
+#         kwargs['initial_time'] = data['initial_time']
+#     if 'metadata' in data:
+#         kwargs['metadata'] = data['metadata']
+    
+#     success = timer_manager.create_timer(timer_id, timer_type, **kwargs)
+    
+#     if success:
+#         current_app.logger.info(f'✅ Timer created: {timer_id}')
+#     else:
+#         current_app.logger.error(f'❌ Failed to create timer: {timer_id}')
+#         emit('error', {'message': f'Failed to create timer {timer_id}'})
+
+
+# @socketio.on('timer_plugin_start_timer')
+# def handle_timer_plugin_start_timer(data):
+#     """
+#     Start timer in timer-plugin (recovery)
+    
+#     Client sends: {'timer_id': 'main-p1'}
+#     """
+#     current_app.logger.info(f'📥 UI requested timer start: {data.get("timer_id")}')
+    
+#     timer_manager = get_timer_manager()
+#     if not timer_manager:
+#         emit('error', {'message': 'Timer manager not available'})
+#         return
+    
+#     timer_id = data.get('timer_id')
+#     success = timer_manager.start_timer(timer_id)
+    
+#     if success:
+#         current_app.logger.info(f'✅ Timer started: {timer_id}')
+#     else:
+#         current_app.logger.error(f'❌ Failed to start timer: {timer_id}')
+#         emit('error', {'message': f'Failed to start timer {timer_id}'})
+
+@socketio.on('timer_plugin_request_all_timers')
+def handle_timer_plugin_request_all_timers():
+    """
+    Request all timers from timer-plugin
+    UI will use this to check which timers are running after crash/restart
+    
+    Flow:
+    1. UI sends 'timer_plugin_request_all_timers' via socket
+    2. Backend calls timer_manager.get_all_timers()
+    3. Timer manager sends request to timer-plugin via hub
+    4. Timer-plugin responds with list of all timers
+    5. Hub forwards response to backend
+    6. Backend's on_all_timers() emits 'timer_plugin_all_timers' to UI
+    
+    Note: This handler doesn't wait for response - it's async.
+    Response comes via different path (hub -> timer_manager -> socketio emit)
+    """
+    current_app.logger.info('📥 UI requested all timers from plugin')
+    
+    timer_manager = get_timer_manager()
+    if not timer_manager:
+        emit('error', {'message': 'Timer manager not available'})
+        return
+    
+    # Send request to timer-plugin
+    # The response will come via hub message handler -> on_all_timers()
+    timer_manager.get_all_timers()
+    current_app.logger.info('📤 Request sent to timer-plugin')
+
+
+@socketio.on('timer_plugin_create_timer')
+def handle_timer_plugin_create_timer(data):
+    """
+    Create timer in timer-plugin (used during recovery)
+    
+    Client sends:
+    {
+        'timer_id': 'main-p1',
+        'timer_type': 'independent',  # or 'dependent'
+        'initial_time': 0,
+        'limit': 1200000,
+        'pause_at_limit': true,
+        'parent_id': 'main-p1',  # only for dependent timers
+        'metadata': {
+            'description': '1. połowa',
+            'period': 1,
+            'timer_class': 'main'
+        }
+    }
+    
+    This is called when recovery system detects a timer is missing
+    in timer-plugin but exists in Settings.current_timers
+    """
+    current_app.logger.info(f'📥 UI requested timer creation: {data.get("timer_id")}')
+    
+    timer_manager = get_timer_manager()
+    if not timer_manager:
+        emit('error', {'message': 'Timer manager not available'})
+        return
+    
+    timer_id = data.get('timer_id')
+    timer_type = data.get('timer_type', 'independent')
+    
+    # Extract optional parameters
+    kwargs = {}
+    if 'parent_id' in data:
+        kwargs['parent_id'] = data['parent_id']
+    if 'limit' in data:
+        kwargs['limit'] = data['limit']
+    if 'pause_at_limit' in data:
+        kwargs['pause_at_limit'] = data['pause_at_limit']
+    if 'initial_time' in data:
+        kwargs['initial_time'] = data['initial_time']
+    if 'metadata' in data:
+        kwargs['metadata'] = data['metadata']
+    
+    success = timer_manager.create_timer(timer_id, timer_type, **kwargs)
+    
+    if success:
+        current_app.logger.info(f'✅ Timer created: {timer_id}')
+    else:
+        current_app.logger.error(f'❌ Failed to create timer: {timer_id}')
+        emit('error', {'message': f'Failed to create timer {timer_id}'})
+
+
+@socketio.on('timer_plugin_start_timer')
+def handle_timer_plugin_start_timer(data):
+    """
+    Start timer in timer-plugin (used during recovery)
+    
+    Client sends: 
+    {
+        'timer_id': 'main-p1'
+    }
+    
+    This is called after creating a timer that was in 'running' state
+    before the crash. The recovery system creates the timer first,
+    then starts it to restore the previous state.
+    """
+    current_app.logger.info(f'📥 UI requested timer start: {data.get("timer_id")}')
+    
+    timer_manager = get_timer_manager()
+    if not timer_manager:
+        emit('error', {'message': 'Timer manager not available'})
+        return
+    
+    timer_id = data.get('timer_id')
+    success = timer_manager.start_timer(timer_id)
+    
+    if success:
+        current_app.logger.info(f'✅ Timer started: {timer_id}')
+    else:
+        current_app.logger.error(f'❌ Failed to start timer: {timer_id}')
+        emit('error', {'message': f'Failed to start timer {timer_id}'})

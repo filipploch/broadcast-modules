@@ -13,6 +13,7 @@ class Settings(db.Model):
     current_game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
     current_period_id = db.Column(db.Integer, db.ForeignKey('periods.id'), nullable=True)
     current_timers = db.Column(db.Text, nullable=True)  # JSON: {"main": {...}, "penalties": [{...}]}
+    is_scoreboard_reversed = db.Column(db.Boolean, default=False)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -93,11 +94,13 @@ class Settings(db.Model):
         """
         settings = cls.get_settings()
         if not settings.current_timers:
-            return {"main": None, "penalties": []}
+            return {"main": None, "penalties": {"home": [], "away": []}}
         try:
             return json.loads(settings.current_timers)
         except (json.JSONDecodeError, TypeError):
-            return {"main": None, "penalties": []}
+            print('EXCEPT')
+            print('==================================================================')
+            return {"main": None, "penalties": {"home": [], "away": []}}
     
     @classmethod
     def set_current_timers(cls, timers_data):
@@ -125,7 +128,7 @@ class Settings(db.Model):
         cls.set_current_timers(timers)
     
     @classmethod
-    def add_penalty_timer(cls, timer_data):
+    def add_penalty_timer(cls, team, timer_data):
         """
         Add penalty timer to current_timers
         
@@ -134,8 +137,8 @@ class Settings(db.Model):
         """
         timers = cls.get_current_timers()
         if "penalties" not in timers:
-            timers["penalties"] = []
-        timers["penalties"].append(timer_data)
+            timers["penalties"] = {"home": [], "away": []}
+        timers["penalties"][team].append(timer_data)
         cls.set_current_timers(timers)
     
     @classmethod
@@ -149,11 +152,16 @@ class Settings(db.Model):
         """
         timers = cls.get_current_timers()
         if "penalties" not in timers:
-            timers["penalties"] = []
+            timers["penalties"] = {"home": [], "away": []}
         
-        for i, penalty in enumerate(timers["penalties"]):
+        for i, penalty in enumerate(timers["penalties"]["home"]):
             if penalty.get("timer_id") == timer_id:
-                timers["penalties"][i] = timer_data
+                timers["penalties"]["home"][i] = timer_data
+                break
+
+        for i, penalty in enumerate(timers["penalties"]["away"]):
+            if penalty.get("timer_id") == timer_id:
+                timers["penalties"]["away"][i] = timer_data
                 break
         
         cls.set_current_timers(timers)
@@ -167,13 +175,19 @@ class Settings(db.Model):
         if "penalties" not in timers:
             return
         
-        timers["penalties"] = [
-            p for p in timers["penalties"] 
+        timers["penalties"]["home"] = [
+            p for p in timers["penalties"]["home"] 
             if p.get("state") != "limit_reached"
         ]
+
+        timers["penalties"]["away"] = [
+            p for p in timers["penalties"]["away"] 
+            if p.get("state") != "limit_reached"
+        ]
+
         cls.set_current_timers(timers)
     
     @classmethod
     def clear_timers(cls):
         """Clear all timers"""
-        cls.set_current_timers({"main": None, "penalties": []})
+        cls.set_current_timers({"main": None, "penalties": {'home': [], 'away': []}})

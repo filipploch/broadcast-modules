@@ -1,0 +1,73 @@
+body {
+  margin:0px;
+  padding:0;
+  font-family:"Varela Round",sans-serif;
+}
+
+#container {
+    position: absolute;
+    display: flex;
+    height:264px;
+    width:817px;
+    border:1px solid black;
+    margin:0px;
+    padding:0;
+    background-color:#2b2e38;
+    overflow:hidden;
+}
+
+.module-frame {
+    margin:0px;
+    padding:0px;
+}
+
+.top-bar {
+    position: relative;
+    display: flex;
+    background-color: darkgray;
+}
+
+a {
+    text-decoration: none;
+}
+
+.top-bar-element {
+    font-size: 12px !important;
+    margin: 0;
+    padding: 0;
+    height: 15px;
+}
+
+button.top-bar-element {
+    width: 15px;
+}
+
+#nav-to-game-settings {
+    margin-right: 2px;
+}
+
+#column-controls {
+	position: relative;
+	width: 165px;
+}
+
+.penalty-timer {
+    display: grid;
+    grid-template-columns: 25% 50% 25%;
+}
+
+.penalty-x-button {
+    right: 0px;
+    position: relative;
+    top: 0px;
+    height: 15px;
+    width: 15px;
+    padding: 0;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+
+.penalty-timer-button {
+	height: 40%;
+}

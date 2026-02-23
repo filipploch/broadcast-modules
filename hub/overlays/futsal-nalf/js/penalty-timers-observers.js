@@ -1,107 +1,121 @@
-// Przechowujemy mapę istniejących obserwatorów, aby uniknąć wielokrotnego obserwowania tego samego elementu
-const elementObservers = new WeakMap();
+// penalty-timers-observer.js
+(function() {
+    'use strict';
 
-// Funkcja dodająca obserwatora tekstu do pojedynczego elementu
-function observeSingleElement(element) {
-    // Sprawdź, czy element już nie jest obserwowany
-    if (elementObservers.has(element)) {
-        return;
-    }
+    // Przechowujemy referencje do istniejących timerów
+    const penaltyTimers = new Map(); // key: timer_id, value: { element, container }
 
-    // Konfiguracja obserwatora dla zmian tekstu
-    const config = { characterData: true, subtree: true };
-    
-    const callback = function(mutationsList) {
-        for (let mutation of mutationsList) {
-            if (mutation.type === 'characterData') {
-                const targetElement = mutation.target.parentElement;
-                
-                if (targetElement && targetElement.classList.contains('penalty-timer')) {
-                    if (targetElement.textContent.trim() !== '') {
-                        targetElement.classList.add('show-penalty-timer');
-                        targetElement.classList.remove('hide-penalty-timer');
-                    } else {
-                        targetElement.classList.add('hide-penalty-timer');
-                        targetElement.classList.remove('show-penalty-timer');
-                    }
-                }
-            }
+    // Funkcja tworząca element timera karnego
+    function createPenaltyTimerElement(timerId, initialTime) {
+        // Sprawdź czy timer już istnieje
+        if (penaltyTimers.has(timerId)) {
+            console.log(`Timer ${timerId} already exists, updating time...`);
+            const existing = penaltyTimers.get(timerId);
+            existing.element.textContent = initialTime;
+            return existing.element;
         }
-    };
-    
-    // Utwórz i zapisz obserwatora
-    const observer = new MutationObserver(callback);
-    observer.observe(element, config);
-    
-    // Zapisz obserwatora w mapie
-    elementObservers.set(element, observer);
-    
-    // Inicjalne sprawdzenie stanu elementu
-    if (element.textContent.trim() !== '') {
-        element.classList.add('show-penalty-timer');
-    }
-}
 
-// Funkcja usuwająca obserwatora z elementu
-function unobserveSingleElement(element) {
-    if (elementObservers.has(element)) {
-        const observer = elementObservers.get(element);
-        observer.disconnect();
-        elementObservers.delete(element);
-    }
-}
+        // Określ kontener docelowy na podstawie timer_id
+        let containerId;
+        if (timerId.startsWith('penalty_home')) {
+            containerId = 'home-team-penalty-timer-container';
+        } else if (timerId.startsWith('penalty_away')) {
+            containerId = 'away-team-penalty-timer-container';
+        } else {
+            console.error(`Unknown timer type: ${timerId}`);
+            return null;
+        }
 
-// Główny obserwator całego dokumentu
-function observeDocument() {
-    // Obserwuj cały dokument pod kątem nowych elementów
-    const bodyObserver = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            // Obsługa DODANYCH węzłów
-            mutation.addedNodes.forEach((node) => {
-                // Sprawdź, czy dodany węzeł to element z klasą 'penalty-timer'
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    if (node.classList && node.classList.contains('penalty-timer')) {
-                        observeSingleElement(node);
-                    }
-                    
-                    // Sprawdź również dzieci dodanego elementu
-                    const nestedElements = node.querySelectorAll('.penalty-timer');
-                    nestedElements.forEach(observeSingleElement);
-                }
-            });
-            
-            // Obsługa USUNIĘTYCH węzłów
-            mutation.removedNodes.forEach((node) => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    if (node.classList && node.classList.contains('penalty-timer')) {
-                        unobserveSingleElement(node);
-                    }
-                    
-                    // Sprawdź również dzieci usuwanego elementu
-                    const nestedElements = node.querySelectorAll('.penalty-timer');
-                    nestedElements.forEach(unobserveSingleElement);
-                }
-            });
+        const container = document.getElementById(containerId);
+        if (!container) {
+            console.error(`Container ${containerId} not found`);
+            return null;
+        }
+
+        // Usuń istniejący timer w kontenerze (jeśli istnieje)
+        const existingTimer = container.querySelector('.penalty-timer');
+        if (existingTimer) {
+            container.removeChild(existingTimer);
+        }
+
+        // Utwórz nowy element timera
+        const timerElement = document.createElement('div');
+        timerElement.className = 'penalty-timer';
+        timerElement.setAttribute('data-timer-id', timerId);
+        timerElement.textContent = initialTime;
+
+        // Dodaj do kontenera
+        container.appendChild(timerElement);
+
+        // Zapisz referencję
+        penaltyTimers.set(timerId, {
+            element: timerElement,
+            container: container
         });
-    });
-    
-    // Rozpocznij obserwację całego dokumentu
-    bodyObserver.observe(document.body, {
-        childList: true,      // obserwuj dodawanie/usuwanie dzieci
-        subtree: true         // obserwuj całe drzewo DOM
-    });
-    
-    // Znajdź i obserwuj istniejące elementy
-    const existingElements = document.querySelectorAll('.penalty-timer');
-    existingElements.forEach(observeSingleElement);
-    
-    return bodyObserver; // zwróć obserwatora na wypadek, gdyby trzeba go było zatrzymać
-}
 
-// Uruchom cały mechanizm po załadowaniu strony
-document.addEventListener('DOMContentLoaded', () => {
-    const observer = observeDocument();
-    
-    // Opcjonalnie: jeśli chcesz móc zatrzymać obserwację w przyszłości
-    window.stopObserving = () => observer.disconnect();
-});
+        // Wywołaj animację pojawienia się
+        timerElement.classList.add('show-penalty-timer');
+        
+        // Usuń klasę animacji po jej zakończeniu (opcjonalnie)
+        setTimeout(() => {
+            timerElement.classList.remove('show-penalty-timer');
+        }, 300);
+
+        console.log(`✅ Created penalty timer: ${timerId} with time ${initialTime}`);
+        return timerElement;
+    }
+
+    // Funkcja aktualizująca istniejący timer
+    function updatePenaltyTimer(timerId, newTime) {
+        if (penaltyTimers.has(timerId)) {
+            const { element } = penaltyTimers.get(timerId);
+            element.textContent = newTime;
+            
+            // Opcjonalnie: dodaj efekt mignięcia przy aktualizacji
+            element.classList.add('timer-updated');
+            setTimeout(() => {
+                element.classList.remove('timer-updated');
+            }, 200);
+            
+            console.log(`🔄 Updated penalty timer: ${timerId} -> ${newTime}`);
+        } else {
+            console.warn(`Cannot update ${timerId} - timer doesn't exist`);
+        }
+    }
+
+    // Funkcja usuwająca timer
+    function removePenaltyTimer(timerId) {
+        if (penaltyTimers.has(timerId)) {
+            const { element, container } = penaltyTimers.get(timerId);
+            
+            // Dodaj animację zniknięcia
+            element.classList.add('hide-penalty-timer');
+            
+            // Usuń po zakończeniu animacji
+            setTimeout(() => {
+                if (element.parentNode === container) {
+                    container.removeChild(element);
+                }
+                penaltyTimers.delete(timerId);
+                console.log(`❌ Removed penalty timer: ${timerId}`);
+            }, 300);
+        }
+    }
+
+    // Funkcja czyszcząca wszystkie timery
+    function clearAllPenaltyTimers() {
+        penaltyTimers.forEach((_, timerId) => {
+            removePenaltyTimer(timerId);
+        });
+    }
+
+    // Eksponuj funkcje do globalnego zasięgu (dla dostępu z WebSocket)
+    window.PenaltyTimers = {
+        create: createPenaltyTimerElement,
+        update: updatePenaltyTimer,
+        remove: removePenaltyTimer,
+        clearAll: clearAllPenaltyTimers
+    };
+
+    console.log('✅ Penalty Timers Observer initialized');
+})();

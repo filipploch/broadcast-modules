@@ -30,7 +30,7 @@ class Period(db.Model):
     
     # Time settings (in milliseconds)
     initial_time = db.Column(db.Integer, default=0, nullable=False)  # Starting time for stopwatch
-    limit_time = db.Column(db.Integer, default=1200000, nullable=False)  # 20 minutes = 1200000 ms
+    limit = db.Column(db.Integer, default=1200000, nullable=False)  # 20 minutes = 1200000 ms
     pause_at_limit = db.Column(db.Boolean, default=True, nullable=False)
     
     # Status
@@ -77,9 +77,9 @@ class Period(db.Model):
         return status_map.get(self.status, 'Nieznany')
 
     @property
-    def limit_time_seconds(self):
+    def limit_seconds(self):
         """Get limit time in seconds"""
-        return self.limit_time / 1000 if self.limit_time else 0
+        return self.limit / 1000 if self.limit else 0
 
     @property
     def initial_time_seconds(self):
@@ -100,8 +100,8 @@ class Period(db.Model):
             'away_team_fouls': self.away_team_fouls,
             'initial_time': self.initial_time,
             'initial_time_seconds': self.initial_time_seconds,
-            'limit_time': self.limit_time,
-            'limit_time_seconds': self.limit_time_seconds,
+            'limit': self.limit,
+            'limit_seconds': self.limit_seconds,
             'pause_at_limit': self.pause_at_limit,
             'status': self.status,
             'status_text': self.get_status_text(),
@@ -112,25 +112,25 @@ class Period(db.Model):
     @staticmethod
     def calculate_initial_time_for_period(game_id, period_order):
         """
-        Calculate initial_time for a period based on sum of limit_time of previous periods
+        Calculate initial_time for a period based on sum of limit of previous periods
         
         Args:
             game_id: Game ID
             period_order: Period order number (1, 2, 3, etc.)
         
         Returns:
-            Initial time in milliseconds (sum of previous periods' limit_time)
+            Initial time in milliseconds (sum of previous periods' limit)
         """
         if period_order == 1:
             return 0
         
-        # Sum limit_time of all previous periods for this game
+        # Sum limit of all previous periods for this game
         previous_periods = Period.query.filter(
             Period.game_id == game_id,
             Period.period_order < period_order
         ).all()
         
-        total_time = sum(p.limit_time for p in previous_periods)
+        total_time = sum(p.limit for p in previous_periods)
         return total_time
 
     def update_score(self, home_goals, away_goals):
@@ -145,24 +145,24 @@ class Period(db.Model):
         self.away_team_fouls = away_fouls
         self.updated_at = datetime.utcnow()
 
-    def increment_home_goals(self):
+    def increment_home_goals(self, value: int):
         """Increment home team goals in this period"""
-        self.home_team_goals += 1
+        self.home_team_goals += value
         self.updated_at = datetime.utcnow()
 
-    def increment_away_goals(self):
+    def increment_away_goals(self, value: int):
         """Increment away team goals in this period"""
-        self.away_team_goals += 1
+        self.away_team_goals += value
         self.updated_at = datetime.utcnow()
 
-    def increment_home_fouls(self):
+    def increment_home_fouls(self, value: int):
         """Increment home team fouls in this period"""
-        self.home_team_fouls += 1
+        self.home_team_fouls += value
         self.updated_at = datetime.utcnow()
 
-    def increment_away_fouls(self):
+    def increment_away_fouls(self, value: int):
         """Increment away team fouls in this period"""
-        self.away_team_fouls += 1
+        self.away_team_fouls += value
         self.updated_at = datetime.utcnow()
 
     def sync_to_game(self):

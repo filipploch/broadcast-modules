@@ -58,7 +58,7 @@
                         <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
                             Timer: {{ period.main_timer_name or 'Nie ustawiono' }}<br>
                             Czas początkowy: {{ (period.initial_time / 1000 / 60) | int }} min | 
-                            Limit czasu: {{ (period.limit_time / 1000 / 60) | int }} min<br>
+                            Limit czasu: {{ (period.limit / 1000 / 60) | int }} min<br>
                             Wynik okresu: {{ period.home_team_goals }}:{{ period.away_team_goals }}
                         </p>
                     </div>

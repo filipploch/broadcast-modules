@@ -12,7 +12,7 @@ from app.models.team import Team
 from app.models.period import Period
 from app.models.settings import Settings
 import logging
-import time
+from datetime import datetime
 import os
 
 # Import CRUD routes for Season, League, Game
@@ -40,19 +40,20 @@ def ui_dashboard():
     from app.models.game import Game
     
     settings = Settings.get_settings()
+    current_period_id = settings.current_period_id
     
     # Get current period
     period = None
     game = None
-    if settings.current_period_id:
-        period = Period.query.get(settings.current_period_id)
+    if current_period_id:
+        period = Period.query.filter_by(id=current_period_id).first()
         if period:
             game = Game.query.get(period.game_id)
     
     # Get current timers from Settings
     current_timers = settings.get_current_timers()
     main_timer = current_timers.get('main')
-    penalties = current_timers.get('penalties', [])
+    penalties = current_timers.get('penalties')
     
     # Log for debugging
     current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
@@ -83,7 +84,7 @@ def index():
     if settings.current_game_id:
         game = Game.query.get(settings.current_game_id)
         if game:
-            periods = game.get_periods_list()
+            periods = Period.query.filter_by(game_id=game.id).all()
             penalty = game.penalty
     
     return render_template('index.html',
@@ -99,7 +100,12 @@ def start_period(period_id):
     from app.managers.period_manager import PeriodManager
     from app.models.settings import Settings
     from app.models.game import Game
-    
+    from app.managers import get_timer_manager
+
+    timer_manager = get_timer_manager()
+    _previous_main_timer_id = Settings.get_current_timers()['main']['timer_id']
+    timer_manager.remove_timer(_previous_main_timer_id)
+
     period_manager = PeriodManager()
     period = period_manager.get_period_by_id(period_id)
     
@@ -622,3 +628,203 @@ def api_clear_current_timers():
         'success': True,
         'message': 'Timers cleared'
     })
+
+# @current_app.route('/api/settings')
+# def api_get_settings():
+#     """
+#     Get complete settings including current period, game and timers
+    
+#     Returns JSON:
+#     {
+#         "current_season_id": int or null,
+#         "current_game_id": int or null,
+#         "current_period_id": int or null,
+#         "current_timers": {
+#             "main": {...} or null,
+#             "penalties": [...]
+#         },
+#         "period": {
+#             "id": int,
+#             "description": str,
+#             "main_timer_name": str,
+#             ...
+#         } or null,
+#         "game": {
+#             "id": int,
+#             ...
+#         } or null
+#     }
+#     """
+#     from app.models.settings import Settings
+#     from app.models.period import Period
+#     from app.models.game import Game
+    
+#     settings = Settings.get_settings()
+#     current_timers = settings.get_current_timers()
+    
+#     # Get period details if exists
+#     period_data = None
+#     if settings.current_period_id:
+#         period = Period.query.get(settings.current_period_id)
+#         if period:
+#             period_data = {
+#                 "id": period.id,
+#                 "description": period.description,
+#                 "period_order": period.period_order,
+#                 "main_timer_name": period.main_timer_name,
+#                 "initial_time": period.initial_time,
+#                 "limit": period.limit,
+#                 "pause_at_limit": period.pause_at_limit,
+#                 "status": period.status
+#             }
+    
+#     # Get game details if exists
+#     game_data = None
+#     if settings.current_game_id:
+#         game = Game.query.get(settings.current_game_id)
+#         if game:
+#             game_data = {
+#                 "id": game.id,
+#                 # Add other game fields as needed
+#             }
+    
+#     return jsonify({
+#         "current_season_id": settings.current_season_id,
+#         "current_game_id": settings.current_game_id,
+#         "current_period_id": settings.current_period_id,
+#         "current_timers": current_timers,
+#         "period": period_data,
+#         "game": game_data
+#     })
+
+@current_app.route('/api/settings')
+def api_get_settings():
+    """
+    Get complete settings including current period, game and timers
+    
+    Used by timer recovery system to check what timers should be running
+    after crash/restart.
+    
+    Returns JSON:
+    {
+        "current_season_id": int or null,
+        "current_game_id": int or null,
+        "current_period_id": int or null,
+        "current_timers": {
+            "main": {
+                "timer_id": "main-p1",
+                "state": "running",
+                "initial_time": 0,
+                "limit": 1200000,
+                ...
+            } or null,
+            "penalties": [
+                {
+                    "timer_id": "penalty-1",
+                    "state": "running",
+                    ...
+                }
+            ]
+        },
+        "period": {
+            "id": int,
+            "description": str,
+            "main_timer_name": str,
+            "initial_time": int,
+            "limit": int,
+            "pause_at_limit": bool,
+            "status": int
+        } or null,
+        "game": {
+            "id": int
+        } or null
+    }
+    """
+    from app.models.settings import Settings
+    from app.models.period import Period
+    from app.models.game import Game
+    
+    settings = Settings.get_settings()
+    current_timers = settings.get_current_timers()
+    
+    # Get period details if exists
+    period_data = None
+    if settings.current_period_id:
+        period = Period.query.get(settings.current_period_id)
+        if period:
+            period_data = {
+                "id": period.id,
+                "description": period.description,
+                "period_order": period.period_order,
+                "main_timer_name": period.main_timer_name,
+                "initial_time": period.initial_time,
+                "limit": period.limit,
+                "pause_at_limit": period.pause_at_limit,
+                "status": period.status
+            }
+    
+    # Get game details if exists
+    game_data = None
+    if settings.current_game_id:
+        game = Game.query.get(settings.current_game_id)
+        if game:
+            game_data = {
+                "id": game.id,
+                # Add other game fields as needed
+            }
+
+    is_reversed = False
+    if settings.is_scoreboard_reversed:
+        is_reversed = True
+    
+    return jsonify({
+        "current_season_id": settings.current_season_id,
+        "current_game_id": settings.current_game_id,
+        "current_period_id": settings.current_period_id,
+        "current_timers": current_timers,
+        "period": period_data,
+        "game": game_data,
+        "is_reversed": is_reversed
+    })
+
+@current_app.route('/api/scoreboard-state', methods=['GET', 'POST'])
+def get_scoreboard_state():
+    from app.models.settings import Settings
+    settings = Settings.query.get(1)
+    if not settings:
+        settings = Settings(id=1, is_scoreboard_reversed=False)
+        db.session.add(settings)
+        db.session.commit()
+
+    if request.method == 'POST':
+        data = request.get_json()
+        settings.is_scoreboard_reversed = data.get('is_reversed', False)
+        settings.updated_at = datetime.utcnow()
+        db.session.add(settings)
+        db.session.commit()
+    
+        return jsonify({'success': True, 'is_reversed': settings.is_scoreboard_reversed})
+    
+    return jsonify({
+        'is_reversed': settings.is_scoreboard_reversed
+    })
+
+# # Endpoint do zapisywania stanu
+# @app.route('/api/scoreboard-state', methods=['POST'])
+# def update_scoreboard_state():
+#     data = request.get_json()
+#     setting = Setting.query.get(1)
+    
+#     if setting:
+#         setting.is_scoreboard_reversed = data.get('is_reversed', False)
+#         setting.updated_at = datetime.utcnow()
+#     else:
+#         setting = Setting(
+#             id=1, 
+#             is_scoreboard_reversed=data.get('is_reversed', False)
+#         )
+#         db.session.add(setting)
+    
+#     db.session.commit()
+    
+#     return jsonify({'success': True, 'is_reversed': setting.is_scoreboard_reversed})

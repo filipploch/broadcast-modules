@@ -317,7 +317,8 @@ class HubClient:
             # self._with_app_context(self._on_plugin_offline, plugin_id)
 
         elif msg_type == 'health_status':
-            print(f"health_status: {msg}")
+            pass
+            # print(f"health_status: {msg}")
 
         # elif msg_type == 'timer_updated':
         #     # Timer updates - forward to UI
