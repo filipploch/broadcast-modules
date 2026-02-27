@@ -6,7 +6,7 @@
 {% if scraping_status.status == 'in_progress' %}
 <div class="card" style="background: #fff3cd; border: 2px solid #ffc107;">
     <div class="card-header" style="background: #ffc107; color: #856404;">
-        <h2>⏳ Scrapowanie W Toku</h2>
+        <span>⏳ Scrapowanie W Toku</span>
     </div>
     <p style="padding: 1rem;">
         Scraper działa w tle. 
@@ -17,14 +17,13 @@
 
 <div class="card">
     <div class="card-header">
-        <h2>Scrapuj Zespoły z NALF</h2>
+        <span>Scrapuj Zespoły z NALF</span>
     </div>
     
     <form method="POST">
         <div class="form-group">
             <label for="league_urls">
                 URL Tabel Ligowych
-                <small>Podaj jeden lub więcej URL (każdy w nowej linii lub oddzielone przecinkami)</small>
             </label>
             <textarea 
                 id="league_urls" 
@@ -33,9 +32,7 @@
                 required
                 placeholder="https://nalffutsal.pl/?page_id=16&#10;https://nalffutsal.pl/?page_id=36">{% for url in default_urls %}{{ url }}
 {% endfor %}</textarea>
-            <small>
-                💡 Domyślne URL-e to strony tabel ligowych NALF. Możesz dodać więcej lub je zmodyfikować.
-            </small>
+
         </div>
         
         <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
@@ -58,7 +55,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2>Przykładowe Strony NALF</h2>
+        <span>Przykładowe Strony NALF</span>
     </div>
     
     <table>

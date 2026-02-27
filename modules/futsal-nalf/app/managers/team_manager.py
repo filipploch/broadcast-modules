@@ -58,7 +58,7 @@ class TeamManager:
     
     def create_team(self, name: str, name_20: str, short_name: str, 
                    team_url: str, logo_path: str = 'static/images/logos/default.png',
-                   foreign_id: str = None) -> Team:
+                   foreign_id: str = None, uniform: dict = None) -> Team:
         """
         Create new team
         
@@ -73,13 +73,15 @@ class TeamManager:
         Returns:
             Created Team object
         """
+        import json
         team = Team(
             name=name,
             name_20=name_20,
             short_name=short_name.upper(),
             team_url=team_url,
             logo_path=logo_path,
-            foreign_id=foreign_id
+            foreign_id=foreign_id,
+            uniform=json.dumps(uniform) if uniform else None
         )
         
         db.session.add(team)
@@ -103,12 +105,15 @@ class TeamManager:
         if not team:
             return None
         
-        allowed_fields = ['name', 'name_20', 'short_name', 'team_url', 'logo_path']
+        allowed_fields = ['name', 'name_20', 'short_name', 'team_url', 'logo_path', 'uniform']
         
+        import json
         for field, value in kwargs.items():
             if field in allowed_fields and value is not None:
                 if field == 'short_name':
                     value = value.upper()
+                elif field == 'uniform':
+                    value = json.dumps(value) if isinstance(value, dict) else value
                 setattr(team, field, value)
         
         db.session.commit()

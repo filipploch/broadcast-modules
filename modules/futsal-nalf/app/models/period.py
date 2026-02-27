@@ -132,6 +132,11 @@ class Period(db.Model):
         
         total_time = sum(p.limit for p in previous_periods)
         return total_time
+    
+    @staticmethod
+    def calculate_limit_for_period(game_id, period_order, own_duration_ms):
+        initial_time = Period.calculate_initial_time_for_period(game_id, period_order)
+        return initial_time + own_duration_ms
 
     def update_score(self, home_goals, away_goals):
         """Update period score"""

@@ -12,10 +12,13 @@ socket.on('plugins_states', data => {
      
      if(document.querySelector(`[data-plugin-for=${key}]`)){
          _pluginElement = document.querySelector(`[data-plugin-for=${key}]`);
+         _icon = _pluginElement.querySelector('img');
          if(value.is_active === true){
              addClassName(_pluginElement, 'status-plugin-active');
+             addClassName(_icon, 'filter-green');
             } else {
                 removeClassName(_pluginElement, 'status-plugin-active');
+                removeClassName(_icon, 'filter-green');
             };
             if(value.is_healthy === true){
                 addClassName(_pluginElement, 'status-plugin-healthy');

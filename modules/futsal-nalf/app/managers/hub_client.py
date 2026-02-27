@@ -113,6 +113,19 @@ class HubClient:
         # Get app_port from app config
         app_port = self._get_config('APP_PORT', 8081)
 
+        # Resolve absolute DB path from SQLAlchemy URI
+        import os
+        db_path = ''
+        try:
+            db_uri = self._get_config('SQLALCHEMY_DATABASE_URI', '')
+            db_filename = db_uri.replace('sqlite:///', '').replace('sqlite://', '')
+            if self.app:
+                db_path = os.path.join(self.app.instance_path, db_filename)
+            else:
+                db_path = db_filename
+        except Exception:
+            pass
+
         self.send({
             'from': module_id,
             'to': 'hub',
@@ -123,7 +136,8 @@ class HubClient:
                 'component_type': 'main_module',
                 'host': 'localhost',
                 'port': str(app_port),
-                'type': 'local'
+                'type': 'local',
+                'database_path': db_path
             }
         })
 
@@ -322,6 +336,9 @@ class HubClient:
             plugin_manager.on_plugins_state_received(msg)
             # print(f"health_status: {msg}")
 
+        elif msg_type == 'obs_event':
+                print('OBS_EVENT:', msg)
+
         # elif msg_type == 'timer_updated':
         #     # Timer updates - forward to UI
         #     self._with_app_context(self._emit_to_ui, 'timer_updated', payload)
@@ -338,6 +355,10 @@ class HubClient:
         # elif msg_type == 'recording_stopped':
         #     self._log("info", "Recording stopped")
         #     self._with_app_context(self._emit_to_ui, 'recording_status', {'recording': False})
+
+        # if msg_from == 'obs-ws-plugin':
+        #     if msg_type == 'obs_event':
+        #         self._log('info', msg)
 
         # Timer Plugin messages
         if msg_from == 'timer-plugin':
@@ -422,6 +443,20 @@ class HubClient:
             
             # 1. Register
             app_port = self._get_config('APP_PORT', 8081)
+
+            # Resolve absolute DB path from SQLAlchemy URI
+            import os
+            db_path = ''
+            try:
+                db_uri = self._get_config('SQLALCHEMY_DATABASE_URI', '')
+                db_filename = db_uri.replace('sqlite:///', '').replace('sqlite://', '')
+                if self.app:
+                    db_path = os.path.join(self.app.instance_path, db_filename)
+                else:
+                    db_path = db_filename
+            except Exception:
+                pass
+            
             self.send({
                 'from': self.module_id,
                 'to': 'hub',
@@ -432,7 +467,8 @@ class HubClient:
                     'component_type': 'main_module',
                     'host': 'localhost',
                     'port': str(app_port),
-                    'type': 'local'
+                    'type': 'local',
+                    'database_path': db_path
                 }
             })
             

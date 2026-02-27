@@ -25,6 +25,7 @@ type Module struct {
 	DeviceInfo    map[string]interface{}
 	Subscriptions map[string]bool
 	subMu         sync.RWMutex
+	DatabasePath  string // Absolute path to SQLite DB (set on main_module registration)
 }
 
 func NewModule(hub *Hub, conn *websocket.Conn) *Module {

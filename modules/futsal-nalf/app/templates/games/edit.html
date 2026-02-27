@@ -3,7 +3,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>Edytuj Mecz</h2>
+        <span>Edytuj Mecz</span>
         {% if game.periods.count() == 0 %}
         <a href="{{ url_for('prepare_game_for_broadcast', game_id=game.id) }}" class="btn btn-primary">📡 Przygotuj mecz do transmisji</a>
         {% else %}
@@ -95,9 +95,8 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small></label>
+            <label for="foreign_id">Foreign ID</label>
             <input type="text" id="foreign_id" name="foreign_id" value="{{ game.foreign_id or '' }}" maxlength="500" placeholder="np. external-game-789" style="background: #f8f9fa; cursor: pointer;" ondblclick="enableElementToEdit(this)" readonly>
-            <small style="color: #6c757d;">Kliknij dwukrotnie aby edytować</small>
         </div>
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Zapisz Zmiany</button>

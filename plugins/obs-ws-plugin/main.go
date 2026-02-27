@@ -37,13 +37,11 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	log.Println("🎬 OBS WebSocket Plugin starting...")
 
-	// Load configuration
 	config, err := loadConfig()
 	if err != nil {
 		log.Fatalf("❌ Failed to load config: %v", err)
 	}
 
-	// Override from environment variables if set
 	if pluginID := os.Getenv("PLUGIN_ID"); pluginID != "" {
 		config.Plugin.ID = pluginID
 	}
@@ -53,25 +51,21 @@ func main() {
 		hubURL = "ws://localhost:8080/ws"
 	}
 
-	// Create plugin instance
 	plugin := &Plugin{
 		config:    config,
 		hubClient: hub.NewHubClient(hubURL, config.Plugin.ID, config.Plugin.Name),
 		obsClient: obs.NewClient(&config.OBS),
 	}
 
-	// Connect to HUB
 	if err := plugin.hubClient.Connect(); err != nil {
 		log.Fatalf("❌ Failed to connect to HUB: %v", err)
 	}
 
-	// Connect to OBS
 	if err := plugin.obsClient.Connect(); err != nil {
 		log.Printf("⚠️  Failed to connect to OBS: %v", err)
 		log.Printf("    Will retry automatically...")
 	}
 
-	// Start message routing
 	go plugin.routeHubToOBS()
 	go plugin.routeOBSToHub()
 	go plugin.monitorOBSStatus()
@@ -81,11 +75,9 @@ func main() {
 	log.Printf("   HUB: %s", hubURL)
 	log.Printf("   OBS: %s:%d", config.OBS.Host, config.OBS.Port)
 
-	// Wait for shutdown signal
 	waitForShutdown(plugin)
 }
 
-// loadConfig loads configuration from file
 func loadConfig() (*Config, error) {
 	data, err := os.ReadFile("config.json")
 	if err != nil {
@@ -100,23 +92,19 @@ func loadConfig() (*Config, error) {
 	return &config, nil
 }
 
-// routeHubToOBS routes messages from HUB to OBS
+// routeHubToOBS routes obs_command messages from HUB to OBS and sends response back
 func (p *Plugin) routeHubToOBS() {
 	log.Println("🔀 Starting Hub → OBS routing")
 
 	for msg := range p.hubClient.Messages {
-		// Only forward obs_command messages
 		if msg.Type != "obs_command" {
 			continue
 		}
 
-		log.Printf("📨 Hub → OBS: %s", msg.Type)
+		log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
 
-		// Check if OBS is connected
 		if !p.obsClient.IsConnected() {
 			log.Printf("⚠️  OBS not connected, cannot forward command")
-			
-			// Send error back to sender
 			p.hubClient.Send(&hub.Message{
 				From: p.config.Plugin.ID,
 				To:   msg.From,
@@ -129,52 +117,69 @@ func (p *Plugin) routeHubToOBS() {
 			continue
 		}
 
-		// Forward raw payload to OBS (transparent proxy)
-		if err := p.obsClient.SendRaw(msg.Payload); err != nil {
-			log.Printf("❌ Failed to send to OBS: %v", err)
-			
-			// Send error back to sender
+		// Extract requestType and requestData from payload
+		requestType, ok := msg.Payload["requestType"].(string)
+		if !ok || requestType == "" {
+			log.Printf("⚠️  obs_command missing requestType")
 			p.hubClient.Send(&hub.Message{
 				From: p.config.Plugin.ID,
 				To:   msg.From,
 				Type: "obs_error",
 				Payload: map[string]interface{}{
-					"error":   err.Error(),
-					"command": msg.Payload,
+					"error": "obs_command payload must contain requestType",
 				},
 			})
+			continue
 		}
+
+		var requestData map[string]interface{}
+		if rd, ok := msg.Payload["requestData"].(map[string]interface{}); ok {
+			requestData = rd
+		}
+
+		// Send to OBS and wait for response
+		responseData, err := p.obsClient.SendRequest(requestType, requestData)
+		if err != nil {
+			log.Printf("❌ OBS request failed (%s): %v", requestType, err)
+			p.hubClient.Send(&hub.Message{
+				From: p.config.Plugin.ID,
+				To:   msg.From,
+				Type: "obs_error",
+				Payload: map[string]interface{}{
+					"error":       err.Error(),
+					"requestType": requestType,
+				},
+			})
+			continue
+		}
+
+		log.Printf("✅ OBS response received for %s", requestType)
+
+		// Send response back to requester
+		p.hubClient.Send(&hub.Message{
+			From: p.config.Plugin.ID,
+			To:   msg.From,
+			Type: "obs_response",
+			Payload: map[string]interface{}{
+				"requestType":  requestType,
+				"responseData": responseData,
+			},
+		})
 	}
 }
 
-// routeOBSToHub routes events from OBS to HUB
+// routeOBSToHub broadcasts OBS events to all HUB subscribers
 func (p *Plugin) routeOBSToHub() {
 	log.Println("🔀 Starting OBS → Hub routing")
 
 	for event := range p.obsClient.Events {
 		log.Printf("📨 OBS → Hub: event received")
 
-		// Convert event to map for JSON serialization
-		eventData := make(map[string]interface{})
-		
-		// Marshal and unmarshal to convert to map
-		data, err := json.Marshal(event)
-		if err != nil {
-			log.Printf("⚠️  Failed to marshal OBS event: %v", err)
-			continue
-		}
-
-		if err := json.Unmarshal(data, &eventData); err != nil {
-			log.Printf("⚠️  Failed to unmarshal OBS event: %v", err)
-			continue
-		}
-
-		// Broadcast to all modules via HUB (transparent proxy)
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID,
-			To:   "broadcast",
-			Type: "obs_event",
-			Payload: eventData,
+			From:    p.config.Plugin.ID,
+			To:      "broadcast:obs_messages_receiver",
+			Type:    "obs_event",
+			Payload: event,
 		})
 	}
 }
@@ -186,7 +191,6 @@ func (p *Plugin) monitorOBSStatus() {
 	for status := range p.obsClient.StatusChanged {
 		log.Printf("📊 OBS Status changed: %s", status)
 
-		// Notify HUB about OBS status change
 		p.hubClient.Send(&hub.Message{
 			From: p.config.Plugin.ID,
 			To:   "broadcast",
@@ -200,7 +204,6 @@ func (p *Plugin) monitorOBSStatus() {
 	}
 }
 
-// waitForShutdown waits for shutdown signal and cleanup
 func waitForShutdown(plugin *Plugin) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -209,7 +212,6 @@ func waitForShutdown(plugin *Plugin) {
 
 	log.Println("🛑 Shutdown signal received, cleaning up...")
 
-	// Close connections
 	plugin.obsClient.Close()
 	plugin.hubClient.Close()
 

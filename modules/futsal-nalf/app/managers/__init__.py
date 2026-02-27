@@ -13,6 +13,7 @@ Managers:
 from flask import current_app
 import threading
 import time
+import os
 
 # Global instances
 # _plugin_manager = None
@@ -21,6 +22,7 @@ _current_game_manager = None
 _recorder_manager = None
 _timer_manager = None
 _plugin_manager = None
+_sequence_manager = None
 _team_scraper_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
@@ -38,7 +40,8 @@ def initialize_all_managers(app):
     5. Other managers (Timer/Game/Recorder) lazy init when needed
     """
     # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
-    global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, _team_scraper_manager, _initialized
+    global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, \
+        _sequence_manager, _team_scraper_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -156,6 +159,18 @@ def get_plugin_manager():
         current_app.logger.info("✅ Plugin Manager initialized (lazy)")
 
     return _plugin_manager
+
+def get_sequence_manager():
+    """Get Sequence Manager instance (lazy initialization)"""
+    global _sequence_manager
+
+    if _sequence_manager is None:
+        from app.managers.sequence_manager import SequenceManager
+        _sequences_path = current_app.config['SEQUENCES_PATH']
+        _sequence_manager = SequenceManager(get_hub_client(), _sequences_path)
+        current_app.logger.info("✅ Sequence Manager initialized (lazy)")
+
+    return _sequence_manager
 
 
 def get_current_game_manager():

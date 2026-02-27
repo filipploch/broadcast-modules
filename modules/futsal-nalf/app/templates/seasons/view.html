@@ -24,7 +24,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2>{{ stats.season.name }} (Sezon #{{ stats.season.number }})</h2>
+        <span>{{ stats.season.name }} (Sezon #{{ stats.season.number }})</span>
         <div class="actions">
             <a href="{{ url_for('create_league', season_id=stats.season.id) }}" class="btn btn-success">
                 ➕ Dodaj Ligę

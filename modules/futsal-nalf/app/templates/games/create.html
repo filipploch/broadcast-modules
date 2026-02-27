@@ -2,7 +2,7 @@
 {% block title %}Utwórz Mecz{% endblock %}
 {% block content %}
 <div class="card">
-    <div class="card-header"><h2>Utwórz Nowy Mecz</h2></div>
+    <div class="card-header"><span>Utwórz Nowy Mecz</span></div>
     <form method="POST">
         <div class="form-group">
             <label for="league_id">Liga *</label>
@@ -56,9 +56,8 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie)</small></label>
+            <label for="foreign_id">Foreign ID</label>
             <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
-            <small>Zewnętrzny identyfikator dla integracji</small>
         </div>
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Utwórz Mecz</button>
@@ -69,7 +68,6 @@
 {% endblock %}
 
         <div class="form-group">
-            <label for="foreign_id">Foreign ID <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(Opcjonalnie)</small></label>
+            <label for="foreign_id">Foreign ID</label>
             <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
-            <small>Zewnętrzny identyfikator dla integracji</small>
         </div>

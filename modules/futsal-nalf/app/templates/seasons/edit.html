@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Edytuj Sezon: {{ season.name }}</h2>
+        <span>Edytuj Sezon: {{ season.name }}</span>
     </div>
     
     <form method="POST">
@@ -21,7 +21,6 @@
                 required
                 min="1"
                 placeholder="np. 1">
-            <small>Unikalny numer identyfikujący sezon</small>
         </div>
         
         <div class="form-group">
@@ -36,13 +35,11 @@
                 required
                 maxlength="100"
                 placeholder="np. Jesień 2025">
-            <small>Opisowa nazwa sezonu (max 100 znaków)</small>
         </div>
         
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID
-                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
             </label>
             <div style="position: relative;">
                 <input 
@@ -55,7 +52,6 @@
                     readonly
                     style="background: #f8f9fa; cursor: pointer;"
                     ondblclick="enableElementToEdit(this)">
-                <small style="color: #6c757d;">Zewnętrzny identyfikator - kliknij dwukrotnie aby edytować</small>
             </div>
         </div>
         

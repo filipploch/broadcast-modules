@@ -1,6 +1,7 @@
 """Team model - Football teams"""
 from app.extensions import db
 from datetime import datetime
+import json
 
 
 class Team(db.Model):
@@ -14,6 +15,7 @@ class Team(db.Model):
     team_url = db.Column(db.String(500), nullable=False)
     logo_path = db.Column(db.String(500), default='static/images/logos/default.png')
     foreign_id = db.Column(db.String(500), nullable=True)
+    uniform = db.Column(db.Text, nullable=True)  # JSON: {"home": ["#111111", ...], "away": ["#222222", ...]}
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -27,6 +29,19 @@ class Team(db.Model):
 
     def __repr__(self):
         return f'<Team {self.short_name}: {self.name}>'
+
+    def get_uniform(self):
+        """Return uniform colors as dict, or empty structure if not set"""
+        if not self.uniform:
+            return {"home": [], "away": []}
+        try:
+            return json.loads(self.uniform)
+        except (json.JSONDecodeError, TypeError):
+            return {"home": [], "away": []}
+
+    def set_uniform(self, home_colors: list, away_colors: list):
+        """Set uniform colors from lists of hex strings"""
+        self.uniform = json.dumps({"home": home_colors, "away": away_colors})
 
     def get_leagues(self, season_id=None):
         """Get leagues this team participates in"""
@@ -59,6 +74,7 @@ class Team(db.Model):
             'team_url': self.team_url,
             'logo_path': self.logo_path,
             'foreign_id': self.foreign_id,
+            'uniform': self.get_uniform(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

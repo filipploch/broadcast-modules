@@ -4,6 +4,7 @@ from flask_socketio import emit
 from app.extensions import socketio
 from app.managers import get_hub_client
 from app.managers import get_timer_manager
+from app.managers import get_sequence_manager
 import json
 
 @socketio.on('connect')
@@ -988,3 +989,21 @@ def handle_timer_plugin_start_timer(data):
     else:
         current_app.logger.error(f'❌ Failed to start timer: {timer_id}')
         emit('error', {'message': f'Failed to start timer {timer_id}'})
+
+@socketio.on('trigger_sequence')
+def handle_trigger_sequence(data):
+    sequence_manager = get_sequence_manager()
+    sequence_id = sequence_manager.trigger(data['sequence'], data.get('context', {}))
+    emit('sequence_started', {'sequence_id': sequence_id})
+
+@socketio.on('stop_sequence')
+def handle_stop_sequence(data):
+    sequence_id = data.get('sequence_id')
+    sequence_manager = get_sequence_manager()
+    if sequence_id:
+        sequence_manager.stop(sequence_id)
+        emit('sequence_stopped', {'sequence_id': sequence_id})
+    else:
+        # zatrzymaj wszystkie instancje danej sekwencji
+        sequence_manager.stop_all(data.get('sequence'))
+        emit('all_sequences_stopped', {})

@@ -7,7 +7,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Uzupełnij Dane Zespołu</h2>
+        <span>Uzupełnij Dane Zespołu</span>
     </div>
     
     <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
@@ -22,7 +22,6 @@
         <div class="form-group">
             <label for="name">
                 Pełna Nazwa Zespołu
-                <small>Ta wartość została pobrana ze scrapowania</small>
             </label>
             <input 
                 type="text" 
@@ -36,7 +35,6 @@
         <div class="form-group">
             <label for="name_20">
                 Nazwa Skrócona (max 20 znaków) *
-                <small>Krótka nazwa do wyświetlania w tabelach i raportach</small>
             </label>
             <input 
                 type="text" 
@@ -52,7 +50,6 @@
         <div class="form-group">
             <label for="short_name">
                 Skrót 3-literowy (TLA) *
-                <small>Trzyliterowy kod zespołu (np. KRA, WAR, POZ)</small>
             </label>
             <input 
                 type="text" 
@@ -64,13 +61,11 @@
                 placeholder="np. {{ team.name[:3]|upper }}"
                 value="{{ team.name[:3]|upper }}"
                 style="text-transform: uppercase;">
-            <small>Wpisz dokładnie 3 litery (A-Z)</small>
         </div>
         
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID
-                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
             </label>
             <input
                 type="text"
@@ -82,13 +77,11 @@
                 readonly
                 style="background: #f8f9fa; cursor: pointer;"
                 ondblclick="enableForeignIdComplete(this)">
-            <small style="color: #6c757d;">Zewnętrzny identyfikator - kliknij dwukrotnie aby edytować</small>
         </div>
 
         <div class="form-group">
             <label for="logo_path">
                 Ścieżka do Logo
-                <small>Domyślnie: static/images/logos/default.png</small>
             </label>
             <input
                 type="text"
@@ -100,11 +93,6 @@
                 <img src="/static/images/logos/default.png" alt="Domyślne logo" style="max-width: 200px;">
             </div>
             <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
-
-            <small>
-                💡 Możesz później zmienić logo w edycji zespołu.
-                Logo powinno być umieszczone w katalogu static/images/logos/
-            </small>
         </div>
 
         <div class="form-group">
@@ -138,7 +126,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2>💡 Wskazówki</h2>
+        <span>💡 Wskazówki</span>
     </div>
     
     <ul style="margin-left: 1.5rem; line-height: 2;">

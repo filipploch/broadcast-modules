@@ -21,10 +21,11 @@ class Config:
     APP_PORT = 8081
 
     REQUIRED_PLUGINS = ['timer-plugin', 'recorder-plugin', 'obs-ws-plugin']
-    SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver']
+    SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver', 'obs_messages_receiver']
 
     HUB_EXECUTABLE = '../../hub/hub.exe'
     PLUGINS_DIR = '../../plugins'
+    SEQUENCES_PATH = 'app/sequences/sequences.py'
 
 
 class DevelopmentConfig(Config):

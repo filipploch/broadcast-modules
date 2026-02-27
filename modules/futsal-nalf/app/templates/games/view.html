@@ -3,7 +3,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Mecz: {{ game.home_team.short_name if game.home_team else '?' }} vs {{ game.away_team.short_name if game.away_team else '?' }}</h2>
+        <span>Mecz: {{ game.home_team.short_name if game.home_team else '?' }} vs {{ game.away_team.short_name if game.away_team else '?' }}</span>
         <div class="actions">
             <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">✏️ Edytuj</a>
             <a href="{{ url_for('list_games', league_id=game.league_id) }}" class="btn btn-primary">← Powrót</a>

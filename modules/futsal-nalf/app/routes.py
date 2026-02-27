@@ -292,12 +292,15 @@ def create_team():
     """Create new team manually (without scraping)"""
     if request.method == 'POST':
         try:
+            uniform_home = request.form.getlist('uniform_home[]')
+            uniform_away = request.form.getlist('uniform_away[]')
             team = team_manager.create_team(
                 name=request.form['name'],
                 name_20=request.form['name_20'],
                 short_name=request.form['short_name'],
                 team_url=request.form['team_url'],
-                logo_path=request.form.get('logo_path', 'static/images/logos/default.png')
+                logo_path=request.form.get('logo_path', 'static/images/logos/default.png'),
+                uniform={'home': uniform_home, 'away': uniform_away}
             )
 
             flash(f'Dodano zespół: {name}', 'success')
@@ -322,13 +325,16 @@ def edit_team(team_id):
 
     if request.method == 'POST':
         try:
+            uniform_home = request.form.getlist('uniform_home[]')
+            uniform_away = request.form.getlist('uniform_away[]')
             team_manager.update_team(
                 team_id=team_id,
                 name=request.form.get('name'),
                 name_20=request.form.get('name_20'),
                 short_name=request.form.get('short_name'),
                 team_url=request.form.get('team_url'),
-                logo_path=request.form.get('logo_path')
+                logo_path=request.form.get('logo_path'),
+                uniform={'home': uniform_home, 'away': uniform_away}
             )
 
             flash(f'Zaktualizowano zespół: {team.name}', 'success')

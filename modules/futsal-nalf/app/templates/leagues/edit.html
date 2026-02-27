@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Edytuj Ligę: {{ league.name }}</h2>
+        <span>Edytuj Ligę: {{ league.name }}</span>
     </div>
     
     <form method="POST">
@@ -85,7 +85,6 @@
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID
-                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
             </label>
             <input 
                 type="text" 
@@ -97,7 +96,6 @@
                 readonly
                 style="background: #f8f9fa; cursor: pointer;"
                 ondblclick="enableElementToEdit(this)">
-            <small style="color: #6c757d;">Kliknij dwukrotnie aby edytować</small>
         </div>
         
         <div class="actions">

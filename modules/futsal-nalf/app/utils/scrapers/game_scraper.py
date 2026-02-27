@@ -103,23 +103,29 @@ class GameScraper:
             result_cell = row.find('td', class_='data-time')
             if not result_cell:
                 return None
-            
-            result = result_cell.find('a').get_text(strip=True)
-            if not result:
+
+            result_link = result_cell.find('a')
+            if not result_link:
                 return None
-            
+
+            # Remove nested tags (e.g. <date>) and get only direct text
+            for tag in result_link.find_all(True):
+                tag.decompose()
+            result = result_link.get_text(strip=True)
+
             if ' - ' in result:
                 status = 2
-                home_team_goals = int(result.split(' - ')[0])
-                away_team_goals = int(result.split(' - ')[1])
+                parts = result.split(' - ')
+                home_team_goals = int(parts[0])
+                away_team_goals = int(parts[1])
             else:
+                # Match not started yet - time is shown instead of score
                 status = 0
                 home_team_goals = None
                 away_team_goals = None
             
-            if not status or not home_team_goals or not away_team_goals:
-                return None
-            
+            # status=0 and goals=None are valid for unstarted matches - do not guard on them
+
             league_txt = row.find('td', class_='data-league').get_text(strip=True)
             if not league_txt:
                 return None

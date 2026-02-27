@@ -22,6 +22,7 @@ var homeScoreLabel = document.getElementById('labelScoreHome');
 var awayScoreLabel = document.getElementById('labelScoreAway');
 var homeFoulsLabel = document.getElementById('labelFoulsHome');
 var awayFoulsLabel = document.getElementById('labelFoulsAway');
+var currentSequenceId = null;
 
 
 
@@ -33,6 +34,24 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
     console.log('❌ WebSocket disconnected');
 });
+
+socket.on('sequence_started', ({ sequence_id }) => {
+    currentSequenceId = sequence_id;
+});
+
+socket.on('sequence_stopped', ({ sequence_id }) => {
+    if(currentSequenceId === sequence_id) {
+        currentSequenceId = null;
+    }
+});
+
+socket.on('all_sequences_stopped', ({}) => {
+    currentSequenceId = null;
+});
+
+function runSequence(){
+    socket.emit('trigger_sequence', { sequence: 'halftime_start', context: {} });
+}
 
 // ============================================================================
 // TIMER DISPLAY FORMATTING
@@ -182,7 +201,11 @@ socket.on('timer_updated', (data) => {
 socket.on('timer_started', (data) => {
     console.log('Timer started:', data);
     if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data);
+        let dsElements = document.querySelectorAll('.ds-element');
+        dsElements.forEach(element => {
+            addClassName(element, 'hidden');
+        })
+        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -195,7 +218,11 @@ socket.on('timer_started', (data) => {
 socket.on('timer_paused', (data) => {
     console.log('Timer paused:', data);
     if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data);
+        let dsElements = document.querySelectorAll('.ds-element');
+        dsElements.forEach(element => {
+            removeClassName(element, 'hidden');
+        })
+        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);

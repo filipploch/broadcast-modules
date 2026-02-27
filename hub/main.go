@@ -42,6 +42,11 @@ func main() {
 	}
 
 	// Start hub event loop
+	// Initialize FallbackWriter
+	hub.FallbackWriter = NewFallbackWriter(hub, fallbackRules())
+	log.Println("✅ FallbackWriter initialized")
+
+	// Start hub event loop
 	go hub.Run()
 
 	// Setup HTTP server

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Edytuj Zespół: {{ team.name }}</h2>
+        <span>Edytuj Zespół: {{ team.name }}</span>
         <a href="{{ url_for('view_team', team_id=team.id) }}" class="btn btn-secondary">← Powrót</a>
     </div>
     
@@ -50,13 +50,11 @@
                 required
                 value="{{ team.short_name }}"
                 style="text-transform: uppercase;">
-            <small>Wpisz dokładnie 3 litery (A-Z)</small>
         </div>
 
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID
-                <small style="display: inline; margin-left: 0.5rem; color: #7f8c8d;">(kliknij dwukrotnie aby edytować)</small>
             </label>
             <input
                 type="text"
@@ -68,7 +66,6 @@
                 readonly
                 style="background: #f8f9fa; cursor: pointer;"
                 ondblclick="enableElementToEdit(this)">
-            <small style="color: #6c757d;">Zewnętrzny identyfikator - kliknij dwukrotnie aby edytować</small>
         </div>
         
         <div class="form-group">
@@ -81,13 +78,11 @@
                 name="team_url" 
                 required
                 value="{{ team.team_url }}">
-            <small>Unikalny URL ze strony NALF</small>
         </div>
         
         <div class="form-group">
             <label for="logo_path">
                 Ścieżka do Logo
-                <small>Domyślnie: static/images/logos/default.png</small>
             </label>
             <input
                 type="text"
@@ -101,11 +96,33 @@
                      style="max-height: 100px; max-width: 100px; object-fit: contain;">
             </div>
             <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
+        </div>
 
-            <small>
-                💡 Możesz później zmienić logo w edycji zespołu.
-                Logo powinno być umieszczone w katalogu static/images/logos/
-            </small>
+        <div class="form-group">
+            <label>Barwy domowe</label>
+            <div id="home-colors" class="color-swatches">
+                {% set uniform = team.get_uniform() %}
+                {% for color in uniform.home %}
+                <div class="color-swatch-entry">
+                    <input type="color" name="uniform_home[]" value="{{ color }}">
+                    <button type="button" class="btn-remove-color" onclick="removeSwatch(this)">✕</button>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="button" onclick="addSwatch('home-colors', 'uniform_home[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
+        </div>
+
+        <div class="form-group">
+            <label>Barwy wyjazdowe</label>
+            <div id="away-colors" class="color-swatches">
+                {% for color in uniform.away %}
+                <div class="color-swatch-entry">
+                    <input type="color" name="uniform_away[]" value="{{ color }}">
+                    <button type="button" class="btn-remove-color" onclick="removeSwatch(this)">✕</button>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="button" onclick="addSwatch('away-colors', 'uniform_away[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
         </div>
 
         <div class="actions">
@@ -117,7 +134,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2>Informacje Systemowe</h2>
+        <span>Informacje Systemowe</span>
     </div>
     
     <table>
@@ -179,6 +196,19 @@
         const path = this.value.replace('static/', '');
         logoPreview.src = '{{ url_for('static', filename='') }}' + path;
     });
+
+    function addSwatch(containerId, inputName) {
+        const container = document.getElementById(containerId);
+        const entry = document.createElement('div');
+        entry.className = 'color-swatch-entry';
+        entry.innerHTML = `<input type="color" name="${inputName}" value="#ffffff">
+            <button type="button" class="btn-remove-color" onclick="removeSwatch(this)">✕</button>`;
+        container.appendChild(entry);
+    }
+
+    function removeSwatch(btn) {
+        btn.closest('.color-swatch-entry').remove();
+    }
 
     function extractForeignId() {
         const foreignIdInput = document.getElementById('foreign_id');

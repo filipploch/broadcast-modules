@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Zespoły Wymagające Uzupełnienia ({{ pending_teams|length }})</h2>
+        <span>Zespoły Wymagające Uzupełnienia ({{ pending_teams|length }})</span>
         <div class="actions">
             <form action="{{ url_for('clear_pending') }}"
                   method="POST" 
@@ -70,7 +70,7 @@
 {% if pending_teams %}
 <div class="card">
     <div class="card-header">
-        <h2>Postęp</h2>
+        <span>Postęp</span>
     </div>
     
     <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
@@ -81,9 +81,6 @@
         <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
             <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.3s;"></div>
         </div>
-        <small style="color: #7f8c8d; margin-top: 0.5rem; display: block;">
-            Po uzupełnieniu wszystkich zespołów zostaniesz przekierowany do listy zespołów.
-        </small>
     </div>
 </div>
 {% endif %}

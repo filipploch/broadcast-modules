@@ -45,15 +45,17 @@ class PeriodManager:
             # Calculate initial_time
             if auto_calculate_initial_time:
                 initial_time = Period.calculate_initial_time_for_period(game_id, period_order)
+                cumulative_limit = Period.calculate_limit_for_period(game_id, period_order, limit)
             else:
                 initial_time = 0
+                cumulative_limit = limit
 
             period = Period(
                 game_id=game_id,
                 period_order=period_order,
                 description=description,
                 initial_time=initial_time,
-                limit=limit,
+                limit=cumulative_limit,
                 pause_at_limit=pause_at_limit,
                 status=Period.STATUS_NOT_STARTED
             )

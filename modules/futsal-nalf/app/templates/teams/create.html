@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2>Dodaj Nowy Zespół Ręcznie</h2>
+        <span>Dodaj Nowy Zespół Ręcznie</span>
     </div>
     
     <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
@@ -58,13 +58,11 @@
                 required
                 placeholder="np. IGL"
                 style="text-transform: uppercase;">
-            <small>Wpisz dokładnie 3 litery (A-Z)</small>
         </div>
 
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID
-                <small>Opcjonalnie - ID zewnętrzne dla integracji</small>
             </label>
             <input
                 type="text"
@@ -72,7 +70,6 @@
                 name="foreign_id"
                 maxlength="500"
                 placeholder="np. external-team-999">
-            <small>Zewnętrzny identyfikator dla integracji z innymi systemami</small>
         </div>
         
         <div class="form-group">
@@ -85,13 +82,11 @@
                 name="team_url" 
                 required
                 placeholder="https://nalffutsal.pl/?sp_team=nazwa-zespolu">
-            <small>Unikalny URL ze strony NALF</small>
         </div>
         
         <div class="form-group">
             <label for="logo_path">
                 Ścieżka do Logo
-                <small>Domyślnie: static/images/logos/default.png</small>
             </label>
             <input
                 type="text"
@@ -103,13 +98,20 @@
                 <img src="/static/images/logos/default.png" alt="Domyślne logo" style="max-width: 200px;">
             </div>
             <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
-
-            <small>
-                💡 Możesz później zmienić logo w edycji zespołu.
-                Logo powinno być umieszczone w katalogu static/images/logos/
-            </small>
         </div>
         
+        <div class="form-group">
+            <label>Barwy domowe</label>
+            <div id="home-colors" class="color-swatches"></div>
+            <button type="button" onclick="addSwatch('home-colors', 'uniform_home[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
+        </div>
+
+        <div class="form-group">
+            <label>Barwy wyjazdowe</label>
+            <div id="away-colors" class="color-swatches"></div>
+            <button type="button" onclick="addSwatch('away-colors', 'uniform_away[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
+        </div>
+
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Dodaj Zespół</button>
             <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">Anuluj</a>
@@ -152,5 +154,18 @@
     document.getElementById('short_name').addEventListener('input', function() {
         this.value = this.value.toUpperCase();
     });
+
+    function addSwatch(containerId, inputName) {
+        const container = document.getElementById(containerId);
+        const entry = document.createElement('div');
+        entry.className = 'color-swatch-entry';
+        entry.innerHTML = `<input type="color" name="${inputName}" value="#ffffff">
+            <button type="button" class="btn-remove-color" onclick="removeSwatch(this)">✕</button>`;
+        container.appendChild(entry);
+    }
+
+    function removeSwatch(btn) {
+        btn.closest('.color-swatch-entry').remove();
+    }
 </script>
 {% endblock %}

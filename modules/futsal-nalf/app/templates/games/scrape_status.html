@@ -97,22 +97,18 @@
         <div class="status-icon status-in-progress">
             🔄
         </div>
-        <h2 style="text-align: center; color: #3498db;">Scrapowanie w toku...</h2>
+        <span style="text-align: center; color: #3498db;">Scrapowanie w toku...</span>
         <p style="text-align: center; color: #7f8c8d;">Proszę czekać. Scraper działa w tle.</p>
         
         <div class="progress-bar">
             <div class="progress-fill" style="width: 100%; background-size: 200% 100%;"></div>
         </div>
-        
-        <p style="text-align: center; margin-top: 1rem;">
-            <small>Ta strona odświeży się automatycznie...</small>
-        </p>
-        
+                
         {% elif status.status == 'completed' %}
         <div class="status-icon status-completed">
             ✅
         </div>
-        <h2 style="text-align: center; color: #27ae60;">Scrapowanie Zakończone!</h2>
+        <span style="text-align: center; color: #27ae60;">Scrapowanie Zakończone!</span>
         
         <div class="stats-grid">
             <div class="stat-box">
@@ -152,7 +148,7 @@
         <div class="status-icon status-error">
             ❌
         </div>
-        <h2 style="text-align: center; color: #e74c3c;">Błąd Scrapowania</h2>
+        <span style="text-align: center; color: #e74c3c;">Błąd Scrapowania</span>
         
         <div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 1rem; border-radius: 4px; margin: 1.5rem 0;">
             <strong>Błąd:</strong>
@@ -172,7 +168,7 @@
         <div class="status-icon">
             ℹ️
         </div>
-        <h2 style="text-align: center; color: #7f8c8d;">Brak Aktywnego Scrapowania</h2>
+        <span style="text-align: center; color: #7f8c8d;">Brak Aktywnego Scrapowania</span>
         <p style="text-align: center;">
             Nie trwa żadne scrapowanie. 
             <a href="{{ url_for('scrape_games') }}">Rozpocznij scrapowanie</a>
@@ -183,7 +179,7 @@
     {% if status.status == 'completed' or status.status == 'error' %}
     <div class="card">
         <div class="card-header">
-            <h2>Co dalej?</h2>
+            <span>Co dalej?</span>
         </div>
         
         <ul style="margin-left: 1.5rem; line-height: 2;">

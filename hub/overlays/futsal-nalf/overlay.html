@@ -5,37 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Timer Overlay - Futsal NALF</title>
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/main.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/classes.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
 </head>
 <body>
-    <!-- <div id="connection-status" class="connected"></div> -->
-    <div id="scoreboard-container">
-        <div id="top-scoreboard-container" class="scoreboard-row">
-            <div></div>
-            <div id="home-team-fouls" class="team-fouls">·····</div>
-            <div></div>
-            <div></div>
-            <div id="away-team-fouls" class="team-fouls">·····</div>
-        </div>
-        <div id="main-scoreboard-container" class="scoreboard-row">
-            <div id="main-timer-display">00:00</div>
-            <div id="home-team-name" class="team-name">TEA</div>
-            <div id="home-team-score" class="team-score">1</div>
-            <div id="away-team-score" class="team-score">1</div>
-            <div id="away-team-name" class="team-name">TEB</div>
-        </div>
-        <div id="bottom-scoreboard-container" class="scoreboard-row">
-            <div></div>
-            <div id="home-team-penalty-timer-container" class="penalty-timer-container">
+    <div id="game-screen-container" class="overlay-container hidden">
+        <div id="scoreboard-container">
+            <div id="top-scoreboard-container" class="scoreboard-row">
+                <div></div>
+                <div id="home-team-fouls" class="team-fouls">●●●●●</div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div id="away-team-fouls" class="team-fouls">■■■■■</div>
             </div>
-            <div></div>
-            <div></div>
-            <div id="away-team-penalty-timer-container" class="penalty-timer-container">
+            <div id="main-scoreboard-container" class="scoreboard-row">
+                <div id="main-timer-display">00:00</div>
+                <div class="team-box">
+                    <div id="home-team-name" class="team-name">TEA</div>
+                    <div id="home-team-uniform" class="team-uniform">
+                        <div class="flex1 team-uniform-element" style="background-color: rgb(255, 255, 255);">.</div>
+                        <div class="flex1 team-uniform-element" style="background-color: rgb(0, 132, 70);">.</div>
+                    </div>
+                </div>
+                <div id="home-team-score" class="team-score">18</div>
+                <div></div>
+                <div id="away-team-score" class="team-score">1</div>
+                <div class="team-box">
+                    <div id="away-team-name" class="team-name">TEB</div>
+                    <div id="away-team-uniform" class="team-uniform">
+                        <div class="flex1 team-uniform-element" style="background-color: blue;">.</div>
+                        <div class="flex1 team-uniform-element" style="background-color: white;">.</div>
+                        <div class="flex1 team-uniform-element" style="background-color: blue;">.</div>
+                    </div>
+                </div>
+            </div>
+            <div id="bottom-scoreboard-container" class="scoreboard-row">
+                <div></div>
+                <div id="home-team-penalty-timer-container" class="penalty-timer-container">
+                    <div class="penalty-timer">0:22</div>
+                    <div class="penalty-timer">0:22</div>
+                </div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div id="away-team-penalty-timer-container" class="penalty-timer-container">
+                    <div class="penalty-timer">0:22</div>
+                    <div class="penalty-timer">0:22</div>
+                </div>
             </div>
         </div>
     </div>
-
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
     
     <script>
@@ -81,7 +102,7 @@
                 from: overlayId,
                 to: 'hub',
                 payload: {
-                    class: ['timer', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
+                    class: ['timer', 'overlay', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
         }
@@ -145,6 +166,13 @@
             }
         }
 
+        if (msg.type === 'show_container') {
+            const data = msg.payload || msg.data;
+            
+            // Sprawdź czy to dotyczy timera karnego
+            showOverlay('game-screen-container');
+        }
+
         if (msg.type === 'game_data') {
             const data = msg.payload || msg.data;
             console.log('game_data', data);
@@ -152,9 +180,70 @@
             let awayTeamScoreElement = document.getElementById('away-team-score');
             let homeTeamFoulsElement = document.getElementById('home-team-fouls');
             let awayTeamFoulsElement = document.getElementById('away-team-fouls');
+            let homeTeamShortNameElement = document.getElementById('home-team-name');
+            let awayTeamShortNameElement = document.getElementById('away-team-name');
 
-            homeTeamScoreElement.textContent = data.home_team.goals;
-            awayTeamScoreElement.textContent = data.away_team.goals;
+            if (typeof data.home_team.goals != "undefined") {
+                if(data.home_team.goals === '' || data.home_team.goals === null){
+                    homeTeamScoreElement.textContent = '';
+                }else if(parseInt(data.home_team.goals) !== 'undefined'){
+                    homeTeamScoreElement.textContent = data.home_team.goals;
+                }else{
+                    
+                }
+            }
+            if (typeof data.away_team.goals != "undefined") {
+                if(data.away_team.goals === '' || data.away_team.goals === null){
+                    awayTeamScoreElement.textContent = '';
+                }else if(parseInt(data.home_team.goals) !== 'undefined'){
+                    awayTeamScoreElement.textContent = data.away_team.goals;
+                }else{
+                    
+                }
+            }
+            if (typeof data.home_team.short_name != "undefined") {
+                homeTeamShortNameElement.textContent = data.home_team.short_name;
+            }
+            
+            if (typeof data.away_team.short_name != "undefined") {
+                homeTeamShortNameElement.textContent = data.away_team.short_name;
+            }
+
+            if (typeof data.home_team.fouls != "undefined") {
+                if(data.home_team.fouls === '' || data.home_team.fouls === null){
+                    homeTeamFoulsElement.textContent = '';
+                }else if(parseInt(data.home_team.fouls) !== 'undefined' &&
+                    data.home_team.fouls >= 0 &&
+                    data.home_team.fouls < 6){
+                        homeTeamScoreElement.textContent = '●'.repeat(data.home_team.goals);
+                        homeTeamScoreElement.style.color = 'yellow';
+                        if(data.home_team.goals > 4){
+                            homeTeamScoreElement.style.color = 'red';
+                        }else if(data.home_team.goals < 4){
+                            homeTeamScoreElement.style.color = 'white';
+                }else{
+                    
+                }
+            }
+            if (typeof data.away_team.fouls != "undefined") {
+                if(data.away_team.fouls === '' || data.away_team.fouls === null){
+                    awayTeamFoulsElement.textContent = '';
+                }else if(parseInt(data.away_team.fouls) !== 'undefined' &&
+                    data.away_team.fouls >= 0 &&
+                    data.away_team.fouls < 6){
+                        awayTeamFoulsElement.textContent = '●'.repeat(data.away_team.goals);
+                        awayTeamFoulsElement.style.color = 'yellow';
+                        if(data.away_team.goals > 4){
+                            awayTeamFoulsElement.style.color = 'red';
+                        }else if(data.away_team.goals < 4){
+                            awayTeamFoulsElement.style.color = 'white';
+                        }else{}
+                }else{
+                    
+                }
+            }}
+            
+
         }
     };
 
@@ -163,6 +252,7 @@
     //     window.PenaltyTimers?.clearAll();
     // });
 </script>
+    <script src="/overlays/futsal-nalf/js/utils.js"></script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>

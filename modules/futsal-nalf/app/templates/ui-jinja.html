@@ -14,6 +14,7 @@ Online HTML, CSS and JavaScript editor to run code online.
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/penalty-timer-modal.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/reversible-elements.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/plugins-states.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/scoreboard.css') }}">
 		<title>Browser</title>
 	</head>
 	
@@ -29,13 +30,13 @@ Online HTML, CSS and JavaScript editor to run code online.
 						<div class="main-timer-display-container">
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -60000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -1000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
-							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -100);" class="timer-button ds-{{ main_timer.timer_id }}-element" data-timer-id="{{ main_timer.timer_id }}"></button>
+							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element hidden" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<div id="{{ main_timer.timer_id }}-min-display" class="timer-display" data-display-for="{{ main_timer.timer_id }}-min-display">102</div>
 							<div id="{{ main_timer.timer_id }}-sec-display" class="timer-display" data-display-for="{{ main_timer.timer_id }}-sec-display">27</div>
-							<div id="{{ main_timer.timer_id }}-ds-display" class="timer-display ds-{{ main_timer.timer_id }}-element" data-display-for="{{ main_timer.timer_id }}-ds-display">4</div>
+							<div id="{{ main_timer.timer_id }}-ds-display" class="timer-display  ds-element ds-{{ main_timer.timer_id }}-element hidden" data-display-for="{{ main_timer.timer_id }}-ds-display">4</div>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 60000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 1000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
-							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 100);" class="timer-button ds-{{ main_timer.timer_id }}-element" data-timer-id="{{ main_timer.timer_id }}"></button>
+							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element hidden" data-timer-id="{{ main_timer.timer_id }}"></button>
 			</div>
 			<div class="timer-controllers-container">
 				<div class="timer-small-controllers">
@@ -61,7 +62,7 @@ Online HTML, CSS and JavaScript editor to run code online.
 			</div>
 			<button class="thin-wide-button bg_red" onclick="openModal(modalID='modal-penalties-timers')">KARY</button>
 			<!-- <div id="modal-penalties-timers" class="hidden"> -->
-			<div id="modal-penalties-timers" class="">
+			<div id="modal-penalties-timers" class="hidden">
 				<div id="modal-penalties-header">
 					<button class="top-bar-element bg_red" onclick="closeModal(modalID='modal-penalties-timers');">X</button>
 				</div>
@@ -120,10 +121,10 @@ Online HTML, CSS and JavaScript editor to run code online.
 		
 				<div class="reversible scoreboard">
 					<!-- Drugi wiersz - etykiety -->
-					<label class="flex-item flex1" id="labelFoulsHome"><span id="foulsHome">{{ period.home_team_fouls }}</span></label>
-					<label class="flex-item flex1" id="labelScoreHome"><span id="scoreHome"></span>{{ game.home_team_goals }}</label>
-					<label class="flex-item flex1" id="labelScoreAway"><span id="scoreAway"></span>{{ game.away_team_goals }}</label>
-					<label class="flex-item flex1" id="labelFoulsAway"><span id="foulsAway">{{ period.away_team_fouls }}</span></label>
+					<label class="flex-item flex1 fouls-label" id="labelFoulsHome"><span id="foulsHome">{{ period.home_team_fouls }}</span></label>
+					<label class="flex-item flex1 goals-label" id="labelScoreHome"><span id="scoreHome"></span>{{ game.home_team_goals }}</label>
+					<label class="flex-item flex1 goals-label" id="labelScoreAway"><span id="scoreAway"></span>{{ game.away_team_goals }}</label>
+					<label class="flex-item flex1 fouls-label" id="labelFoulsAway"><span id="foulsAway">{{ period.away_team_fouls }}</span></label>
 				</div>
 		
 				<div class="reversible scoreboard">		
@@ -142,13 +143,20 @@ Online HTML, CSS and JavaScript editor to run code online.
 					</div>
 					<div class="flex-item flex3 data-item data-away" id="teamAwayName">{{ teams.away.short_name }}</div>
 				</div>
+				<div><button type="button" onclick="runSequence()"></button></div>
 			</div>
 		</div>
 		
 	</div>
 	<div id="flash-msg-display" style="display: none;"></div>
 	<div id="plugins-states-container" style="display: flex;">
-		<div id="timer-state" class="status-false" data-plugin-for="timer-plugin">T</div>
+		<div id="timer-state" class="status-false" data-plugin-for="timer-plugin">
+			<img src="{{ url_for('static', filename='images/gopro.svg') }}" 
+			class="filter-gray"
+			alt="triangle with all three sides equal" 
+			height="30" 
+			width="30"/>
+		</div>
 		<div id="recorder-state" class="status-false" data-plugin-for="recorder-plugin">R</div>
 		<div id="obs-ws-state" class="status-false" data-plugin-for="obs-ws-plugin">O</div>
 	</div>

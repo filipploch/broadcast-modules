@@ -1,0 +1,2 @@
+id,current_season_id,current_game_id,current_period_id,current_timers,is_scoreboard_reversed,created_at,updated_at
+1,1,13,2,"{""main"": {""timer_id"": ""MKTxNON p:2"", ""timer_type"": ""independent"", ""initial_time"": 1216000, ""limit"": 2400000, ""pause_at_limit"": true, ""state"": ""idle"", ""metadata"": {""description"": ""1. po\u0142owa"", ""period"": 1, ""timer_class"": ""main""}}, ""penalties"": {""home"": [], ""away"": []}}",0,2026-02-23 20:39:05.092546,2026-02-25 22:59:53.226167

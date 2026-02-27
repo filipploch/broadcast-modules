@@ -9,7 +9,7 @@
 {% endif %}
 <div class="card">
     <div class="card-header">
-        <h2>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</h2>
+        <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
                 <a href="{{ url_for('scrape_games', league_id=league.id) }}" class="btn btn-success">

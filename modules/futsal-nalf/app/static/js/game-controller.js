@@ -160,6 +160,10 @@ socket.on('timer_updated', (data) => {
 socket.on('timer_started', (data) => {
     console.log('Timer started:', data);
     if (data.elapsed_time !== undefined) {
+        let dsElements = document.querySelectorAll('.ds-element');
+        dsElements.forEach(element => {
+            addClassName(element, 'hidden');
+        })
         updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
     }
     if (data.state) {
@@ -173,6 +177,10 @@ socket.on('timer_started', (data) => {
 socket.on('timer_paused', (data) => {
     console.log('Timer paused:', data);
     if (data.elapsed_time !== undefined) {
+        let dsElements = document.querySelectorAll('.ds-element');
+        dsElements.forEach(element => {
+            removeClassName(element, 'hidden');
+        })
         updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
     }
     if (data.state) {

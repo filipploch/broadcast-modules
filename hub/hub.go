@@ -27,6 +27,8 @@ type Hub struct {
 
 	mu       sync.RWMutex
 	shutdown chan struct{}
+
+	FallbackWriter *FallbackWriter
 }
 
 // NewHub creates a new Hub instance
@@ -221,6 +223,9 @@ func (h *Hub) handleRegister(msg *Message) {
 	}
 	module.ComponentType = componentType
 	module.IsActive = true
+	if dbPath, ok := msg.Payload["database_path"].(string); ok && dbPath != "" {
+		module.DatabasePath = dbPath
+	}
 
 	// Register based on component type
 	if componentType == "main_module" {
@@ -238,6 +243,12 @@ func (h *Hub) registerMainModule(module *Module) {
 	h.mu.Unlock()
 
 	log.Printf("✅ Main module registered: %s (%s)", module.ID, module.Name)
+	log.Printf("   Database path: %s", module.DatabasePath)
+
+	// Inform FallbackWriter about current DB path
+	if h.FallbackWriter != nil {
+		h.FallbackWriter.SetDatabasePath(module.DatabasePath)
+	}
 
 	// Send confirmation
 	confirmMsg := NewMessage("hub", module.ID, "registered", map[string]interface{}{
@@ -593,6 +604,10 @@ func (h *Hub) routeMessage(msg *Message) {
 	if strings.HasPrefix(msg.To, "broadcast:") {
 		className := strings.TrimPrefix(msg.To, "broadcast:")
 		h.broadcastToClass(msg, className)
+		// Fallback write if main_module is offline
+		if h.FallbackWriter != nil {
+			h.FallbackWriter.Handle(msg)
+		}
 		return
 	}
 

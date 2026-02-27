@@ -10,3 +10,15 @@
 .status-plugin-healthy {
     background-color: chartreuse !important;
 }
+
+.filter-green{
+    filter: brightness(0) saturate(100%)
+    invert(19%) sepia(90%) saturate(5134%)
+    hue-rotate(127deg) brightness(94%) contrast(102%) !important;
+}
+
+.filter-gray {
+    filter: brightness(0) saturate(100%) invert(50%)
+    sepia(4%) saturate(17%) hue-rotate(46deg)
+    brightness(100%) contrast(101%);
+}
