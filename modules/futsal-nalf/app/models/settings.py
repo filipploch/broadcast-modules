@@ -14,7 +14,7 @@ class Settings(db.Model):
     current_period_id = db.Column(db.Integer, db.ForeignKey('periods.id'), nullable=True)
     current_timers = db.Column(db.Text, nullable=True)  # JSON: {"main": {...}, "penalties": [{...}]}
     is_scoreboard_reversed = db.Column(db.Boolean, default=False)
-    obs_record_filename = db.Column(db.String(500), nullable=True)
+    obs_record_filepath = db.Column(db.String(500), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -39,18 +39,18 @@ class Settings(db.Model):
         return settings
     
     @classmethod
-    def set_obs_record_filename(cls, filename):
+    def set_obs_record_filepath(cls, filepath):
         """Set last OBS recording filename"""
         settings = cls.get_settings()
-        settings.obs_record_filename = filename
+        settings.obs_record_filepath = filepath
         settings.updated_at = datetime.utcnow()
         db.session.commit()
 
     @classmethod
-    def get_obs_record_filename(cls):
-        """Get last OBS recording filename"""
+    def get_obs_record_filepath(cls):
+        """Get last OBS recording filepath"""
         settings = cls.get_settings()
-        return settings.obs_record_filename
+        return settings.obs_record_filepath
 
     @classmethod
     def set_current_season(cls, season_id):

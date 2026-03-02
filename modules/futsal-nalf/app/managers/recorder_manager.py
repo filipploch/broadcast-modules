@@ -49,6 +49,8 @@ class RecorderManager:
                 'cameras': cameras
             }
         )
+
+        
         
         self.is_recording = True
         
@@ -100,6 +102,30 @@ class RecorderManager:
         cameras = Camera.query.filter_by(is_enabled=True).order_by(Camera.priority).all()
         return [cam.recorder_camera_id for cam in cameras if cam.recorder_camera_id]
     
+    def on_recording_started(self, msg):
+        """Called by hub_client when recorder-plugin reports recording started for a camera."""
+        payload = msg.get('payload', {})
+        camera_id = payload.get('camera_id')
+        current_app.logger.info(f"▶️  Recording started: {camera_id} → {payload.get('file_name')}")
+        self._emit_to_ui('recording_started', {
+            'camera_id':   camera_id,
+            'camera_name': payload.get('camera_name'),
+            'file_name':   payload.get('file_name'),
+            'file_path':   payload.get('file_path'),
+            'started_at':  payload.get('started_at'),
+            'match_id':    payload.get('match_id'),
+            'period_id':   payload.get('period_id'),
+        }, broadcast=True)
+
+    def on_recording_stopped(self, msg):
+        """Called by hub_client when recorder-plugin reports recording stopped for a camera."""
+        payload = msg.get('payload', {})
+        camera_id = payload.get('camera_id')
+        current_app.logger.info(f"⏹️  Recording stopped: {camera_id}")
+        self._emit_to_ui('recording_stopped', {
+            'camera_id': camera_id,
+        }, broadcast=True)
+    
     def get_camera_status(self):
         """Get recording status"""
         cameras = self._get_enabled_cameras()
@@ -109,3 +135,12 @@ class RecorderManager:
             'cameras': cameras,
             'camera_count': len(cameras)
         }
+    
+    def _emit_to_ui(self, msg_type, data):
+        """Emit event to UI clients via SocketIO"""
+        try:
+            from app.extensions import socketio
+            # socketio.emit(event, data, broadcast=True)
+            socketio.emit(msg_type, data)
+        except Exception as e:
+            current_app.logger.error(f"Failed to emit to UI: {e}")

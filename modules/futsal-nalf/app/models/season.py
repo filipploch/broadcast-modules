@@ -2,6 +2,7 @@
 from app.extensions import db
 from datetime import datetime
 from app.models.league import League
+from app.models.settings import Settings
 
 
 class Season(db.Model):
@@ -33,6 +34,11 @@ class Season(db.Model):
         """Get total number of games in this season"""
         from app.models.game import Game
         return Game.query.join(League).filter(League.season_id == self.id).count()
+    
+    @property
+    def set_newest_season_as_current():
+        newest_season = Season.query.order_by(Season.number.desc()).first()
+        Settings.set_current_season(newest_season.id)
 
     def to_dict(self):
         """Convert to dictionary"""

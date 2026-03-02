@@ -53,6 +53,10 @@ function runSequence(){
     socket.emit('trigger_sequence', { sequence: 'halftime_start', context: {} });
 }
 
+function startRecording(){
+    socket.emit('start_recording');
+}
+
 // ============================================================================
 // TIMER DISPLAY FORMATTING
 // ============================================================================

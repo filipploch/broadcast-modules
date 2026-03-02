@@ -506,6 +506,13 @@ func (h *Hub) handleSubscribe(msg *Message) {
 				classNames = append(classNames, className)
 			}
 		}
+	case map[string]interface{}:
+		// Lista klas jako []interface{}
+		for _, item := range classValue {
+			if className, ok := item.(string); ok && className != "" {
+				classNames = append(classNames, className)
+			}
+		}
 	case []string:
 		// Lista klas jako []string (jeśli struktura Message to obsługuje)
 		classNames = classValue
@@ -696,9 +703,9 @@ func (h *Hub) broadcastToClass(msg *Message, className string) {
 		}
 	}
 
-	// if count > 0 {
-	// 	log.Printf("📢 Broadcast to class '%s': %d recipients", className, count)
-	// }
+	if count > 0 {
+		log.Printf("📢 Broadcast to class '%s': %d recipients", className, count)
+	}
 }
 
 // hasCapability checks if module has a specific capability

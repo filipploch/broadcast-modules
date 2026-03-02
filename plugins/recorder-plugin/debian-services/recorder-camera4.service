@@ -1,0 +1,59 @@
+[Unit]
+Description=Camera Recorder - camera4
+# Prevent starting if already active (extra OS-level guard)
+# The recorder-plugin enforces this in Go, but systemd adds a second layer.
+After=network.target
+# Do NOT set Wants/Requires on other camera services — each is fully independent.
+
+[Service]
+Type=simple
+
+# --- Recording environment (injected by recorder-plugin via drop-in override) ---
+# RECORDING_FILE  — full path to the output .mkv file
+# RECORDING_FILENAME — basename only (for logging)
+# These are set in /run/systemd/system/recorder-camera4.service.d/recording-env.conf
+# before the service is started. The plugin writes that file, then calls
+# "systemctl daemon-reload && systemctl start recorder-camera4.service".
+
+# --- FFmpeg recording command ---
+ExecStart=/usr/bin/ffmpeg \
+    -loglevel warning \
+    -f v4l2 \
+    -input_format mjpeg \
+    -video_size 1920x1080 \
+    -framerate 30 \
+    -i /dev/camera4 \
+    -c:v libx264 \
+    -preset ultrafast \
+    -crf 18 \
+    -pix_fmt yuv420p \
+    -an \
+    ${RECORDING_FILE}
+
+# --- Restart policy ---
+# Restart on crash / unexpected exit so a new recording session begins automatically.
+# The recorder-plugin detects the restart (via hub heartbeat / service status) and:
+#   1. generates a new file name (new timestamp)
+#   2. writes a new drop-in override with the new RECORDING_FILE path
+#   3. updates both JSON metadata files
+Restart=on-failure
+RestartSec=2s
+
+# --- Resource / safety limits ---
+# Kill FFmpeg cleanly on stop so the .mkv file is finalised
+KillSignal=SIGTERM
+TimeoutStopSec=10s
+
+# Working directory (output_dir is passed via RECORDING_FILE, not here)
+WorkingDirectory=/srv/samba/public/recorder
+
+# Run as a dedicated user if desired (optional — remove to run as root)
+# User=recorder
+# Group=recorder
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=recorder-camera4
+
+[Install]
+WantedBy=multi-user.target

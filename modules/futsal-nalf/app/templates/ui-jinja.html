@@ -143,22 +143,90 @@ Online HTML, CSS and JavaScript editor to run code online.
 					</div>
 					<div class="flex-item flex3 data-item data-away" id="teamAwayName">{{ teams.away.short_name }}</div>
 				</div>
-				<div><button type="button" onclick="runSequence()"></button></div>
+				<div><button type="button" onclick="runSequence()">SEQENCE</button></div>
+				<div><button type="button" onclick="startRecording()">RECORD</button></div>
 			</div>
 		</div>
 		
 	</div>
 	<div id="flash-msg-display" style="display: none;"></div>
-	<div id="plugins-states-container" style="display: flex;">
-		<div id="timer-state" class="status-false" data-plugin-for="timer-plugin">
-			<img src="{{ url_for('static', filename='images/gopro.svg') }}" 
-			class="filter-gray"
-			alt="triangle with all three sides equal" 
-			height="30" 
-			width="30"/>
+	<div>
+		<div id="plugins-states-container" style="display: flex;">
+			<div id="timer-state" class="plugin-state status-false" data-plugin-for="timer-plugin">
+				<img src="{{ url_for('static', filename='images/timer.svg') }}" 
+				class="filter-gray"
+				alt="T" 
+				height="30" 
+				width="30"/>
+			</div>
+			<div id="recorder-state" class="plugin-state status-false" data-plugin-for="recorder-plugin">
+				<img src="{{ url_for('static', filename='images/floppy-disk.svg') }}" 
+				class="filter-gray"
+				alt="R" 
+				height="30" 
+				width="30"/>
+			</div>
+			<div id="obs-ws-state" class="plugin-state status-false" data-plugin-for="obs-ws-plugin">
+				<img src="{{ url_for('static', filename='images/ObsLogo.svg') }}" 
+				class="filter-gray"
+				alt="O" 
+				height="30" 
+				width="30"/>
+			</div>
 		</div>
-		<div id="recorder-state" class="status-false" data-plugin-for="recorder-plugin">R</div>
-		<div id="obs-ws-state" class="status-false" data-plugin-for="obs-ws-plugin">O</div>
+		<div id="cameras-states-container" style="display: flex;">
+			<div>
+				<div class="recording-status">
+					<img src="{{ url_for('static', filename='images/handycam-obs.svg') }}" 
+					class="filter-gray"
+					alt="O" 
+					height="25" 
+					width="25"/>
+				</div>
+				<div class="pan-tilt-head-status"></div>
+			</div>
+			<div>
+				<div class="recording-status">
+					<img src="{{ url_for('static', filename='images/handycam1.svg') }}" 
+					class="filter-gray"
+					alt="O" 
+					height="25" 
+					width="25"/>
+				</div>
+				<div class="pan-tilt-head-status">			
+				</div>
+			</div>
+			<div>
+				<div class="recording-status">
+					<img src="{{ url_for('static', filename='images/gopro2.svg') }}" 
+					class="filter-gray"
+					alt="O" 
+					height="25" 
+					width="25"/>
+				</div>
+				<div class="pan-tilt-head-status"></div>
+			</div>
+			<div>
+				<div class="recording-status">
+					<img src="{{ url_for('static', filename='images/gopro3.svg') }}" 
+					class="filter-gray"
+					alt="O" 
+					height="25" 
+					width="25"/>	
+				</div>
+				<div class="pan-tilt-head-status"></div>
+			</div>
+			<div>
+				<div class="recording-status">
+					<img src="{{ url_for('static', filename='images/gopro4.svg') }}" 
+					class="filter-gray"
+					alt="O" 
+					height="25" 
+					width="25"/>
+				</div>
+				<div class="pan-tilt-head-status"></div>
+			</div>
+		</div>
 	</div>
 </div>
 	

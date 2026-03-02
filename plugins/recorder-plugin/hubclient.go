@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -32,6 +33,7 @@ type HubClient struct {
 	done       chan struct{}
 	mu         sync.RWMutex
 	connected  bool
+	connecting int32 // atomic flag: 1 = Connect() in progress
 }
 
 // NewHubClient creates a new Hub client
@@ -49,6 +51,20 @@ func NewHubClient(pluginID, pluginName, hubURL string) *HubClient {
 
 // Connect establishes connection to the Hub
 func (hc *HubClient) Connect() error {
+	// Guard against concurrent Connect() calls
+	if !atomic.CompareAndSwapInt32(&hc.connecting, 0, 1) {
+		return fmt.Errorf("Connect() already in progress, ignoring duplicate call")
+	}
+	defer atomic.StoreInt32(&hc.connecting, 0)
+
+	// Also reject if already connected
+	hc.mu.RLock()
+	alreadyConnected := hc.connected
+	hc.mu.RUnlock()
+	if alreadyConnected {
+		return fmt.Errorf("already connected to Hub at %s", hc.HubURL)
+	}
+
 	// ✅ DODAJ DEBUG
 	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Printf("🔍 DEBUG Connect()")
@@ -106,10 +122,10 @@ func (hc *HubClient) Connect() error {
 		To:   "hub",
 		Type: "register",
 		Payload: map[string]interface{}{
-			"id":      hc.PluginID,   // ✅ Changed from plugin_id to id
-			"name":    hc.PluginName, // ✅ Added name field
-			"type":    "timer",
-			"version": "1.0.0",
+			"plugin_id":   hc.PluginID,
+			"plugin_name": hc.PluginName,
+			"plugin_type": "recorder",
+			"classes":     []string{"recorder_device"},
 		},
 	})
 
@@ -157,6 +173,9 @@ func (hc *HubClient) readPump() {
 			hc.conn.Close()
 		}
 		hc.mu.Unlock()
+
+		// Close receive channel so "for msg := range Receive()" exits cleanly
+		close(hc.receive)
 
 		// Signal reconnect
 		select {
@@ -316,6 +335,20 @@ func (hc *HubClient) AutoReconnect(maxAttempts int) {
 			return
 		}
 	}
+}
+
+// Subscribe subscribes this plugin to one or more HUB classes.
+// Must be called after successful registration.
+func (hc *HubClient) Subscribe(classes ...string) {
+	msg := &Message{
+		From: hc.PluginID,
+		To:   "hub",
+		Type: "subscribe",
+		Payload: map[string]interface{}{
+			"class": classes,
+		},
+	}
+	hc.Send(msg)
 }
 
 // sendHeartbeat sends periodic heartbeat messages

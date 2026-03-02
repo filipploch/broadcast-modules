@@ -3,6 +3,8 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 from app.managers.season_manager import SeasonManager
 from app.managers.league_manager import LeagueManager
 from app.managers.game_manager import GameManager
+from app.managers.camera_manager import CameraManager
+from app.managers.game_camera_manager import GameCameraManager
 from app.models.stadium import Stadium
 from app.models.team import Team
 from datetime import datetime
@@ -317,10 +319,13 @@ def update_team_group(league_id, team_id):
 @current_app.route('/leagues/<int:league_id>/games/')
 def league_games(league_id=None):
     """List all games, optionally filtered by league"""
+    season_manager = SeasonManager()
+    current_season = season_manager.get_current_season()
     games = game_manager.get_all_games(league_id=league_id)
     league = league_manager.get_league_by_id(league_id) if league_id else None
     
     return render_template('games/list.html',
+                          season=current_season,
                           games=games,
                           league=league)
 
@@ -459,8 +464,14 @@ def prepare_game_for_broadcast(game_id):
     # Check if game already has periods
     if game.periods.count() > 0:
         flash('Mecz ma już utworzone okresy', 'warning')
-        return redirect(url_for('edit_game', game_id=game_id))
+        return redirect(url_for('index'))
     
+    camera_manager = CameraManager()
+    main_camera = camera_manager.get_camera_by_id(1)
+    if main_camera:
+        game_camera_manager = GameCameraManager()
+        game_camera_manager.assign_camera_to_game(game_id=game.id, camera_id=main_camera.id, location='Główna')
+
     period_manager = PeriodManager()
     
     try:

@@ -23,6 +23,7 @@ type DiscoveryServer struct {
 	HubPort      int
 	HubURL       string
 	mu           sync.RWMutex
+	discovered   bool // true after first successful announcement
 	onDiscovered func(hubURL string)
 	server       *http.Server
 }
@@ -132,7 +133,19 @@ func (ds *DiscoveryServer) handleDiscovery(w http.ResponseWriter, r *http.Reques
 
 		log.Printf("📤 Acknowledgment sent to HUB")
 
-		// Trigger callback
+		// Trigger callback — only once per discovery cycle
+		ds.mu.Lock()
+		alreadyDiscovered := ds.discovered
+		if !alreadyDiscovered {
+			ds.discovered = true
+		}
+		ds.mu.Unlock()
+
+		if alreadyDiscovered {
+			log.Printf("⚠️  Duplicate hub_announce ignored (already connected to HUB)")
+			return
+		}
+
 		if ds.onDiscovered != nil {
 			log.Printf("🚀 Triggering connection to HUB...")
 			go ds.onDiscovered(ds.HubURL)
@@ -154,6 +167,19 @@ func (ds *DiscoveryServer) IsDiscovered() bool {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 	return ds.HubURL != ""
+}
+
+// Reset clears the discovered flag so the server can accept a new hub_announce.
+// Call this after the hub connection is lost, to allow reconnection via reverse discovery.
+func (ds *DiscoveryServer) Reset() {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	ds.discovered = false
+	ds.HubURL = ""
+	ds.HubIP = ""
+	ds.HubPort = 0
+	log.Println("🔄 Discovery server reset — ready for new hub_announce")
 }
 
 // Stop stops the discovery server

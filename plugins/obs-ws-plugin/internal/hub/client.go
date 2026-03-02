@@ -82,10 +82,24 @@ func (c *HubClient) register() error {
 			"plugin_id":   c.PluginID,
 			"plugin_name": c.PluginName,
 			"plugin_type": "obs-websocket",
-			"classes":     []string{"obs", "streaming", "recording"},
+			"classes":     []string{"obs", "streaming", "recording", "recorder_device"},
 		},
 	}
 
+	return c.Send(msg)
+}
+
+// Subscribe subscribes this plugin to one or more HUB classes.
+// Must be called after successful registration.
+func (c *HubClient) Subscribe(classes ...string) error {
+	msg := &Message{
+		From: c.PluginID,
+		To:   "hub",
+		Type: "subscribe",
+		Payload: map[string]interface{}{
+			"class": classes,
+		},
+	}
 	return c.Send(msg)
 }
 

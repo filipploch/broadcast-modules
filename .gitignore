@@ -13,3 +13,4 @@ instance/*.*
 *.md
 *.exe*
 *.*~
+*.sqbpro

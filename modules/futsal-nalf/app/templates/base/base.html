@@ -15,11 +15,16 @@
     <header>
         <div class="container">
             <nav>
-                <a href="{{ url_for('index') }}">🏠 Start</a>
-                <a href="{{ url_for('list_seasons') }}">Sezony</a>
+                <a href="{{ url_for('index') }}">MECZ</a>
+                {% if season %}
+                    {% for league in season.leagues %}
+                        <a href="{{ url_for('league_games', league_id=league.id) }}">{{ league.name }}</a>
+                    {% endfor %}
+                {% endif %}
+                <!-- <a href="{{ url_for('list_seasons') }}">Sezony</a>
                 <a href="{{ url_for('list_leagues') }}">Ligi</a>
                 <a href="{{ url_for('list_games') }}" {% if request.endpoint == 'list_games' %}class="active"{% endif %}>Mecze</a>
-                <a href="{{ url_for('list_teams') }}">Zespoły</a>
+                <a href="{{ url_for('list_teams') }}">Zespoły</a> -->
             </nav>
         </div>
     </header>

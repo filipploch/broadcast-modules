@@ -339,6 +339,19 @@ class HubClient:
         elif msg_type == 'obs_event':
                 print('OBS_EVENT:', msg)
 
+        elif msg_type == 'obs_error':
+                print('OBS_ERROR:', msg)
+
+        elif msg_from == 'recorder-plugin':
+            from app.managers import get_recorder_manager
+            recorder_manager = get_recorder_manager()
+            if msg_type == 'recording_started':
+                self._log("info", f"Recording started: camera={payload.get('camera_id')} file={payload.get('file_name')}")
+                recorder_manager.on_recording_started(msg)
+            elif msg_type == 'recording_stopped':
+                self._log("info", f"Recording stopped: camera={payload.get('camera_id')}")
+                recorder_manager.on_recording_stopped(msg)
+
         # elif msg_type == 'timer_updated':
         #     # Timer updates - forward to UI
         #     self._with_app_context(self._emit_to_ui, 'timer_updated', payload)

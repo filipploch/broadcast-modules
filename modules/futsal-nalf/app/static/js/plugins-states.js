@@ -15,10 +15,10 @@ socket.on('plugins_states', data => {
          _icon = _pluginElement.querySelector('img');
          if(value.is_active === true){
              addClassName(_pluginElement, 'status-plugin-active');
-             addClassName(_icon, 'filter-green');
+             addClassName(_icon, 'filter-black');
             } else {
                 removeClassName(_pluginElement, 'status-plugin-active');
-                removeClassName(_icon, 'filter-green');
+                removeClassName(_icon, 'filter-black');
             };
             if(value.is_healthy === true){
                 addClassName(_pluginElement, 'status-plugin-healthy');

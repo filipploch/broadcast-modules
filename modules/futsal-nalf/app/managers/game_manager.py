@@ -39,7 +39,7 @@ class GameManager:
         if status is not None:
             query = query.filter_by(status=status)
 
-        return query.order_by(Game.date.desc()).all()
+        return query.order_by(Game.date).all()
 
     def get_game_by_id(self, game_id):
         """Get game by ID"""

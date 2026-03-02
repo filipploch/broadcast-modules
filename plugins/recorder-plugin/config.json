@@ -4,17 +4,30 @@
   "discovery_port": 9999,
   "discovery_retry": true,
   "hub_url": "",
-  "recording": {
-    "output_dir": "/srv/samba/public/recorder",
-    "temp_dir": "/tmp/recorder",
-    "format": "mp4",
-    "quality": "high"
-  },
+  "output_dir": "/srv/samba/public/recorder",
   "cameras": [
     {
       "id": "camera1",
-      "name": "Main Camera",
-      "url": "rtsp://camera1.local/stream",
+      "device_name": "camera1",
+      "service_name": "recorder-camera1.service",
+      "enabled": true
+    },
+    {
+      "id": "camera2",
+      "device_name": "camera2",
+      "service_name": "recorder-camera2.service",
+      "enabled": true
+    },
+    {
+      "id": "camera3",
+      "device_name": "camera3",
+      "service_name": "recorder-camera3.service",
+      "enabled": true
+    },
+    {
+      "id": "camera4",
+      "device_name": "camera4",
+      "service_name": "recorder-camera4.service",
       "enabled": true
     }
   ]

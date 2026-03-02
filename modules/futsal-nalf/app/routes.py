@@ -58,7 +58,9 @@ def ui_dashboard():
     # Get current timers from Settings
     current_timers = settings.get_current_timers()
     main_timer = current_timers.get('main')
-    penalties = current_timers.get('penalties')
+    home_penalties = current_timers.get('penalties')['home']
+    away_penalties = current_timers.get('penalties')['away']
+    penalties = home_penalties + away_penalties
     
     # Log for debugging
     current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
@@ -79,13 +81,18 @@ def index():
     from app.models.settings import Settings
     from app.models.game import Game
     from app.models.period import Period
+    from app.models.season import Season
     
     settings = Settings.get_settings()
     
+    season = None
     # Get actual game
     game = None
     periods = []
     penalty = None
+
+    if settings.current_season_id:
+        season = Season.query.get(settings.current_season_id)
     
     if settings.current_game_id:
         game = Game.query.get(settings.current_game_id)
@@ -94,6 +101,7 @@ def index():
             penalty = game.penalty
     
     return render_template('index.html',
+                          season=season,
                           game=game,
                           periods=periods,
                           penalty=penalty,

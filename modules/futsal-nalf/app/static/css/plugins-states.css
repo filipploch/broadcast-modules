@@ -11,7 +11,7 @@
     background-color: chartreuse !important;
 }
 
-.filter-green{
+.filter-green {
     filter: brightness(0) saturate(100%)
     invert(19%) sepia(90%) saturate(5134%)
     hue-rotate(127deg) brightness(94%) contrast(102%) !important;
@@ -21,4 +21,21 @@
     filter: brightness(0) saturate(100%) invert(50%)
     sepia(4%) saturate(17%) hue-rotate(46deg)
     brightness(100%) contrast(101%);
+}
+
+.filter-black {
+    filter: brightness(0) saturate(100%) invert(0%)
+    sepia(91%) saturate(46%) hue-rotate(93deg)
+    brightness(88%) contrast(97%) !important;
+}
+
+#plugins-states-container {
+    padding: 4px 2px;
+    height: 34px;
+    background-color: #ff0000;
+}
+
+.plugin-state {
+    margin: 0px 2px;
+    padding: 2px;
 }

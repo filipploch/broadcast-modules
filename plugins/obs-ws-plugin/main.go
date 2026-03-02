@@ -66,6 +66,12 @@ func main() {
 		log.Printf("    Will retry automatically...")
 	}
 
+	if err := plugin.hubClient.Subscribe("recorder_device"); err != nil {
+		log.Printf("⚠️  Failed to subscribe to recorder_device: %v", err)
+	} else {
+		log.Printf("✅ Subscribed to class: recorder_device")
+	}
+
 	go plugin.routeHubToOBS()
 	go plugin.routeOBSToHub()
 	go plugin.monitorOBSStatus()
@@ -97,7 +103,7 @@ func (p *Plugin) routeHubToOBS() {
 	log.Println("🔀 Starting Hub → OBS routing")
 
 	for msg := range p.hubClient.Messages {
-		if msg.Type != "obs_command" {
+		if msg.Type != "obs_command" && msg.Type != "recording_command" {
 			continue
 		}
 

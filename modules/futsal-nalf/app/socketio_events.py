@@ -6,6 +6,7 @@ from app.managers import get_hub_client
 from app.managers import get_timer_manager
 from app.managers import get_sequence_manager
 import json
+import datetime
 
 @socketio.on('connect')
 def handle_connect():
@@ -55,15 +56,29 @@ def handle_disconnect():
 def handle_start_recording():
     hub_client = get_hub_client()
     if hub_client:
-        hub_client.broadcast('start_recording', {'cameras': []})
-        emit('recording_started', {}, broadcast=True)
+        hub_client.broadcast(msg_type='recording_command', payload={
+        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+            'requestType': 'StartRecord',
+            'requestData': {},
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            'cameras':{'camera1': True,
+                       'camera2': False,
+                       'camera3': False,
+                       'camera4': False}})
+        
 
 @socketio.on('stop_recording')
 def handle_stop_recording():
     hub_client = get_hub_client()
     if hub_client:
-        hub_client.broadcast('stop_recording', {})
-        emit('recording_stopped', {}, broadcast=True)
+        hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+            'requestType': 'StopRecord',
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            'requestData': {},
+            'cameras':{'camera1': True,
+                       'camera2': False,
+                       'camera3': False,
+                       'camera4': False}})
 
 @socketio.on('goal_scored')
 def handle_goal_scored(data):
@@ -1007,3 +1022,4 @@ def handle_stop_sequence(data):
         # zatrzymaj wszystkie instancje danej sekwencji
         sequence_manager.stop_all(data.get('sequence'))
         emit('all_sequences_stopped', {})
+
