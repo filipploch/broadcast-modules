@@ -15,6 +15,12 @@ Online HTML, CSS and JavaScript editor to run code online.
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/reversible-elements.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/plugins-states.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/scoreboard.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/game-field.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/events-controllers.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/overlay-switcher.css') }}">
+		<style>
+			.game-field-cell {background-image: url({{ url_for('static', filename='images/field/empty.png') }})}
+		</style>
 		<title>Browser</title>
 	</head>
 	
@@ -144,7 +150,9 @@ Online HTML, CSS and JavaScript editor to run code online.
 					<div class="flex-item flex3 data-item data-away" id="teamAwayName">{{ teams.away.short_name }}</div>
 				</div>
 				<div><button type="button" onclick="runSequence()">SEQENCE</button></div>
-				<div><button type="button" onclick="startRecording()">RECORD</button></div>
+				<div><button type="button" onclick="startRecording()">REC.START</button></div>
+				<div><button type="button" onclick="stopRecording()">REC.STOP</button></div>
+				<div><button type="button" onclick="getObsWsConnection()">GET STATUS</button></div>
 			</div>
 		</div>
 		
@@ -176,57 +184,138 @@ Online HTML, CSS and JavaScript editor to run code online.
 		</div>
 		<div id="cameras-states-container" style="display: flex;">
 			<div>
-				<div class="recording-status">
+				<div id="obs-recording-indicator" class="recording-indicator">
 					<img src="{{ url_for('static', filename='images/handycam-obs.svg') }}" 
 					class="filter-gray"
 					alt="O" 
-					height="25" 
-					width="25"/>
+					height="19" 
+					width="19"/>
 				</div>
 				<div class="pan-tilt-head-status"></div>
 			</div>
 			<div>
-				<div class="recording-status">
+				<div id="camera1-recording-indicator" class="recording-indicator" data-camera-id="camera1">
 					<img src="{{ url_for('static', filename='images/handycam1.svg') }}" 
 					class="filter-gray"
 					alt="O" 
-					height="25" 
-					width="25"/>
+					height="19" 
+					width="19"/>
 				</div>
 				<div class="pan-tilt-head-status">			
 				</div>
 			</div>
 			<div>
-				<div class="recording-status">
+				<div id="camera2-recording-indicator" class="recording-indicator" data-camera-id="camera2">
 					<img src="{{ url_for('static', filename='images/gopro2.svg') }}" 
 					class="filter-gray"
 					alt="O" 
-					height="25" 
-					width="25"/>
+					height="19" 
+					width="19"/>
 				</div>
 				<div class="pan-tilt-head-status"></div>
 			</div>
 			<div>
-				<div class="recording-status">
+				<div id="camera3-recording-indicator" class="recording-indicator" data-camera-id="camera3">
 					<img src="{{ url_for('static', filename='images/gopro3.svg') }}" 
 					class="filter-gray"
 					alt="O" 
-					height="25" 
-					width="25"/>	
+					height="19" 
+					width="19"/>	
 				</div>
 				<div class="pan-tilt-head-status"></div>
 			</div>
 			<div>
-				<div class="recording-status">
+				<div id="camera4-recording-indicator" class="recording-indicator" data-camera-id="camera4">
 					<img src="{{ url_for('static', filename='images/gopro4.svg') }}" 
 					class="filter-gray"
 					alt="O" 
-					height="25" 
-					width="25"/>
+					height="19" 
+					width="19"/>
 				</div>
 				<div class="pan-tilt-head-status"></div>
 			</div>
 		</div>
+		<div id="overlay-switchers-container">
+			<div id="overlay-off" class="overlay-switcher" ondblclick="showOverlay('empty')" style="background-image: url({{ url_for('static', filename='images/ui/empty.png') }})"></div> 
+			<div id="overlay-start-stream" class="overlay-switcher screen-container" ondblclick="showOverlay('start-stream-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/start.png') }})"></div> 
+			<div id="overlay-lineup-team-a" class="overlay-switcher screen-container" ondblclick="showOverlay('lineup-team-a-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/team-a-lineup.png') }})"></div> 
+			<div id="overlay-lineup-team-b" class="overlay-switcher screen-container" ondblclick="showOverlay('lineup-team-b-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/team-b-lineup.png') }})"></div> 
+			<div id="overlay-game" class="overlay-switcher screen-container" ondblclick="showOverlay('game-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/game.png') }})"></div> 
+		</div>
+		<div>
+			<div id="events-controllers-container" class="reversible">
+				<div id="home-side-events-controllers-container" class="side-events-controllers-container">
+					<div id="home-save-controller" class="event-controller save-controller" onclick="addTeamEvent('home', 'save');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+					<div id="away-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('away', 'goal');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+					<div id="away-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('away', 'miss');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+				</div>
+				<div id="game-field" class="" style="background-image: url({{ url_for('static', filename='images/field/football.png') }})">
+					<div class="game-field-row" style="display: flex;">
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A1" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A2" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A3" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A4" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A5" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A6" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A7" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A8" class="game-field-cell"></div>
+					</div>
+					<div class="game-field-row" style="display: flex;">
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B1" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B2" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B3" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B4" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B5" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B6" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B7" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B8" class="game-field-cell"></div>
+					</div>
+					<div class="game-field-row" style="display: flex;">
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C1" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C2" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C3" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C4" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C5" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C6" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C7" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C8" class="game-field-cell"></div>
+					</div>
+					<div class="game-field-row" style="display: flex;">
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D1" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D2" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D3" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D4" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D5" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D6" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D7" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D8" class="game-field-cell"></div>
+					</div>
+					<div class="game-field-row" style="display: flex;">
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E1" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E2" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E3" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E4" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E5" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E6" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E7" class="game-field-cell"></div>
+						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E8" class="game-field-cell"></div>	
+					</div>
+				</div>
+				<div id="away-side-events-controllers-container" class="side-events-controllers-container">
+					<div id="away-save-controller" class="event-controller save-controller" onclick="addTeamEvent('away', 'save');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+					<div id="home-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('home', 'goal');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+					<div id="home-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('home', 'miss');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+				</div>
+			</div>
+				<div id="bottom-events-controllers-container">
+					<div id="hahaha-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/hahaha.png') }})"></div>
+					<div id="hidded-events-controllers-container" class="hidden">
+						<div id="var-controller" class="event-controller" onclick="addFieldEvent('var');" style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
+						<div id="foul-controller" class="event-controller" onclick="addFieldEvent('foul');" style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
+					</div>
+					<div id="bum-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
+				</div>
+			</div>
 	</div>
 </div>
 	
@@ -256,5 +345,8 @@ Online HTML, CSS and JavaScript editor to run code online.
   <script src="{{ url_for('static', filename='js/game-teams.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plugins-states.js') }}"></script>
   <script src="{{ url_for('static', filename='js/timer-recovery.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/servo-utils.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/overlay-utils.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/events-controllers.js') }}"></script>
   </body>  
 </html>

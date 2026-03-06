@@ -51,6 +51,14 @@ class Settings(db.Model):
         """Get last OBS recording filepath"""
         settings = cls.get_settings()
         return settings.obs_record_filepath
+    
+    @classmethod
+    def set_scoreboard_order(cls, is_reversed):
+        """Set scoreboard order"""
+        settings = cls.get_settings()
+        settings.is_scoreboard_reversed = is_reversed
+        settings.updated_at = datetime.utcnow()
+        db.session.commit()
 
     @classmethod
     def set_current_season(cls, season_id):

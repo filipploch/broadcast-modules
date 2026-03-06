@@ -26,10 +26,12 @@ socket.on('initial_data', (data) => {
     appState.isReversed = data.is_reversed;
     appState.isReordering = false;
 
+    if(appState.isReversed===true){
+        reorderReversible(onLoad=true);
+    }
     let timer = appState.mainTimer;
     console.log('initial_data timer: ', timer);
     updateTimerDisplay(timer);
     fillPenaltiesTimersContainer('home');
     fillPenaltiesTimersContainer('away');
-
 });

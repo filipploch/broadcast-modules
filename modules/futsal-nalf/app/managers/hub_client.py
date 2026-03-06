@@ -336,13 +336,10 @@ class HubClient:
             plugin_manager.on_plugins_state_received(msg)
             # print(f"health_status: {msg}")
 
-        elif msg_type == 'obs_event':
-                print('OBS_EVENT:', msg)
 
-        elif msg_type == 'obs_error':
-                print('OBS_ERROR:', msg)
 
         elif msg_from == 'recorder-plugin':
+            print(f'RECORDER MSG: {msg}')
             from app.managers import get_recorder_manager
             recorder_manager = get_recorder_manager()
             if msg_type == 'recording_started':
@@ -351,6 +348,10 @@ class HubClient:
             elif msg_type == 'recording_stopped':
                 self._log("info", f"Recording stopped: camera={payload.get('camera_id')}")
                 recorder_manager.on_recording_stopped(msg)
+            elif msg_type == 'recording_status_response':
+                recorder_manager.on_recording_status_received(msg)
+            elif msg_type == 'recording_command_response':
+                recorder_manager.on_recording_command_response(msg)
 
         # elif msg_type == 'timer_updated':
         #     # Timer updates - forward to UI
@@ -369,9 +370,24 @@ class HubClient:
         #     self._log("info", "Recording stopped")
         #     self._with_app_context(self._emit_to_ui, 'recording_status', {'recording': False})
 
-        # if msg_from == 'obs-ws-plugin':
-        #     if msg_type == 'obs_event':
-        #         self._log('info', msg)
+        if msg_from == 'obs-ws-plugin':
+            from app.managers import get_obs_ws_manager
+            obs_ws_manager = get_obs_ws_manager()
+
+            if msg_type == 'obs_status':
+                print('OBS_STATUS:', msg)
+                obs_ws_manager.on_obs_status(msg)
+            elif msg_type == 'obs_response':
+                obs_ws_manager.on_obs_response(msg)
+            elif msg_type == 'obs_event':
+                print('OBS_EVENT:', msg)
+                obs_ws_manager.on_obs_event(msg)
+            elif msg_type == 'obs_error':
+                print('OBS_ERROR:', msg)
+            else:
+                print('OBS MSG:', msg)
+
+
 
         # Timer Plugin messages
         if msg_from == 'timer-plugin':

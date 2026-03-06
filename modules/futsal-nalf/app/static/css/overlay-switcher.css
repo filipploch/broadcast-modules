@@ -1,0 +1,9 @@
+#overlay-switchers-container {
+    display: flex;
+}
+
+.overlay-switcher {
+    width: 25px;
+    height: 25px;
+    background-size: contain;
+}

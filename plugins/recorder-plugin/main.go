@@ -5,9 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
-	"time"
 )
 
 // Config holds full plugin configuration loaded from config.json.
@@ -44,23 +42,11 @@ func main() {
 
 	discoveryServer := NewDiscoveryServer(discoveryPort)
 
-	var hubURL string
-	var hubURLMutex sync.Mutex
-	discoveryDone := make(chan bool, 1)
-
-	err := discoveryServer.Start(func(url string) {
-		hubURLMutex.Lock()
-		hubURL = url
-		hubURLMutex.Unlock()
-
+	err := discoveryServer.Start(func(hubURL string) {
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		log.Printf("🎯 HUB URL RECEIVED: %s", hubURL)
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-		go func() {
-			connectToHub(hubURL, config, discoveryServer, recorder)
-			discoveryDone <- true
-		}()
+		go connectToHub(hubURL, config, discoveryServer, recorder)
 	})
 
 	if err != nil {
@@ -69,31 +55,13 @@ func main() {
 
 	log.Println("")
 	log.Println("⏳ Waiting for HUB announcement...")
-	log.Println("   Timeout: 60 seconds")
+	log.Println("   (HUB will connect to us when it starts)")
 	log.Println("")
-
-	select {
-	case <-discoveryDone:
-		log.Println("✅ Connection established!")
-
-	case <-time.After(60 * time.Second):
-		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		log.Println("⚠️  No HUB announcement received after 60s")
-
-		if config.HubURL != "" {
-			log.Printf("   Using fallback URL: %s", config.HubURL)
-			connectToHub(config.HubURL, config, discoveryServer, recorder)
-		} else {
-			log.Println("   No fallback URL configured")
-			log.Println("   Will keep discovery server running...")
-		}
-	}
 
 	// Graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("✅ Recorder Plugin is running")
 	log.Println("   Press Ctrl+C to stop")
@@ -113,8 +81,8 @@ func main() {
 }
 
 // connectToHub establishes and maintains the WebSocket connection to the hub.
-// Blocks until the connection is lost, then resets the discovery server so
-// a new hub_announce can trigger reconnection.
+// Blocks until the connection is lost (Messages channel is drained), then
+// resets the discovery server so a new hub_announce can trigger reconnection.
 func connectToHub(hubURL string, config Config, ds *DiscoveryServer, recorder *RecorderManager) {
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Printf("🔌 Connecting to HUB: %s", hubURL)
@@ -128,12 +96,6 @@ func connectToHub(hubURL string, config Config, ds *DiscoveryServer, recorder *R
 		return
 	}
 
-	if err := hubClient.Subscribe("recorder_device"); err != nil {
-		log.Printf("⚠️  Failed to subscribe to recorder_device: %v", err)
-	} else {
-		log.Printf("✅ Subscribed to class: recorder_device")
-	}
-
 	log.Println("✅ Connected to HUB!")
 	log.Printf("   Plugin ID:   %s", config.PluginID)
 	log.Printf("   Plugin Name: %s", config.PluginName)
@@ -141,23 +103,49 @@ func connectToHub(hubURL string, config Config, ds *DiscoveryServer, recorder *R
 
 	// Udostępnij hubClient recorderowi — od teraz będzie wysyłał notyfikacje do main_module
 	recorder.SetHubClient(hubClient)
-	defer recorder.SetHubClient(nil) // wyczyść po rozłączeniu
+	defer recorder.SetHubClient(nil)
 
-	// Process incoming messages until the receive channel is closed
-	// (closed by readPump when the WebSocket connection drops)
-	for msg := range hubClient.Receive() {
-		handleMessage(msg, hubClient, recorder)
+	// Process incoming messages.
+	// hubClient.reconnectEnabled = true, więc po zerwaniu połączenia readMessages()
+	// uruchomi go reconnect() wewnętrznie — Messages nigdy nie jest zamykany.
+	// Pętla kończy się dopiero gdy wywołamy hubClient.Close() (stopChan).
+	for {
+		select {
+		case msg, ok := <-hubClient.Receive():
+			if !ok {
+				// kanał zamknięty — Close() został wywołany
+				log.Println("⚠️  HUB Messages channel closed")
+				ds.Reset()
+				return
+			}
+			handleMessage(msg, hubClient, recorder)
+
+		case <-hubClient.Done():
+			// Close() wywołany z zewnątrz (np. Ctrl+C)
+			log.Println("⏹️  HUB client stopped")
+			ds.Reset()
+			return
+		}
 	}
-
-	log.Println("⚠️  Lost connection to HUB — resetting discovery server")
-	ds.Reset()
 }
 
 // handleMessage routes a single message from the hub.
 func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager) {
 	switch msg.Type {
 	case "registered":
-		log.Printf("✅ Registered in HUB as: %s", msg.Payload["id"])
+		log.Printf("✅ Registered in HUB as: %s", msg.To)
+		if err := recorder.hubClient.Subscribe("recorder_device"); err != nil {
+			log.Printf("⚠️  Failed to subscribe to recorder_device: %v", err)
+		} else {
+			log.Printf("✅ Subscribed to class: recorder_device")
+		}
+		_ = recorder.hubClient.Send(&Message{
+			To:   "main_module",
+			Type: "recording_status_response",
+			Payload: map[string]interface{}{
+				"cameras": recorder.Status(),
+			},
+		})
 
 	case "heartbeat_ack":
 		// nothing to do

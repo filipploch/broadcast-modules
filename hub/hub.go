@@ -499,7 +499,7 @@ func (h *Hub) handleSubscribe(msg *Message) {
 	case string:
 		// Pojedyncza klasa jako string
 		classNames = []string{classValue}
-	case []interface{}:
+	case []any:
 		// Lista klas jako []interface{}
 		for _, item := range classValue {
 			if className, ok := item.(string); ok && className != "" {
@@ -606,7 +606,7 @@ func (h *Hub) routeMessage(msg *Message) {
 	defer h.mu.RUnlock()
 
 	// Check if this is a class-based broadcast
-	class, hasClass := msg.Payload["class"].(string)
+	// class, hasClass := msg.Payload["class"].(string)
 	// ✅ Handle broadcast to class
 	if strings.HasPrefix(msg.To, "broadcast:") {
 		className := strings.TrimPrefix(msg.To, "broadcast:")
@@ -626,23 +626,24 @@ func (h *Hub) routeMessage(msg *Message) {
 			}
 
 			// Skip main module in broadcasts (unless subscribed)
-			if plugin == h.MainModule && !hasClass {
-				continue
-			}
+			// if plugin == h.MainModule && !hasClass {
+			// 	continue
+			// }
 
 			// If class specified, check subscription
-			if hasClass && class != "" {
-				if !plugin.IsSubscribedTo(class) {
-					continue // Skip non-subscribers
-				}
-			}
+			// if hasClass && class != "" {
+			// 	if !plugin.IsSubscribedTo(class) {
+			// 		continue // Skip non-subscribers
+			// 	}
+			// }
 
 			if data, err := msg.ToJSON(); err == nil {
 				select {
 				case plugin.Send <- data:
-					if hasClass {
-						log.Printf("📤 Sent to %s (subscribed to %s)", plugin.ID, class)
-					}
+					// if hasClass {
+					// log.Printf("📤 Sent to %s (subscribed to %s)", plugin.ID, class)
+					log.Printf("📤 Sent to %s", plugin.ID)
+					// }
 				default:
 					log.Printf("⚠️  Plugin %s channel full, skipping message", plugin.ID)
 				}
@@ -654,6 +655,8 @@ func (h *Hub) routeMessage(msg *Message) {
 	// Route to specific destination
 	var destination *Module
 	if h.MainModule != nil && h.MainModule.ID == msg.To {
+		destination = h.MainModule
+	} else if h.MainModule != nil && msg.To == "main_module" {
 		destination = h.MainModule
 	} else if plugin, ok := h.Plugins[msg.To]; ok {
 		destination = plugin
@@ -674,6 +677,7 @@ func (h *Hub) routeMessage(msg *Message) {
 
 // ✅ ORIGINAL: Broadcast to all modules with specific capability (class)
 func (h *Hub) broadcastToClass(msg *Message, className string) {
+	log.Println("BROADCAST TO CLASS STARTED!!!", className, "|", msg)
 	count := 0
 	data, err := msg.ToJSON()
 	if err != nil {

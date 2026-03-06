@@ -1,0 +1,10 @@
+#game-field {
+    width: 160px;
+    height: 100px;
+    background-size: contain;
+}
+
+.game-field-cell {
+    width: 20px;
+    height: 20px;
+}

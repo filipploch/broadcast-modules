@@ -54,3 +54,33 @@ function convertToClassName(str) {
         .replace(/\s+/g, '-')
         .toLowerCase();
 }
+
+function updateCamerasIndicators(camerasDict) {
+    for (let cameraId in camerasDict) {
+        if (camerasDict.hasOwnProperty(cameraId)) {
+            const cameraInfo = camerasDict[cameraId];
+            const element = document.querySelector(`.recording-indicator[data-camera-id="${cameraId}"]`);
+            const elementImg = element.querySelector('img');
+            console.log(cameraInfo['succes']);
+            console.log(elementImg);
+            
+            if (element) {
+              if (cameraInfo['succes'] === true ){
+                if(cameraInfo['is_recording'] === true){
+                  removeClassName(element, 'important_bg_orange');
+                  addClassName(element, 'important_bg_black');
+                  addClassName(elementImg, 'filter-red');
+                }else{
+                  removeClassName(element, 'important_bg_orange');
+                  removeClassName(element, 'important_bg_black');
+                  removeClassName(elementImg, 'filter-red');
+                }      
+              } else {
+                removeClassName(element, 'important_bg_black');
+                removeClassName(elementImg, 'filter-red');
+                addClassName(element, 'important_bg_orange');
+              }
+            }
+        }
+    }
+}

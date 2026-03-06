@@ -18,18 +18,35 @@ class RecorderManager:
         cameras = self._get_enabled_cameras()
         
         # Send configuration to recorder
-        self.hub_client.send_to_plugin(
-            self.recorder_plugin_id,
-            'configure_cameras',
-            {
-                'cameras': cameras
-            }
-        )
+        self.hub_client.send_to_plugin(self.recorder_plugin_id, 'configure_cameras', {'cameras': cameras})
+        self.hub_client.send_to_plugin(self.recorder_plugin_id, 'recording_status', {})
         
         # Check if we should be recording (based on OBS status)
         # TODO: Query OBS status and sync
         # For now, just log
         current_app.logger.info(f"Recorder configured with {len(cameras)} cameras")
+
+    # recorder_manager.py
+    def on_recording_status_received(self, msg):
+        payload = msg.get('payload', {})
+        cameras = payload.get('cameras', {})
+        active = [cam_id for cam_id, active in cameras.items() if active]
+        current_app.logger.info(f"📹 Recording status: {cameras}")
+        self._emit_to_ui('recording_status_response', {
+            'cameras': cameras,
+            'active_cameras': active,
+            'any_recording': bool(active),
+            })
+        
+    def on_recording_command_response(self, msg):
+        payload = msg.get('payload', {})
+        request_type = payload.get('requestType')
+        if request_type == 'StartRecord':
+            cameras = payload.get('cameras')
+            self._emit_to_ui('recording_started', cameras)
+        elif request_type == 'StopRecord':
+            cameras = payload.get('cameras')
+            self._emit_to_ui('recording_stopped', cameras)
     
     def start_recording(self):
         """Start camera recording"""

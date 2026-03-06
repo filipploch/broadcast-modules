@@ -18,6 +18,10 @@ type Message struct {
 	Payload map[string]interface{} `json:"payload,omitempty"`
 }
 
+// classes that this plugin subscribes to after every successful registration.
+// Defined as a package-level constant so it's easy to extend.
+var pluginClasses = []string{"obs", "streaming", "recording", "recorder_device"}
+
 // HubClient handles WebSocket connection to the HUB
 type HubClient struct {
 	URL              string
@@ -29,6 +33,7 @@ type HubClient struct {
 	connected        bool
 	reconnectEnabled bool
 	stopChan         chan struct{}
+	stopOnce         sync.Once
 }
 
 // NewHubClient creates a new HUB client
@@ -43,7 +48,8 @@ func NewHubClient(url, pluginID, pluginName string) *HubClient {
 	}
 }
 
-// Connect establishes WebSocket connection to HUB
+// Connect establishes WebSocket connection to HUB.
+// Safe to call multiple times (e.g. during reconnect).
 func (c *HubClient) Connect() error {
 	log.Printf("🔌 Connecting to HUB: %s", c.URL)
 
@@ -55,53 +61,110 @@ func (c *HubClient) Connect() error {
 	c.mu.Lock()
 	c.conn = conn
 	c.connected = true
+	// Refresh stopChan for new session — previous one may be spent
+	c.stopChan = make(chan struct{})
+	c.stopOnce = sync.Once{}
 	c.mu.Unlock()
 
 	// Register with HUB
 	if err := c.register(); err != nil {
 		conn.Close()
+		c.mu.Lock()
+		c.connected = false
+		c.mu.Unlock()
 		return fmt.Errorf("failed to register with HUB: %w", err)
 	}
 
-	log.Printf("✅ Connected to HUB and registered as: %s", c.PluginID)
+	// Subscribe to classes — separate message, hub handles it via handleSubscribe()
+	if err := c.subscribe(); err != nil {
+		// Non-fatal: plugin is registered, just won't receive class broadcasts.
+		// Hub will log the missing subscription; retry happens on next reconnect.
+		log.Printf("⚠️  Failed to subscribe to classes: %v", err)
+	}
 
-	// Start message handlers
+	log.Printf("✅ Connected to HUB and registered as: %s", c.PluginID)
+	log.Printf("   Subscribed to classes: %v", pluginClasses)
+
+	// Start message handlers for this session
 	go c.readMessages()
 	go c.heartbeat()
 
 	return nil
 }
 
-// register sends registration message to HUB
+// ConnectWithRetry attempts Connect() indefinitely with exponential backoff.
+// Use at startup instead of Connect() to avoid Fatalf on temporary hub unavailability.
+func (c *HubClient) ConnectWithRetry() {
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+	attempt := 0
+
+	for {
+		attempt++
+		log.Printf("🔌 Connecting to HUB (attempt %d): %s", attempt, c.URL)
+
+		if err := c.Connect(); err == nil {
+			return
+		} else {
+			log.Printf("⚠️  HUB connection failed: %v — retrying in %v", err, backoff)
+		}
+
+		select {
+		case <-c.stopChan:
+			log.Printf("⏹️  ConnectWithRetry cancelled")
+			return
+		case <-time.After(backoff):
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+// register sends registration message to HUB.
+// Classes are NOT included here — hub ignores them in register payload.
+// Use subscribe() separately after registration.
 func (c *HubClient) register() error {
-	msg := &Message{
+	return c.Send(&Message{
 		From: c.PluginID,
 		To:   "hub",
 		Type: "register",
 		Payload: map[string]interface{}{
-			"plugin_id":   c.PluginID,
-			"plugin_name": c.PluginName,
+			"id":          c.PluginID,
+			"name":        c.PluginName,
 			"plugin_type": "obs-websocket",
-			"classes":     []string{"obs", "streaming", "recording", "recorder_device"},
 		},
-	}
-
-	return c.Send(msg)
+	})
 }
 
-// Subscribe subscribes this plugin to one or more HUB classes.
-// Must be called after successful registration.
-func (c *HubClient) Subscribe(classes ...string) error {
-	msg := &Message{
+// subscribe sends a subscribe message to HUB so this plugin receives
+// broadcast:className messages. Must be called after every successful register().
+func (c *HubClient) subscribe() error {
+	return c.Send(&Message{
 		From: c.PluginID,
 		To:   "hub",
 		Type: "subscribe",
 		Payload: map[string]interface{}{
-			"class": classes,
+			"class": pluginClasses,
 		},
-	}
-	return c.Send(msg)
+	})
 }
+
+// // Subscribe subscribes this plugin to one or more HUB classes.
+// // Must be called after successful registration.
+// func (c *HubClient) Subscribe(classes ...string) error {
+// 	msg := &Message{
+// 		From: "obs-ws-plugin",
+// 		To:   "hub",
+// 		Type: "subscribe",
+// 		Payload: map[string]interface{}{
+// 			"class": classes,
+// 		},
+// 	}
+// 	return c.Send(msg)
+// }
 
 // readMessages reads incoming messages from HUB
 func (c *HubClient) readMessages() {
@@ -170,7 +233,7 @@ func (c *HubClient) heartbeat() {
 			}
 
 			msg := &Message{
-				From: c.PluginID,
+				From: "obs-ws-plugin",
 				To:   "hub",
 				Type: "heartbeat",
 			}

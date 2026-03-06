@@ -57,6 +57,14 @@ function startRecording(){
     socket.emit('start_recording');
 }
 
+function stopRecording(){
+    socket.emit('stop_recording');
+}
+
+function getObsWsConnection() {
+    socket.emit('get_obs_ws_connection');
+}
+
 // ============================================================================
 // TIMER DISPLAY FORMATTING
 // ============================================================================
@@ -89,10 +97,10 @@ function updateTimerDisplay(timerData) {
         // Odliczanie malejąco — pokaż następną pełną sekundę która będzie wyświetlona
         // Math.floor na elapsed zaokrągla w dół do pełnej sekundy, więc display zmienia się
         // dokładnie co sekundę i jest spójny przy pauzie/resume
-        const elapsedSeconds = Math.floor(elapsed / 100) * 100;
-        displayTime = Math.max(0, timerLimit - elapsedSeconds - 1);
+        // const elapsedSeconds = Math.floor(elapsed / 100) * 100;
+        displayTime = Math.max(0, timerLimit - elapsed - 1);
         if(timerState === 'idle'){
-            displayTime = Math.max(0, timerLimit - elapsedSeconds);
+            displayTime = timerLimit - elapsed;
         }
     } else {
         displayTime = elapsed;
@@ -204,17 +212,12 @@ socket.on('timer_updated', (data) => {
  */
 socket.on('timer_started', (data) => {
     console.log('Timer started:', data);
-    if (data.elapsed_time !== undefined) {
-        let dsElements = document.querySelectorAll('.ds-element');
-        dsElements.forEach(element => {
-            addClassName(element, 'hidden');
-        })
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
-    }
+    document.querySelectorAll('.ds-element').forEach(el => addClassName(el, 'hidden'));
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
     }
 });
+
 
 /**
  * Handle timer paused event
@@ -226,7 +229,7 @@ socket.on('timer_paused', (data) => {
         dsElements.forEach(element => {
             removeClassName(element, 'hidden');
         })
-        updateTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -428,6 +431,18 @@ socket.on('away_penalty_timer_created', (data) => {
     return timerId;
 });
 
+socket.on('recording_status_response', data => {
+    console.log(data);
+});
+
+socket.on('recording_started', cameras => {
+    updateCamerasIndicators(cameras);
+});
+
+socket.on('recording_stopped', cameras => {
+    updateCamerasIndicators(cameras);
+});
+
 // ============================================================================
 // TIMER CONTROL FUNCTIONS
 // ============================================================================
@@ -620,7 +635,7 @@ function finishPeriod() {
 
 
 
-function reorderReversible() {
+function reorderReversible(onLoad=false) {
   // Zapobiegnij równoczesnym wywołaniom
   if (appState.isReordering) {
     return;
@@ -642,9 +657,13 @@ function reorderReversible() {
     // Wstaw dzieci z powrotem w odwróconej kolejności
     reversedChildren.forEach(child => element.appendChild(child));
   });
-
-  // Zmień stan flagi globalnej
-  appState.isReversed = !appState.isReversed;
+  console.log('is onload', onLoad);
+  if(onLoad === false){      
+    // Zmień stan flagi globalnej
+    appState.isReversed = !appState.isReversed;
+    console.log('isReversed:', appState.isReversed);
+    socket.emit('reverse_scoreboard', {is_scoreboard_reversed: appState.isReversed});
+  }
   
   // Odblokuj możliwość ponownego wywołania
   appState.isReordering = false;
@@ -703,6 +722,20 @@ function getAllTimerIds() {
     const timerElements = document.querySelectorAll('[data-timer-id]');
     return [...new Set(Array.from(timerElements).map(el => el.getAttribute('data-timer-id')))];
 }
+
+
+document.querySelectorAll('.game-field-cell').forEach(element => {
+    element.addEventListener('mouseover', () => {
+        element.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+    });
+});
+
+document.querySelectorAll('.game-field-cell').forEach(element => {
+    element.addEventListener('mouseout', () => {
+        element.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+    });
+});
+
 
 // ============================================================================
 // DEBUG HELPERS

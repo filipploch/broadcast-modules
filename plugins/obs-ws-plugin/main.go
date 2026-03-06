@@ -57,19 +57,11 @@ func main() {
 		obsClient: obs.NewClient(&config.OBS),
 	}
 
-	if err := plugin.hubClient.Connect(); err != nil {
-		log.Fatalf("❌ Failed to connect to HUB: %v", err)
-	}
+	plugin.hubClient.ConnectWithRetry()
 
 	if err := plugin.obsClient.Connect(); err != nil {
 		log.Printf("⚠️  Failed to connect to OBS: %v", err)
 		log.Printf("    Will retry automatically...")
-	}
-
-	if err := plugin.hubClient.Subscribe("recorder_device"); err != nil {
-		log.Printf("⚠️  Failed to subscribe to recorder_device: %v", err)
-	} else {
-		log.Printf("✅ Subscribed to class: recorder_device")
 	}
 
 	go plugin.routeHubToOBS()
@@ -106,7 +98,7 @@ func (p *Plugin) routeHubToOBS() {
 		if msg.Type != "obs_command" && msg.Type != "recording_command" {
 			continue
 		}
-
+		requestID := msg.Payload["request_id"]
 		log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
 
 		if !p.obsClient.IsConnected() {
@@ -168,6 +160,7 @@ func (p *Plugin) routeHubToOBS() {
 			Type: "obs_response",
 			Payload: map[string]interface{}{
 				"requestType":  requestType,
+				"requestID":    requestID,
 				"responseData": responseData,
 			},
 		})
@@ -199,7 +192,7 @@ func (p *Plugin) monitorOBSStatus() {
 
 		p.hubClient.Send(&hub.Message{
 			From: p.config.Plugin.ID,
-			To:   "broadcast",
+			To:   "main_module",
 			Type: "obs_status",
 			Payload: map[string]interface{}{
 				"status":    status,

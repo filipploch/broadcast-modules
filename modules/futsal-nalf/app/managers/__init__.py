@@ -24,6 +24,7 @@ _timer_manager = None
 _plugin_manager = None
 _sequence_manager = None
 _team_scraper_manager = None
+_obs_ws_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
 
@@ -41,7 +42,7 @@ def initialize_all_managers(app):
     """
     # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
     global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, \
-        _sequence_manager, _team_scraper_manager, _initialized
+        _sequence_manager, _team_scraper_manager, _obs_ws_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -149,6 +150,16 @@ def get_timer_manager():
 
     return _timer_manager
 
+def get_obs_ws_manager():
+    global _obs_ws_manager
+
+    if _obs_ws_manager is None:
+        from app.managers.obs_ws_manager import ObsWsManager
+        _obs_ws_manager = ObsWsManager(get_hub_client())
+        current_app.logger.info("✅ OBS WebSocket Manager initialized (lazy)")
+
+    return _obs_ws_manager
+
 def get_plugin_manager():
     """Get Timer Manager instance (lazy initialization)"""
     global _plugin_manager
@@ -238,6 +249,7 @@ __all__ = [
     'get_current_game_manager',
     'get_recorder_manager',
     'get_timer_manager',
+    'get_obs_ws_manager',
     'shutdown_all_managers'
 ]
 

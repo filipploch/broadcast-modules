@@ -239,6 +239,11 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 		return
 	}
 
+	requestID, ok := stringField(msg.Payload, "request_id")
+	if !ok || requestID == "" {
+		requestID = ""
+	}
+
 	// Parse cameras map: {"camera1": true/false, ...}
 	// Only cameras explicitly set to true are acted upon.
 	camerasRaw, hasCameras := msg.Payload["cameras"].(map[string]interface{})
@@ -269,11 +274,11 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 		for _, camID := range targetCameras {
 			if err := rm.StartRecord(camID, meta); err != nil {
 				log.Printf("❌ recording_command StartRecord [%s]: %v", camID, err)
-				results[camID] = map[string]interface{}{"ok": false, "error": err.Error()}
+				results[camID] = map[string]interface{}{"succes": false, "error": err.Error()}
 				hasError = true
 			} else {
 				log.Printf("▶️  recording_command StartRecord [%s]: OK", camID)
-				results[camID] = map[string]interface{}{"ok": true}
+				results[camID] = map[string]interface{}{"succes": true, "is_recording": true}
 			}
 		}
 		if hasError {
@@ -283,14 +288,16 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 				To:   msg.From,
 				Type: "recording_command_response",
 				Payload: map[string]interface{}{
-					"status":  "partial_error",
-					"cameras": results,
+					"status":     "partial_error",
+					"cameras":    results,
+					"request_id": requestID,
 				},
 			})
 		} else {
 			rm.replyOK(hubClient, msg, map[string]interface{}{
 				"requestType": requestType,
 				"cameras":     results,
+				"request_id":  requestID,
 			})
 		}
 
@@ -300,11 +307,11 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 		for _, camID := range targetCameras {
 			if err := rm.StopRecord(camID); err != nil {
 				log.Printf("❌ recording_command StopRecord [%s]: %v", camID, err)
-				results[camID] = map[string]interface{}{"ok": false, "error": err.Error()}
+				results[camID] = map[string]interface{}{"succes": false, "error": err.Error()}
 				hasError = true
 			} else {
 				log.Printf("⏹️  recording_command StopRecord [%s]: OK", camID)
-				results[camID] = map[string]interface{}{"ok": true}
+				results[camID] = map[string]interface{}{"succes": true, "is_recording": false}
 			}
 		}
 		if hasError {
@@ -312,14 +319,16 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 				To:   msg.From,
 				Type: "recording_command_response",
 				Payload: map[string]interface{}{
-					"status":  "partial_error",
-					"cameras": results,
+					"status":     "partial_error",
+					"cameras":    results,
+					"request_id": requestID,
 				},
 			})
 		} else {
 			rm.replyOK(hubClient, msg, map[string]interface{}{
 				"requestType": requestType,
 				"cameras":     results,
+				"request_id":  requestID,
 			})
 		}
 

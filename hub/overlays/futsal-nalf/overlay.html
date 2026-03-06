@@ -215,12 +215,12 @@
                 }else if(parseInt(data.home_team.fouls) !== 'undefined' &&
                     data.home_team.fouls >= 0 &&
                     data.home_team.fouls < 6){
-                        homeTeamScoreElement.textContent = '●'.repeat(data.home_team.goals);
-                        homeTeamScoreElement.style.color = 'yellow';
-                        if(data.home_team.goals > 4){
-                            homeTeamScoreElement.style.color = 'red';
-                        }else if(data.home_team.goals < 4){
-                            homeTeamScoreElement.style.color = 'white';
+                        homeTeamFoulsElement.textContent = '●'.repeat(data.home_team.fouls);
+                        homeTeamFoulsElement.style.color = 'yellow';
+                        if(data.home_team.fouls > 4){
+                            homeTeamFoulsElement.style.color = 'red';
+                        }else if(data.home_team.fouls < 4){
+                            homeTeamFoulsElement.style.color = 'white';
                 }else{
                     
                 }
@@ -231,11 +231,11 @@
                 }else if(parseInt(data.away_team.fouls) !== 'undefined' &&
                     data.away_team.fouls >= 0 &&
                     data.away_team.fouls < 6){
-                        awayTeamFoulsElement.textContent = '●'.repeat(data.away_team.goals);
+                        awayTeamFoulsElement.textContent = '●'.repeat(data.away_team.fouls);
                         awayTeamFoulsElement.style.color = 'yellow';
-                        if(data.away_team.goals > 4){
+                        if(data.away_team.fouls > 4){
                             awayTeamFoulsElement.style.color = 'red';
-                        }else if(data.away_team.goals < 4){
+                        }else if(data.away_team.fouls < 4){
                             awayTeamFoulsElement.style.color = 'white';
                         }else{}
                 }else{

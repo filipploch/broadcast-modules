@@ -45,7 +45,12 @@ def handle_request_initial_data():
         })
 
 
-
+@socketio.on('reverse_scoreboard')
+def handle_reverse_scoreboard(data):
+    from app.models.settings import Settings
+    is_reversed = data.get('is_scoreboard_reversed')
+    print('is_reversed', is_reversed)
+    Settings.set_scoreboard_order(is_reversed)
 
 
 @socketio.on('disconnect')
@@ -56,8 +61,8 @@ def handle_disconnect():
 def handle_start_recording():
     hub_client = get_hub_client()
     if hub_client:
-        hub_client.broadcast(msg_type='recording_command', payload={
-        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+        # hub_client.broadcast(msg_type='recording_command', payload={
+        hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
             'requestType': 'StartRecord',
             'requestData': {},
             'request_id': f'my-unique-id-{datetime.datetime.now()}',
@@ -71,6 +76,7 @@ def handle_start_recording():
 def handle_stop_recording():
     hub_client = get_hub_client()
     if hub_client:
+        # hub_client.broadcast(msg_type='recording_command', payload={
         hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
             'requestType': 'StopRecord',
             'request_id': f'my-unique-id-{datetime.datetime.now()}',
@@ -79,6 +85,16 @@ def handle_stop_recording():
                        'camera2': False,
                        'camera3': False,
                        'camera4': False}})
+        
+@socketio.on('get_obs_ws_connection')
+def handle_get_obs_ws_connection():
+    hub_client = get_hub_client()
+    if hub_client:
+        hub_client.send_to_plugin(plugin_id='obs-ws-plugin', msg_type='obs_command', payload={
+            'requestType': 'GetVersion',
+            'request_id': 'get-websocket-connection',
+            'requestData': {},
+            })
 
 @socketio.on('goal_scored')
 def handle_goal_scored(data):
@@ -182,9 +198,9 @@ def handle_timer_start(data):
                     Settings.update_penalty_timer(timer_id, penalty)
                     break
         
-        emit('timer_started', {'timer_id': timer_id}, broadcast=True)
-    else:
-        emit('error', {'message': f'Failed to start timer {timer_id}'})
+    #     emit('timer_started', {'timer_id': timer_id}, broadcast=True)
+    # else:
+    #     emit('error', {'message': f'Failed to start timer {timer_id}'})
 
 
 @socketio.on('timer_pause')

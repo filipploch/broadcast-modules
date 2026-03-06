@@ -31,7 +31,7 @@ class PluginManager:
         plugins_health = payload.get('plugin_health')
 
         plugins = {
-            'obs-ws-plugin': {},
+            # 'obs-ws-plugin': {},
             'recorder-plugin': {},
             'timer-plugin': {}
         }

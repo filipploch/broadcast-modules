@@ -455,10 +455,11 @@ class TimerManager:
         msg_type = msg.get('type')
         payload = msg.get('payload')
         timer_id = payload.get('timer_id')
-        elapsed_time = payload.get('elapsed_time')
         state = payload.get('state', 'unknown')
         limit = payload.get('limit', 0)
-
+        elapsed_time = 0
+        if payload.get('elapsed_time') and payload.get('elapsed_time').isDigit():
+            elapsed_time = payload.get('elapsed_time')
         self.update_timer_state(timer_id, {
             'elapsed_time': elapsed_time,
             'state': state,

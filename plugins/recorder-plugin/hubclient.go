@@ -6,7 +6,6 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -17,8 +16,8 @@ type Message struct {
 	From      string                 `json:"from"`
 	To        string                 `json:"to"`
 	Type      string                 `json:"type"`
-	Payload   map[string]interface{} `json:"payload"`
-	Timestamp string                 `json:"timestamp"`
+	Payload   map[string]interface{} `json:"payload,omitempty"`
+	Timestamp string                 `json:"timestamp,omitempty"`
 }
 
 // HubClient manages WebSocket connection to the Hub
@@ -26,38 +25,30 @@ type HubClient struct {
 	PluginID   string
 	PluginName string
 	HubURL     string
-	conn       *websocket.Conn
-	send       chan []byte
-	receive    chan *Message
-	reconnect  chan struct{}
-	done       chan struct{}
-	mu         sync.RWMutex
-	connected  bool
-	connecting int32 // atomic flag: 1 = Connect() in progress
+
+	conn             *websocket.Conn
+	mu               sync.RWMutex
+	connected        bool
+	reconnectEnabled bool
+	stopChan         chan struct{}
+
+	Messages chan *Message // incoming messages from Hub
 }
 
 // NewHubClient creates a new Hub client
 func NewHubClient(pluginID, pluginName, hubURL string) *HubClient {
 	return &HubClient{
-		PluginID:   pluginID,
-		PluginName: pluginName,
-		HubURL:     hubURL,
-		send:       make(chan []byte, 256),
-		receive:    make(chan *Message, 256),
-		reconnect:  make(chan struct{}, 1),
-		done:       make(chan struct{}),
+		PluginID:         pluginID,
+		PluginName:       pluginName,
+		HubURL:           hubURL,
+		Messages:         make(chan *Message, 256),
+		reconnectEnabled: true,
+		stopChan:         make(chan struct{}),
 	}
 }
 
 // Connect establishes connection to the Hub
 func (hc *HubClient) Connect() error {
-	// Guard against concurrent Connect() calls
-	if !atomic.CompareAndSwapInt32(&hc.connecting, 0, 1) {
-		return fmt.Errorf("Connect() already in progress, ignoring duplicate call")
-	}
-	defer atomic.StoreInt32(&hc.connecting, 0)
-
-	// Also reject if already connected
 	hc.mu.RLock()
 	alreadyConnected := hc.connected
 	hc.mu.RUnlock()
@@ -65,38 +56,21 @@ func (hc *HubClient) Connect() error {
 		return fmt.Errorf("already connected to Hub at %s", hc.HubURL)
 	}
 
-	// ✅ DODAJ DEBUG
-	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("🔍 DEBUG Connect()")
-	log.Printf("   HubURL: '%s'", hc.HubURL)
-	log.Printf("   Length: %d", len(hc.HubURL))
-	log.Printf("   Type: %T", hc.HubURL)
-	log.Printf("   Bytes: %v", []byte(hc.HubURL))
-	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-	// Walidacja i czyszczenie
+	hc.HubURL = strings.TrimSpace(hc.HubURL)
 	if hc.HubURL == "" {
 		return fmt.Errorf("HubURL is empty")
 	}
-
-	// Usuń białe znaki
-	hc.HubURL = strings.TrimSpace(hc.HubURL)
-
-	// Sprawdź scheme
 	if !strings.HasPrefix(hc.HubURL, "ws://") && !strings.HasPrefix(hc.HubURL, "wss://") {
 		return fmt.Errorf("invalid URL scheme: %s", hc.HubURL)
 	}
 
-	log.Printf("✅ URL validation passed")
+	log.Printf("🔌 Connecting to HUB: %s", hc.HubURL)
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
-
-	log.Printf("🔌 Dialing: %s", hc.HubURL)
 	conn, _, err := dialer.Dial(hc.HubURL, nil)
 	if err != nil {
-		log.Printf("❌ Dial failed with error: %v", err)
 		return fmt.Errorf("failed to connect to Hub: %w", err)
 	}
 
@@ -105,20 +79,28 @@ func (hc *HubClient) Connect() error {
 	hc.connected = true
 	hc.mu.Unlock()
 
-	log.Printf("✅ Connected to Hub at %s", hc.HubURL)
+	// Register plugin with Hub
+	if err := hc.register(); err != nil {
+		conn.Close()
+		hc.mu.Lock()
+		hc.conn = nil
+		hc.connected = false
+		hc.mu.Unlock()
+		return fmt.Errorf("failed to register with Hub: %w", err)
+	}
 
-	// Start goroutines for reading and writing
-	go hc.readPump()
-	go hc.writePump()
+	log.Printf("✅ Connected to HUB and registered as: %s", hc.PluginID)
+
+	go hc.readMessages()
 	go hc.sendHeartbeat()
 
-	// Register plugin with Hub
-	log.Printf("📤 Registering with HUB...")
-	log.Printf("   Plugin ID:   %s", hc.PluginID)
-	log.Printf("   Plugin Name: %s", hc.PluginName)
+	return nil
+}
 
-	hc.Send(&Message{
-		From: hc.PluginID,
+// register sends the registration message to Hub
+func (hc *HubClient) register() error {
+	return hc.Send(&Message{
+		From: "recorder-plugin",
 		To:   "hub",
 		Type: "register",
 		Payload: map[string]interface{}{
@@ -128,83 +110,95 @@ func (hc *HubClient) Connect() error {
 			"classes":     []string{"recorder_device"},
 		},
 	})
-
-	return nil
 }
 
 // Send sends a message to the Hub
 func (hc *HubClient) Send(msg *Message) error {
 	hc.mu.RLock()
-	if !hc.connected {
-		hc.mu.RUnlock()
-		return fmt.Errorf("not connected to Hub")
-	}
+	conn := hc.conn
+	connected := hc.connected
 	hc.mu.RUnlock()
 
-	msg.Timestamp = time.Now().Format(time.RFC3339)
+	if !connected || conn == nil {
+		return fmt.Errorf("not connected to Hub")
+	}
+
 	if msg.From == "" {
 		msg.From = hc.PluginID
 	}
+	msg.Timestamp = time.Now().Format(time.RFC3339)
 
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	select {
-	case hc.send <- data:
-		return nil
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("send timeout")
+	hc.mu.Lock()
+	defer hc.mu.Unlock()
+
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return fmt.Errorf("failed to send message: %w", err)
 	}
+
+	return nil
 }
 
-// Receive returns the channel for receiving messages
+// Subscribe subscribes this plugin to one or more HUB classes.
+// Must be called after successful registration.
+func (hc *HubClient) Subscribe(classes ...string) error {
+	return hc.Send(&Message{
+		From: "recorder-plugin",
+		To:   "hub",
+		Type: "subscribe",
+		Payload: map[string]interface{}{
+			"class": classes,
+		},
+	})
+}
+
+// Receive returns the channel for incoming messages (read-only)
 func (hc *HubClient) Receive() <-chan *Message {
-	return hc.receive
+	return hc.Messages
 }
 
-// readPump reads messages from the Hub
-func (hc *HubClient) readPump() {
+// readMessages reads incoming messages from Hub
+func (hc *HubClient) readMessages() {
 	defer func() {
 		hc.mu.Lock()
 		hc.connected = false
 		if hc.conn != nil {
 			hc.conn.Close()
+			hc.conn = nil
 		}
 		hc.mu.Unlock()
 
-		// Close receive channel so "for msg := range Receive()" exits cleanly
-		close(hc.receive)
-
-		// Signal reconnect
-		select {
-		case hc.reconnect <- struct{}{}:
-		default:
+		if hc.reconnectEnabled {
+			go hc.reconnect()
 		}
 	}()
 
-	hc.mu.RLock()
-	conn := hc.conn
-	hc.mu.RUnlock()
-
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		return nil
-	})
-
 	for {
 		select {
-		case <-hc.done:
+		case <-hc.stopChan:
 			return
 		default:
+		}
+
+		hc.mu.RLock()
+		conn := hc.conn
+		hc.mu.RUnlock()
+
+		if conn == nil {
+			return
 		}
 
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("❌ WebSocket error: %v", err)
+			} else {
+				log.Printf("⚠️  Connection to HUB lost: %v", err)
 			}
 			return
 		}
@@ -216,151 +210,22 @@ func (hc *HubClient) readPump() {
 		}
 
 		select {
-		case hc.receive <- &msg:
-		case <-time.After(1 * time.Second):
-			log.Printf("⚠️  Receive buffer full, dropping message")
+		case hc.Messages <- &msg:
+		default:
+			log.Printf("⚠️  Message channel full, dropping message")
 		}
 	}
 }
 
-// writePump writes messages to the Hub
-func (hc *HubClient) writePump() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-hc.done:
-			return
-
-		case data, ok := <-hc.send:
-			hc.mu.RLock()
-			conn := hc.conn
-			hc.mu.RUnlock()
-
-			if !ok || conn == nil {
-				return
-			}
-
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-				log.Printf("❌ Write error: %v", err)
-				return
-			}
-
-		case <-ticker.C:
-			// Send ping to keep connection alive
-			hc.mu.RLock()
-			conn := hc.conn
-			hc.mu.RUnlock()
-
-			if conn == nil {
-				return
-			}
-
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
-}
-
-// Close closes the connection to the Hub
-func (hc *HubClient) Close() error {
-	hc.mu.Lock()
-	defer hc.mu.Unlock()
-
-	close(hc.done)
-
-	if hc.conn != nil {
-		// Send close message
-		hc.conn.WriteMessage(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-		)
-		hc.conn.Close()
-		hc.conn = nil
-	}
-
-	hc.connected = false
-	return nil
-}
-
-// IsConnected returns true if connected to Hub
-func (hc *HubClient) IsConnected() bool {
-	hc.mu.RLock()
-	defer hc.mu.RUnlock()
-	return hc.connected
-}
-
-// AutoReconnect automatically reconnects to Hub if connection is lost
-func (hc *HubClient) AutoReconnect(maxAttempts int) {
-	attempts := 0
-	backoff := 1 * time.Second
-
-	for {
-		select {
-		case <-hc.reconnect:
-			if maxAttempts > 0 && attempts >= maxAttempts {
-				log.Printf("❌ Max reconnect attempts (%d) reached", maxAttempts)
-				return
-			}
-
-			attempts++
-			log.Printf("🔄 Reconnecting to Hub (attempt %d/%d)...", attempts, maxAttempts)
-
-			time.Sleep(backoff)
-
-			if err := hc.Connect(); err != nil {
-				log.Printf("❌ Reconnect failed: %v", err)
-				// Exponential backoff
-				backoff *= 2
-				if backoff > 30*time.Second {
-					backoff = 30 * time.Second
-				}
-
-				// Signal reconnect again
-				select {
-				case hc.reconnect <- struct{}{}:
-				default:
-				}
-			} else {
-				log.Printf("✅ Reconnected to Hub")
-				attempts = 0
-				backoff = 1 * time.Second
-			}
-
-		case <-hc.done:
-			return
-		}
-	}
-}
-
-// Subscribe subscribes this plugin to one or more HUB classes.
-// Must be called after successful registration.
-func (hc *HubClient) Subscribe(classes ...string) {
-	msg := &Message{
-		From: hc.PluginID,
-		To:   "hub",
-		Type: "subscribe",
-		Payload: map[string]interface{}{
-			"class": classes,
-		},
-	}
-	hc.Send(msg)
-}
-
-// sendHeartbeat sends periodic heartbeat messages
+// sendHeartbeat sends periodic heartbeat messages to Hub
 func (hc *HubClient) sendHeartbeat() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-hc.done:
+		case <-hc.stopChan:
 			return
-
 		case <-ticker.C:
 			hc.mu.RLock()
 			connected := hc.connected
@@ -370,18 +235,77 @@ func (hc *HubClient) sendHeartbeat() {
 				return
 			}
 
-			err := hc.Send(&Message{
-				From: hc.PluginID,
+			if err := hc.Send(&Message{
+				From: "recorder-plugin",
 				To:   "hub",
 				Type: "heartbeat",
 				Payload: map[string]interface{}{
 					"status": "alive",
 				},
-			})
-
-			if err != nil {
+			}); err != nil {
 				log.Printf("⚠️  Failed to send heartbeat: %v", err)
 			}
 		}
 	}
+}
+
+// reconnect attempts to reconnect to Hub after connection loss
+func (hc *HubClient) reconnect() {
+	log.Printf("🔄 Attempting to reconnect to HUB...")
+
+	backoff := 1 * time.Second
+	maxBackoff := 30 * time.Second
+
+	for {
+		select {
+		case <-hc.stopChan:
+			return
+		default:
+			if err := hc.Connect(); err == nil {
+				log.Printf("✅ Reconnected to HUB")
+				return
+			}
+
+			log.Printf("⚠️  Reconnect failed, retrying in %v...", backoff)
+			time.Sleep(backoff)
+
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
+	}
+}
+
+// IsConnected returns true if connected to Hub
+func (hc *HubClient) IsConnected() bool {
+	hc.mu.RLock()
+	defer hc.mu.RUnlock()
+	return hc.connected
+}
+
+// Close closes the connection to the Hub
+func (hc *HubClient) Close() error {
+	hc.reconnectEnabled = false
+	close(hc.stopChan)
+
+	hc.mu.Lock()
+	defer hc.mu.Unlock()
+
+	if hc.conn != nil {
+		hc.conn.WriteMessage(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+		)
+		hc.conn.Close()
+		hc.conn = nil
+	}
+
+	hc.connected = false
+	log.Printf("🔌 Disconnected from HUB")
+	return nil
+}
+
+func (hc *HubClient) Done() <-chan struct{} {
+	return hc.stopChan
 }

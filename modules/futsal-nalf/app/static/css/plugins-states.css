@@ -29,6 +29,18 @@
     brightness(88%) contrast(97%) !important;
 }
 
+.filter-yellow {
+    filter: brightness(0) saturate(100%) invert(86%)
+    sepia(75%) saturate(610%) hue-rotate(1deg)
+    brightness(106%) contrast(103%) !important;
+}
+
+.filter-red {
+    filter: brightness(0) saturate(100%) invert(14%)
+    sepia(88%) saturate(6968%) hue-rotate(360deg)
+    brightness(102%) contrast(114%) !important;
+}
+
 #plugins-states-container {
     padding: 4px 2px;
     height: 34px;
@@ -38,4 +50,13 @@
 .plugin-state {
     margin: 0px 2px;
     padding: 2px;
+}
+
+.recording-indicator {
+    border: 1px solid black;
+    padding: 2px;
+    align-items: center;
+    align-content: center;
+    background-color: rgb(237, 237, 237);
+    height: 19px;
 }
