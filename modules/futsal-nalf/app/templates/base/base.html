@@ -14,15 +14,24 @@
 <body>
     <header>
         <div class="container">
+            <div id="socket-monitor" class="hidden" style="width: 90vw; background-color: rgb(0, 88, 13); color: white; position: sticky; top: 0;">
+                <button id="close-socket-monitor" onclick="closeSocketMonitor();" type="button">X</button>
+                <div>
+                    <div id="monitor-header"><span id="header-text" class="sm-text"></span><span id="header-name" class="sm-text"></span></div>
+                </div>
+            </div>
             <nav>
                 <a href="{{ url_for('index') }}">MECZ</a>
+                {% if broadcast_game_id %}
+                    <a href="{{ url_for('edit_game', game_id=broadcast_game_id) }}" class="broadcast-link">📡 Na żywo</a>
+                {% endif %}
                 {% if season %}
                     {% for league in season.leagues %}
                         <a href="{{ url_for('league_games', league_id=league.id) }}">{{ league.name }}</a>
                     {% endfor %}
                 {% endif %}
-                <!-- <a href="{{ url_for('list_seasons') }}">Sezony</a>
-                <a href="{{ url_for('list_leagues') }}">Ligi</a>
+                <a href="{{ url_for('common_data') }}">Dane Wspólne</a>
+                <!-- <a href="{{ url_for('list_leagues') }}">Ligi</a>
                 <a href="{{ url_for('list_games') }}" {% if request.endpoint == 'list_games' %}class="active"{% endif %}>Mecze</a>
                 <a href="{{ url_for('list_teams') }}">Zespoły</a> -->
             </nav>
@@ -38,6 +47,7 @@
                 </div>
             {% endif %}
         {% endwith %}
+
         {% block content %}{% endblock %}
     <div id="modal" class="invisible">
         <div id="modal-body">
@@ -46,7 +56,9 @@
         </div>
     </div>
     </main>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/base.js') }}"></script>
     <script src="{{ url_for('static', filename='js/modal.js') }}"></script>
     <script src="{{ url_for('static', filename='js/logos.js') }}"></script>
     {% block extra_js %}{% endblock %}

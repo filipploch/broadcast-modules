@@ -67,49 +67,14 @@ Online HTML, CSS and JavaScript editor to run code online.
 				</div>
 			</div>
 			<button class="thin-wide-button bg_red" onclick="openModal(modalID='modal-penalties-timers')">KARY</button>
-			<!-- <div id="modal-penalties-timers" class="hidden"> -->
 			<div id="modal-penalties-timers" class="hidden">
 				<div id="modal-penalties-header">
 					<button class="top-bar-element bg_red" onclick="closeModal(modalID='modal-penalties-timers');">X</button>
 				</div>
 				<div id="penalties-timers" class="modal-content reversible">
 					<div id="home-team-penalties-timers-container" class="penalties-timers-container flex1">
-						<!-- <div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">1:15</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div>
-						<div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">1:34</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div> -->
 					</div>
 					<div id="away-team-penalties-timers-container" class="penalties-timers-container flex1">
-						<!-- <div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">0:44</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div>
-						<button class="add-penalty-button" onclick="addPenaltyTimer('away')">KARA<br>2 min.</button> -->
 					</div>
 				</div>
 			</div>
@@ -245,66 +210,66 @@ Online HTML, CSS and JavaScript editor to run code online.
 		<div>
 			<div id="events-controllers-container" class="reversible">
 				<div id="home-side-events-controllers-container" class="side-events-controllers-container">
-					<div id="home-save-controller" class="event-controller save-controller" onclick="addTeamEvent('home', 'save');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
-					<div id="away-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('away', 'goal');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
-					<div id="away-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('away', 'miss');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+					<div id="home-save-controller" class="event-controller save-controller" onclick="addTeamEvent('home', 'Obrona');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+					<div id="away-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('away', 'Bramka');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+					<div id="away-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('away', 'Pudło');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
 				</div>
 				<div id="game-field" class="" style="background-image: url({{ url_for('static', filename='images/field/football.png') }})">
 					<div class="game-field-row" style="display: flex;">
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A1" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A2" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A3" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A4" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A5" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A6" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A7" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="A8" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="C1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="D1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="E1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="F1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="G1" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="H1" class="game-field-cell"></div>
 					</div>
 					<div class="game-field-row" style="display: flex;">
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B1" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B2" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B3" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B4" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B5" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B6" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B7" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="B8" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="C2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="D2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="E2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="F2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="G2" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="H2" class="game-field-cell"></div>
 					</div>
 					<div class="game-field-row" style="display: flex;">
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C1" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C2" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C3" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C4" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C5" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C6" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C7" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="C8" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="C3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="D3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="E3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="F3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="G3" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="H3" class="game-field-cell"></div>
 					</div>
 					<div class="game-field-row" style="display: flex;">
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D1" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D2" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D3" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D4" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D5" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D6" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D7" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="D8" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="C4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="D4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="E4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="F4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="G4" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="H4" class="game-field-cell"></div>
 					</div>
 					<div class="game-field-row" style="display: flex;">
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E1" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E2" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E3" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E4" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E5" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E6" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E7" class="game-field-cell"></div>
-						<div ondblclick="showEventsControllers(this);" onclick="setCameraPosition(this)" id="E8" class="game-field-cell"></div>	
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="C5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="D5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="E5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="F5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="G5" class="game-field-cell"></div>
+						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="H5" class="game-field-cell"></div>	
 					</div>
 				</div>
 				<div id="away-side-events-controllers-container" class="side-events-controllers-container">
-					<div id="away-save-controller" class="event-controller save-controller" onclick="addTeamEvent('away', 'save');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
-					<div id="home-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('home', 'goal');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
-					<div id="home-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('home', 'miss');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+					<div id="away-save-controller" class="event-controller save-controller" onclick="addTeamEvent('away', 'Obrona');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+					<div id="home-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('home', 'Bramka');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+					<div id="home-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('home', 'Pudło');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
 				</div>
 			</div>
 				<div id="bottom-events-controllers-container">

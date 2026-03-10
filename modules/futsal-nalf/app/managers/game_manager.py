@@ -46,7 +46,7 @@ class GameManager:
         return Game.query.get(game_id)
     
     def get_game_by_foreign_id(self, foreign_id):
-        return Game.query.get(foreign_id)
+        return Game.query.filter_by(foreign_id=foreign_id).first()
 
     def create_game(self, home_team_id, away_team_id, league_id, stadium_id,
                      round_number, group_nr=1, date=None, foreign_id=None):

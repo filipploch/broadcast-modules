@@ -56,7 +56,7 @@ class Game(db.Model):
     game_cameras = db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
     penalty = db.relationship('Penalty', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
     player_games = db.relationship('PlayerGame', backref='game', lazy='dynamic', cascade='all, delete-orphan')
-    game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.time')
+    game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
     game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
 
     # Indexes
@@ -254,7 +254,7 @@ class Game(db.Model):
             query = query.filter_by(period_id=period_id)
         if event_id:
             query = query.filter_by(event_id=event_id)
-        return query.order_by('time').all()
+        return query.order_by('game_time').all()
 
     def get_referees_list(self, referee_type=None):
         """

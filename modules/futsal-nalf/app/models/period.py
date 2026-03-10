@@ -39,6 +39,7 @@ class Period(db.Model):
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    game_events = db.relationship('GameEvent', backref='period', lazy='dynamic', cascade='all, delete-orphan')
 
     # Unique constraint: period_order must be unique per game
     __table_args__ = (

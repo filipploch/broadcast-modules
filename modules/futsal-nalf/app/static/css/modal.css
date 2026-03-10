@@ -28,3 +28,40 @@
     width: 100%;
     height: calc(100vh - 20px)
 }
+
+#game-players-select-container {
+    flex: 1;
+    overflow-x: hidden;
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 0;
+    overflow-y: scroll;
+}
+
+.player-container {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: grab;
+    user-select: none;
+}
+
+#assign-modal-header {
+    padding: 0rem 1.2rem;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.game-elements-column-header {
+    padding: 0rem 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    font-size: .85rem;
+    color: #495057;
+}

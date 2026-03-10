@@ -114,8 +114,10 @@ class PlayerGameManager:
         query = PlayerGame.query.filter_by(game_id=game_id)
         if team_id:
             query = query.filter_by(team_id=team_id)
-        return query.order_by(
-            PlayerGame.number.asc().nullslast()
+        return query.join(Player, PlayerGame.player_id == Player.id).order_by(
+            PlayerGame.is_goalkeeper.desc(),     # bramkarze pierwsi
+            PlayerGame.number.asc().nullslast(), # numer rosnąco, None na końcu
+            Player.last_name.asc(),              # nazwisko alfabetycznie
         ).all()
 
     def get_player_game_by_id(self, player_game_id: int) -> Optional[PlayerGame]:

@@ -353,23 +353,6 @@ class HubClient:
             elif msg_type == 'recording_command_response':
                 recorder_manager.on_recording_command_response(msg)
 
-        # elif msg_type == 'timer_updated':
-        #     # Timer updates - forward to UI
-        #     self._with_app_context(self._emit_to_ui, 'timer_updated', payload)
-
-        # ✅ NEW: Handle timer limit reached
-        # elif msg_type == 'timer_limit_reached':
-        #     self._log("info", f"Timer limit reached: {payload.get('timer_id')}")
-        #     self._with_app_context(self._emit_to_ui, 'timer_limit_reached', payload)
-
-        # elif msg_type == 'recording_started':
-        #     self._log("info", "Recording started")
-        #     self._with_app_context(self._emit_to_ui, 'recording_status', {'recording': True})
-        #
-        # elif msg_type == 'recording_stopped':
-        #     self._log("info", "Recording stopped")
-        #     self._with_app_context(self._emit_to_ui, 'recording_status', {'recording': False})
-
         if msg_from == 'obs-ws-plugin':
             from app.managers import get_obs_ws_manager
             obs_ws_manager = get_obs_ws_manager()

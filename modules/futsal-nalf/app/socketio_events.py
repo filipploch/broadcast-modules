@@ -61,8 +61,8 @@ def handle_disconnect():
 def handle_start_recording():
     hub_client = get_hub_client()
     if hub_client:
-        # hub_client.broadcast(msg_type='recording_command', payload={
-        hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+        hub_client.broadcast(msg_type='recording_command', payload={
+        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
             'requestType': 'StartRecord',
             'requestData': {},
             'request_id': f'my-unique-id-{datetime.datetime.now()}',
@@ -76,8 +76,8 @@ def handle_start_recording():
 def handle_stop_recording():
     hub_client = get_hub_client()
     if hub_client:
-        # hub_client.broadcast(msg_type='recording_command', payload={
-        hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+        hub_client.broadcast(msg_type='recording_command', payload={
+        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
             'requestType': 'StopRecord',
             'request_id': f'my-unique-id-{datetime.datetime.now()}',
             'requestData': {},
@@ -1039,3 +1039,85 @@ def handle_stop_sequence(data):
         sequence_manager.stop_all(data.get('sequence'))
         emit('all_sequences_stopped', {})
 
+# ============================================================================
+# GAME EVENTS
+# ============================================================================
+
+@socketio.on('add_game_event_to_db')
+def handle_add_game_event_to_db(data):
+
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.models.team import Team
+    from app.managers.game_event_manager import GameEventManager
+    from app.managers import get_hub_client
+
+    settings = Settings.get_settings()
+    game_id   = settings.current_game_id
+    period_id = settings.current_period_id
+
+    if not game_id or not period_id:
+        emit('error', {'message': 'Brak aktywnego meczu lub okresu'})
+        return
+
+    # Resolve team_id from team_type ('home'/'away')
+    team_id = None
+    team_type = data.get('team_type')
+    if team_type in ('home', 'away'):
+        game = Game.query.get(game_id)
+        if game:
+            team_id = game.home_team_id if team_type == 'home' else game.away_team_id
+
+    event_type     = data.get('event_type')
+    selected_cell  = data.get('selected_cell_id')
+
+    try:
+        manager = GameEventManager()
+        game_event = manager.record_event(
+            game_id=game_id,
+            event_id=_resolve_event_id(event_type),
+            period_id=period_id,
+            team_id=team_id,
+            event_place=selected_cell,
+        )
+    except Exception as e:
+        current_app.logger.error(f'❌ Failed to save game event: {e}')
+        emit('error', {'message': str(e)})
+        return
+
+    # current_app.logger.info(f'✅ GameEvent saved: id={game_event.id} type={event_type}')
+
+    # # Notify UI
+    # emit('game_event_saved', {'game_event_id': game_event.id}, broadcast=True)
+
+    # Request recording data from all recorder_device plugins
+    hub_client = get_hub_client()
+    if hub_client:
+        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+        hub_client.broadcast(msg_type='recording_command', payload={
+            'requestType': 'GetRecordStatus',
+            'requestData': {},
+            'request_id': 'get-record-status-' + str(game_event.id),
+            'game_event_id': game_event.id,
+            'cameras':{'camera1': True,
+                       'camera2': False,
+                       'camera3': False,
+                       'camera4': False}})
+        current_app.logger.info(
+            f'📡 Sent get_record_file_info to recorder_device for game_event_id={game_event.id}'
+        )
+
+
+def _resolve_event_id(event_type: str):
+    """
+    Resolve event_type string to Event.id from DB.
+    Looks up by Event.short_name (case-insensitive).
+    Raises ValueError if not found.
+    """
+    from app.models.event import Event
+    event = Event.query.filter(
+        Event.name.ilike(event_type)
+    ).first()
+    if not event:
+        raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")
+    return event.id 

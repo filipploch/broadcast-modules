@@ -319,13 +319,10 @@ def update_team_group(league_id, team_id):
 @current_app.route('/leagues/<int:league_id>/games/')
 def league_games(league_id=None):
     """List all games, optionally filtered by league"""
-    season_manager = SeasonManager()
-    current_season = season_manager.get_current_season()
     games = game_manager.get_all_games(league_id=league_id)
     league = league_manager.get_league_by_id(league_id) if league_id else None
-    
+
     return render_template('games/list.html',
-                          season=current_season,
                           games=games,
                           league=league)
 
@@ -470,7 +467,7 @@ def prepare_game_for_broadcast(game_id):
     main_camera = camera_manager.get_camera_by_id(1)
     if main_camera:
         game_camera_manager = GameCameraManager()
-        game_camera_manager.assign_camera_to_game(game_id=game.id, camera_id=main_camera.id, location='Główna')
+        game_camera_manager.assign_camera_to_game(game_id=game.id, camera_id=main_camera.id, hdmi_input=1, location='Główna')
 
     period_manager = PeriodManager()
     
@@ -638,3 +635,349 @@ def api_get_game(game_id):
         return jsonify({'error': 'Game not found'}), 404
     
     return jsonify(game.to_dict())
+
+# =========================
+# PLAYER ROUTES
+# =========================
+
+from app.managers.player_manager import PlayerManager
+from app.managers.team_manager import TeamManager as _TeamManager
+from app.models.player import Player
+
+_player_manager = PlayerManager()
+_team_manager_crud = _TeamManager()
+
+@current_app.route('/teams/<int:team_id>/players')
+def list_players(team_id):
+    team = _team_manager_crud.get_team_by_id(team_id)
+    if not team:
+        flash('Nie znaleziono drużyny', 'error')
+        return redirect(url_for('list_games'))
+    players = _player_manager.get_players_by_team(team_id)
+    return render_template('players/list.html', team=team, players=players)
+
+@current_app.route('/teams/<int:team_id>/players/create', methods=['GET', 'POST'])
+def create_player(team_id):
+    team = _team_manager_crud.get_team_by_id(team_id)
+    if not team:
+        flash('Nie znaleziono drużyny', 'error')
+        return redirect(url_for('list_games'))
+    if request.method == 'POST':
+        try:
+            _player_manager.create_player(
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+                team_id=team_id,
+                number=int(request.form['number']) if request.form.get('number') else None,
+                is_goalkeeper='is_goalkeeper' in request.form,
+                is_captain='is_captain' in request.form,
+            )
+            flash('Zawodnik został dodany', 'success')
+            return redirect(url_for('list_players', team_id=team_id))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('players/form.html', team=team, player=None)
+
+@current_app.route('/players/<int:player_id>/edit', methods=['GET', 'POST'])
+def edit_player(player_id):
+    player = _player_manager.get_player_by_id(player_id)
+    if not player:
+        flash('Nie znaleziono zawodnika', 'error')
+        return redirect(url_for('list_games'))
+    if request.method == 'POST':
+        try:
+            _player_manager.update_player(
+                player_id=player_id,
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+                number=int(request.form['number']) if request.form.get('number') else None,
+                is_goalkeeper='is_goalkeeper' in request.form,
+                is_captain='is_captain' in request.form,
+            )
+            flash('Zawodnik zaktualizowany', 'success')
+            return redirect(url_for('list_players', team_id=player.team_id))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('players/form.html', team=player.team, player=player)
+
+@current_app.route('/players/<int:player_id>/delete', methods=['POST'])
+def delete_player(player_id):
+    player = _player_manager.get_player_by_id(player_id)
+    if not player:
+        flash('Nie znaleziono zawodnika', 'error')
+        return redirect(url_for('list_games'))
+    team_id = player.team_id
+    _player_manager.delete_player(player_id)
+    flash('Zawodnik usunięty', 'success')
+    return redirect(url_for('list_players', team_id=team_id))
+
+
+# =========================
+# STADIUM ROUTES
+# =========================
+
+from app.managers.stadium_manager import StadiumManager as _StadiumManager
+
+_stadium_manager = _StadiumManager()
+
+@current_app.route('/stadiums')
+def list_stadiums():
+    stadiums = _stadium_manager.get_all_stadiums()
+    return render_template('stadiums/list.html', stadiums=stadiums)
+
+@current_app.route('/stadiums/create', methods=['GET', 'POST'])
+def create_stadium():
+    if request.method == 'POST':
+        try:
+            _stadium_manager.create_stadium(
+                name=request.form['name'].strip(),
+                address=request.form['address'].strip(),
+                city=request.form['city'].strip(),
+            )
+            flash('Stadion dodany', 'success')
+            return redirect(url_for('list_stadiums'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('stadiums/form.html', stadium=None)
+
+@current_app.route('/stadiums/<int:stadium_id>/edit', methods=['GET', 'POST'])
+def edit_stadium(stadium_id):
+    stadium = _stadium_manager.get_stadium_by_id(stadium_id)
+    if not stadium:
+        flash('Nie znaleziono stadionu', 'error')
+        return redirect(url_for('list_stadiums'))
+    if request.method == 'POST':
+        try:
+            _stadium_manager.update_stadium(
+                stadium_id=stadium_id,
+                name=request.form['name'].strip(),
+                address=request.form['address'].strip(),
+                city=request.form['city'].strip(),
+            )
+            flash('Stadion zaktualizowany', 'success')
+            return redirect(url_for('list_stadiums'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('stadiums/form.html', stadium=stadium)
+
+@current_app.route('/stadiums/<int:stadium_id>/delete', methods=['POST'])
+def delete_stadium(stadium_id):
+    _stadium_manager.delete_stadium(stadium_id)
+    flash('Stadion usunięty', 'success')
+    return redirect(url_for('list_stadiums'))
+
+
+# =========================
+# REFEREE ROUTES
+# =========================
+
+from app.managers.referee_manager import RefereeManager as _RefereeManager
+
+_referee_manager = _RefereeManager()
+
+@current_app.route('/referees')
+def list_referees():
+    referees = _referee_manager.get_all_referees()
+    return render_template('referees/list.html', referees=referees)
+
+@current_app.route('/referees/create', methods=['GET', 'POST'])
+def create_referee():
+    if request.method == 'POST':
+        try:
+            _referee_manager.create_referee(
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+            )
+            flash('Sędzia dodany', 'success')
+            return redirect(url_for('list_referees'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('referees/form.html', referee=None)
+
+@current_app.route('/referees/<int:referee_id>/edit', methods=['GET', 'POST'])
+def edit_referee(referee_id):
+    referee = _referee_manager.get_referee_by_id(referee_id)
+    if not referee:
+        flash('Nie znaleziono sędziego', 'error')
+        return redirect(url_for('list_referees'))
+    if request.method == 'POST':
+        try:
+            _referee_manager.update_referee(
+                referee_id=referee_id,
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+            )
+            flash('Sędzia zaktualizowany', 'success')
+            return redirect(url_for('list_referees'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('referees/form.html', referee=referee)
+
+@current_app.route('/referees/<int:referee_id>/delete', methods=['POST'])
+def delete_referee(referee_id):
+    _referee_manager.delete_referee(referee_id)
+    flash('Sędzia usunięty', 'success')
+    return redirect(url_for('list_referees'))
+
+
+# =========================
+# COMMENTATOR ROUTES
+# =========================
+
+from app.managers.commentator_manager import CommentatorManager as _CommentatorManager
+
+_commentator_manager = _CommentatorManager()
+
+@current_app.route('/commentators')
+def list_commentators():
+    commentators = _commentator_manager.get_all_commentators()
+    return render_template('commentators/list.html', commentators=commentators)
+
+@current_app.route('/commentators/create', methods=['GET', 'POST'])
+def create_commentator():
+    if request.method == 'POST':
+        try:
+            _commentator_manager.create_commentator(
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+            )
+            flash('Komentator dodany', 'success')
+            return redirect(url_for('list_commentators'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('commentators/form.html', commentator=None)
+
+@current_app.route('/commentators/<int:commentator_id>/edit', methods=['GET', 'POST'])
+def edit_commentator(commentator_id):
+    commentator = _commentator_manager.get_commentator_by_id(commentator_id)
+    if not commentator:
+        flash('Nie znaleziono komentatora', 'error')
+        return redirect(url_for('list_commentators'))
+    if request.method == 'POST':
+        try:
+            _commentator_manager.update_commentator(
+                commentator_id=commentator_id,
+                first_name=request.form['first_name'].strip(),
+                last_name=request.form['last_name'].strip(),
+            )
+            flash('Komentator zaktualizowany', 'success')
+            return redirect(url_for('list_commentators'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('commentators/form.html', commentator=commentator)
+
+@current_app.route('/commentators/<int:commentator_id>/delete', methods=['POST'])
+def delete_commentator(commentator_id):
+    _commentator_manager.delete_commentator(commentator_id)
+    flash('Komentator usunięty', 'success')
+    return redirect(url_for('list_commentators'))
+
+
+# =========================
+# CAMERA ROUTES
+# =========================
+
+_camera_manager_crud = CameraManager()
+
+@current_app.route('/cameras')
+def list_cameras():
+    cameras = _camera_manager_crud.get_all_cameras()
+    return render_template('cameras/list.html', cameras=cameras)
+
+@current_app.route('/cameras/create', methods=['GET', 'POST'])
+def create_camera():
+    if request.method == 'POST':
+        try:
+            _camera_manager_crud.create_camera(
+                name=request.form['name'].strip(),
+                brand=request.form['brand'].strip(),
+                model=request.form['model'].strip(),
+            )
+            flash('Kamera dodana', 'success')
+            return redirect(url_for('list_cameras'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('cameras/form.html', camera=None)
+
+@current_app.route('/cameras/<int:camera_id>/edit', methods=['GET', 'POST'])
+def edit_camera(camera_id):
+    camera = _camera_manager_crud.get_camera_by_id(camera_id)
+    if not camera:
+        flash('Nie znaleziono kamery', 'error')
+        return redirect(url_for('list_cameras'))
+    if request.method == 'POST':
+        try:
+            _camera_manager_crud.update_camera(
+                camera_id=camera_id,
+                name=request.form['name'].strip(),
+                brand=request.form['brand'].strip(),
+                model=request.form['model'].strip(),
+            )
+            flash('Kamera zaktualizowana', 'success')
+            return redirect(url_for('list_cameras'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('cameras/form.html', camera=camera)
+
+@current_app.route('/cameras/<int:camera_id>/delete', methods=['POST'])
+def delete_camera(camera_id):
+    _camera_manager_crud.delete_camera(camera_id)
+    flash('Kamera usunięta', 'success')
+    return redirect(url_for('list_cameras'))
+
+
+# =========================
+# EVENT ROUTES
+# =========================
+
+from app.managers.event_manager import EventManager as _EventManager
+
+_event_manager = _EventManager()
+
+@current_app.route('/events')
+def list_events():
+    events = _event_manager.get_all_events()
+    return render_template('events/list.html', events=events)
+
+@current_app.route('/events/create', methods=['GET', 'POST'])
+def create_event():
+    if request.method == 'POST':
+        try:
+            _event_manager.create_event(
+                name=request.form['name'].strip(),
+                short_name=request.form['short_name'].strip(),
+                is_reported='is_reported' in request.form,
+                image_path=request.form.get('image_path', '').strip() or None,
+            )
+            flash('Zdarzenie dodane', 'success')
+            return redirect(url_for('list_events'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('events/form.html', event=None)
+
+@current_app.route('/events/<int:event_id>/edit', methods=['GET', 'POST'])
+def edit_event(event_id):
+    event = _event_manager.get_event_by_id(event_id)
+    if not event:
+        flash('Nie znaleziono zdarzenia', 'error')
+        return redirect(url_for('list_events'))
+    if request.method == 'POST':
+        try:
+            _event_manager.update_event(
+                event_id=event_id,
+                name=request.form['name'].strip(),
+                short_name=request.form['short_name'].strip(),
+                is_reported='is_reported' in request.form,
+                image_path=request.form.get('image_path', '').strip() or None,
+            )
+            flash('Zdarzenie zaktualizowane', 'success')
+            return redirect(url_for('list_events'))
+        except Exception as e:
+            flash(f'Błąd: {e}', 'error')
+    return render_template('events/form.html', event=event)
+
+@current_app.route('/events/<int:event_id>/delete', methods=['POST'])
+def delete_event(event_id):
+    _event_manager.delete_event(event_id)
+    flash('Zdarzenie usunięte', 'success')
+    return redirect(url_for('list_events'))

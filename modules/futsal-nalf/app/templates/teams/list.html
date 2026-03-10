@@ -24,9 +24,9 @@
     <div class="card-header">
         <span>Wszystkie Zespoły</span>
         <div class="actions">
-            <a href="{{ url_for('scrape_teams') }}" class="btn btn-success">
+            <button class="btn btn-success" onclick="startTeamScraping()">
                 🔍 Scrapuj nowe zespoły
-            </a>
+            </button>
             <a href="{{ url_for('create_team') }}" class="btn btn-primary">
                 ➕ Dodaj ręcznie
             </a>
@@ -88,4 +88,12 @@
     </p>
     {% endif %}
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function startTeamScraping() {
+    fetch('/teams/scrape')
+        .catch(err => console.error('Team scraping request failed:', err));
+}
+</script>
 {% endblock %}

@@ -5,6 +5,7 @@ from app.extensions import db
 
 from app.managers.team_manager import TeamManager
 from app.managers.team_scraper_manager import TeamScraperManager
+from app.managers.player_scraper_manager import PlayerScraperManager
 from app.managers.game_manager import GameManager
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.league_manager import LeagueManager
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 team_manager = TeamManager()
 team_scraper_manager = TeamScraperManager()
+player_scraper_manager = PlayerScraperManager()
 game_manager = GameManager()
 game_scraper_manager = GameScraperManager()
 league_manager = LeagueManager()
@@ -81,31 +83,43 @@ def index():
     from app.models.settings import Settings
     from app.models.game import Game
     from app.models.period import Period
-    from app.models.season import Season
-    
+    from app.managers.player_game_manager import PlayerGameManager
+    from app.managers.game_referee_manager import GameRefereeManager
+    from app.managers.game_commentator_manager import GameCommentatorManager
+    from app.managers.game_camera_manager import GameCameraManager
+
     settings = Settings.get_settings()
-    
-    season = None
-    # Get actual game
+
     game = None
     periods = []
     penalty = None
+    assigned = {
+        'home_squad': [],
+        'away_squad': [],
+        'referees': [],
+        'commentators': [],
+        'cameras': [],
+    }
 
-    if settings.current_season_id:
-        season = Season.query.get(settings.current_season_id)
-    
     if settings.current_game_id:
         game = Game.query.get(settings.current_game_id)
         if game:
             periods = Period.query.filter_by(game_id=game.id).all()
             penalty = game.penalty
-    
+
+            pg_mgr = PlayerGameManager()
+            assigned['home_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
+            assigned['away_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
+            assigned['referees'] = GameRefereeManager().get_referees_for_game(game.id)
+            assigned['commentators'] = GameCommentatorManager().get_commentators_for_game(game.id)
+            assigned['cameras'] = GameCameraManager().get_cameras_for_game(game.id)
+
     return render_template('index.html',
-                          season=season,
-                          game=game,
-                          periods=periods,
-                          penalty=penalty,
-                          settings=settings)  # ADDED: Pass settings to template
+                           game=game,
+                           periods=periods,
+                           penalty=penalty,
+                           settings=settings,
+                           assigned=assigned)
 
 
 @current_app.route('/period/<int:period_id>/start')
@@ -258,6 +272,11 @@ def list_games():
                            stats=stats,
                            scraping_status=scraping_status)
 
+@current_app.route('/common-data/')
+def common_data():
+ 
+    return render_template('common-data.html')
+
 @current_app.route('/teams/')
 def list_teams():
     """List all teams in database"""
@@ -378,132 +397,42 @@ def delete_team(team_id):
 # Scraping Workflow (Async)
 # =========================
 
-@current_app.route('/games/scrape', methods=['GET', 'POST'])
-@current_app.route('/leagues/<int:league_id>/games/scrape', methods=['GET', 'POST'])
-def scrape_games(league_id=None):
-    """Scrape games from NALF league pages (async)"""
-    selected_league_id = int(request.form.get('league_id', league_id or 0))
-    league = league_manager.get_league_by_id(selected_league_id)
-    teams = Team.query.order_by(Team.name).all()
-    if request.method == 'POST':
-        try:
-            
-            # Check if scraping already in progress
-            if game_scraper_manager.is_scraping_in_progress():
-                flash('Scrapowanie już trwa. Poczekaj na zakończenie.', 'info')
-                return redirect(url_for('game_scrape_status'))
-
-            # Get URLs from form (comma or newline separated)
-            urls = []
-            urls.append(league.games_url)
-
-            if not urls:
-                flash('Podaj przynajmniej jeden URL do tabeli ligi', 'error')
-                return render_template('games/scrape.html')
-            
-            print(f'urls: {urls}')
-
-            # Start async scraping
-            if game_scraper_manager.scrape_games_async(urls):
-                flash(f'Rozpoczęto scrapowanie {len(urls)} lig w tle...', 'info')
-                return redirect(url_for('game_scrape_status'))
-            else:
-                flash('Nie udało się rozpocząć scrapowania', 'error')
-
-        except Exception as e:
-            logger.error(f"Error starting scraping: {e}")
-            flash(f'Błąd podczas rozpoczynania scrapowania: {str(e)}', 'error')
-
-    # Default URLs for quick scraping
-    default_urls = [
-        'https://nalffutsal.pl/?page_id=34',  # Dywizja A
-        'https://nalffutsal.pl/?page_id=52',  # Dywizja B
-        'https://nalffutsal.pl/?page_id=32',  # Puchar Ligi
-    ]
-
-    scraping_status = game_scraper_manager.get_scraping_status()
-
-    return render_template('games/scrape.html',
-                           default_urls=default_urls,
-                           league=league,
-                           scraping_status=scraping_status)
-
-@current_app.route('/game/scrape/status')
-def game_scrape_status():
-    """Show scraping status page"""
-    status = game_scraper_manager.get_scraping_status()
-    stats = game_scraper_manager.get_statistics()
-
-    return render_template('games/scrape_status.html',
-                           status=status,
-                           stats=stats)
-
-@current_app.route('/games/scrape/clear-status', methods=['POST'])
-def clear_games_scrape_status():
-    """Clear scraping status"""
-    game_scraper_manager.clear_scraping_status()
-    flash('Wyczyszczono status scrapowania', 'info')
-    return redirect(url_for('list_games'))
+@current_app.route('/leagues/<int:league_id>/games/scrape')
+def scrape_games(league_id):
+    """Start scraping games for a league in background thread, return JSON"""
+    from flask import jsonify
+    league = league_manager.get_league_by_id(league_id)
+    if not league:
+        return jsonify({'error': 'Nie znaleziono ligi'}), 404
+    if not league.games_url:
+        return jsonify({'error': 'Liga nie ma skonfigurowanego URL do scrapowania'}), 400
+    if game_scraper_manager.is_scraping_in_progress():
+        return jsonify({'error': 'Scrapowanie już trwa'}), 409
+    try:
+        game_scraper_manager.scrape_games_async([league.games_url], league_name=league.name)
+        return jsonify({'status': 'started'}), 202
+    except Exception as e:
+        logger.error(f"Error starting scraping: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @current_app.route('/teams/scrape', methods=['GET', 'POST'])
 def scrape_teams():
-    """Scrape teams from NALF league pages (async)"""
-    if request.method == 'POST':
-        try:
-            # Check if scraping already in progress
-            if team_scraper_manager.is_scraping_in_progress():
-                flash('Scrapowanie już trwa. Poczekaj na zakończenie.', 'info')
-                return redirect(url_for('teams_scrape_status'))
+    """Start scraping teams in background thread, return JSON"""
+    from flask import jsonify
+    if team_scraper_manager.is_scraping_in_progress():
+        return jsonify({'error': 'Scrapowanie już trwa'}), 409
 
-            # Get URLs from form (comma or newline separated)
-            urls_input = request.form.get('league_urls', '')
-            urls = [url.strip() for url in urls_input.replace('\n', ',').split(',') if url.strip()]
-
-            if not urls:
-                flash('Podaj przynajmniej jeden URL do tabeli ligi', 'error')
-                return render_template('teams/scrape.html')
-
-            # Start async scraping
-            if team_scraper_manager.scrape_leagues_async(urls):
-                flash(f'Rozpoczęto scrapowanie {len(urls)} lig w tle...', 'info')
-                return redirect(url_for('teams_scrape_status'))
-            else:
-                flash('Nie udało się rozpocząć scrapowania', 'error')
-
-        except Exception as e:
-            logger.error(f"Error starting scraping: {e}")
-            flash(f'Błąd podczas rozpoczynania scrapowania: {str(e)}', 'error')
-
-    # Default URLs for quick scraping
-    default_urls = [
-        'https://nalffutsal.pl/?page_id=16',  # Ekstraklasa
-        'https://nalffutsal.pl/?page_id=36',  # I Liga
+    urls = [
+        'https://nalffutsal.pl/?page_id=16',
+        'https://nalffutsal.pl/?page_id=36',
     ]
 
-    scraping_status = team_scraper_manager.get_scraping_status()
-
-    return render_template('teams/scrape.html',
-                           default_urls=default_urls,
-                           scraping_status=scraping_status)
-
-
-@current_app.route('/teams/scrape/status')
-def teams_scrape_status():
-    """Show scraping status page"""
-    status = team_scraper_manager.get_scraping_status()
-    stats = team_scraper_manager.get_statistics()
-
-    return render_template('teams/scrape_status.html',
-                           status=status,
-                           stats=stats)
-
-
-@current_app.route('/teams/scrape/clear-status', methods=['POST'])
-def clear_teams_scrape_status():
-    """Clear scraping status"""
-    team_scraper_manager.clear_scraping_status()
-    flash('Wyczyszczono status scrapowania', 'info')
-    return redirect(url_for('list_teams'))
+    try:
+        team_scraper_manager.scrape_leagues_async(urls, league_name='Zespoły NALF')
+        return jsonify({'status': 'started'}), 202
+    except Exception as e:
+        logger.error(f"Error starting team scraping: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @current_app.route('/teams/pending')
@@ -848,3 +777,355 @@ def get_scoreboard_state():
 #     db.session.commit()
     
 #     return jsonify({'success': True, 'is_reversed': setting.is_scoreboard_reversed})
+
+@current_app.route('/teams/<int:team_id>/scrape-players')
+def scrape_players(team_id):
+    """Start scraping players for a team in background thread, return JSON"""
+    from flask import jsonify
+    if player_scraper_manager.is_scraping_in_progress():
+        return jsonify({'error': 'Scrapowanie zawodników już trwa'}), 409
+    started = player_scraper_manager.scrape_players_async(team_id)
+    if started:
+        return jsonify({'status': 'started'}), 202
+    return jsonify({'error': 'Nie można rozpocząć scrapowania — sprawdź czy drużyna ma skonfigurowany URL'}), 400
+
+# =========================
+# ASSIGNMENT API
+# =========================
+
+@current_app.route('/api/assign/<content_type>/data')
+def api_assign_data(content_type):
+    """Return JSON with assigned and available elements for the assignment modal."""
+    from flask import jsonify
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.managers.player_game_manager import PlayerGameManager
+    from app.managers.player_manager import PlayerManager
+    from app.managers.game_referee_manager import GameRefereeManager
+    from app.managers.referee_manager import RefereeManager
+    from app.managers.game_commentator_manager import GameCommentatorManager
+    from app.managers.commentator_manager import CommentatorManager
+    from app.managers.game_camera_manager import GameCameraManager
+    from app.managers.camera_manager import CameraManager
+    from app.models.game_camera import VALID_HDMI_INPUTS, HDMI_DEFAULT_LOCATION
+    from app.models.player import Player
+
+    settings = Settings.get_settings()
+    if not settings.current_game_id:
+        return jsonify({'error': 'Brak wybranego meczu'}), 400
+
+    game = Game.query.get(settings.current_game_id)
+    if not game:
+        return jsonify({'error': 'Nie znaleziono meczu'}), 404
+
+    game_id = game.id
+
+    # ── home_squad / away_squad ──────────────────────────────────────────────
+    if content_type in ('home-squad', 'away-squad'):
+        team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
+        team = game.home_team if content_type == 'home-squad' else game.away_team
+
+        pg_mgr = PlayerGameManager()
+        assigned_pgs = pg_mgr.get_players_for_game(game_id, team_id=team_id)
+        assigned_ids = {pg.player_id for pg in assigned_pgs}
+
+        assigned = [{
+            'pg_id': pg.id,
+            'player_id': pg.player_id,
+            'label': f"{pg.player.last_name} {pg.player.first_name}",
+            'last_name': pg.player.last_name,
+            'first_name': pg.player.first_name,
+            'number': pg.number,
+            'is_captain': pg.is_captain,
+            'is_goalkeeper': pg.is_goalkeeper,
+        } for pg in assigned_pgs]
+
+        all_players = (Player.query
+            .filter_by(team_id=team_id)
+            .order_by(Player.is_goalkeeper.desc(), Player.last_name.asc())
+            .all())
+        available = [{
+            'player_id': p.id,
+            'label': f"{p.last_name} {p.first_name}",
+            'is_goalkeeper': p.is_goalkeeper,
+        } for p in all_players if p.id not in assigned_ids]
+
+        return jsonify({
+            'title': f"Skład: {team.name}",
+            'content_type': content_type,
+            'team_id': team_id,
+            'assigned': assigned,
+            'available': available,
+        })
+
+    # ── referees ─────────────────────────────────────────────────────────────
+    if content_type == 'referees':
+        from app.models.game_referee import GameReferee
+        gr_mgr = GameRefereeManager()
+        assigned_grs = gr_mgr.get_referees_for_game(game_id)
+        assigned_ids = {gr.referee_id for gr in assigned_grs}
+
+        assigned = [{
+            'gr_id': gr.id,
+            'referee_id': gr.referee_id,
+            'label': f"{gr.referee.last_name} {gr.referee.first_name}",
+            'type': gr.type,
+            'types': GameReferee.REFEREE_TYPES,
+        } for gr in assigned_grs]
+
+        all_refs = RefereeManager().get_all_referees()
+        available = [{
+            'referee_id': r.id,
+            'label': f"{r.last_name} {r.first_name}",
+            'types': GameReferee.REFEREE_TYPES,
+        } for r in all_refs if r.id not in assigned_ids]
+
+        return jsonify({
+            'title': 'Sędziowie',
+            'content_type': content_type,
+            'assigned': assigned,
+            'available': available,
+        })
+
+    # ── commentators ─────────────────────────────────────────────────────────
+    if content_type == 'commentators':
+        from app.models.game_commentator import GameCommentator
+        gc_mgr = GameCommentatorManager()
+        assigned_gcs = gc_mgr.get_commentators_for_game(game_id)
+        assigned_ids = {gc.commentator_id for gc in assigned_gcs}
+
+        assigned = [{
+            'gc_id': gc.id,
+            'commentator_id': gc.commentator_id,
+            'label': f"{gc.commentator.last_name} {gc.commentator.first_name}",
+            'type': gc.type,
+            'types': GameCommentator.REFEREE_TYPES,
+        } for gc in assigned_gcs]
+
+        all_cs = CommentatorManager().get_all_commentators()
+        available = [{
+            'commentator_id': c.id,
+            'label': f"{c.last_name} {c.first_name}",
+            'types': GameCommentator.REFEREE_TYPES,
+        } for c in all_cs if c.id not in assigned_ids]
+
+        return jsonify({
+            'title': 'Komentatorzy',
+            'content_type': content_type,
+            'assigned': assigned,
+            'available': available,
+        })
+
+    # ── cameras ───────────────────────────────────────────────────────────────
+    if content_type == 'cameras':
+        gc_mgr = GameCameraManager()
+        assigned_gcs = gc_mgr.get_cameras_for_game(game_id)
+        assigned_ids = {gc.camera_id for gc in assigned_gcs}
+        free_hdmi = gc_mgr.get_available_hdmi_inputs(game_id)
+
+        assigned = [{
+            'gc_id': gc.id,
+            'camera_id': gc.camera_id,
+            'label': gc.camera.name,
+            'sub': f"{gc.camera.brand} {gc.camera.model}",
+            'hdmi_input': gc.hdmi_input,
+            'location': gc.location,
+            'is_motorized': gc.is_motorized,
+            'free_hdmi': free_hdmi,
+            'hdmi_labels': HDMI_DEFAULT_LOCATION,
+        } for gc in assigned_gcs]
+
+        all_cameras = CameraManager().get_all_cameras()
+        available = [{
+            'camera_id': c.id,
+            'label': c.name,
+            'sub': f"{c.brand} {c.model}",
+            'free_hdmi': free_hdmi,
+            'hdmi_labels': HDMI_DEFAULT_LOCATION,
+        } for c in all_cameras if c.id not in assigned_ids]
+
+        return jsonify({
+            'title': 'Kamery',
+            'content_type': content_type,
+            'assigned': assigned,
+            'available': available,
+        })
+
+    return jsonify({'error': f'Nieznany typ: {content_type}'}), 400
+
+
+@current_app.route('/api/assign/<content_type>/save', methods=['POST'])
+def api_assign_save(content_type):
+    """Save assignment changes from modal (bulk replace)."""
+    from flask import jsonify, request as req
+    from app.models.settings import Settings
+    from app.models.game import Game
+
+    settings = Settings.get_settings()
+    if not settings.current_game_id:
+        return jsonify({'error': 'Brak wybranego meczu'}), 400
+
+    game = Game.query.get(settings.current_game_id)
+    if not game:
+        return jsonify({'error': 'Nie znaleziono meczu'}), 404
+
+    data = req.get_json()
+    game_id = game.id
+
+    try:
+        # ── home_squad / away_squad ──────────────────────────────────────────
+        if content_type in ('home-squad', 'away-squad'):
+            from app.managers.player_game_manager import PlayerGameManager
+            from app.models.player_game import PlayerGame
+            team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
+
+            pg_mgr = PlayerGameManager()
+            # Remove all current assignments for this team in this game
+            existing = PlayerGame.query.filter_by(game_id=game_id, team_id=team_id).all()
+            from app.extensions import db
+            for pg in existing:
+                db.session.delete(pg)
+            db.session.commit()
+
+            # Re-assign from submitted list
+            for item in data.get('assigned', []):
+                pg_mgr.assign_player_to_game(item['player_id'], game_id)
+            return jsonify({'ok': True})
+
+        # ── referees ─────────────────────────────────────────────────────────
+        if content_type == 'referees':
+            from app.managers.game_referee_manager import GameRefereeManager
+            from app.models.game_referee import GameReferee
+            from app.extensions import db
+
+            existing = GameReferee.query.filter_by(game_id=game_id).all()
+            for gr in existing:
+                db.session.delete(gr)
+            db.session.commit()
+
+            gr_mgr = GameRefereeManager()
+            for item in data.get('assigned', []):
+                gr_mgr.assign_referee_to_game(game_id, item['referee_id'], item['type'])
+            return jsonify({'ok': True})
+
+        # ── commentators ─────────────────────────────────────────────────────
+        if content_type == 'commentators':
+            from app.managers.game_commentator_manager import GameCommentatorManager
+            from app.models.game_commentator import GameCommentator
+            from app.extensions import db
+
+            existing = GameCommentator.query.filter_by(game_id=game_id).all()
+            for gc in existing:
+                db.session.delete(gc)
+            db.session.commit()
+
+            gc_mgr = GameCommentatorManager()
+            for item in data.get('assigned', []):
+                gc_mgr.assign_commentator_to_game(game_id, item['commentator_id'], item['type'])
+            return jsonify({'ok': True})
+
+        # ── cameras ───────────────────────────────────────────────────────────
+        if content_type == 'cameras':
+            from app.managers.game_camera_manager import GameCameraManager
+            from app.models.game_camera import GameCamera
+            from app.extensions import db
+
+            existing = GameCamera.query.filter_by(game_id=game_id).all()
+            for gc in existing:
+                db.session.delete(gc)
+            db.session.commit()
+
+            gc_mgr = GameCameraManager()
+            for item in data.get('assigned', []):
+                gc_mgr.assign_camera_to_game(
+                    game_id=game_id,
+                    camera_id=item['camera_id'],
+                    hdmi_input=item['hdmi_input'],
+                    location=item.get('location', ''),
+                    is_motorized=item.get('is_motorized', False),
+                )
+            return jsonify({'ok': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+    return jsonify({'error': f'Nieznany typ: {content_type}'}), 400
+
+
+@current_app.route('/api/player-game/<int:pg_id>', methods=['PATCH'])
+def api_patch_player_game(pg_id):
+    """Update PlayerGame snapshot fields (number, is_goalkeeper, is_captain).
+    If is_captain=True, clears is_captain for all other PlayerGame rows of same team in same game."""
+    from flask import jsonify, request as req
+    from app.models.player_game import PlayerGame
+    from app.extensions import db
+
+    pg = PlayerGame.query.get(pg_id)
+    if not pg:
+        return jsonify({'error': 'Nie znaleziono rekordu'}), 404
+
+    from app.models.player import Player
+    player = Player.query.get(pg.player_id)
+
+    data = req.get_json()
+    try:
+        if 'number' in data:
+            val = data['number']
+            pg.number = int(val) if val not in (None, '', 'null') else None
+            if player:
+                player.number = pg.number
+        if 'is_goalkeeper' in data:
+            pg.is_goalkeeper = bool(data['is_goalkeeper'])
+            if player:
+                player.is_goalkeeper = pg.is_goalkeeper
+        if 'is_captain' in data:
+            is_captain = bool(data['is_captain'])
+            pg.is_captain = is_captain
+            if player:
+                player.is_captain = is_captain
+            if is_captain:
+                # Clear captain for others in same team/game (PlayerGame)
+                others = PlayerGame.query.filter(
+                    PlayerGame.game_id == pg.game_id,
+                    PlayerGame.team_id == pg.team_id,
+                    PlayerGame.id != pg.id,
+                ).all()
+                for other in others:
+                    other.is_captain = False
+                # Clear captain for others in same team (Player)
+                from app.models.player import Player as _P
+                other_players = _P.query.filter(
+                    _P.team_id == pg.team_id,
+                    _P.id != pg.player_id,
+                ).all()
+                for op in other_players:
+                    op.is_captain = False
+        db.session.commit()
+        return jsonify({'ok': True, 'pg': {'id': pg.id, 'number': pg.number, 'is_goalkeeper': pg.is_goalkeeper, 'is_captain': pg.is_captain}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+
+@current_app.route('/api/player/<int:player_id>', methods=['PATCH'])
+def api_patch_player(player_id):
+    """Update Player base record (first_name, last_name)."""
+    from flask import jsonify, request as req
+    from app.models.player import Player
+    from app.extensions import db
+
+    player = Player.query.get(player_id)
+    if not player:
+        return jsonify({'error': 'Nie znaleziono zawodnika'}), 404
+
+    data = req.get_json()
+    try:
+        if 'first_name' in data:
+            player.first_name = data['first_name'].strip()
+        if 'last_name' in data:
+            player.last_name = data['last_name'].strip()
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400

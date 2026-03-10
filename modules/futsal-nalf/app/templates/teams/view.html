@@ -7,14 +7,15 @@
     <div class="card-header">
         <span>{{ team.name }}</span>
         <div class="actions">
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">← Powrót</a>
             <a href="{{ url_for('edit_team', team_id=team.id) }}" class="btn btn-primary">✏️ Edytuj</a>
             <form action="{{ url_for('delete_team', team_id=team.id) }}"
-                  method="POST" 
-                  style="display: inline;"
-                  onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ team.name }}? Tej operacji nie można cofnąć.');">
+                method="POST" 
+                style="display: inline;"
+                onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ team.name }}? Tej operacji nie można cofnąć.');">
                 <button type="submit" class="btn btn-danger">🗑️ Usuń</button>
             </form>
-            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">← Powrót</a>
+            <a href="{{ url_for('list_players', team_id=team.id) }}" class="btn btn-primary">Zawodnicy</a>
         </div>
     </div>
     

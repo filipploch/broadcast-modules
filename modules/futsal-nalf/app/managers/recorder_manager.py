@@ -47,6 +47,56 @@ class RecorderManager:
         elif request_type == 'StopRecord':
             cameras = payload.get('cameras')
             self._emit_to_ui('recording_stopped', cameras)
+        elif request_type == 'GetRecordStatus':
+            request_id = payload.get('request_id')
+            if request_id.startswith('get-record-status-'):
+                payload['request_id'] = request_id.split('get-record-status-')[1]
+                self._on_record_status(payload)
+                # TODO
+
+    def _on_record_status(self, payload):
+
+        from app.models.event_camera import EventCamera
+        from app.extensions import db
+
+        cameras = payload.get('cameras')
+        game_event_id = payload.get('request_id')
+        
+
+        # if not all([game_event_id, camera_id, video_path, record_time is not None]):
+        #     self._log('warning', f'_on_record_file_info: incomplete payload: {payload}')
+        #     return
+
+        for camera in cameras:
+            try:
+                _camera = cameras.get(camera)
+                file_name    = _camera.get('file_name')
+                video_path = 'R:/recorder/' + file_name
+                record_time   = _camera.get('output_duration')
+
+                existing = EventCamera.query.filter_by(
+                    game_event_id=game_event_id,
+                    camera_id=camera
+                ).first()
+
+                if existing:
+                    existing.video_path  = video_path
+                    existing.record_time = record_time
+                else:
+                    ec = EventCamera(
+                        game_event_id=game_event_id,
+                        camera_id=camera,
+                        video_path=video_path,
+                        record_time=record_time,
+                    )
+                    db.session.add(ec)
+
+                db.session.commit()
+                current_app.logger.info(f'✅ EventCamera saved: game_event_id={game_event_id} camera_id={camera}')
+
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f'❌ Failed to save EventCamera: {e}')
     
     def start_recording(self):
         """Start camera recording"""

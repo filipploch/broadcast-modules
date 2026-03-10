@@ -2,7 +2,7 @@
   display: none !important;
 }
 
-.invisible {
+.invisible, .hidden {
   visibility: hidden !important;
   width: 0 !important;
   height: 0 !important;
@@ -27,6 +27,16 @@
 
 .bg_red {
     background-color: red;
+    color: white;
+}
+
+.bg_green {
+    background-color: rgb(40, 109, 0);
+    color: white;
+}
+
+.bg_blue {
+    background-color: darkblue;
     color: white;
 }
 

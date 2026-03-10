@@ -1,0 +1,40 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj zdarzenie' if event else 'Dodaj zdarzenie' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj zdarzenie' if event else 'Nowe zdarzenie' }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Nazwa *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ event.name if event else '' }}"
+                   required maxlength="100" placeholder="np. Bramka">
+        </div>
+        <div class="form-group">
+            <label for="short_name">Skrót *</label>
+            <input type="text" id="short_name" name="short_name"
+                   value="{{ event.short_name if event else '' }}"
+                   required maxlength="50" placeholder="np. G">
+        </div>
+        <div class="form-group">
+            <label for="image_path">Ścieżka do ikony</label>
+            <input type="text" id="image_path" name="image_path"
+                   value="{{ event.image_path if event and event.image_path else '' }}"
+                   maxlength="500" placeholder="np. static/icons/goal.png">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_reported"
+                       {{ 'checked' if event and event.is_reported else '' }}>
+                Raportowane (wymaga przypisania drużyny/zawodnika)
+            </label>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_events') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

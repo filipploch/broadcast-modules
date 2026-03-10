@@ -125,6 +125,7 @@ class Settings(db.Model):
             print('==================================================================')
             return {"main": None, "penalties": {"home": [], "away": []}}
     
+    
     @classmethod
     def set_current_timers(cls, timers_data):
         """

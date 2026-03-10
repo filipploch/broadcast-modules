@@ -259,6 +259,7 @@ from app.managers.season_manager import SeasonManager
 from app.managers.league_manager import LeagueManager
 from app.managers.game_manager import GameManager
 from app.managers.team_scraper_manager import TeamScraperManager
+from app.managers.player_scraper_manager import PlayerScraperManager
 from app.managers.camera_manager import CameraManager
 from app.managers.period_manager import PeriodManager
 from app.managers.game_camera_manager import GameCameraManager

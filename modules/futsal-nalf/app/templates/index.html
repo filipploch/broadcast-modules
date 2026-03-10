@@ -1,169 +1,558 @@
 {% extends "base/base.html" %}
 {% block title %}Kontrola Transmisji{% endblock %}
+
 {% block content %}
 
 <div class="card">
     <div class="card-header">
         <span>🎥 Kontrola Transmisji</span>
     </div>
-    
+
     {% if not game %}
-    <div style="padding: 2rem; text-align: center;">
-        <p style="color: #7f8c8d; font-size: 1.2rem;">Nie wybrano meczu do transmisji</p>
+    <div style="padding:2rem;text-align:center;">
+        <p style="color:#7f8c8d;font-size:1.2rem;">Nie wybrano meczu do transmisji</p>
         <a href="{{ url_for('list_games') }}" class="btn btn-primary">Wybierz mecz</a>
     </div>
     {% else %}
-    
+
     <!-- Game info -->
-    <div style="padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
-        <h3 style="margin: 0;">
-            {{ game.home_team.name }} vs {{ game.away_team.name }}
-        </h3>
-        <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
+    <div style="padding:1rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;">
+        <h3 style="margin:0;">{{ game.home_team.name }} vs {{ game.away_team.name }}</h3>
+        <p style="margin:.5rem 0 0;color:#6c757d;">
             Liga: {{ game.league.name }} | Kolejka: {{ game.round }} | Status: {{ game.get_status_text() }}
         </p>
     </div>
-    
-    <!-- Periods control -->
-    <div style="padding: 1.5rem;">
-        <h4>Okresy meczu:</h4>
-        
-        {% if periods|length == 0 %}
-        <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
-            <strong>⚠️ Uwaga:</strong> Ten mecz nie ma utworzonych okresów. 
-            <a href="{{ url_for('edit_game', game_id=game.id) }}">Przejdź do edycji</a> i przygotuj mecz do transmisji.
-        </div>
-        {% else %}
-        
-        <div style="display: grid; gap: 1rem; margin-top: 1rem;">
-            {% for period in periods %}
-            <div class="period-card" style="border: 2px solid 
-                {% if period.status == 0 %}#dee2e6
-                {% elif period.status == 1 %}#28a745
-                {% else %}#6c757d{% endif %}; 
-                border-radius: 8px; padding: 1.5rem; background: #fff;">
-                
-                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
-                    <div>
-                        <h5 style="margin: 0 0 0.5rem 0;">
-                            {{ period.description }}
-                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-left: 0.5rem;
-                                background: {% if period.status == 0 %}#e9ecef
-                                {% elif period.status == 1 %}#28a745
-                                {% else %}#6c757d{% endif %};
-                                color: {% if period.status == 1 %}#fff{% else %}#495057{% endif %};">
-                                {{ period.get_status_text() }}
-                            </span>
-                        </h5>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            Timer: {{ period.main_timer_name or 'Nie ustawiono' }}<br>
-                            Czas początkowy: {{ (period.initial_time / 1000 / 60) | int }} min | 
-                            Limit czasu: {{ (period.limit / 1000 / 60) | int }} min<br>
-                            Wynik okresu: {{ period.home_team_goals }}:{{ period.away_team_goals }}
-                        </p>
-                    </div>
-                    
-                    <div style="display: flex; gap: 0.5rem; flex-direction: column;">
-                        {% if period.status == 0 %}
-                            <!-- Not started - can start -->
-                            <a href="{{ url_for('start_period', period_id=period.id) }}" 
-                               class="btn btn-success" style="white-space: nowrap;">
-                                ▶️ Rozpocznij okres
-                            </a>
-                        {% elif period.status == 1 %}
-                            <!-- Pending - can finish or go to UI -->
-                            <a href="{{ url_for('ui_dashboard') }}" 
-                               class="btn btn-primary" style="white-space: nowrap;">
-                                🎮 Przejdź do UI
-                            </a>
-                            <a href="{{ url_for('finish_period', period_id=period.id) }}" 
-                               class="btn btn-warning" style="white-space: nowrap;">
-                                ⏹️ Zakończ okres
-                            </a>
-                        {% else %}
-                            <!-- Finished - can reset if needed -->
-                            <button class="btn btn-secondary" disabled style="white-space: nowrap;">
-                                ✅ Zakończony
-                            </button>
-                            <a href="{{ url_for('reset_period_status', period_id=period.id) }}" 
-                               class="btn btn-outline-secondary" 
-                               style="font-size: 0.85rem; white-space: nowrap;"
-                               onclick="return confirm('Czy na pewno chcesz zresetować status tego okresu?');">
-                                🔄 Resetuj
-                            </a>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+
+    <div style="display:flex;gap:0;">
+
+        <!-- LEFT PANEL: assignment buttons -->
+        <div style="width:220px;min-width:220px;padding:1rem;border-right:1px solid #dee2e6;display:flex;flex-direction:column;gap:.5rem;">
+
+            {% set groups = [
+                ('home-squad',   '🏠 Skład: ' ~ game.home_team.short_name, assigned.home_squad),
+                ('away-squad',   '✈️ Skład: ' ~ game.away_team.short_name, assigned.away_squad),
+                ('commentators', '🎙️ Komentatorzy',                        assigned.commentators),
+                ('referees',     '🟨 Sędziowie',                           assigned.referees),
+                ('cameras',      '📷 Kamery',                              assigned.cameras),
+            ] %}
+
+            {% for content_type, label, items in groups %}
+            <button
+                onclick="openAssignModal('{{ content_type }}')"
+                style="text-align:left;padding:.6rem .9rem;border-radius:6px;border:2px solid {{ '#28a745' if items|length > 0 else '#dc3545' }};background:#fff;cursor:pointer;font-size:.9rem;">
+                {% if items|length > 0 %}
+                ✅ {{ label }} <span style="color:#6c757d;font-size:.8rem;">({{ items|length }})</span>
+                {% else %}
+                ⚠️ <span style="color:#dc3545;">{{ label }}</span>
+                {% endif %}
+            </button>
             {% endfor %}
+
         </div>
-        
-        {% endif %}
-        
-        <!-- Penalty shootout if exists -->
-        {% if penalty %}
-        <div style="margin-top: 2rem;">
-            <h4>Rzuty karne:</h4>
-            <div class="period-card" style="border: 2px solid #ffc107; border-radius: 8px; padding: 1.5rem; background: #fff; margin-top: 1rem;">
-                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
-                    <div>
-                        <h5 style="margin: 0 0 0.5rem 0;">Konkurs rzutów karnych</h5>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            Wynik: {{ penalty.home_team_penalties }}:{{ penalty.away_team_penalties }}
-                        </p>
+
+        <!-- RIGHT PANEL: periods -->
+        <div style="flex:1;padding:1.5rem;">
+            <h4>Okresy meczu:</h4>
+
+            {% if periods|length == 0 %}
+            <div style="padding:1rem;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;margin:1rem 0;">
+                <strong>⚠️ Uwaga:</strong> Ten mecz nie ma utworzonych okresów.
+                <a href="{{ url_for('edit_game', game_id=game.id) }}">Przejdź do edycji</a> i przygotuj mecz do transmisji.
+            </div>
+            {% else %}
+            <div style="display:grid;gap:1rem;margin-top:1rem;">
+                {% for period in periods %}
+                <div style="border:2px solid {% if period.status==0 %}#dee2e6{% elif period.status==1 %}#28a745{% else %}#6c757d{% endif %};border-radius:8px;padding:1.5rem;background:#fff;">
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;">
+                        <div>
+                            <h5 style="margin:0 0 .5rem;">
+                                {{ period.description }}
+                                <span style="padding:.25rem .5rem;border-radius:4px;font-size:.85rem;margin-left:.5rem;
+                                    background:{% if period.status==0 %}#e9ecef{% elif period.status==1 %}#28a745{% else %}#6c757d{% endif %};
+                                    color:{% if period.status==1 %}#fff{% else %}#495057{% endif %};">
+                                    {{ period.get_status_text() }}
+                                </span>
+                            </h5>
+                            <p style="margin:0;color:#6c757d;font-size:.9rem;">
+                                Timer: {{ period.main_timer_name or 'Nie ustawiono' }}<br>
+                                Czas: {{ (period.initial_time/1000/60)|int }} min | Limit: {{ (period.limit/1000/60)|int }} min<br>
+                                Wynik: {{ period.home_team_goals }}:{{ period.away_team_goals }}
+                            </p>
+                        </div>
+                        <div style="display:flex;gap:.5rem;flex-direction:column;">
+                            {% if period.status==0 %}
+                            <a href="{{ url_for('start_period', period_id=period.id) }}" class="btn btn-success" style="white-space:nowrap;">▶️ Rozpocznij</a>
+                            {% elif period.status==1 %}
+                            <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary" style="white-space:nowrap;">🎮 Przejdź do UI</a>
+                            <a href="{{ url_for('finish_period', period_id=period.id) }}" class="btn btn-warning" style="white-space:nowrap;">⏹️ Zakończ</a>
+                            {% else %}
+                            <button class="btn btn-secondary" disabled style="white-space:nowrap;">✅ Zakończony</button>
+                            <a href="{{ url_for('reset_period_status', period_id=period.id) }}" class="btn btn-secondary"
+                               style="font-size:.85rem;white-space:nowrap;"
+                               onclick="return confirm('Zresetować status okresu?');">🔄 Resetuj</a>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div>
-                        <span style="padding: 0.5rem 1rem; background: #ffc107; border-radius: 4px; font-weight: bold;">
-                            K
-                        </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if penalty %}
+            <div style="margin-top:2rem;">
+                <h4>Rzuty karne:</h4>
+                <div style="border:2px solid #ffc107;border-radius:8px;padding:1.5rem;background:#fff;margin-top:1rem;">
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;">
+                        <div>
+                            <h5 style="margin:0 0 .5rem;">Konkurs rzutów karnych</h5>
+                            <p style="margin:0;color:#6c757d;font-size:.9rem;">Wynik: {{ penalty.home_team_penalties }}:{{ penalty.away_team_penalties }}</p>
+                        </div>
+                        <span style="padding:.5rem 1rem;background:#ffc107;border-radius:4px;font-weight:bold;">K</span>
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
-    
-    <!-- Actions -->
-    <div style="padding: 1rem; border-top: 1px solid #dee2e6; background: #f8f9fa; display: flex; gap: 1rem;">
-        <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">
-            ✏️ Edytuj mecz
-        </a>
-        <a href="{{ url_for('list_games') }}" class="btn btn-secondary">
-            📋 Lista meczy
-        </a>
+
+    <!-- Actions footer -->
+    <div style="padding:1rem;border-top:1px solid #dee2e6;background:#f8f9fa;display:flex;gap:1rem;">
+        <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">✏️ Edytuj mecz</a>
+        <a href="{{ url_for('list_games') }}" class="btn btn-secondary">📋 Lista meczy</a>
         {% if settings.current_period_id %}
-        <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary">
-            🎮 Przejdź do UI
-        </a>
+        <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary">🎮 Przejdź do UI</a>
         {% endif %}
     </div>
-    
+
     {% endif %}
 </div>
 
-<!-- Info box -->
-<div class="card" style="margin-top: 1rem;">
-    <div class="card-header">
-        <h3>ℹ️ Instrukcje</h3>
-    </div>
-    <div style="padding: 1rem;">
-        <ol style="margin: 0; padding-left: 1.5rem;">
-            <li>Wybierz mecz i przygotuj go do transmisji (utworzy okresy)</li>
-            <li>Wybierz mecz jako aktywny dla transmisji</li>
-            <li>Rozpocznij pierwszy okres - zostaniesz przekierowany do interfejsu /ui</li>
-            <li><strong>Możesz przechodzić między /ui a panelem kontroli bez wpływu na działanie timera</strong></li>
-            <li>Po zakończeniu okresu kliknij "Zakończ okres" - wrócisz do panelu kontroli</li>
-            <li>Rozpocznij kolejny okres</li>
-            <li>Po zakończeniu wszystkich okresów mecz automatycznie zmieni status na "Zakończony"</li>
-        </ol>
-        <p style="margin-top: 1rem; color: #dc3545;">
-            <strong>Uwaga:</strong> Drugi okres automatycznie rozpoczyna liczenie czasu od miejsca, w którym zakończył się pierwszy okres (np. jeśli pierwszy okres to 20 minut, drugi zaczyna od 20:00).
-        </p>
+
+<!-- ASSIGNMENT MODAL -->
+<div id="assign-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div id="assign-modal" style="background:#fff;border-radius:10px;width:820px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);">
+
+        <!-- Header -->
+        <div id="assign-modal-header">
+            <h3 id="modal-title" style="margin:0;font-size:1.1rem;">...</h3>
+            <button onclick="closeAssignModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6c757d;">✕</button>
+        </div>
+
+        <!-- Body: two columns -->
+        <div id="game-players-select-container">
+
+            <!-- Available -->
+            <div style="display:flex;flex-direction:column;border-right:1px solid #dee2e6;">
+                <div class="game-elements-column-header">
+                    DOSTĘPNE <span id="available-count" style="font-weight:400;color:#6c757d;"></span>
+                </div>
+                <div id="available-list"
+                     ondragover="event.preventDefault()" ondrop="onDrop(event,'available')"
+                     style="flex:1;overflow-y:auto;padding:.5rem;min-height:200px;"></div>
+            </div>
+
+            <!-- Assigned -->
+            <div style="display:flex;flex-direction:column;">
+                <div class="game-elements-column-header">
+                    PRZYPISANE <span id="assigned-count" style="font-weight:400;color:#6c757d;"></span>
+                </div>
+                <div id="assigned-list"
+                     ondragover="event.preventDefault()" ondrop="onDrop(event,'assigned')"
+                     style="flex:1;overflow-y:auto;padding:.5rem;min-height:200px;"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:1rem 1.2rem;border-top:1px solid #dee2e6;display:flex;gap:.75rem;align-items:center;">
+            <div id="modal-scrape-btn" style="display:none;margin-right:auto;">
+                <button onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
+                <span id="modal-scrape-status" style="font-size:.85rem;color:#6c757d;margin-left:.5rem;"></span>
+            </div>
+            <button onclick="closeAssignModal()" class="btn btn-secondary">Anuluj</button>
+            <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
+        </div>
     </div>
 </div>
 
 {% endblock %}
 
-{% block extra_js %}
 
+{% block extra_js %}
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let _contentType  = null;
+let _available    = [];
+let _assigned     = [];
+let _dragging     = null;
+let _squadTeamId  = null;  // team_id of currently open squad modal
+
+// Team IDs from server (for SocketIO re-open logic)
+const _homeTeamId = {{ game.home_team_id if game else 'null' }};
+const _awayTeamId = {{ game.away_team_id if game else 'null' }};
+
+// ── Open / Close ───────────────────────────────────────────────────────
+function openAssignModal(contentType) {
+    _contentType = contentType;
+    document.getElementById('modal-title').textContent = 'Wczytywanie...';
+    document.getElementById('available-list').innerHTML = '';
+    document.getElementById('assigned-list').innerHTML  = '';
+    document.getElementById('assign-modal-overlay').style.display = 'flex';
+
+    // Show scrape button only for squad modals
+    const scrapeBtn = document.getElementById('modal-scrape-btn');
+    if (contentType === 'home-squad' || contentType === 'away-squad') {
+        scrapeBtn.style.display = 'block';
+        document.getElementById('modal-scrape-status').textContent = '';
+    } else {
+        scrapeBtn.style.display = 'none';
+    }
+
+    fetch('/api/assign/' + contentType + '/data')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); closeAssignModal(); return; }
+            document.getElementById('modal-title').textContent = data.title;
+            _available = data.available;
+            _assigned  = data.assigned;
+            if (data.team_id) _squadTeamId = data.team_id;
+            renderLists();
+        })
+        .catch(() => { alert('Błąd wczytywania danych'); closeAssignModal(); });
+}
+
+function closeAssignModal() {
+    document.getElementById('assign-modal-overlay').style.display = 'none';
+    _contentType = null;
+    _available = [];
+    _assigned  = [];
+}
+
+document.getElementById('assign-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAssignModal();
+});
+
+// Auto-open modal from URL param (e.g. after scraping redirect)
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get('open');
+    if (open) {
+        history.replaceState(null, '', '/');  // clean URL
+        openAssignModal(open);
+    }
+})();
+
+// ── Render ─────────────────────────────────────────────────────────────
+function renderLists() {
+    renderSide('available-list', _available, 'available');
+    renderSide('assigned-list',  _assigned,  'assigned');
+    document.getElementById('available-count').textContent = '(' + _available.length + ')';
+    document.getElementById('assigned-count').textContent  = '(' + _assigned.length  + ')';
+}
+
+function renderSide(containerId, items, side) {
+    const el = document.getElementById(containerId);
+    if (items.length === 0) {
+        el.innerHTML = '<div style="padding:2rem;text-align:center;color:#adb5bd;font-size:.9rem;">Przeciągnij tu elementy</div>';
+        return;
+    }
+    el.innerHTML = items.map((item, idx) => buildCard(item, side, idx)).join('');
+}
+
+function buildCard(item, side, idx) {
+    const label = item.label || '';
+    const sub   = item.sub   || '';
+    const isSquad = (_contentType === 'home-squad' || _contentType === 'away-squad');
+
+    // ── Referee / commentator type selector ───────────────────────────
+    let typeSelect = '';
+    if (side === 'assigned' && item.types) {
+        const opts = item.types.map(function(t) {
+            return '<option value="' + t + '"' + (t === (item.type || item.types[0]) ? ' selected' : '') + '>' + t + '</option>';
+        }).join('');
+        typeSelect = '<select data-idx="' + idx + '" data-side="' + side + '" onchange="onTypeChange(this)" ' +
+            'style="font-size:.78rem;padding:.15rem .3rem;border:1px solid #ced4da;border-radius:4px;margin-top:.25rem;">' +
+            opts + '</select>';
+    }
+
+    // ── Camera HDMI selector ──────────────────────────────────────────
+    let hdmiSelect = '';
+    if (side === 'assigned' && _contentType === 'cameras') {
+        const usedHdmi = _assigned.filter(function(_, i) { return i !== idx; }).map(function(a) { return a.hdmi_input; }).filter(Boolean);
+        const freeHdmi = [1,2,3,4].filter(function(h) { return !usedHdmi.includes(h) || h === item.hdmi_input; });
+        const labels = item.hdmi_labels || {};
+        const opts = freeHdmi.map(function(h) {
+            return '<option value="' + h + '"' + (h === item.hdmi_input ? ' selected' : '') + '>HDMI ' + h + ' \u2013 ' + (labels[h] || '') + '</option>';
+        }).join('');
+        hdmiSelect = '<select data-idx="' + idx + '" data-side="' + side + '" onchange="onHdmiChange(this)" ' +
+            'style="font-size:.78rem;padding:.15rem .3rem;border:1px solid #ced4da;border-radius:4px;margin-top:.25rem;">' +
+            opts + '</select>';
+    }
+
+    // ── Squad inline editor (assigned side only) ──────────────────────
+    let playerEditor = '';
+    if (isSquad && side === 'assigned' && item.pg_id) {
+        const num   = item.number != null ? item.number : '';
+        const ln    = item.last_name  || '';
+        const fn    = item.first_name || '';
+        const isGK  = item.is_goalkeeper ? 'checked' : '';
+        const isCap = item.is_captain    ? 'checked' : '';
+        const pgId  = item.pg_id;
+        const plId  = item.player_id;
+        const ts    = _contentType;
+        const inp   = 'border:1px solid #ced4da;border-radius:3px;font-size:.78rem;padding:.1rem .3rem;background:#fff;';
+
+        playerEditor =
+            '<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-top:.35rem;">' +
+                '<input type="number" min="1" max="99" placeholder="#" value="' + num + '" ' +
+                    'data-pg="' + pgId + '" data-field="number" ' +
+                    'style="' + inp + 'width:3.5rem;" ' +
+                    'onkeydown="if(event.key===\'Enter\'){patchPlayerGame(this);this.blur();}" ' +
+                    'onblur="patchPlayerGame(this)">' +
+                '<input type="text" placeholder="Nazwisko" value="' + ln.replace(/"/g, '&quot;') + '" ' +
+                    'data-pl="' + plId + '" data-field="last_name" ' +
+                    'style="' + inp + 'width:7rem;" ' +
+                    'onkeydown="if(event.key===\'Enter\'){patchPlayer(this);this.blur();}" ' +
+                    'onblur="patchPlayer(this)">' +
+                '<input type="text" placeholder="Imi\u0119" value="' + fn.replace(/"/g, '&quot;') + '" ' +
+                    'data-pl="' + plId + '" data-field="first_name" ' +
+                    'style="' + inp + 'width:5.5rem;" ' +
+                    'onkeydown="if(event.key===\'Enter\'){patchPlayer(this);this.blur();}" ' +
+                    'onblur="patchPlayer(this)">' +
+                '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Bramkarz">' +
+                    '<input type="checkbox" ' + isGK + ' ' +
+                        'data-pg="' + pgId + '" data-field="is_goalkeeper" ' +
+                        'onchange="patchPlayerGame(this)"> GK' +
+                '</label>' +
+                '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Kapitan">' +
+                    '<input type="radio" name="captain-' + ts + '" ' + isCap + ' ' +
+                        'data-pg="' + pgId + '" data-field="is_captain" ' +
+                        'onchange="patchCaptain(this)"> \u00a9' +
+                '</label>' +
+            '</div>';
+    }
+
+    // ── Center content ────────────────────────────────────────────────
+    let centerContent = '';
+    if (isSquad && side === 'available') {
+        const sub2 = (item.is_goalkeeper ? 'GK ' : '') + (item.number != null ? '#' + item.number : '');
+        centerContent =
+            '<div style="font-weight:600;font-size:.9rem;">' + label + (sub2 ? '<span style="font-size:.78rem;color:#6c757d;"> ' + sub2 + '</span>' : '')+ '</div>' ;
+    } else {
+        centerContent =
+            // '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
+            (sub ? '<div style="font-size:.78rem;color:#6c757d;">' + sub + '</div>' : '') +
+            typeSelect + hdmiSelect;
+    }
+
+    const arrow = side === 'available'
+        ? '<span title="Przypisz" onclick="moveItem(\'available\',' + idx + ')" style="cursor:pointer;color:#28a745;font-size:1.1rem;padding:.2rem .4rem;flex-shrink:0;">&#8594;</span>'
+        : '<span title="Usu\u0144"    onclick="moveItem(\'assigned\','  + idx + ')" style="cursor:pointer;color:#dc3545;font-size:1.1rem;padding:.2rem .4rem;flex-shrink:0;">&#8592;</span>';
+
+    return '<div draggable="true" ondragstart="onDragStart(event,\'' + side + '\',' + idx + ')" ' +
+        'data-side="' + side + '" data-idx="' + idx + '" ' + 'class="player-container">' +
+        '<span style="color:#adb5bd;font-size:1rem;flex-shrink:0;margin-top:.15rem;">&#8291;</span>' +
+        '<div style="flex:1;min-width:0;">' + centerContent + playerEditor + '</div>' +
+        arrow +
+        '</div>';
+}
+
+// ── Drag & Drop ────────────────────────────────────────────────────────
+function onDragStart(event, side, idx) {
+    _dragging = { side: side, idx: idx };
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+function onDrop(event, targetSide) {
+    event.preventDefault();
+    if (!_dragging) return;
+    if (_dragging.side === targetSide) { _dragging = null; return; }
+    moveItem(_dragging.side, _dragging.idx);
+}
+
+function moveItem(fromSide, idx) {
+    const src = fromSide === 'available' ? _available : _assigned;
+    const dst = fromSide === 'available' ? _assigned  : _available;
+    const item = src.splice(idx, 1)[0];
+
+    if (fromSide === 'available' && item.types && !item.type) {
+        item.type = item.types[0];
+    }
+    if (fromSide === 'available' && _contentType === 'cameras') {
+        const usedHdmi = _assigned.map(function(a) { return a.hdmi_input; }).filter(Boolean);
+        item.hdmi_input = [1,2,3,4].find(function(h) { return !usedHdmi.includes(h); }) || 1;
+    }
+
+    dst.push(item);
+    _dragging = null;
+
+    // For squads: persist immediately and reload so the moved card
+    // gets full pg_id + editable fields straight away
+    const isSquad = (_contentType === 'home-squad' || _contentType === 'away-squad');
+    if (isSquad) {
+        _saveSquadThenReload();
+    } else {
+        renderLists();
+    }
+}
+
+function _saveSquadThenReload() {
+    fetch('/api/assign/' + _contentType + '/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned: _assigned }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+// ── Type / HDMI handlers ───────────────────────────────────────────────
+function onTypeChange(sel) {
+    const idx  = parseInt(sel.dataset.idx);
+    const side = sel.dataset.side;
+    const arr  = side === 'assigned' ? _assigned : _available;
+    arr[idx].type = sel.value;
+}
+
+function onHdmiChange(sel) {
+    _assigned[parseInt(sel.dataset.idx)].hdmi_input = parseInt(sel.value);
+    renderLists();
+}
+
+// ── Scrape squad ──────────────────────────────────────────────────────
+function scrapeSquad() {
+    if (!_contentType) return;
+    const statusEl = document.getElementById('modal-scrape-status');
+    const btn = document.querySelector('#modal-scrape-btn button');
+    btn.disabled = true;
+    statusEl.textContent = 'Scrapowanie...';
+
+    // Derive team_id from current modal data
+    // _assigned and _available items have player_id; we need team_id from the API
+    // We stored it in _squadTeamId when opening the modal
+    fetch('/teams/' + _squadTeamId + '/scrape-players')
+        .then(function(r) {
+            if (r.status === 202) {
+                statusEl.textContent = 'Scrapowanie w toku — proszę czekać...';
+            } else {
+                return r.json().then(function(d) {
+                    statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+                    btn.disabled = false;
+                });
+            }
+        })
+        .catch(function() {
+            statusEl.textContent = 'Błąd połączenia';
+            btn.disabled = false;
+        });
+}
+
+// ── SocketIO ───────────────────────────────────────────────────────────
+const _socket = io();
+
+_socket.on('player_scraping_completed', function(data) {
+    const side = (data.team_id === _homeTeamId) ? 'home-squad' : 'away-squad';
+    window.location.href = '/?open=' + side;
+});
+
+// ── Inline patch helpers ──────────────────────────────────────────────
+function _reloadModal() {
+    // Re-fetch and re-render current modal (preserves open state, respects new order_by)
+    const ct = _contentType;
+    fetch('/api/assign/' + ct + '/data')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            _available = data.available;
+            _assigned  = data.assigned;
+            if (data.team_id) _squadTeamId = data.team_id;
+            renderLists();
+        });
+}
+
+function patchPlayerGame(el) {
+    const pgId = el.dataset.pg;
+    const field = el.dataset.field;
+    let value;
+    if (el.type === 'checkbox') value = el.checked;
+    else if (el.type === 'number') value = el.value === '' ? null : parseInt(el.value);
+    else value = el.value;
+
+    // Optimistically update local state
+    const idx = _assigned.findIndex(function(a) { return String(a.pg_id) === String(pgId); });
+    if (idx !== -1) _assigned[idx][field] = value;
+
+    fetch('/api/player-game/' + pgId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd: ' + data.error); return; }
+        // Sync number back (server may have normalised it)
+        if (field === 'number' && idx !== -1) _assigned[idx].number = data.pg.number;
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+function patchCaptain(el) {
+    // Radio: always sets is_captain=true for selected, server clears others
+    patchPlayerGame(el);
+}
+
+function patchPlayer(el) {
+    const plId = el.dataset.pl;
+    const field = el.dataset.field;
+    const value = el.value.trim();
+    if (!value) return;  // don't save empty name
+
+    // Optimistically update local label
+    const idx = _assigned.findIndex(function(a) { return String(a.player_id) === String(plId); });
+    if (idx !== -1) {
+        _assigned[idx][field] = value;
+        _assigned[idx].label = _assigned[idx].last_name + ' ' + _assigned[idx].first_name;
+    }
+
+    fetch('/api/player/' + plId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd: ' + data.error); }
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+// ── Save ───────────────────────────────────────────────────────────────
+function saveAssignments() {
+    if (!_contentType) return;
+    const isSquad = (_contentType === 'home-squad' || _contentType === 'away-squad');
+
+    // Squads are already saved on every move — just close and reload page
+    if (isSquad) {
+        window.location.reload();
+        return;
+    }
+
+    fetch('/api/assign/' + _contentType + '/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned: _assigned }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        window.location.reload();
+    })
+    .catch(function() { alert('Błąd komunikacji z serwerem'); });
+}
+</script>
 {% endblock %}

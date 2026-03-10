@@ -65,9 +65,9 @@ class PlayerManager:
     def get_players_by_team(self, team_id: int) -> List[Player]:
         """Get all players for a specific team"""
         return Player.query.filter_by(team_id=team_id).order_by(
-            Player.number.asc().nullslast(),
-            Player.last_name,
-            Player.first_name
+            Player.is_goalkeeper.desc(),       # bramkarze pierwsi (True > False)
+            Player.number.asc().nullslast(),   # numer rosnąco, None na końcu
+            Player.last_name.asc(),            # nazwisko alfabetycznie
         ).all()
 
     def get_player_by_id(self, player_id: int) -> Optional[Player]:

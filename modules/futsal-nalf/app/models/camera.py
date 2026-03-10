@@ -18,6 +18,7 @@ class Camera(db.Model):
 
     # Relationships
     game_cameras = db.relationship('GameCamera', backref='camera', lazy='dynamic', cascade='all, delete-orphan')
+    event_cameras = db.relationship('EventCamera', backref='camera', lazy='dynamic', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Camera {self.name} ({self.brand} {self.model})>'

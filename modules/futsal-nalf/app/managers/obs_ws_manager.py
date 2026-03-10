@@ -2,7 +2,8 @@
 from flask import current_app
 from datetime import datetime
 from app.models import Settings
-# from app.managers import get_timer_manager
+from app.managers import GameEventManager
+from app.managers import get_timer_manager
 import threading
 
 
@@ -43,6 +44,29 @@ class ObsWsManager:
         request_id = payload.get('requestID')
         if request_id == 'get-websocket-connection':
             self._emit_to_ui('obs_status', 'connected')
+        elif request_id.startswith('get-record-status-'):
+                print(f'OBS_RESPONSE: {msg}')
+                request_id = int(request_id.split('get-record-status-')[1])
+                try:
+                    from app.models.settings import Settings
+                    settings = Settings.get_settings()
+                    video_path = settings.get_obs_record_filepath()
+                    main_timer_id = settings.get_current_timers()['main']['timer_id']
+                    timer_manager = get_timer_manager()
+                    elapsed_time = timer_manager.get_timer_state(main_timer_id)['elapsed_time']
+                    response_data = payload.get('responseData')
+                    record_time = response_data.get('outputDuration')
+                    manager = GameEventManager()
+                    manager.update_game_event(
+                        game_event_id=request_id,
+                        game_time=int(elapsed_time/1000),
+                        video_path=video_path,
+                        record_time=record_time
+                        )
+                except Exception as e:
+                    current_app.logger.error(f'❌ Failed to save game event: {e}')
+                    self._emit_to_ui('error', {'message': str(e)})
+                    return
 
     def on_obs_event(self, msg):
         payload = msg.get('payload')

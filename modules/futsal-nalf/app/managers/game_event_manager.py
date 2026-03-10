@@ -15,19 +15,23 @@ logger = logging.getLogger(__name__)
 class GameEventManager:
     """Manager for GameEvent operations"""
 
-    def record_event(self, game_id: int, event_id: int, time: int,
+    def record_event(self, game_id: int, event_id: int, game_time: int = None,
                     period_id: int = None, team_id: int = None,
-                    player_id: int = None) -> Optional[GameEvent]:
+                    player_id: int = None, event_place: str = None,
+                    record_time: int = None, video_path: str = None) -> Optional[GameEvent]:
         """
         Record event in a game
-        
+
         Args:
             game_id: Game ID
             event_id: Event type ID
-            time: Time in milliseconds (from timer plugin)
+            game_time: Game time in milliseconds (from timer plugin)
+            record_time: Wall-clock recording time in milliseconds
+            video_path: Path to the video file associated with the event
             period_id: Period ID (optional, auto-detect current if not provided)
             team_id: Team ID (required if Event.is_reported=True)
             player_id: Player ID (required if Event.is_reported=True)
+            event_place: Location on the field where the event occurred (optional)
 
         Returns:
             GameEvent object or None if error
@@ -57,19 +61,13 @@ class GameEventManager:
             if not period or period.game_id != game_id:
                 raise ValueError(f"Część o ID {period_id} nie istnieje lub nie należy do meczu {game_id}")
 
-        # Validate team/player for reported events
-        if event.is_reported:
-            if team_id is None:
-                raise ValueError(f"Zdarzenie '{event.name}' wymaga przypisania do drużyny (team_id)")
-            if player_id is None:
-                raise ValueError(f"Zdarzenie '{event.name}' wymaga przypisania do zawodnika (player_id)")
-            
-            # Validate team exists
+        # Validate team for reported events (player_id is optional)
+        if event.is_reported and team_id is not None:
             team = Team.query.get(team_id)
             if not team:
                 raise ValueError(f"Drużyna o ID {team_id} nie istnieje")
-            
-            # Validate player exists
+
+        if player_id is not None:
             player = Player.query.get(player_id)
             if not player:
                 raise ValueError(f"Zawodnik o ID {player_id} nie istnieje")
@@ -81,12 +79,15 @@ class GameEventManager:
                 period_id=period_id,
                 team_id=team_id,
                 player_id=player_id,
-                time=time
+                game_time=game_time,
+                record_time=record_time,
+                video_path=video_path,
+                event_place=event_place
             )
             db.session.add(game_event)
             db.session.commit()
 
-            logger.info(f"Recorded event '{event.name}' at {game_event.time_formatted} in game {game_id}")
+            logger.info(f"Recorded event '{event.name}' at {game_event.game_time_formatted} in game {game_id}")
             return game_event
 
         except Exception as e:
@@ -95,39 +96,47 @@ class GameEventManager:
             raise
 
     def record_event_now(self, game_id: int, event_id: int,
+                        record_time: int, video_path: str,
                         team_id: int = None, player_id: int = None,
-                        get_time_func=None) -> Optional[GameEvent]:
+                        event_place: str = None,
+                        get_game_time_func=None) -> Optional[GameEvent]:
         """
-        Record event with current time from timer plugin
-        
+        Record event with current game time from timer plugin
+
         Args:
             game_id: Game ID
             event_id: Event type ID
+            record_time: Wall-clock recording time in milliseconds
+            video_path: Path to the video file associated with the event
             team_id: Team ID (optional, required if Event.is_reported=True)
             player_id: Player ID (optional, required if Event.is_reported=True)
-            get_time_func: Function to get current time from timer (optional)
-                          If not provided, uses 0 as fallback
+            event_place: Location on the field where the event occurred (optional)
+            get_game_time_func: Function to get current game time from timer (optional)
+                                If not provided, uses 0 as fallback
 
         Returns:
             GameEvent object or None if error
         """
-        # Get current time from timer
-        if get_time_func:
+        # Get current game time from timer
+        if get_game_time_func:
             try:
-                current_time = get_time_func()
+                current_game_time = get_game_time_func()
             except Exception as e:
-                logger.warning(f"Could not get time from timer: {e}, using 0")
-                current_time = 0
+                logger.warning(f"Could not get game time from timer: {e}, using 0")
+                current_game_time = 0
         else:
-            current_time = 0
-            logger.warning("No get_time_func provided, using time=0")
+            current_game_time = 0
+            logger.warning("No get_game_time_func provided, using game_time=0")
 
         return self.record_event(
             game_id=game_id,
             event_id=event_id,
-            time=current_time,
+            game_time=current_game_time,
+            record_time=record_time,
+            video_path=video_path,
             team_id=team_id,
-            player_id=player_id
+            player_id=player_id,
+            event_place=event_place
         )
 
     def get_events_for_game(self, game_id: int, period_id: int = None,
@@ -153,20 +162,25 @@ class GameEventManager:
         if team_id:
             query = query.filter_by(team_id=team_id)
 
-        return query.order_by(GameEvent.time).all()
+        return query.order_by(GameEvent.game_time).all()
 
     def get_game_event_by_id(self, game_event_id: int) -> Optional[GameEvent]:
         """Get GameEvent by ID"""
         return GameEvent.query.get(game_event_id)
 
-    def update_game_event(self, game_event_id: int, time: int = None,
-                         team_id: int = None, player_id: int = None) -> Optional[GameEvent]:
+    def update_game_event(self, game_event_id: int, game_time: int = None,
+                         record_time: int = None, video_path: str = None,
+                         event_place: str = None, team_id: int = None,
+                         player_id: int = None) -> Optional[GameEvent]:
         """
         Update game event
-        
+
         Args:
             game_event_id: GameEvent ID
-            time: New time in milliseconds (optional)
+            game_time: New game time in milliseconds (optional)
+            record_time: New wall-clock recording time in milliseconds (optional)
+            video_path: New path to the video file (optional)
+            event_place: New location on the field (optional)
             team_id: New team ID (optional)
             player_id: New player ID (optional)
 
@@ -179,8 +193,14 @@ class GameEventManager:
             return None
 
         try:
-            if time is not None:
-                game_event.time = time
+            if game_time is not None:
+                game_event.game_time = game_time
+            if record_time is not None:
+                game_event.record_time = record_time
+            if video_path is not None:
+                game_event.video_path = video_path
+            if event_place is not None:
+                game_event.event_place = event_place
             if team_id is not None:
                 game_event.team_id = team_id
             if player_id is not None:
@@ -233,4 +253,4 @@ class GameEventManager:
         Returns:
             List of GameEvent objects with all relationships loaded
         """
-        return GameEvent.query.filter_by(game_id=game_id).order_by(GameEvent.time).all()
+        return GameEvent.query.filter_by(game_id=game_id).order_by(GameEvent.game_time).all()

@@ -332,6 +332,47 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 			})
 		}
 
+	case "GetRecordStatus":
+		// For each active camera that was requested, return the current recording
+		// file path and estimated duration (file size → ms).
+		// game_event_id is forwarded unchanged so the caller can correlate responses.
+		gameEventID, _ := msg.Payload["game_event_id"]
+
+		cameraResults := make(map[string]interface{})
+		for _, camID := range targetCameras {
+			cam, ok := rm.cameras[camID]
+			if !ok {
+				log.Printf("⚠️  GetRecordStatus: unknown camera: %s", camID)
+				cameraResults[camID] = map[string]interface{}{
+					"error": "camera not found",
+				}
+				continue
+			}
+			if !cam.IsRecording() {
+				log.Printf("⚠️  GetRecordStatus: camera not recording: %s", camID)
+				cameraResults[camID] = map[string]interface{}{
+					"is_recording": false,
+				}
+				continue
+			}
+			meta := cam.LastMeta()
+			duration := cam.OutputDuration()
+			log.Printf("📊 GetRecordStatus [%s]: file=%s duration=%dms", camID, meta.FileName, duration)
+			cameraResults[camID] = map[string]interface{}{
+				"file_name":       meta.FileName,
+				"file_path":       meta.FilePath,
+				"output_duration": duration,
+				"is_recording":    true,
+			}
+		}
+
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"requestType":   requestType,
+			"request_id":    requestID,
+			"game_event_id": gameEventID,
+			"cameras":       cameraResults,
+		})
+
 	default:
 		log.Printf("⚠️  recording_command: unknown requestType: %s", requestType)
 		rm.replyError(hubClient, msg, "unknown requestType: "+requestType)

@@ -46,8 +46,25 @@ def create_app(config_name='default'):
     # Register routes and socketio events
     with app.app_context():
 
-
         from app import routes, socketio_events
+
+        @app.context_processor
+        def inject_global_context():
+            """Inject common data into all templates"""
+            try:
+                from app.models.settings import Settings
+                from app.models.season import Season
+                settings = Settings.get_settings()
+                season = Season.query.get(settings.current_season_id) if settings.current_season_id else None
+                return {
+                    'broadcast_game_id': settings.current_game_id,
+                    'season': season,
+                }
+            except Exception:
+                return {
+                    'broadcast_game_id': None,
+                    'season': None,
+                }
 
     # Initialize managers in background thread
     import threading

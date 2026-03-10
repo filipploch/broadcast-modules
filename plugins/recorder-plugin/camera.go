@@ -18,7 +18,7 @@ type RecordingMeta struct {
 	CameraName  string `json:"camera_name"`
 	FileName    string `json:"file_name"`  // e.g. "camera1_20060102_150405.mkv"
 	FilePath    string `json:"file_path"`  // full path to .mkv
-	StartedAt   string `json:"started_at"` // RFC3339
+	StartedAt   int64  `json:"started_at"` // Unix timestamp ms
 	ServiceName string `json:"service_name"`
 	// --- fields populated by hub messages ---
 	MatchID  string `json:"match_id,omitempty"`
@@ -69,6 +69,17 @@ func (cr *CameraRecorder) LastMeta() RecordingMeta {
 	return cr.lastMeta
 }
 
+// OutputDuration returns the elapsed recording time in milliseconds.
+// Calculated as: now_ms - started_at_ms. Returns 0 if not recording.
+func (cr *CameraRecorder) OutputDuration() int64 {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	if !cr.recording || cr.lastMeta.StartedAt == 0 {
+		return 0
+	}
+	return time.Now().UnixMilli() - cr.lastMeta.StartedAt
+}
+
 // StartRecord starts ffmpeg for this camera.
 func (cr *CameraRecorder) StartRecord(meta RecordingMeta) error {
 	cr.mu.Lock()
@@ -111,7 +122,7 @@ func (cr *CameraRecorder) StartRecord(meta RecordingMeta) error {
 	meta.CameraName = cr.config.DeviceName
 	meta.FileName = fileName
 	meta.FilePath = filePath
-	meta.StartedAt = now.Format(time.RFC3339)
+	meta.StartedAt = now.UnixMilli()
 	meta.ServiceName = cr.config.ServiceName
 
 	if err := cr.writeMetaFiles(meta); err != nil {
@@ -143,6 +154,11 @@ func (cr *CameraRecorder) StopRecord() error {
 
 	cr.recording = false
 	log.Printf("⏹️  [%s] Recording stopped", cr.config.ID)
+
+	// Clear current.json — recording is over, data moved to history
+	if err := cr.clearCurrentMeta(); err != nil {
+		log.Printf("⚠️  [%s] Failed to clear current meta: %v", cr.config.ID, err)
+	}
 	return nil
 }
 
@@ -290,8 +306,18 @@ func (cr *CameraRecorder) writeMetaFiles(meta RecordingMeta) error {
 	return cr.appendHistoryMeta(meta)
 }
 
+// clearCurrentMeta overwrites current.json with an empty object, signalling
+// that no recording is active. Called after StopRecord.
+func (cr *CameraRecorder) clearCurrentMeta() error {
+	tmpPath := cr.currentMetaPath() + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte("{}\n"), 0o644); err != nil {
+		return fmt.Errorf("failed to write empty current meta: %w", err)
+	}
+	return os.Rename(tmpPath, cr.currentMetaPath())
+}
+
 func (cr *CameraRecorder) writeCurrentMeta(meta RecordingMeta) error {
-	data, err := json.MarshalIndent(meta, "", "  ")
+	data, err := json.Marshal(meta)
 	if err != nil {
 		return fmt.Errorf("failed to marshal current meta: %w", err)
 	}

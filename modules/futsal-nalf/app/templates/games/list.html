@@ -12,9 +12,9 @@
         <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
-                <a href="{{ url_for('scrape_games', league_id=league.id) }}" class="btn btn-success">
+                <button class="btn btn-success" onclick="startGameScraping({{ league.id }})">
                     🔍 Scrapuj mecze
-                </a>
+                </button>
                 <a href="{{ url_for('create_game', league_id=league.id) }}" class="btn btn-primary">➕ Nowy Mecz</a>
             {% else %}
                 <a href="{{ url_for('create_game') }}" class="btn btn-primary">➕ Nowy Mecz</a>
@@ -26,7 +26,7 @@
         <thead><tr><th>Data</th><th>Mecz</th><th>Wynik</th><th>Status</th><th>Akcje</th></tr></thead>
         <tbody>
             {% for game in games %}
-            <tr>
+            <tr{% if game.id == broadcast_game_id %} class="broadcast-game"{% endif %}>
                 <td>{{ game.date.strftime('%Y-%m-%d %H:%M') if game.date else '-' }}</td>
                 <td><strong>{{ game.home_team.short_name if game.home_team else '?' }}</strong> vs <strong>{{ game.away_team.short_name if game.away_team else '?' }}</strong></td>
                 <td class="game-score">{{ game.score_string }}</td>

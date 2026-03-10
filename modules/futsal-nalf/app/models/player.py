@@ -28,6 +28,7 @@ class Player(db.Model):
 
     # Relationships
     player_games = db.relationship('PlayerGame', backref='player', lazy='dynamic', cascade='all, delete-orphan')
+    game_events = db.relationship('GameEvent', backref='player', lazy='dynamic')
 
     def __repr__(self):
         return f'<Player {self.first_name} {self.last_name} (Team: {self.team_id})>'

@@ -15,6 +15,7 @@ from app.models.player import Player
 from app.models.player_game import PlayerGame
 from app.models.event import Event
 from app.models.game_event import GameEvent
+from app.models.event_camera import EventCamera
 from app.models.referee import Referee
 from app.models.game_referee import GameReferee
 from app.models.commentator import Commentator
@@ -37,6 +38,7 @@ __all__ = [
     'PlayerGame',
     'Event',
     'GameEvent',
+    'EventCamera',
     'Referee',
     'GameReferee',
     'Commentator',
