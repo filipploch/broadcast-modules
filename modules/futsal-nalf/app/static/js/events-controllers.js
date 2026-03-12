@@ -15,14 +15,15 @@ function unselectAllGameFieldCells() {
         removeClassName(cell, 'selected-game-field-cell');
     });
     selectedCellID = null;
+    hideEventsControllers();
 }
 
 function selectGameFieldCell(selectedCell) {
     clearTimeout(clickTimer);
     let selectedGameFieldCell = selectedCell;
-    selectedCellID = selectedGameFieldCell.id;
     unselectAllGameFieldCells();
     addClassName(selectedGameFieldCell, 'selected-game-field-cell');
+    selectedCellID = selectedGameFieldCell.id;
     showEventsControllers();
 }
 
@@ -41,11 +42,8 @@ function addTeamEvent(_team, _event) {
         'selected_cell_id': selectedCellID
     });
     unselectAllGameFieldCells();
-    hideEventsControllers();
 }
 
 function addFieldEvent(_event){
-
     unselectAllGameFieldCells();
-    hideEventsControllers();
 }

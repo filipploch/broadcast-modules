@@ -231,15 +231,27 @@ class PeriodManager:
             # Update main timer in Settings
             Settings.update_main_timer(main_timer_data)
             
-            # Recreate penalty timers as dependent
+            # Recreate penalty timers as dependent on new period's main timer.
+            # elapsed_time from previous period becomes the new initial_time (UI offset),
+            # and the remaining time = original limit - elapsed becomes the new limit
+            # (plugin counts from 0, so it only needs to run for the remainder).
             for penalty in remaining_penalties:
+                penalty_elapsed = penalty.get("elapsed_time", 0) or 0
+                penalty_limit   = penalty.get("limit", 120000) or 120000
+                remaining_limit = max(penalty_limit - penalty_elapsed, 0)
+
+                if remaining_limit == 0:
+                    # Penalty already fully served — skip
+                    continue
+
                 penalty_metadata = penalty.get("metadata", {})
                 timer_manager.create_timer(
                     timer_id=penalty.get("timer_id"),
                     timer_type="dependent",
                     parent_id=period.main_timer_name,
-                    initial_time=penalty.get("initial_time", 0),
-                    limit=penalty.get("limit", 120000),
+                    initial_time=penalty_elapsed,   # UI shows time already served
+                    limit=remaining_limit,          # plugin runs only for the remainder
+                    pause_at_limit=True,
                     metadata=penalty_metadata
                 )
         else:

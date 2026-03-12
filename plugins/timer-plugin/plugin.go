@@ -219,17 +219,17 @@ func (p *Plugin) handleCreateTimer(msg *Message) {
 
 	// Setup callbacks
 	config.Callbacks = &Callbacks{
-		OnStart: func(displayTime time.Duration, internalID string) {
-			p.broadcastTimerStarted(internalID, timerID, displayTime)
+		OnStart: func(elapsedTime time.Duration, internalID string) {
+			p.broadcastTimerStarted(internalID, timerID, elapsedTime)
 		},
-		OnSecondTick: func(displayTime time.Duration, internalID string) {
-			p.broadcastTimerUpdated(internalID, timerID, displayTime)
+		OnSecondTick: func(elapsedTime time.Duration, internalID string) {
+			p.broadcastTimerUpdated(internalID, timerID, elapsedTime)
 		},
-		OnPause: func(displayTime time.Duration, internalID string) {
-			p.broadcastTimerPaused(internalID, timerID, displayTime)
+		OnPause: func(elapsedTime time.Duration, internalID string) {
+			p.broadcastTimerPaused(internalID, timerID, elapsedTime)
 		},
-		OnLimit: func(displayTime time.Duration, internalID string) {
-			p.broadcastLimitReached(internalID, timerID, displayTime)
+		OnLimit: func(elapsedTime time.Duration, internalID string) {
+			p.broadcastLimitReached(internalID, timerID, elapsedTime)
 		},
 	}
 
@@ -329,16 +329,26 @@ func (p *Plugin) handleResumeTimer(msg *Message) {
 		return
 	}
 
-	// Send resume confirmation
-	p.hubClient.Send(&Message{
-		From: p.ID,
-		To:   msg.From,
-		Type: "timer_resumed",
-		Payload: map[string]interface{}{
-			"timer_id": timerID,
-			"success":  true,
-		},
-	})
+	// Broadcast resume to all receivers (main_module + overlays)
+	timerInfo, err := p.manager.GetState(internalID)
+	if err == nil {
+		var limitMs interface{}
+		if timerInfo.Limit > 0 {
+			limitMs = timerInfo.Limit.Milliseconds()
+		}
+		p.hubClient.Send(&Message{
+			From: p.ID,
+			To:   "broadcast:timer_update_receiver",
+			Type: "timer_resumed",
+			Payload: map[string]interface{}{
+				"timer_id":     timerID,
+				"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+				"initial_time": timerInfo.InitialTime.Milliseconds(),
+				"limit":        limitMs,
+				"state":        "running",
+			},
+		})
+	}
 
 	log.Printf("▶️  Timer resumed: %s", timerID)
 }
@@ -364,17 +374,20 @@ func (p *Plugin) handleResetTimer(msg *Message) {
 	// Get state and broadcast
 	timerInfo, err := p.manager.GetState(internalID)
 	if err == nil {
-		displayTime := timerInfo.ElapsedTime + timerInfo.InitialTime
-
+		var limitMs interface{}
+		if timerInfo.Limit > 0 {
+			limitMs = timerInfo.Limit.Milliseconds()
+		}
 		p.hubClient.Send(&Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
 			Type: "timer_reset",
 			Payload: map[string]interface{}{
 				"timer_id":     timerID,
-				"elapsed_time": displayTime.Milliseconds(),
+				"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+				"initial_time": timerInfo.InitialTime.Milliseconds(),
+				"limit":        limitMs,
 				"state":        "idle",
-				"limit":        timerInfo.Limit.Milliseconds(),
 			},
 		})
 	}
@@ -410,17 +423,20 @@ func (p *Plugin) handleAdjustTime(msg *Message) {
 	// Get state and broadcast
 	timerInfo, err := p.manager.GetState(internalID)
 	if err == nil {
-		displayTime := timerInfo.ElapsedTime + timerInfo.InitialTime
-
+		var limitMs interface{}
+		if timerInfo.Limit > 0 {
+			limitMs = timerInfo.Limit.Milliseconds()
+		}
 		p.hubClient.Send(&Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
-			Type: "timer_updated",
+			Type: "timer_adjusted",
 			Payload: map[string]interface{}{
 				"timer_id":     timerID,
-				"elapsed_time": displayTime.Milliseconds(),
+				"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+				"initial_time": timerInfo.InitialTime.Milliseconds(),
+				"limit":        limitMs,
 				"state":        string(timerInfo.State),
-				"limit":        timerInfo.Limit.Milliseconds(),
 			},
 		})
 	}
@@ -454,6 +470,27 @@ func (p *Plugin) handleSetElapsedTime(msg *Message) {
 	if err := p.manager.SetElapsedTime(internalID, newElapsed); err != nil {
 		p.sendError(msg.From, "set_elapsed_time", err.Error())
 		return
+	}
+
+	// Broadcast new state to all receivers
+	timerInfo, err := p.manager.GetState(internalID)
+	if err == nil {
+		var limitMs interface{}
+		if timerInfo.Limit > 0 {
+			limitMs = timerInfo.Limit.Milliseconds()
+		}
+		p.hubClient.Send(&Message{
+			From: p.ID,
+			To:   "broadcast:timer_update_receiver",
+			Type: "timer_updated",
+			Payload: map[string]interface{}{
+				"timer_id":     timerID,
+				"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+				"initial_time": timerInfo.InitialTime.Milliseconds(),
+				"limit":        limitMs,
+				"state":        string(timerInfo.State),
+			},
+		})
 	}
 
 	log.Printf("⏱️  Timer time set: %s (%dms)", timerID, int64(elapsedMs))
@@ -574,89 +611,101 @@ func (p *Plugin) handlePing(msg *Message) {
 // BROADCAST METHODS
 // ============================================================================
 
-func (p *Plugin) broadcastTimerStarted(internalID, externalID string, displayTime time.Duration) {
+func (p *Plugin) broadcastTimerStarted(internalID, externalID string, _ time.Duration) {
 	timerInfo, err := p.manager.GetState(internalID)
 	if err != nil {
 		return
 	}
-
+	var limitMs interface{}
+	if timerInfo.Limit > 0 {
+		limitMs = timerInfo.Limit.Milliseconds()
+	}
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_started",
 		Payload: map[string]interface{}{
 			"timer_id":     externalID,
-			"elapsed_time": displayTime.Milliseconds(),
+			"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+			"initial_time": timerInfo.InitialTime.Milliseconds(),
+			"limit":        limitMs,
 			"state":        string(timerInfo.State),
-			"limit":        timerInfo.Limit.Milliseconds(),
 		},
 	})
-
-	log.Printf("📤 [STARTED] %s: %dms", externalID, displayTime.Milliseconds())
+	log.Printf("📤 [STARTED] %s: elapsed=%dms initial=%dms", externalID, timerInfo.ElapsedTime.Milliseconds(), timerInfo.InitialTime.Milliseconds())
 }
 
-func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, displayTime time.Duration) {
+func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, _ time.Duration) {
 	timerInfo, err := p.manager.GetState(internalID)
 	if err != nil {
 		return
 	}
-
+	var limitMs interface{}
+	if timerInfo.Limit > 0 {
+		limitMs = timerInfo.Limit.Milliseconds()
+	}
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_updated",
 		Payload: map[string]interface{}{
 			"timer_id":     externalID,
-			"elapsed_time": displayTime.Milliseconds(),
+			"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+			"initial_time": timerInfo.InitialTime.Milliseconds(),
+			"limit":        limitMs,
 			"state":        string(timerInfo.State),
-			"limit":        timerInfo.Limit.Milliseconds(),
 		},
 	})
-
-	// log.Printf("📤 [TICK] %s: %dms", externalID, displayTime.Milliseconds())
+	// log.Printf("📤 [TICK] %s: %dms", externalID, timerInfo.ElapsedTime.Milliseconds())
 }
 
-func (p *Plugin) broadcastTimerPaused(internalID, externalID string, displayTime time.Duration) {
+func (p *Plugin) broadcastTimerPaused(internalID, externalID string, _ time.Duration) {
 	timerInfo, err := p.manager.GetState(internalID)
 	if err != nil {
 		return
 	}
-
+	var limitMs interface{}
+	if timerInfo.Limit > 0 {
+		limitMs = timerInfo.Limit.Milliseconds()
+	}
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_paused",
 		Payload: map[string]interface{}{
 			"timer_id":     externalID,
-			"elapsed_time": displayTime.Milliseconds(),
+			"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+			"initial_time": timerInfo.InitialTime.Milliseconds(),
+			"limit":        limitMs,
 			"state":        string(timerInfo.State),
-			"limit":        timerInfo.Limit.Milliseconds(),
 		},
 	})
-
-	log.Printf("📤 [PAUSED] %s: %dms", externalID, displayTime.Milliseconds())
+	log.Printf("📤 [PAUSED] %s: elapsed=%dms initial=%dms", externalID, timerInfo.ElapsedTime.Milliseconds(), timerInfo.InitialTime.Milliseconds())
 }
 
-func (p *Plugin) broadcastLimitReached(internalID, externalID string, displayTime time.Duration) {
+func (p *Plugin) broadcastLimitReached(internalID, externalID string, _ time.Duration) {
 	timerInfo, err := p.manager.GetState(internalID)
 	if err != nil {
 		return
 	}
-
+	var limitMs interface{}
+	if timerInfo.Limit > 0 {
+		limitMs = timerInfo.Limit.Milliseconds()
+	}
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "limit_reached",
 		Payload: map[string]interface{}{
 			"timer_id":       externalID,
-			"elapsed_time":   displayTime.Milliseconds(),
+			"elapsed_time":   timerInfo.ElapsedTime.Milliseconds(),
+			"initial_time":   timerInfo.InitialTime.Milliseconds(),
+			"limit":          limitMs,
 			"state":          string(timerInfo.State),
 			"pause_at_limit": timerInfo.PauseAtLimit,
-			"limit":          timerInfo.Limit.Milliseconds(),
 		},
 	})
-
-	log.Printf("⏱️  Timer %s reached limit (%dms)", externalID, displayTime.Milliseconds())
+	log.Printf("⏱️  Timer %s reached limit (elapsed=%dms initial=%dms)", externalID, timerInfo.ElapsedTime.Milliseconds(), timerInfo.InitialTime.Milliseconds())
 }
 
 // ============================================================================
@@ -674,18 +723,20 @@ func (p *Plugin) findInternalID(externalID string) string {
 }
 
 func (p *Plugin) convertTimerInfo(info *TimerInfo, externalID string) map[string]interface{} {
-	displayTime := info.ElapsedTime + info.InitialTime
-
+	var limitMs interface{}
+	if info.Limit > 0 {
+		limitMs = info.Limit.Milliseconds()
+	}
 	return map[string]interface{}{
 		"timer_id":          externalID,
 		"internal_id":       info.ID,
-		"elapsed_time":      displayTime.Milliseconds(),
+		"elapsed_time":      info.ElapsedTime.Milliseconds(),
 		"initial_time":      info.InitialTime.Milliseconds(),
+		"limit":             limitMs,
 		"state":             string(info.State),
 		"timer_type":        string(info.Type),
 		"parent_id":         info.ParentID,
 		"metadata":          info.Metadata,
-		"limit":             info.Limit.Milliseconds(),
 		"has_reached_limit": info.HasReachedLimit,
 	}
 }

@@ -16,9 +16,10 @@ import (
 type RecordingMeta struct {
 	CameraID    string `json:"camera_id"`
 	CameraName  string `json:"camera_name"`
-	FileName    string `json:"file_name"`  // e.g. "camera1_20060102_150405.mkv"
-	FilePath    string `json:"file_path"`  // full path to .mkv
-	StartedAt   int64  `json:"started_at"` // Unix timestamp ms
+	FileName    string `json:"file_name"`   // e.g. "camera1_20060102_150405.mkv"
+	FilePath    string `json:"file_path"`   // full path to .mkv
+	StartedAt   int64  `json:"started_at"`  // Unix timestamp ms
+	FinishedAt  int64  `json:"finished_at"` // Unix timestamp ms; 0 if still recording
 	ServiceName string `json:"service_name"`
 	// --- fields populated by hub messages ---
 	MatchID  string `json:"match_id,omitempty"`
@@ -152,6 +153,8 @@ func (cr *CameraRecorder) StopRecord() error {
 		return fmt.Errorf("failed to stop ffmpeg for camera %s: %w", cr.config.ID, err)
 	}
 
+	cr.lastMeta.FinishedAt = time.Now().UnixMilli()
+	_ = cr.appendHistoryMeta(cr.lastMeta)
 	cr.recording = false
 	log.Printf("⏹️  [%s] Recording stopped", cr.config.ID)
 
@@ -300,10 +303,8 @@ func (cr *CameraRecorder) writeMetaFiles(meta RecordingMeta) error {
 	if err := os.MkdirAll(cr.outputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output dir: %w", err)
 	}
-	if err := cr.writeCurrentMeta(meta); err != nil {
-		return err
-	}
-	return cr.appendHistoryMeta(meta)
+	// Only update current.json on start — history is written on stop (with finished_at)
+	return cr.writeCurrentMeta(meta)
 }
 
 // clearCurrentMeta overwrites current.json with an empty object, signalling

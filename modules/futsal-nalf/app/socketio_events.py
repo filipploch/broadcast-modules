@@ -35,6 +35,10 @@ def handle_request_initial_data():
     # away_team_id = current_game.away_team_id
     away_team = current_game['away_team']
 
+    hub_client = get_hub_client ()
+    if hub_client:
+        hub_client.broadcast_to_class('overlay', 'game_data', current_game)
+
     emit('initial_data', {
         'scores': {'home': home_team['goals'], 'away': away_team['goals']},
         'fouls': {'home': home_team['fouls'], 'away': away_team['fouls']},
@@ -56,6 +60,12 @@ def handle_reverse_scoreboard(data):
 @socketio.on('disconnect')
 def handle_disconnect():
     current_app.logger.info('🔌 UI client disconnected')
+
+@socketio.on('show_overlay_container')
+def handle_show_overlay_container(data):
+    hub_client = get_hub_client()
+    if hub_client:
+        hub_client.broadcast_to_class('overlay', 'show_overlay_container', payload=data)
 
 @socketio.on('start_recording')
 def handle_start_recording():
@@ -319,7 +329,9 @@ def handle_timer_resume(data):
 @socketio.on('timer_reset')
 def handle_timer_reset(data):
     """
-    Reset timer
+    Reset timer.
+    Does NOT emit timer_reset to UI directly — the confirmation comes from
+    timer-plugin → hub_client → timer_manager.on_timer_reset → _emit_to_ui.
 
     Client sends: {'timer_id': 'match-123'}
     """
@@ -331,8 +343,8 @@ def handle_timer_reset(data):
     timer_id = data.get('timer_id')
     success = timer_manager.reset_timer(timer_id)
 
-    if success:
-        emit('timer_reset', {'timer_id': timer_id}, broadcast=True)
+    if not success:
+        emit('error', {'message': f'Failed to reset timer {timer_id}'})
         
 @socketio.on('timer_remove')
 def handle_timer_remove(data):
@@ -619,10 +631,14 @@ def handle_change_game_value(data):
 
     if period:
         game = Game.query.filter_by(id=period.game_id).first()
+        data = {
+            'home_team': {'goals': game.home_team_goals, 'fouls': game.home_team_fouls},
+            'away_team': {'goals': game.away_team_goals, 'fouls': game.away_team_fouls}
+        }
         hub_client = get_hub_client()
         if hub_client:
-            hub_client.broadcast_to_class('game_data_receiver', 'game_data', game.to_dict())
-            emit('game_data', {'payload': game.to_dict()})
+            hub_client.broadcast_to_class('game_data_receiver', 'scoreboard_data', data)
+            emit('scoreboard_data', {'payload': data})
     
     # # ALWAYS sync penalty state with parent state
     # parent_state = timer_manager.get_timer_state(game_timer_id)

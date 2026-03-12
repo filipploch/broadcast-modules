@@ -18,10 +18,10 @@
 
 const socket = io();
 
-var homeScoreLabel = document.getElementById('labelScoreHome');
-var awayScoreLabel = document.getElementById('labelScoreAway');
-var homeFoulsLabel = document.getElementById('labelFoulsHome');
-var awayFoulsLabel = document.getElementById('labelFoulsAway');
+var homeScoreLabel = document.getElementById('scoreHome');
+var awayScoreLabel = document.getElementById('scoreAway');
+var homeFoulsLabel = document.getElementById('foulsHome');
+var awayFoulsLabel = document.getElementById('foulsAway');
 var currentSequenceId = null;
 
 
@@ -83,7 +83,8 @@ function updateTimerDisplay(timerData) {
     console.log("timerData:", timerData);
     const timerId = timerData.timer_id;
     const elapsedMs = timerData.elapsed_time;
-    const timerLimit = timerData.limit;
+    const timerLimit = timerData.limit   || 0;
+    const initialMs  = timerData.initial_time || 0;
     const timerState = timerData.state;
     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
     const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
@@ -93,17 +94,26 @@ function updateTimerDisplay(timerData) {
     const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
 
     let displayTime;
+
+    // if (timerLimit > 0) {
+    //     displayTime = Math.max(0, timerLimit - elapsed - 1);
+    //     if(timerState === 'idle'){
+    //         displayTime = timerLimit - elapsed;
+    //     }
+    // } else {
+    //     displayTime = elapsed;
+    // }
+
     if (timerLimit > 0) {
-        // Odliczanie malejąco — pokaż następną pełną sekundę która będzie wyświetlona
-        // Math.floor na elapsed zaokrągla w dół do pełnej sekundy, więc display zmienia się
-        // dokładnie co sekundę i jest spójny przy pauzie/resume
-        // const elapsedSeconds = Math.floor(elapsed / 100) * 100;
-        displayTime = Math.max(0, timerLimit - elapsed - 1);
-        if(timerState === 'idle'){
-            displayTime = timerLimit - elapsed;
-        }
+        // Count down: show remaining = limit - (initialTime + elapsed)
+        // Subtract 1ms so display changes exactly on the second boundary
+        const shown = initialMs + elapsed;
+        displayTime = timerState === 'idle'
+            ? Math.max(0, timerLimit - shown)
+            : Math.max(0, timerLimit - shown - 1);
     } else {
-        displayTime = elapsed;
+        // Count up: show initialTime + elapsed
+        displayTime = initialMs + elapsed;
     }
 
     const minutes  = Math.floor(displayTime / 60000);
@@ -166,13 +176,13 @@ function updateTimerState(timerId, state) {
     });
 }
 
-function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit) {
+function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit, initialTime=0) {
     // console.log('updatePenaltyTimerDisplay');
     const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
-    let elapsedTime = elapsedMs;
-    if(timerLimit>0){
-        elapsedTime = timerLimit - elapsedMs;
-    }
+    // Penalties count down: remaining = limit - (initialTime + elapsed)
+    const elapsedTime = timerLimit > 0
+        ? Math.max(0, timerLimit - initialTime - elapsedMs)
+        : initialTime + elapsedMs;
     console.log('updatePenalty', elapsedTime);
     if (!penaltyDisplay) return;
     // Format time as MM:SS.CS
@@ -184,6 +194,25 @@ function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit) {
     
     penaltyDisplay.textContent = `${minutesString}:${secondsString}`;
 }
+
+// function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit) {
+//     // console.log('updatePenaltyTimerDisplay');
+//     const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
+//     let elapsedTime = elapsedMs;
+//     if(timerLimit>0){
+//         elapsedTime = timerLimit - elapsedMs;
+//     }
+//     console.log('updatePenalty', elapsedTime);
+//     if (!penaltyDisplay) return;
+//     // Format time as MM:SS.CS
+//     const minutes = Math.floor(elapsedTime / 60000);
+//     const seconds = Math.floor((elapsedTime % 60000) / 1000);
+    
+//     const minutesString = minutes.toString();
+//     const secondsString = seconds.toString().padStart(2, '0');
+    
+//     penaltyDisplay.textContent = `${minutesString}:${secondsString}`;
+// }
 
 // ============================================================================
 // WEBSOCKET EVENT HANDLERS - UPDATES ONLY
@@ -252,7 +281,31 @@ socket.on('timer_reset', (data) => {
  */
 socket.on('timer_adjusted', (data) => {
     console.log('Timer adjusted:', data);
-    // Timer will send updated event with new elapsed_time
+    if (data.elapsed_time !== undefined) {
+        if (data.timer_id.startsWith('penalty')) {
+            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
+        } else {
+            updateTimerDisplay(data);
+        }
+    }
+    if (data.state) {
+        updateTimerState(data.timer_id, data.state);
+    }
+});
+
+socket.on('timer_resumed', (data) => {
+    console.log('Timer resumed:', data);
+    document.querySelectorAll('.ds-element').forEach(el => addClassName(el, 'hidden'));
+    if (data.elapsed_time !== undefined) {
+        if (data.timer_id.startsWith('penalty')) {
+            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
+        } else {
+            updateTimerDisplay(data);
+        }
+    }
+    if (data.state) {
+        updateTimerState(data.timer_id, data.state);
+    }
 });
 
 /**
@@ -539,7 +592,7 @@ socket.on('reload_penalty_timers', (data) => {
     fillPenaltiesTimersContainer('away');
 });
 
-socket.on('game_data', (data) => {
+socket.on('scoreboard_data', (data) => {
     let gameData = data['payload'];
     homeScoreLabel.innerText = gameData['home_team'].goals;
     awayScoreLabel.innerText = gameData['away_team'].goals;

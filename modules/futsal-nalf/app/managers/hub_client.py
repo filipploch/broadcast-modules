@@ -337,7 +337,6 @@ class HubClient:
             # print(f"health_status: {msg}")
 
 
-
         elif msg_from == 'recorder-plugin':
             print(f'RECORDER MSG: {msg}')
             from app.managers import get_recorder_manager

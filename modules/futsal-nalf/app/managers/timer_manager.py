@@ -118,20 +118,15 @@ class TimerManager:
         return success
     
     def reset_timer(self, timer_id):
-        """Reset a timer"""
-        success = self.hub_client.send_to_plugin(
+        """
+        Send reset request to timer-plugin.
+        Cache is updated when plugin confirms via on_timer_reset().
+        """
+        return self.hub_client.send_to_plugin(
             self.timer_plugin_id,
             'reset_timer',
             {'timer_id': timer_id}
         )
-        
-        if success:
-            with self.lock:
-                if timer_id in self.timers:
-                    self.timers[timer_id]['state'] = 'idle'
-            current_app.logger.info(f"⏹️  Reseted timer: {timer_id}")
-        
-        return success
     
     def remove_timer(self, timer_id):
         """Remove a timer"""
@@ -601,21 +596,19 @@ class TimerManager:
 
     def on_timer_created(self, msg):
         """
-        Handle timer_updated message from Timer Plugin
-
-        Args:
-            msg: Update payload
+        Handle timer_created confirmation from Timer Plugin.
+        Updates local cache with confirmed state, then persists to Settings
+        and notifies UI.
         """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
+        payload = msg.get('payload', {})
         timer_id = payload.get('timer_id')
-        initial_time = payload.get('initial_time')
-        limit = payload.get('limit', 0)
+        initial_time = payload.get('initial_time', 0) or 0
+        limit = payload.get('limit', 0) or 0
         state = payload.get('state', 'idle')
 
-        print(f'on_timer_created msg: {msg}')
-
+        # Confirm cache — elapsed always 0 at creation
         self.update_timer_state(timer_id, {
+            'elapsed_time': 0,
             'initial_time': initial_time,
             'state': state,
             'limit': limit,
@@ -623,82 +616,63 @@ class TimerManager:
         })
 
         game_timers = Settings.get_current_timers()
-        if timer_id.startswith('penalty'):
-            game_timer_id = game_timers['main']['timer_id']
-            if timer_id.startswith('penalty_home') and len(game_timers['penalties']['home']) <= 2:
-                msg_type = 'home_penalty_timer_created'
-                team = 'home'
-            elif timer_id.startswith('penalty_away') and len(game_timers['penalties']['away']) <= 2:
-                msg_type = 'away_penalty_timer_created'
-                team = 'away'
-            else:
-                self._emit_to_ui('flash_msg', {
-                    'type': 'warning', 
-                    'text': 'Błąd dodawania kary'
-                })
-                return
 
-            timer_type = "dependent"
-            team_name = payload.get('team_name')
-            # Sync initial state with main timer state
-            main_timer = game_timers.get('main', {})
-            main_state = main_timer.get('state', 'idle') if main_timer else 'idle'
-            if main_state == 'limit_reached':
-                penalty_state = 'paused'
-            else:
-                penalty_state = main_state
-            # Add to Settings.current_timers
+        if timer_id.startswith('penalty_home'):
+            team = 'home'
+        elif timer_id.startswith('penalty_away'):
+            team = 'away'
+        else:
+            team = None
+
+        if team is not None:
+            # --- PENALTY TIMER ---
+            game_timer_id = (game_timers.get('main') or {}).get('timer_id')
+            main_state = (game_timers.get('main') or {}).get('state', 'idle')
+
+            # If main timer already at limit treat as paused, not running
+            penalty_state = 'paused' if main_state == 'limit_reached' else main_state
+
             penalty_data = {
-                "timer_id": timer_id,
-                "timer_type": timer_type,
-                "parent_id": game_timer_id,
-                "initial_time": 0,
-                "elapsed_time": 0,
-                "limit": limit,
-                "state": penalty_state,
-                "metadata": {
-                    "team": team,
-                    "team_name": team_name,
-                    "timer_class": "penalty",
-                    "duration_minutes": int(limit/60000)
+                'timer_id': timer_id,
+                'timer_type': 'dependent',
+                'parent_id': game_timer_id,
+                'elapsed_time': 0,
+                'initial_time': 0,
+                'limit': limit,
+                'state': penalty_state,
+                'metadata': {
+                    'team': team,
+                    'timer_class': 'penalty',
+                    'duration_minutes': int(limit / 60000) if limit else 0
                 }
             }
             Settings.add_penalty_timer(team, penalty_data)
 
-            # Auto-start penalty timer if main timer is running
+            # Auto-start if main timer is running
             if main_state == 'running':
                 self.start_timer(timer_id)
 
             updated_timers = Settings.get_current_timers()
-            home_penalties = updated_timers['penalties']['home']
-            away_penalties = updated_timers['penalties']['away']
-            penalties = {'home': home_penalties, 'away': away_penalties}
-
             self._emit_to_ui('reload_penalty_timers', {
-                'penalties': penalties
+                'penalties': updated_timers.get('penalties', {'home': [], 'away': []})
             })
 
-            
         else:
+            # --- MAIN TIMER ---
             timer_data = {
-                "timer_id": timer_id,
-                "timer_type": "independent",
-                "initial_time": initial_time,
-                "limit": limit,
-                "pause_at_limit": True,
-                "state": "idle",
-                "metadata": {
-                    "description": "1. połowa",
-                    "period": 1,
-                    "timer_class": "main"
-                }
+                'timer_id': timer_id,
+                'timer_type': 'independent',
+                'elapsed_time': 0,
+                'initial_time': initial_time,
+                'limit': limit,
+                'pause_at_limit': True,
+                'state': 'idle',
             }
             Settings.update_main_timer(timer_data)
-            
-            # Emit to frontend via SocketIO
-            self._emit_to_ui(msg_type, {
+
+            self._emit_to_ui('timer_created', {
                 'timer_id': timer_id,
-                'elapsed_time': initial_time,
+                'elapsed_time': 0,
                 'initial_time': initial_time,
                 'state': state,
                 'limit': limit,

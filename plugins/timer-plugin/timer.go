@@ -230,10 +230,6 @@ func (m *Manager) Reset(timerID string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.state != StatePaused {
-		t.state = StatePaused
-	}
-
 	t.elapsedBase = 0
 	t.remainderTime = 0
 	t.state = StateIdle

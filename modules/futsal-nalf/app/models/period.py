@@ -153,23 +153,31 @@ class Period(db.Model):
 
     def increment_home_goals(self, value: int):
         """Increment home team goals in this period"""
-        self.home_team_goals += value
-        self.updated_at = datetime.utcnow()
+        changed_value = self.home_team_goals + value
+        if changed_value >= 0:
+            self.home_team_goals += value
+            self.updated_at = datetime.utcnow()
 
     def increment_away_goals(self, value: int):
         """Increment away team goals in this period"""
-        self.away_team_goals += value
-        self.updated_at = datetime.utcnow()
+        changed_value = self.away_team_goals + value
+        if changed_value >= 0:
+            self.away_team_goals += value
+            self.updated_at = datetime.utcnow()
 
     def increment_home_fouls(self, value: int):
         """Increment home team fouls in this period"""
-        self.home_team_fouls += value
-        self.updated_at = datetime.utcnow()
+        changed_value = self.home_team_fouls + value
+        if changed_value >= 0 and changed_value <= 5:
+            self.home_team_fouls += value
+            self.updated_at = datetime.utcnow()
 
     def increment_away_fouls(self, value: int):
         """Increment away team fouls in this period"""
-        self.away_team_fouls += value
-        self.updated_at = datetime.utcnow()
+        changed_value = self.away_team_fouls + value
+        if changed_value >= 0 and changed_value <= 5:
+            self.away_team_fouls += value
+            self.updated_at = datetime.utcnow()
 
     def sync_to_game(self):
         """

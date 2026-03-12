@@ -36,13 +36,13 @@ Online HTML, CSS and JavaScript editor to run code online.
 						<div class="main-timer-display-container">
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -60000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -1000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
-							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element hidden" data-timer-id="{{ main_timer.timer_id }}"></button>
+							<button onclick="adjustTimer('{{ main_timer.timer_id }}', -100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<div id="{{ main_timer.timer_id }}-min-display" class="timer-display" data-display-for="{{ main_timer.timer_id }}-min-display">102</div>
 							<div id="{{ main_timer.timer_id }}-sec-display" class="timer-display" data-display-for="{{ main_timer.timer_id }}-sec-display">27</div>
-							<div id="{{ main_timer.timer_id }}-ds-display" class="timer-display  ds-element ds-{{ main_timer.timer_id }}-element hidden" data-display-for="{{ main_timer.timer_id }}-ds-display">4</div>
+							<div id="{{ main_timer.timer_id }}-ds-display" class="timer-display  ds-element ds-{{ main_timer.timer_id }}-element" data-display-for="{{ main_timer.timer_id }}-ds-display">4</div>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 60000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
 							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 1000);" class="timer-button" data-timer-id="{{ main_timer.timer_id }}"></button>
-							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element hidden" data-timer-id="{{ main_timer.timer_id }}"></button>
+							<button onclick="adjustTimer('{{ main_timer.timer_id }}', 100);" class="timer-button ds-element ds-{{ main_timer.timer_id }}-element" data-timer-id="{{ main_timer.timer_id }}"></button>
 			</div>
 			<div class="timer-controllers-container">
 				<div class="timer-small-controllers">
@@ -93,8 +93,8 @@ Online HTML, CSS and JavaScript editor to run code online.
 				<div class="reversible scoreboard">
 					<!-- Drugi wiersz - etykiety -->
 					<label class="flex-item flex1 fouls-label" id="labelFoulsHome"><span id="foulsHome">{{ period.home_team_fouls }}</span></label>
-					<label class="flex-item flex1 goals-label" id="labelScoreHome"><span id="scoreHome"></span>{{ game.home_team_goals }}</label>
-					<label class="flex-item flex1 goals-label" id="labelScoreAway"><span id="scoreAway"></span>{{ game.away_team_goals }}</label>
+					<label class="flex-item flex1 goals-label" id="labelScoreHome"><span id="scoreHome">{{ game.home_team_goals }}</span></label>
+					<label class="flex-item flex1 goals-label" id="labelScoreAway"><span id="scoreAway">{{ game.away_team_goals }}</span></label>
 					<label class="flex-item flex1 fouls-label" id="labelFoulsAway"><span id="foulsAway">{{ period.away_team_fouls }}</span></label>
 				</div>
 		
@@ -277,6 +277,7 @@ Online HTML, CSS and JavaScript editor to run code online.
 					<div id="hidded-events-controllers-container" class="hidden">
 						<div id="var-controller" class="event-controller" onclick="addFieldEvent('var');" style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
 						<div id="foul-controller" class="event-controller" onclick="addFieldEvent('foul');" style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
+						<div id="cancel-btn" class="event-controller" onclick="unselectAllGameFieldCells();" style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
 					</div>
 					<div id="bum-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
 				</div>

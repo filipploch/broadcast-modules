@@ -135,6 +135,8 @@
         <!-- Header -->
         <div id="assign-modal-header">
             <h3 id="modal-title" style="margin:0;font-size:1.1rem;">...</h3>
+            <button id="scrape-btn" onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
+            <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
             <button onclick="closeAssignModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6c757d;">✕</button>
         </div>
 
@@ -163,12 +165,12 @@
         </div>
 
         <!-- Footer -->
-        <div style="padding:1rem 1.2rem;border-top:1px solid #dee2e6;display:flex;gap:.75rem;align-items:center;">
+        <div style="display: none; padding:1rem 1.2rem;border-top:1px solid #dee2e6;gap:.75rem;align-items:center;">
             <div id="modal-scrape-btn" style="display:none;margin-right:auto;">
-                <button onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
                 <span id="modal-scrape-status" style="font-size:.85rem;color:#6c757d;margin-left:.5rem;"></span>
             </div>
             <button onclick="closeAssignModal()" class="btn btn-secondary">Anuluj</button>
+            <button onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
             <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
         </div>
     </div>
@@ -199,7 +201,7 @@ function openAssignModal(contentType) {
     document.getElementById('assign-modal-overlay').style.display = 'flex';
 
     // Show scrape button only for squad modals
-    const scrapeBtn = document.getElementById('modal-scrape-btn');
+    const scrapeBtn = document.getElementById('scrape-btn');
     if (contentType === 'home-squad' || contentType === 'away-squad') {
         scrapeBtn.style.display = 'block';
         document.getElementById('modal-scrape-status').textContent = '';
@@ -302,7 +304,7 @@ function buildCard(item, side, idx) {
         const inp   = 'border:1px solid #ced4da;border-radius:3px;font-size:.78rem;padding:.1rem .3rem;background:#fff;';
 
         playerEditor =
-            '<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-top:.35rem;">' +
+            '<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">' +
                 '<input type="number" min="1" max="99" placeholder="#" value="' + num + '" ' +
                     'data-pg="' + pgId + '" data-field="number" ' +
                     'style="' + inp + 'width:3.5rem;" ' +
@@ -345,8 +347,8 @@ function buildCard(item, side, idx) {
     }
 
     const arrow = side === 'available'
-        ? '<span title="Przypisz" onclick="moveItem(\'available\',' + idx + ')" style="cursor:pointer;color:#28a745;font-size:1.1rem;padding:.2rem .4rem;flex-shrink:0;">&#8594;</span>'
-        : '<span title="Usu\u0144"    onclick="moveItem(\'assigned\','  + idx + ')" style="cursor:pointer;color:#dc3545;font-size:1.1rem;padding:.2rem .4rem;flex-shrink:0;">&#8592;</span>';
+        ? '<span class="move-item-btn" title="Przypisz" onclick="moveItem(\'available\',' + idx + ')" style="color:#28a745;">&#8594;</span>'
+        : '<span class="move-item-btn" title="Usu\u0144"    onclick="moveItem(\'assigned\','  + idx + ')" style="color:#dc3545;">&#8592;</span>';
 
     return '<div draggable="true" ondragstart="onDragStart(event,\'' + side + '\',' + idx + ')" ' +
         'data-side="' + side + '" data-idx="' + idx + '" ' + 'class="player-container">' +
@@ -426,7 +428,7 @@ function onHdmiChange(sel) {
 function scrapeSquad() {
     if (!_contentType) return;
     const statusEl = document.getElementById('modal-scrape-status');
-    const btn = document.querySelector('#modal-scrape-btn button');
+    const btn = document.querySelector('#scrape-btn');
     btn.disabled = true;
     statusEl.textContent = 'Scrapowanie...';
 
