@@ -18,8 +18,10 @@ Online HTML, CSS and JavaScript editor to run code online.
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/game-field.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/events-controllers.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/overlay-switcher.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/event-edit.css') }}">
 		<style>
 			.game-field-cell {background-image: url({{ url_for('static', filename='images/field/empty.png') }})}
+			.game-field-selector {background-image: url({{ url_for('static', filename='images/field/football.png') }})}
 		</style>
 		<title>Browser</title>
 	</head>
@@ -123,7 +125,7 @@ Online HTML, CSS and JavaScript editor to run code online.
 		
 	</div>
 	<div id="flash-msg-display" style="display: none;"></div>
-	<div>
+	<div style="width:222px; height: 100vh;">
 		<div id="plugins-states-container" style="display: flex;">
 			<div id="timer-state" class="plugin-state status-false" data-plugin-for="timer-plugin">
 				<img src="{{ url_for('static', filename='images/timer.svg') }}" 
@@ -201,20 +203,20 @@ Online HTML, CSS and JavaScript editor to run code online.
 			</div>
 		</div>
 		<div id="overlay-switchers-container">
-			<div id="overlay-off" class="overlay-switcher" ondblclick="showOverlay('empty')" style="background-image: url({{ url_for('static', filename='images/ui/empty.png') }})"></div> 
+			<div id="overlay-off" class="overlay-switcher" ondblclick="showOverlay('empty')" style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div> 
 			<div id="overlay-start-stream" class="overlay-switcher screen-container" ondblclick="showOverlay('start-stream-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/start.png') }})"></div> 
 			<div id="overlay-lineup-team-a" class="overlay-switcher screen-container" ondblclick="showOverlay('lineup-team-a-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/team-a-lineup.png') }})"></div> 
 			<div id="overlay-lineup-team-b" class="overlay-switcher screen-container" ondblclick="showOverlay('lineup-team-b-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/team-b-lineup.png') }})"></div> 
 			<div id="overlay-game" class="overlay-switcher screen-container" ondblclick="showOverlay('game-screen-container')" style="background-image: url({{ url_for('static', filename='images/ui/game.png') }})"></div> 
 		</div>
-		<div>
-			<div id="events-controllers-container" class="reversible">
+		<div id="events-controllers-container">
+			<div id="reversible-events-controllers-container" class="reversible">
 				<div id="home-side-events-controllers-container" class="side-events-controllers-container">
 					<div id="home-save-controller" class="event-controller save-controller" onclick="addTeamEvent('home', 'Obrona');" style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
 					<div id="away-goal-controller" class="event-controller goal-controller" onclick="addTeamEvent('away', 'Bramka');" style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
 					<div id="away-miss-controller" class="event-controller miss-controller" onclick="addTeamEvent('away', 'Pudło');" style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
 				</div>
-				<div id="game-field" class="" style="background-image: url({{ url_for('static', filename='images/field/football.png') }})">
+				<div id="game-field" class="game-field-selector">
 					<div class="game-field-row" style="display: flex;">
 						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="A1" class="game-field-cell"></div>
 						<div ondblclick="selectGameFieldCell(this);" onclick="setCameraPosition(this)" id="B1" class="game-field-cell"></div>
@@ -282,6 +284,13 @@ Online HTML, CSS and JavaScript editor to run code online.
 					<div id="bum-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
 				</div>
 			</div>
+	</div>
+	<div id="ui-monitor-container" style="width:420px; height: 100vh; background-color: black;">
+		<div id="ui-monitor-controlls" style="display: flex;">
+			<div class="flex1"><button type="button" onclick="showUiMonitorContent('events')">AKCJE</button></div>
+			<div class="flex1"><button type="button" onclick="showUiMonitorContent()">X</button></div>
+		</div>
+		<div id="ui-monitor-content" data-is-events-update-blocked="false"></div>
 	</div>
 </div>
 	

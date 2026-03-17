@@ -3,6 +3,7 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 from app.managers.season_manager import SeasonManager
 from app.managers.league_manager import LeagueManager
 from app.managers.game_manager import GameManager
+# from app.managers import get_game_manager
 from app.managers.camera_manager import CameraManager
 from app.managers.game_camera_manager import GameCameraManager
 from app.models.stadium import Stadium
@@ -501,7 +502,7 @@ def select_game_for_broadcast(game_id):
     
     try:
         Settings.set_current_game(game_id)
-        flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
+        flash(f'Wybrano mecz do transmisji: {game.home_team_short_name} vs {game.away_team_short_name}', 'success')
         return redirect(url_for('index'))
     except Exception as e:
         logger.error(f"Error selecting game for broadcast: {e}")
@@ -947,6 +948,7 @@ def create_event():
                 name=request.form['name'].strip(),
                 short_name=request.form['short_name'].strip(),
                 is_reported='is_reported' in request.form,
+                player_from_opponent='player_from_opponent' in request.form,
                 image_path=request.form.get('image_path', '').strip() or None,
             )
             flash('Zdarzenie dodane', 'success')
@@ -968,6 +970,7 @@ def edit_event(event_id):
                 name=request.form['name'].strip(),
                 short_name=request.form['short_name'].strip(),
                 is_reported='is_reported' in request.form,
+                player_from_opponent='player_from_opponent' in request.form,
                 image_path=request.form.get('image_path', '').strip() or None,
             )
             flash('Zdarzenie zaktualizowane', 'success')

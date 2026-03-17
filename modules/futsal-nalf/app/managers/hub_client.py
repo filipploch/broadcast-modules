@@ -271,7 +271,7 @@ class HubClient:
             # Log message (with app context)
             msg_type = msg.get('type', 'unknown')
             msg_from = msg.get('from', 'unknown')
-            self._log("debug", f"Received: {msg_type} from {msg_from}")
+            # self._log("debug", f"Received: {msg_type} from {msg_from}")
 
             # Handle message in app context
             if self.app:
@@ -336,6 +336,11 @@ class HubClient:
             plugin_manager.on_plugins_state_received(msg)
             # print(f"health_status: {msg}")
 
+        elif msg_from == 'stream-overlay':
+            from app.managers import GameManager
+            game_manager = GameManager()
+            if msg_type == 'request_game_data':
+                game_manager.handle_request_game_data(msg)
 
         elif msg_from == 'recorder-plugin':
             print(f'RECORDER MSG: {msg}')

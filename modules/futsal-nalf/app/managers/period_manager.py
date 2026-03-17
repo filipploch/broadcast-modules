@@ -364,9 +364,7 @@ class PeriodManager:
 
     def get_current_period(self, game_id: int) -> Optional[Period]:
         """Get currently active period for a game"""
-        return Period.query.filter_by(
-            game_id=game_id
-        ).first()
+        return Period.query.filter_by(game_id=game_id, status=Period.STATUS_PENDING).first()
     
     def get_all_game_periods(self, game_id: int) -> Optional[Period]:
         """Get currently active period for a game"""

@@ -23,6 +23,20 @@
             <tr>
                 <td><strong>{{ event.name }}</strong></td>
                 <td><code>{{ event.short_name }}</code></td>
+                <td>
+                    <span style="display:inline-flex;align-items:center;gap:.5rem;">
+                        <span style="display:inline-block;width:1.2rem;height:1.2rem;border-radius:3px;
+                                     background:{{ event.color }};border:1px solid #ccc;"></span>
+                        <code>{{ event.color }}</code>
+                    </span>
+                </td>
+                <td>
+                    {% if event.filter_class %}
+                        <code>{{ event.filter_class }}</code>
+                    {% else %}
+                        <span style="color:#aaa;">—</span>
+                    {% endif %}
+                </td>
                 <td>{{ '✅ Tak' if event.is_reported else '—' }}</td>
                 <td>
                     <div class="actions">

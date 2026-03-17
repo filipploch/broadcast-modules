@@ -4,15 +4,26 @@ from app.models.game import Game
 from app.models.league import League
 from app.models.team import Team
 from app.models.stadium import Stadium
+from app.managers import get_hub_client
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
+from flask import current_app
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class GameManager:
-    """Manages CRUD operations for games (games)"""
+
+    def _emit_to_ui(self, msg_type, data):
+        """Emit event to UI clients via SocketIO"""
+        try:
+            from app.extensions import socketio
+            # socketio.emit(event, data, broadcast=True)
+            socketio.emit(msg_type, data)
+        except Exception as e:
+            current_app.logger.error(f"Failed to emit to UI: {e}")
 
     def get_all_games(self, league_id=None, team_id=None, status=None):
         """
@@ -456,3 +467,16 @@ class GameManager:
             query = query.filter_by(league_id=league_id)
 
         return query.order_by(Game.date.desc()).all()
+
+    def handle_request_game_data(self, msg):
+        from app.models.settings import Settings
+        settings = Settings.get_settings()
+        current_game_id = settings.current_game_id
+        current_game = Game.query.get(current_game_id).to_dict()
+        msg_from = msg.get('from', '')
+
+        hub_client = get_hub_client()
+        print('hub_client = get_hub_client()')
+        if hub_client:
+            print('if hub_client:')
+            hub_client.send_to_plugin(msg_from, 'game_data', current_game)

@@ -6,4 +6,7 @@
     width: 25px;
     height: 25px;
     background-size: contain;
+    border: 1px solid #9a9a9a;
+    margin: 1px;
+    border-radius: 6px;
 }

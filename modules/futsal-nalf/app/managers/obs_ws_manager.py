@@ -51,15 +51,15 @@ class ObsWsManager:
                     from app.models.settings import Settings
                     settings = Settings.get_settings()
                     video_path = settings.get_obs_record_filepath()
-                    main_timer_id = settings.get_current_timers()['main']['timer_id']
-                    timer_manager = get_timer_manager()
-                    elapsed_time = timer_manager.get_timer_state(main_timer_id)['elapsed_time']
+                    # main_timer_id = settings.get_current_timers()['main']['timer_id']
+                    # timer_manager = get_timer_manager()
+                    # elapsed_time = timer_manager.get_timer_state(main_timer_id)['elapsed_time']
                     response_data = payload.get('responseData')
                     record_time = response_data.get('outputDuration')
                     manager = GameEventManager()
                     manager.update_game_event(
                         game_event_id=request_id,
-                        game_time=int(elapsed_time/1000),
+                        # game_time=int(elapsed_time/1000),
                         video_path=video_path,
                         record_time=record_time
                         )

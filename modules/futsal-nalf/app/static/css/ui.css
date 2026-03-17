@@ -71,3 +71,38 @@ button.top-bar-element {
 .penalty-timer-button {
 	height: 40%;
 }
+
+.svg-field {
+    border: 1px solid white;
+}
+
+.events-td-game-time {
+    width: 35px;
+}
+
+/* .events-td-event-name {
+    width: 200px;
+} */
+
+.events-td-svg-field {
+    width: 25px;
+}
+
+.filter-event-button {
+    width: calc(100%/7);
+    font-weight: 700;
+    font-size: 10px !important;
+    background-color: #cdfeb5;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#game-events-table{
+    font-size: 12px;
+}
+
+.event-btn {
+    width: 22px;
+    height: 21px;
+    padding: 0;
+}

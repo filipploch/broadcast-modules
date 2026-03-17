@@ -25,6 +25,7 @@ _plugin_manager = None
 _sequence_manager = None
 _team_scraper_manager = None
 _obs_ws_manager = None
+# _game_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
 
@@ -42,7 +43,7 @@ def initialize_all_managers(app):
     """
     # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
     global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, \
-        _sequence_manager, _team_scraper_manager, _obs_ws_manager, _initialized
+        _sequence_manager, _team_scraper_manager, _obs_ws_manager, _game_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -207,6 +208,16 @@ def get_recorder_manager():
 
     return _recorder_manager
 
+# def get_game_manager():
+#     global _game_manager
+
+#     if _game_manager is None:
+#         from app.managers.game_manager import GameManager
+#         _game_manager = GameManager(get_hub_client())
+#         current_app.logger.info("✅ Game Manager initialized (lazy)")
+
+#     return _game_manager
+
 
 def shutdown_all_managers():
     """
@@ -215,8 +226,8 @@ def shutdown_all_managers():
     Note: We DON'T stop plugin processes - HUB manages them!
     """
     # global _plugin_manager, _hub_client, _current_game_manager
-    global _hub_client, _current_game_manager
-    global _recorder_manager, _timer_manager, _initialized
+    global _hub_client, _current_game_manager, _plugin_manager, _sequence_manager, _team_scraper_manager
+    global _recorder_manager, _timer_manager, _initialized, _obs_ws_manager, _game_manager
 
     current_app.logger.info("=" * 60)
     current_app.logger.info("SHUTTING DOWN MANAGERS")
@@ -235,6 +246,11 @@ def shutdown_all_managers():
     _current_game_manager = None
     _recorder_manager = None
     _timer_manager = None
+    _plugin_manager = None
+    _sequence_manager = None
+    _team_scraper_manager = None
+    _obs_ws_manager = None
+    _game_manager = None
     _initialized = False
 
     current_app.logger.info("=" * 60)
@@ -265,7 +281,7 @@ from app.managers.period_manager import PeriodManager
 from app.managers.game_camera_manager import GameCameraManager
 from app.managers.penalty_manager import PenaltyManager
 from app.managers.player_manager import PlayerManager
-from app.managers.player_game_manager import PlayerGameManager
+from app.managers.game_player_manager import GamePlayerManager
 from app.managers.event_manager import EventManager
 from app.managers.game_event_manager import GameEventManager
 from app.managers.commentator_manager import CommentatorManager

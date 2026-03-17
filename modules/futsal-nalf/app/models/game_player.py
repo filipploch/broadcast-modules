@@ -1,16 +1,16 @@
-"""PlayerGame model - Association between Player and Game"""
+"""GamePlayer model - Association between Player and Game"""
 from app.extensions import db
 from datetime import datetime
 
 
-class PlayerGame(db.Model):
+class GamePlayer(db.Model):
     """
     Association between Player and Game (player participation in a game)
     
     Historical snapshot: is_goalkeeper, is_captain, number are copied from Player
     at time of assignment to preserve historical data if player changes team/role.
     """
-    __tablename__ = 'player_games'
+    __tablename__ = 'game_players'
 
     id = db.Column(db.Integer, primary_key=True)
     
@@ -31,11 +31,21 @@ class PlayerGame(db.Model):
 
     # Unique constraint: player can only be assigned once per game
     __table_args__ = (
-        db.UniqueConstraint('player_id', 'game_id', name='unique_player_game'),
+        db.UniqueConstraint('player_id', 'game_id', name='unique_game_player'),
     )
 
     def __repr__(self):
-        return f'<PlayerGame player_id={self.player_id} game_id={self.game_id} team_id={self.team_id}>'
+        return f'<GamePlayer player_id={self.player_id} game_id={self.game_id} team_id={self.team_id}>'
+    
+    def to_squad_dict(self):
+        return {
+            'id':            self.player_id,
+            'first_name':    self.player.first_name if self.player else None,
+            'last_name':     self.player.last_name  if self.player else None,
+            'number':        self.number,
+            'is_goalkeeper': self.is_goalkeeper,
+            'is_captain':    self.is_captain,
+        }
 
     def to_dict(self):
         """Convert to dictionary"""

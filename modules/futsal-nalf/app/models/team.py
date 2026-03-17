@@ -26,7 +26,7 @@ class Team(db.Model):
     home_games = db.relationship('Game', foreign_keys='Game.home_team_id', backref='home_team', lazy='dynamic')
     away_games = db.relationship('Game', foreign_keys='Game.away_team_id', backref='away_team', lazy='dynamic')
     players = db.relationship('Player', backref='team', lazy='dynamic', cascade='all, delete-orphan')
-    player_games = db.relationship('PlayerGame', backref='team', lazy='dynamic')
+    game_players = db.relationship('GamePlayer', backref='team', lazy='dynamic')
     game_events = db.relationship('GameEvent', backref='team', lazy='dynamic')
 
 

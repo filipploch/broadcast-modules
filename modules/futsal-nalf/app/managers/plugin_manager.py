@@ -22,7 +22,7 @@ class PluginManager:
         self.timers = {}  # Cache: {timer_id: timer_state}
         self.lock = threading.Lock()
         
-        current_app.logger.info("TimerManager initialized")
+        current_app.logger.info("PluginManager initialized")
 
     def on_plugins_state_received(self, msg):
         msg_type = msg.get('type')

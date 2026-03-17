@@ -18,7 +18,8 @@ class GameEventManager:
     def record_event(self, game_id: int, event_id: int, game_time: int = None,
                     period_id: int = None, team_id: int = None,
                     player_id: int = None, event_place: str = None,
-                    record_time: int = None, video_path: str = None) -> Optional[GameEvent]:
+                    record_time: int = None, video_path: str = None,
+                    color: str = '#000000', comment: str = None) -> Optional[GameEvent]:
         """
         Record event in a game
 
@@ -82,7 +83,9 @@ class GameEventManager:
                 game_time=game_time,
                 record_time=record_time,
                 video_path=video_path,
-                event_place=event_place
+                event_place=event_place,
+                # color=color,
+                comment=comment,
             )
             db.session.add(game_event)
             db.session.commit()
@@ -168,15 +171,16 @@ class GameEventManager:
         """Get GameEvent by ID"""
         return GameEvent.query.get(game_event_id)
 
-    def update_game_event(self, game_event_id: int, game_time: int = None,
-                         record_time: int = None, video_path: str = None,
-                         event_place: str = None, team_id: int = None,
-                         player_id: int = None) -> Optional[GameEvent]:
+    def update_game_event(self, game_event_id: int, event_id: int = None,
+                         game_time: int = None, record_time: int = None,
+                         video_path: str = None, event_place: str = None,
+                         team_id: int = None, player_id: int = None) -> Optional[GameEvent]:
         """
         Update game event
 
         Args:
             game_event_id: GameEvent ID
+            event_id: New event type ID (optional)
             game_time: New game time in milliseconds (optional)
             record_time: New wall-clock recording time in milliseconds (optional)
             video_path: New path to the video file (optional)
@@ -193,6 +197,11 @@ class GameEventManager:
             return None
 
         try:
+            if event_id is not None:
+                event = Event.query.get(event_id)
+                if not event:
+                    raise ValueError(f"Typ zdarzenia o ID {event_id} nie istnieje")
+                game_event.event_id = event_id
             if game_time is not None:
                 game_event.game_time = game_time
             if record_time is not None:
@@ -213,7 +222,6 @@ class GameEventManager:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error updating game event: {e}")
-            return None
 
     def delete_game_event(self, game_event_id: int) -> bool:
         """

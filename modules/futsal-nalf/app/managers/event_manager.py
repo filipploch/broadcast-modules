@@ -12,6 +12,9 @@ class EventManager:
 
     def create_event(self, name: str, short_name: str,
                     is_reported: bool = False,
+                    color: str = '#FFFFFF',
+                    filter_class: str = None,
+                    player_from_opponent: bool = False,
                     image_path: str = None) -> Optional[Event]:
         """
         Create new event type
@@ -30,6 +33,9 @@ class EventManager:
                 name=name,
                 short_name=short_name,
                 is_reported=is_reported,
+                color=color,
+                filter_class=filter_class,
+                player_from_opponent=player_from_opponent,
                 image_path=image_path
             )
             db.session.add(event)
@@ -65,6 +71,8 @@ class EventManager:
 
     def update_event(self, event_id: int, name: str = None,
                     short_name: str = None, is_reported: bool = None,
+                    color: str = None, filter_class: str = None,
+                    player_from_opponent: bool = None,
                     image_path: str = None) -> Optional[Event]:
         """
         Update event type
@@ -91,6 +99,12 @@ class EventManager:
                 event.short_name = short_name
             if is_reported is not None:
                 event.is_reported = is_reported
+            if color is not None:
+                event.color = color
+            if filter_class is not None:
+                event.filter_class = filter_class or None  # '' → None
+            if player_from_opponent is not None:
+                event.player_from_opponent = player_from_opponent
             if image_path is not None:
                 event.image_path = image_path
 
@@ -141,16 +155,16 @@ class EventManager:
         """
         default_events = [
             # Reported events (require team/player)
-            {"name": "Bramka", "short_name": "G", "is_reported": True},
-            {"name": "Żółta kartka", "short_name": "YC", "is_reported": True},
-            {"name": "Czerwona kartka", "short_name": "RC", "is_reported": True},
-            {"name": "Faul", "short_name": "F", "is_reported": True},
-            {"name": "Strzał na bramkę", "short_name": "S", "is_reported": True},
-            
-            # System events (no team/player)
-            {"name": "Początek połowy", "short_name": "START", "is_reported": False},
-            {"name": "Koniec połowy", "short_name": "END", "is_reported": False},
-            {"name": "Timeout", "short_name": "TO", "is_reported": False},
+            {"name": "Bramka", "short_name": "G", "is_reported": True, "color": "#69ffa7", "filter_class": "goal"},
+            {"name": "Bramka samobójcza", "short_name": "OG", "is_reported": True, "color": "#f88f8f", "filter_class": "goal", "player_from_opponent": True},
+            {"name": "Żółta kartka", "short_name": "YC", "is_reported": True, "color": "#f3ec12", "filter_class": "yellow_card"},
+            {"name": "Czerwona kartka", "short_name": "RC", "is_reported": True, "color": "#ff1900", "filter_class": "red_card"},
+            {"name": "Faul", "short_name": "F", "is_reported": True, "color": "#f77e1a", "filter_class": "foul"},
+            {"name": "Obrona", "short_name": "S", "is_reported": False, "color": "#8e44ad", "filter_class": "save", "player_from_opponent": True},
+            {"name": "Pudło", "short_name": "M", "is_reported": False, "color": "#37d3ce", "filter_class": "miss"},
+            {"name": "VAR", "short_name": "V", "is_reported": False, "color": "#5454e2", "filter_class": "var"},
+            {"name": "HAHAHA", "short_name": "xD", "is_reported": False, "color": "#7c7c7c", "filter_class": None},
+            {"name": "BUM", "short_name": "##", "is_reported": False, "color": "#3c3c3c", "filter_class": None},
         ]
 
         created = []

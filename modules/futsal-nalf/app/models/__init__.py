@@ -12,7 +12,7 @@ from app.models.game_camera import GameCamera
 from app.models.period import Period
 from app.models.penalty import Penalty
 from app.models.player import Player
-from app.models.player_game import PlayerGame
+from app.models.game_player import GamePlayer
 from app.models.event import Event
 from app.models.game_event import GameEvent
 from app.models.event_camera import EventCamera
@@ -35,7 +35,7 @@ __all__ = [
     'Period',
     'Penalty',
     'Player',
-    'PlayerGame',
+    'GamePlayer',
     'Event',
     'GameEvent',
     'EventCamera',

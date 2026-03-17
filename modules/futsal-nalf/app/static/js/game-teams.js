@@ -18,10 +18,15 @@ function changeGameValue(valueType, teamType, value) {
 
 socket.on('initial_data', (data) => {
     // data powinno zawierać: { scores: {home, away}, fouls: {home, away}, penalties: {home: [...], away: [...]}, teamNames: {home, away}, isReversed, gameTimerRunning }
-    appState.scores = data.scores;
-    appState.fouls = data.fouls;
-    appState.penalties = data.penalties;
-    appState.teams = data.teams;
+    // appState.scores = data.scores;
+    // appState.fouls = data.fouls;
+    appState.home_team_goals = data.home_team_goals;
+    appState.home_team_fouls = data.home_team_fouls;
+    appState.home_penalties = data.home_penalties;
+    appState.away_team_goals = data.away_team_goals;
+    appState.away_team_fouls = data.away_team_fouls;
+    appState.away_penalties = data.away_penalties;
+    // appState.teams = data.teams;
     appState.mainTimer = data.main_timer;
     appState.isReversed = data.is_reversed;
     appState.isReordering = false;
@@ -32,6 +37,6 @@ socket.on('initial_data', (data) => {
     let timer = appState.mainTimer;
     console.log('initial_data timer: ', timer);
     updateTimerDisplay(timer);
-    fillPenaltiesTimersContainer('home');
-    fillPenaltiesTimersContainer('away');
+    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
 });

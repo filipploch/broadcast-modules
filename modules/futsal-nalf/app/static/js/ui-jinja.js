@@ -586,18 +586,19 @@ socket.on('timer_removed', (data) => {
 });
 
 socket.on('reload_penalty_timers', (data) => {
-    appState.penalties = data.penalties;
+    appState.home_penalties = data.penalties['home'];
+    appState.away_penalties = data.penalties['away'];
 
-    fillPenaltiesTimersContainer('home');
-    fillPenaltiesTimersContainer('away');
+    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
 });
 
 socket.on('scoreboard_data', (data) => {
     let gameData = data['payload'];
-    homeScoreLabel.innerText = gameData['home_team'].goals;
-    awayScoreLabel.innerText = gameData['away_team'].goals;
-    homeFoulsLabel.innerText = gameData['home_team'].fouls;
-    awayFoulsLabel.innerText = gameData['away_team'].fouls;
+    homeScoreLabel.innerText = gameData['home_team_goals'];
+    awayScoreLabel.innerText = gameData['away_team_goals'];
+    homeFoulsLabel.innerText = gameData['home_team_fouls'];
+    awayFoulsLabel.innerText = gameData['away_team_fouls'];
 })
 
 /**
@@ -633,9 +634,11 @@ function hideAddPenaltyDialog() {
  */
 function addPenaltyTimer(teamType, penaltyDuration=2) {
     const team = teamType;
+    let _penalties = appState.home_penalties;
+    if(team === 'away') _penalties = appState.away_penalties;
     const duration = penaltyDuration;
     
-    if (appState.penalties[team].length >= 2) return;
+    if (_penalties.length >= 2) return;
     if (!appState.mainTimer) {
         alert('Brak aktywnego głównego timera!');
         return;
@@ -644,7 +647,7 @@ function addPenaltyTimer(teamType, penaltyDuration=2) {
     // Get team name
     let teamName = '';
     if (game) {
-        teamName = team === 'home' ? game.home_team.name : game.away_team.name;
+        teamName = team === 'home' ? game.home_team_name : game.away_team_name;
     }
     
     console.log('Adding penalty:', { team, teamName, duration });
@@ -790,6 +793,340 @@ document.querySelectorAll('.game-field-cell').forEach(element => {
 });
 
 
+
+// ============================================================================
+// DEBUG HELPERS
+// ============================================================================
+
+function showUiMonitorContent(contentType=null, payload=null){
+    socket.emit('request_ui_monitor_content', {type: contentType, payload: payload});
+}
+
+function gameEventPlayerNameGenerator(_gameEvent) {
+    if(_gameEvent.is_reported === true && _gameEvent.player_id === null){
+        return `<span style="color: red;" onclick="openGameEventEditModal(${_gameEvent.id})">WYBIERZ ZAWODNIKA</span>`
+    } else if (_gameEvent.is_reported === true) {
+        return _gameEvent.player_name
+    } else {
+        return ''
+    }
+}
+
+function gameEventInfoBtnGenerator(_gameEvent) {
+    const whiteIcon = `<svg height="13" viewBox="0 -960 481.49437 361.12079" width="11" fill="#ffffff"
+        version="1.1" id="svg1" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+        <defs id="defs1" />
+        <path
+            d="m 90.28019,-689.1594 h 210.65379 v -45.1401 H 90.28019 Z m 255.79389,0 h 45.14009 v -45.1401 H 346.07408 Z M 90.28019,-779.4396 h 45.1401 v -45.1401 h -45.1401 z m 90.2802,0 h 210.65378 v -45.1401 H 180.56039 Z M 45.1401,-598.87921 q -18.62029,0 -31.8802,-13.26617 Q 9.9999998e-7,-625.41156 9.9999998e-7,-644.04439 v -270.99104 q 0,-18.63283 13.25989900000002,-31.79869 13.25991,-13.16587 31.8802,-13.16587 h 391.21417 q 18.62029,0 31.88019,13.26618 13.25991,13.26617 13.25991,31.899 v 270.99105 q 0,18.63283 -13.25991,31.79869 -13.2599,13.16586 -31.88019,13.16586 z m 0,-45.1401 H 436.35427 V -914.85989 H 45.1401 Z m 0,0 v -270.84058 z"
+            id="path1"
+            style="stroke-width:1" />
+        </svg>`;
+    if(_gameEvent.is_reported === true && _gameEvent.player_id === null){
+        return `<button type="button" class="event-btn events-info-btn" style="background-color:red; padding: 1px 3.6px;"
+        onclick="showInfo('${_gameEvent.id}', ${_gameEvent.team_id})">${whiteIcon}</button>`
+    } else if (_gameEvent.is_reported === true) {
+        return `<button type="button" class="event-btn events-info-btn" style="background-color:green; padding: 1px 3.6px;"
+        onclick="showInfo('${_gameEvent.id}', ${_gameEvent.player_id})">${whiteIcon}</button>`
+    } else {
+        return ''
+    }
+}
+
+function obsReplayTdGenerator(_gameEvent) {
+    if(_gameEvent.video_path) {
+        return `<button type="button" class="event-btn events-obs-replay-btn"
+        style="background-color:green; color: white; font-weight: 700;"
+        onclick="showReplay('${_gameEvent.video_path}', ${_gameEvent.record_time})">O</button>`
+    } else {
+        return ''
+    }
+}
+
+function camerasReplaysBtnsGenerator(_gameEvent) {
+    const eventCameras = _gameEvent.event_cameras;
+    console.log(eventCameras);
+    if(!_gameEvent.event_cameras) return ''
+    btns = '';
+    eventCameras.forEach(camera => {
+        btns += `<button type="button"
+        class="event-btn event-camera-replay-btn"
+        style="background-color:green; color: white; font-weight: 700;"
+        onclick="showReplay('${camera.video_path}', ${camera.record_time})">
+        ${camera.camera_id.substr(camera.camera_id.length - 1)}</button>`
+    });
+    return btns
+}
+
+function gameEventEditBtnGenerator(_gameEvent) {
+    return `<button type="button" class="event-btn event-edit-btn"
+            style="font-size: 9px; padding: 0 0 2px 0; height: 19px;"
+            onclick="openGameEventEditModal(${_gameEvent.id})">✏️</button>`
+}
+
+function openGameEventEditModal(gameEventID){
+    const payload = {
+        'game_event_id': gameEventID
+    };
+    showUiMonitorContent('edit_event', payload);
+}
+
+function showReplay(videoPath, recordTime) {
+    alert(`Symulacja wyświetlania powtórki`);
+}
+
+function fieldSvgGenerator(cellId, color) {
+    // Mapowanie liter kolumn na indeksy (0–7)
+    const colMap = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7 };
+
+    // Walidacja i parsowanie parametru cellId (np. "A3", "H5")
+    const colLetter = cellId.charAt(0).toUpperCase();
+    const rowNumber = parseInt(cellId.slice(1), 10);
+
+    if (!(colLetter in colMap) || rowNumber < 1 || rowNumber > 5) {
+        throw new Error('Nieprawidłowy identyfikator komórki. Użyj formatu A1-H5.');
+    }
+
+    const colIndex = colMap[colLetter];      // 0 – A, 1 – B, ..., 7 – H
+    const rowIndex = rowNumber - 1;           // 0 – wiersz 1, 1 – wiersz 2, ..., 4 – wiersz 5
+
+    // Wymiary viewBox: szerokość = 8 (kolumny), wysokość = 5 (wiersze)
+    const width = 8;
+    const height = 5;
+    const cellSize = 1;                       // bok kwadratu = 1 jednostka
+
+    // Pozycja kwadratu w viewBox
+    const x = colIndex * cellSize;
+    const y = rowIndex * cellSize;
+
+    // Generowanie kodu SVG (dodano atrybuty width/height w px dla wygody)
+    return `<svg class="svg-field" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="24" height="15">
+    <rect width="${width}" height="${height}" fill="white" stroke="none" />
+    <rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#${color}" stroke="none" />
+    </svg>`;
+}
+
+function filterEvents(_element, _className) {
+    let tableRowsToShow = document.querySelectorAll(`#game-events-table .${_className}`);
+    let allTableRows = document.querySelectorAll(`#game-events-table tr`);
+    let filterEventButtons = document.querySelectorAll('.filter-event-button');
+    // let isClicked = _element.dataset.isClicked;
+    if(_element.dataset.isClicked === 'false'){
+        filterEventButtons.forEach(btn => {
+            btn.dataset.isClicked = 'false';
+            btn.style.backgroundColor = "buttonface";
+        });
+        _element.dataset.isClicked = 'true';
+        _element.style.backgroundColor = "#cdfeb5";
+        allTableRows.forEach(tr => {
+            tr.style.display = 'none';
+        });
+        tableRowsToShow.forEach(tr => {
+            tr.style.display = 'table-row';
+        });
+    }else{
+        filterEventButtons.forEach(btn => {
+            btn.dataset.isClicked = 'false';
+            btn.style.backgroundColor = "#cdfeb5";
+        });
+        allTableRows.forEach(tr => {
+            tr.style.display = 'table-row';
+        });
+    }
+}
+
+function eventEditRadioGenerator(_eventTypes, _gameEvent) {
+    const eTypes = _eventTypes;
+    const gEvent = _gameEvent;    
+    let eventTypeRadioGroup = document.createElement('div');
+    eventTypeRadioGroup.style.display = 'flex';
+    eventTypeRadioGroup.style.height = '8vh';
+    
+    addClassName(eventTypeRadioGroup, 'event-type-radio-group');
+    let radios = '';
+    let checked = '';
+    eTypes.forEach(et => {
+        if(et.id === gEvent.event_id) {checked = 'checked'} else {checked = ''};
+        console.log('et.id:', et.id, 'gEvent.event_id:', gEvent.event_id);
+        radios += `<input type="radio" name="eventType" id="event${et.id}" value="1" ${checked}>
+                   <label style="width: calc(100vw/${eTypes.length});" for="event${et.id}">${et.short_name}</label>`
+    });
+    eventTypeRadioGroup.innerHTML = radios;
+    return eventTypeRadioGroup;
+}
+
+function toggleGameFieldCell(selectedCell) {
+    console.log('toggleGameFieldCell');
+    let field = document.querySelector('#event-edit-game-field');
+    let allCells = document.querySelectorAll('.event-edit-game-field-cell');
+    let selectedGameFieldCell = selectedCell;
+    let selectedGameFieldCellId = selectedGameFieldCell.dataset.cellId;
+    if (!selectedGameFieldCell.classList.contains('selected-game-field-cell')) {
+        allCells.forEach(cell => {
+            removeClassName(cell, 'selected-game-field-cell');
+        });
+        addClassName(selectedGameFieldCell, 'selected-game-field-cell');
+        field.dataset.cellId = selectedGameFieldCellId;
+    } else {
+        allCells.forEach(cell => {
+            removeClassName(cell, 'selected-game-field-cell');
+        });
+        field.dataset.cellId = '';
+    }
+}
+
+function eventEditGameFieldGenerator(_eventCellID, cols = 8, rows = 5) {
+    let _cellId = ''
+    let html = `<div id="event-edit-game-field"
+    class="game-field-selector" data-cell-id="none">`;
+    for (let row = 1; row <= rows; row++) {
+        html += `<div class="game-field-row" style="display: flex;">`;
+        for (let col = 0; col < cols; col++) {
+            let eventCellID = _eventCellID;
+            const letter = String.fromCharCode(65 + col);
+            const cellId = letter + row;
+            let _class = '';
+            if(cellId === eventCellID) {
+                _class = 'selected-game-field-cell';
+                _cellId = cellId;
+            }
+            html += `<div ondblclick="toggleGameFieldCell(this);" style="background-image: url(/static/images/field/empty.png)"
+            data-cell-id="${cellId}" class="event-edit-game-field-cell ${_class}"></div>`;
+        }
+        html += `</div>`;
+    }
+    html += `</div>`;
+    return html.replace('data-cell-id="none"', `data-cell-id="${_cellId}"`);
+}
+
+function eventEditGetTeamByGameEvent(_gameData, _gameEvent, _eventTypes) {
+        const gameData = _gameData;
+        const homeTeamSquad = gameData.home_team_squad;
+        const awayTeamSquad = gameData.away_team_squad;
+        const gameEvent = _gameEvent;
+        const teamId = gameEvent.team_id;
+        const eventTypes = _eventTypes;
+        const eventTypeId = gameEvent.event_id;
+        const event = eventTypes.find(e => e.id === eventTypeId);
+        if (event?.player_from_opponent === 1) {
+            return teamId === gameData.home_team_id ? awayTeamSquad : homeTeamSquad;
+        }
+        return teamId === gameData.home_team_id ? homeTeamSquad : awayTeamSquad;
+}
+
+function eventEditTeamSquadSelectGenerator(_teamSquad) {
+    let teamSquad = _teamSquad;    
+    let squadSelect = document.createElement("select");
+    teamSquad.forEach(player => {
+        let isCaptain = '';
+        if(player.is_captain) isCaptain = 'C';
+        let isGK = '';
+        if(player.is_goalkeeper) isGK = 'G';
+        let option = document.createElement("option");
+        option.dataset.playerId = player.player_id;
+        option.text = `${player.number} ${player.player_name} ${isGK} ${isCaptain}`;
+        squadSelect.add(option);
+    });
+    return squadSelect;
+}
+
+function eventEditGameFieldListeners(){
+    document.querySelectorAll('.event-edit-game-field-cell').forEach(element => {
+        element.addEventListener('mouseover', () => {
+            element.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+        });
+    });
+
+    document.querySelectorAll('.event-edit-game-field-cell').forEach(element => {
+        element.addEventListener('mouseout', () => {
+            element.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+        });
+    });
+}
+socket.on('show_ui_monitor_content', data => {
+    console.log('data', data);
+    let uiMonitorContent = document.getElementById('ui-monitor-content');
+    if (data.content_type === null) {
+        uiMonitorContent.innerHTML = '';
+        uiMonitorContent.dataset.isEventsUpdateBlocked = 'false';
+    } else if (data.content_type === 'events') {
+        uiMonitorContent.innerHTML = '';
+        let eventsTypeSelectorsContainer = document.createElement('div');
+        eventsTypeSelectorsContainer.style.display = 'flex';
+        eventsTypeSelectorsContainer.style.height = '8vh';
+        eventsTypeSelectorsContainer.innerHTML = `
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'goal')">GOLE</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'yellow_card')">Ż.KARTKI</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'red_card')">CZ.KARTKI</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'save')">OBRONY</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'miss')">PUDŁA</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'foul')">FAULE</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'var')">VARY</button>`
+        ;
+        let gameEventsContainer = document.createElement('div');
+        gameEventsContainer.style.height = '84vh';
+        gameEventsContainer.style.overflowY = 'auto';
+        gameEventsContainer.innerHTML = '';
+        let gameEventsTable = document.createElement('table');
+        gameEventsTable.id = 'game-events-table';
+        let gameEvents = data.game_events;
+        gameEvents.forEach(gameEvent => {
+            const svgCode = fieldSvgGenerator(gameEvent.event_place, gameEvent.event_color);
+            const playerName = gameEventPlayerNameGenerator(gameEvent);
+            const obsReplayBtn = obsReplayTdGenerator(gameEvent);
+            const camerasReplaysBtns = camerasReplaysBtnsGenerator(gameEvent);
+            const eventInfoBtn = gameEventInfoBtnGenerator(gameEvent);
+            const eventEditBtn = gameEventEditBtnGenerator(gameEvent);
+            let gameEventTableRow = document.createElement('tr');
+            gameEventTableRow.className = gameEvent.filter_class;
+            gameEventTableRow.style.color = gameEvent.event_color;
+            gameEventTableRow.innerHTML = `
+                <td class="events-td-game-time">${gameEvent.game_time_formatted}</td>
+                <td class="events-td-event-name">${gameEvent.event_name}</td>
+                <td class="events-td-event-name">${playerName}</td>
+                <td class="events-td-svg-field">${svgCode}</td>
+                <td class="events-td-obs-replay">${obsReplayBtn}</td>
+                <td class="events-td-cameras-replays">${camerasReplaysBtns}</td>
+                <td class="events-td-event-info">${eventInfoBtn}</td>
+                <td class="events-td-event-edit">${eventEditBtn}</td>
+            `;
+            gameEventsTable.appendChild(gameEventTableRow);
+        });
+        gameEventsContainer.append(gameEventsTable);
+        uiMonitorContent.append(eventsTypeSelectorsContainer);
+        uiMonitorContent.append(gameEventsContainer);
+        uiMonitorContent.dataset.isEventsUpdateBlocked = 'false';
+    } else if(data.content_type === 'edit_event') {
+        uiMonitorContent.innerHTML = '';
+        const eventsTypes = data.events_types;
+        let isScoreboardReversed = data.is_scoreboard_reversed;
+        const gameEvent = data.game_event;
+        const gameData = data.game_data;
+        eventEditEventTypeRadios = eventEditRadioGenerator(eventsTypes, gameEvent);
+        let eventEditContainer = document.createElement('div');
+        eventEditContainer.style.height = '84vh';
+        eventEditContainer.style.overflowY = 'auto';
+        eventEditContainer.style.display = 'flex';
+        eventEditContainer.innerHTML = '';
+        let eventEditLeftColumn = document.createElement('div');
+        eventEditLeftColumn.style.width = '160px';
+        eventEditLeftColumn.innerHTML = eventEditGameFieldGenerator(data.game_event.event_place);
+        eventEditGameFieldListeners();
+        let eventEditRightColumn = document.createElement('div');
+        eventEditRightColumn.style.width = '260px';
+        squad = eventEditGetTeamByGameEvent(gameData, gameEvent, eventsTypes);
+        teamSelect = eventEditTeamSquadSelectGenerator(squad);
+        // let gameField = eventEditGameFieldGenerator();
+        // eventEditContainer.append(gameField);
+        uiMonitorContent.append(eventEditEventTypeRadios);
+        uiMonitorContent.append(eventEditContainer);
+        eventEditContainer.append(eventEditLeftColumn);
+        eventEditContainer.append(eventEditRightColumn);
+        eventEditRightColumn.append(teamSelect);
+        uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+    }
+});
+
+
 // ============================================================================
 // DEBUG HELPERS
 // ============================================================================
@@ -798,7 +1135,8 @@ window.debugTimers = () => {
     console.log('=== TIMER DEBUG ===');
     console.log('Period:', period);
     console.log('Main timer data:', appState.mainTimer);
-    console.log('Penalties data:', appState.penalties);
+    console.log('home_penalties data:', appState.home_penalties);
+    console.log('away_penalties data:', appState.away_penalties);
     console.log('DOM timer IDs:', getAllTimerIds());
     console.log('Socket connected:', socket.connected);
 };

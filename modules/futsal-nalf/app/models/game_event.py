@@ -25,6 +25,12 @@ class GameEvent(db.Model):
     # Location on the field where the event occurred
     event_place = db.Column(db.String, nullable=True)
 
+    # Display colour for UI/overlay (hex, e.g. '#ff0000')
+    # color = db.Column(db.String(7), nullable=False, default='#FFFFFF')
+
+    # Optional free-text note added by the operator
+    comment = db.Column(db.String, nullable=True)
+
     # Fallback video data (e.g. OBS stream output) — nullable, populated separately
     record_time = db.Column(db.Integer, nullable=True)   # file length at moment of event (ms)
     video_path = db.Column(db.String, nullable=True)     # path to fallback video file
@@ -63,6 +69,20 @@ class GameEvent(db.Model):
         if value is not None and not isinstance(value, str):
             raise TypeError("video_path must be a string")
         return value
+    
+    @validates('color')
+    def validate_color(self, key, value):
+        if value is None:
+            return '#FFFFFF'
+        if not isinstance(value, str) or not re.match(r'^#[0-9a-fA-F]{6}$', value):
+            raise ValueError("color must be a 7-character hex string, e.g. '#ff0000'")
+        return value.lower()
+
+    @validates('comment')
+    def validate_comment(self, key, value):
+        if value is not None and not isinstance(value, str):
+            raise TypeError('comment must be a string or None')
+        return value or None   # treat empty string as None
 
     @validates('event_place')
     def validate_event_place(self, key, value):
@@ -72,11 +92,12 @@ class GameEvent(db.Model):
 
     @property
     def game_time_seconds(self):
-        return self.game_time / 1000 if self.game_time else 0
+        return int(self.game_time) if self.game_time else 0
 
     @property
     def game_time_formatted(self):
         seconds = int(self.game_time_seconds)
+        print('time///', self.game_time_seconds, f"{seconds // 60:02d}:{seconds % 60:02d}")
         return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
     @property
@@ -86,24 +107,29 @@ class GameEvent(db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'game_id': self.game_id,
-            'event_id': self.event_id,
-            'event_name': self.event.name if self.event else None,
-            'event_short_name': self.event.short_name if self.event else None,
-            'period_id': self.period_id,
-            'period_description': self.period.description if self.period else None,
-            'team_id': self.team_id,
-            'team_name': self.team.name if self.team else None,
-            'player_id': self.player_id,
-            'player_name': self.player.full_name if self.player else None,
-            'game_time': self.game_time,
-            'game_time_seconds': self.game_time_seconds,
+            'id':                  self.id,
+            'game_id':             self.game_id,
+            'event_id':            self.event_id,
+            'event_name':          self.event.name         if self.event  else None,
+            'event_short_name':    self.event.short_name   if self.event  else None,
+            'event_color':         self.event.color        if self.event  else '#FFFFFF',
+            'filter_class':        self.event.filter_class,
+            'is_reported':         self.event.is_reported,
+            'period_id':           self.period_id,
+            'period_description':  self.period.description if self.period else None,
+            'team_id':             self.team_id,
+            'team_name':           self.team.name          if self.team   else None,
+            'team_short_name':     self.team.short_name    if self.team   else None,
+            'player_id':           self.player_id,
+            'player_name':         self.player.full_name   if self.player else None,
+            'game_time':           self.game_time,
+            'game_time_seconds':   self.game_time_seconds,
             'game_time_formatted': self.game_time_formatted,
-            'event_place': self.event_place,
-            'record_time': self.record_time,
-            'video_path': self.video_path,
-            'has_camera_data': self.has_camera_data,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'event_place':         self.event_place,
+            'record_time':         self.record_time,
+            'video_path':          self.video_path,
+            'has_camera_data':     self.has_camera_data,
+            'event_cameras':       [gc.to_dict() for gc in self.event_cameras],
+            'created_at':          self.created_at.isoformat() if self.created_at else None,
+            'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
         }

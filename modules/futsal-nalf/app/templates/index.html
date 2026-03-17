@@ -308,8 +308,8 @@ function buildCard(item, side, idx) {
                 '<input type="number" min="1" max="99" placeholder="#" value="' + num + '" ' +
                     'data-pg="' + pgId + '" data-field="number" ' +
                     'style="' + inp + 'width:3.5rem;" ' +
-                    'onkeydown="if(event.key===\'Enter\'){patchPlayerGame(this);this.blur();}" ' +
-                    'onblur="patchPlayerGame(this)">' +
+                    'onkeydown="if(event.key===\'Enter\'){patchGamePlayer(this);this.blur();}" ' +
+                    'onblur="patchGamePlayer(this)">' +
                 '<input type="text" placeholder="Nazwisko" value="' + ln.replace(/"/g, '&quot;') + '" ' +
                     'data-pl="' + plId + '" data-field="last_name" ' +
                     'style="' + inp + 'width:7rem;" ' +
@@ -323,7 +323,7 @@ function buildCard(item, side, idx) {
                 '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Bramkarz">' +
                     '<input type="checkbox" ' + isGK + ' ' +
                         'data-pg="' + pgId + '" data-field="is_goalkeeper" ' +
-                        'onchange="patchPlayerGame(this)"> GK' +
+                        'onchange="patchGamePlayer(this)"> GK' +
                 '</label>' +
                 '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Kapitan">' +
                     '<input type="radio" name="captain-' + ts + '" ' + isCap + ' ' +
@@ -339,9 +339,11 @@ function buildCard(item, side, idx) {
         const sub2 = (item.is_goalkeeper ? 'GK ' : '') + (item.number != null ? '#' + item.number : '');
         centerContent =
             '<div style="font-weight:600;font-size:.9rem;">' + label + (sub2 ? '<span style="font-size:.78rem;color:#6c757d;"> ' + sub2 + '</span>' : '')+ '</div>' ;
+    } else if (isSquad && side === 'assigned') {
+        centerContent = '';
     } else {
         centerContent =
-            // '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
+            '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
             (sub ? '<div style="font-size:.78rem;color:#6c757d;">' + sub + '</div>' : '') +
             typeSelect + hdmiSelect;
     }
@@ -475,7 +477,7 @@ function _reloadModal() {
         });
 }
 
-function patchPlayerGame(el) {
+function patchGamePlayer(el) {
     const pgId = el.dataset.pg;
     const field = el.dataset.field;
     let value;
@@ -504,7 +506,7 @@ function patchPlayerGame(el) {
 
 function patchCaptain(el) {
     // Radio: always sets is_captain=true for selected, server clears others
-    patchPlayerGame(el);
+    patchGamePlayer(el);
 }
 
 function patchPlayer(el) {

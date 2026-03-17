@@ -1,5 +1,5 @@
 """SocketIO events - MINIMAL"""
-from flask import current_app
+from flask import current_app, jsonify
 from flask_socketio import emit
 from app.extensions import socketio
 from app.managers import get_hub_client
@@ -26,24 +26,27 @@ def handle_request_initial_data():
     current_timers = Settings.get_current_timers()
     home_penalties = current_timers['penalties']['home']
     away_penalties = current_timers['penalties']['away']
-    penalties = {'home': home_penalties, 'away': away_penalties}
+    # penalties = {'home': home_penalties, 'away': away_penalties}
     main_timer = current_timers['main']
     is_reversed = bool(settings.is_scoreboard_reversed)
     current_game = Game.query.get(current_period.game_id).to_dict()
     # home_team_id = current_game.home_team_id
-    home_team = current_game['home_team']
+    # home_team = current_game['home_team']
     # away_team_id = current_game.away_team_id
-    away_team = current_game['away_team']
+    # away_team = current_game['away_team']
 
-    hub_client = get_hub_client ()
+    hub_client = get_hub_client()
     if hub_client:
         hub_client.broadcast_to_class('overlay', 'game_data', current_game)
 
     emit('initial_data', {
-        'scores': {'home': home_team['goals'], 'away': away_team['goals']},
-        'fouls': {'home': home_team['fouls'], 'away': away_team['fouls']},
-        'penalties': penalties,
-        'teams': {'home': home_team, 'away': away_team},
+        'home_team_goals': current_game['home_team_goals'],
+        'away_team_goals': current_game['away_team_goals'],
+        'home_team_fouls': current_game['home_team_fouls'],
+        'away_team_fouls': current_game['away_team_fouls'],
+        'home_penalties': home_penalties,
+        'away_penalties': away_penalties,
+        # 'teams': {'home': home_team, 'away': away_team},
         'main_timer': main_timer,
         'is_reversed': is_reversed
         })
@@ -632,13 +635,69 @@ def handle_change_game_value(data):
     if period:
         game = Game.query.filter_by(id=period.game_id).first()
         data = {
-            'home_team': {'goals': game.home_team_goals, 'fouls': game.home_team_fouls},
-            'away_team': {'goals': game.away_team_goals, 'fouls': game.away_team_fouls}
+            'home_team_goals': game.home_team_goals,
+            'home_team_fouls': game.home_team_fouls,
+            'away_team_goals': game.away_team_goals,
+            'away_team_fouls': game.away_team_fouls,
         }
         hub_client = get_hub_client()
         if hub_client:
             hub_client.broadcast_to_class('game_data_receiver', 'scoreboard_data', data)
             emit('scoreboard_data', {'payload': data})
+
+@socketio.on('request_ui_monitor_content')
+def handle_request_ui_monitor_content(data):
+    print('handle_show_ui_monitor_content data', data)
+    content_type = data.get('type')
+    if content_type == None:
+        emit('show_ui_monitor_content', {'content_type': None})
+    elif content_type == 'events':
+        from app.managers.event_manager import EventManager
+        event_manager = EventManager()
+        events_types = event_manager.get_all_events()
+        _events_types = []
+        for event in events_types:
+            _events_types.append(event.to_dict())
+        from app.managers.game_event_manager import GameEventManager
+        game_event_manager = GameEventManager()
+        from app.models.settings import Settings
+        settings = Settings.get_settings()
+        current_game_id = settings.current_game_id
+        game_events = game_event_manager.get_events_for_game(current_game_id)
+        _game_events = []
+        for event in game_events:
+            _game_events.append(event.to_dict())
+        emit('show_ui_monitor_content', {'content_type': 'events',
+                                         'events_types': _events_types,
+                                         'game_events': _game_events})
+    elif content_type == 'edit_event':
+        payload = data.get('payload')
+        game_event_id = payload['game_event_id']
+        from app.managers.event_manager import EventManager
+        event_manager = EventManager()
+        events_types = event_manager.get_all_events()
+        _events_types = []
+        for event in events_types:
+            if event.filter_class:
+                _events_types.append(event.to_dict())
+        from app.managers.game_event_manager import GameEventManager
+        game_event_manager = GameEventManager()
+        game_event = game_event_manager.get_game_event_by_id(game_event_id)
+        game_id = game_event.game_id
+        from app.managers.game_manager import GameManager
+        game_manager = GameManager()
+        game_data = game_manager.get_game_by_id(game_id).to_dict()
+        from app.models.settings import Settings
+        settings = Settings.get_settings()
+        is_scoreboard_reversed = settings.is_scoreboard_reversed
+
+        emit('show_ui_monitor_content', {'content_type': 'edit_event',
+                                         'events_types': _events_types,
+                                         'game_data': game_data,
+                                         'is_scoreboard_reversed': bool(is_scoreboard_reversed),
+                                         'game_event': game_event.to_dict()})
+
+
     
     # # ALWAYS sync penalty state with parent state
     # parent_state = timer_manager.get_timer_state(game_timer_id)
@@ -1064,18 +1123,27 @@ def handle_add_game_event_to_db(data):
 
     from app.models.settings import Settings
     from app.models.game import Game
+    from app.managers.period_manager import PeriodManager
     from app.models.team import Team
     from app.managers.game_event_manager import GameEventManager
+    from app.managers import get_timer_manager
     from app.managers import get_hub_client
 
     settings = Settings.get_settings()
     game_id   = settings.current_game_id
     period_id = settings.current_period_id
+    timer_id = settings.get_current_timers()['main']['timer_id']
 
     if not game_id or not period_id:
         emit('error', {'message': 'Brak aktywnego meczu lub okresu'})
         return
-
+    period_manager = PeriodManager()
+    current_period_data = period_manager.get_period_by_id(period_id=period_id).to_dict()
+    current_period_initial_time_in_seconds = int(current_period_data['initial_time_seconds'])
+    timer_manager = get_timer_manager()
+    timer_state = timer_manager.get_timer_state(timer_id=timer_id)
+    elapsed_seconds = int(timer_state['elapsed_time']/1000)
+    game_time = elapsed_seconds + current_period_initial_time_in_seconds
     # Resolve team_id from team_type ('home'/'away')
     team_id = None
     team_type = data.get('team_type')
@@ -1087,6 +1155,11 @@ def handle_add_game_event_to_db(data):
     event_type     = data.get('event_type')
     selected_cell  = data.get('selected_cell_id')
 
+
+    print(f'elapsed_seconds: {elapsed_seconds} - typ {type(elapsed_seconds)},')
+    print(f'current_period_initial_time_in_seconds: {current_period_initial_time_in_seconds} - typ {type(current_period_initial_time_in_seconds)},')
+    print(f'game_time: {game_time} - typ {type(game_time)},')
+
     try:
         manager = GameEventManager()
         game_event = manager.record_event(
@@ -1095,6 +1168,7 @@ def handle_add_game_event_to_db(data):
             period_id=period_id,
             team_id=team_id,
             event_place=selected_cell,
+            game_time=game_time,
         )
     except Exception as e:
         current_app.logger.error(f'❌ Failed to save game event: {e}')

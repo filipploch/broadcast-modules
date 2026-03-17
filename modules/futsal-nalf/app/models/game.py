@@ -55,7 +55,7 @@ class Game(db.Model):
     periods = db.relationship('Period', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='Period.period_order')
     game_cameras = db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
     penalty = db.relationship('Penalty', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
-    player_games = db.relationship('PlayerGame', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    game_players = db.relationship('GamePlayer', backref='game', lazy='dynamic', cascade='all, delete-orphan')
     game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
     game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
 
@@ -231,9 +231,9 @@ class Game(db.Model):
             team_id: Optional filter by team
         
         Returns:
-            List of PlayerGame objects
+            List of GamePlayer objects
         """
-        query = self.player_games
+        query = self.game_players
         if team_id:
             query = query.filter_by(team_id=team_id)
         return query.all()
@@ -274,7 +274,7 @@ class Game(db.Model):
     @property
     def total_players(self):
         """Get total number of players assigned to this game"""
-        return self.player_games.count()
+        return self.game_players.count()
 
     @property
     def total_events(self):
@@ -383,26 +383,47 @@ class Game(db.Model):
             include_live: If True, include live games with current score
         """
         return self.get_team_stats(self.away_team_id, include_live=include_live)
+    
+    def get_squad(self, team_id):
+        """
+        Return players assigned to this game grouped by team side.
 
+        Returns:
+            [GamePlayer.to_dict(), ...]
+        Ordered per team: goalkeepers first, then by number asc (nulls last), then last_name.
+        """
+        from app.models.player import Player
+
+        def _sorted(team_id):
+            from app.models.game_player import GamePlayer
+            return (
+                self.game_players
+                .filter_by(team_id=team_id)
+                .join(Player, GamePlayer.player_id == Player.id)
+                .order_by(
+                    GamePlayer.is_goalkeeper.desc(),
+                    GamePlayer.number.asc().nullslast(),
+                    Player.last_name.asc(),
+                )
+                .all()
+            )
+        return [gp.to_dict() for gp in _sorted(team_id)]
+    
     def to_dict(self):
         """Convert to dictionary"""
         return {
             'id': self.id,
             'foreign_id': self.foreign_id,
-            'home_team': {
-                'id': self.home_team_id,
-                'name': self.home_team.name if self.home_team else None,
-                'short_name': self.home_team.short_name if self.home_team else None,
-                'goals': self.home_team_goals,
-                'fouls': self.home_team_fouls
-            },
-            'away_team': {
-                'id': self.away_team_id,
-                'name': self.away_team.name if self.away_team else None,
-                'short_name': self.away_team.short_name if self.away_team else None,
-                'goals': self.away_team_goals,
-                'fouls': self.away_team_fouls
-            },
+            'home_team_id': self.home_team_id,
+            'home_team_name': self.home_team.name if self.home_team else None,
+            'home_team_short_name': self.home_team.short_name if self.home_team else None,
+            'home_team_goals': self.home_team_goals,
+            'home_team_fouls': self.home_team_fouls,
+            'away_team_id': self.away_team_id,
+            'away_team_name': self.away_team.name if self.away_team else None,
+            'away_team_short_name': self.away_team.short_name if self.away_team else None,
+            'away_team_goals': self.away_team_goals,
+            'away_team_fouls': self.away_team_fouls,
             'is_home_team_lost_by_wo': self.is_home_team_lost_by_wo,
             'is_away_team_lost_by_wo': self.is_away_team_lost_by_wo,
             'is_walkover': self.is_walkover,
@@ -431,7 +452,8 @@ class Game(db.Model):
             'total_players': self.total_players,
             'total_events': self.total_events,
             'total_referees': self.total_referees,
-            'players': [pg.to_dict() for pg in self.get_players_list()],
+            'home_team_squad': self.get_squad(self.home_team_id),
+            'away_team_squad': self.get_squad(self.away_team_id),
             'events': [ge.to_dict() for ge in self.get_events_list()],
             'referees': [gr.to_dict() for gr in self.get_referees_list()],
             'created_at': self.created_at.isoformat() if self.created_at else None,

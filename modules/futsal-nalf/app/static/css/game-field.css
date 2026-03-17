@@ -9,6 +9,11 @@
     height: 20px;
 }
 
+.event-edit-game-field-cell {
+    width: 20px;
+    height: 20px;
+}
+
 .selected-game-field-cell {
     background-color: rgba(0, 0, 0, 0.3) !important;
 }

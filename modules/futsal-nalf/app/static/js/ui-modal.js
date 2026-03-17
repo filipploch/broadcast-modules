@@ -17,16 +17,16 @@ function closeModal(modalId) {
 //     `;
 // }
 
-function fillPenaltiesTimersContainer(team){
-    console.log('fill: ', appState.penalties);
-    const penalties = appState.penalties[team];
+function fillPenaltiesTimersContainer(_penalties, teamType){
+    const penalties = _penalties;
+    console.log('penalties:', penalties);
     // const penalties = Array.of(appState.penalties[team]);
-    let penaltiesContainerId = `${team}-team-penalties-timers-container`;
+    let penaltiesContainerId = `${teamType}-team-penalties-timers-container`;
     let penaltiesContainer = document.getElementById(penaltiesContainerId);
     let itemsHtml = '';
     if(penalties.length > 0) {
         penalties.forEach(penalty => {
-            console.log('penalty:', team, penalty);
+            console.log('penalty:', teamType, penalty);
             itemsHtml += `
             <div class="penalty-element" data-timer-id="${penalty.timer_id}">
             <div class="penalty-element-content">
@@ -44,7 +44,7 @@ function fillPenaltiesTimersContainer(team){
     }
 
     if (penalties.length < 2) {
-        itemsHtml += `<button class="add-penalty-button" onclick="addPenaltyTimer('${team}')">Dodaj</button>`;
+        itemsHtml += `<button class="add-penalty-button" onclick="addPenaltyTimer('${teamType}')">Dodaj</button>`;
     }
 
     penaltiesContainer.innerHTML = itemsHtml;

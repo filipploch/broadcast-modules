@@ -343,18 +343,19 @@ socket.on('timer_removed', (data) => {
 });
 
 socket.on('reload_penalty_timers', (data) => {
-    appState.penalties = data.penalties;
+    appState.home_penalties = data.home_penalties;
+    appState.away_penalties = data.away_penalties;
 
-    fillPenaltiesTimersContainer('home');
-    fillPenaltiesTimersContainer('away');
+    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
 });
 
 socket.on('game_data', (data) => {
     let gameData = data['payload'];
-    homeScoreLabel.innerText = gameData['home_team'].goals;
-    awayScoreLabel.innerText = gameData['away_team'].goals;
-    homeFoulsLabel.innerText = gameData['home_team'].fouls;
-    awayFoulsLabel.innerText = gameData['away_team'].fouls;
+    homeScoreLabel.innerText = gameData['home_team_goals'];
+    awayScoreLabel.innerText = gameData['away_team_goals'];
+    homeFoulsLabel.innerText = gameData['home_team_fouls'];
+    awayFoulsLabel.innerText = gameData['away_team_fouls'];
 })
 
 /**

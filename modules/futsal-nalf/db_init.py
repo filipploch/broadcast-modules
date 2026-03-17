@@ -313,7 +313,7 @@ def show_database_info():
             print(f"   - Active Season: {settings.current_season.name if settings.current_season else 'None'}")
             if settings.current_game:
                 game = settings.current_game
-                print(f"   - Active Game:   {game.home_team.short_name} vs {game.away_team.short_name} (ID: {game.id})")
+                print(f"   - Active Game:   {game.home_team_short_name} vs {game.away_team_short_name} (ID: {game.id})")
 
     print("\n" + "=" * 80)
 

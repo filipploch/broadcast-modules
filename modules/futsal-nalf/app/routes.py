@@ -7,6 +7,7 @@ from app.managers.team_manager import TeamManager
 from app.managers.team_scraper_manager import TeamScraperManager
 from app.managers.player_scraper_manager import PlayerScraperManager
 from app.managers.game_manager import GameManager
+# from app.managers import get_game_manager
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.league_manager import LeagueManager
 from app.models.team import Team
@@ -83,7 +84,7 @@ def index():
     from app.models.settings import Settings
     from app.models.game import Game
     from app.models.period import Period
-    from app.managers.player_game_manager import PlayerGameManager
+    from app.managers.game_player_manager import GamePlayerManager
     from app.managers.game_referee_manager import GameRefereeManager
     from app.managers.game_commentator_manager import GameCommentatorManager
     from app.managers.game_camera_manager import GameCameraManager
@@ -107,7 +108,7 @@ def index():
             periods = Period.query.filter_by(game_id=game.id).all()
             penalty = game.penalty
 
-            pg_mgr = PlayerGameManager()
+            pg_mgr = GamePlayerManager()
             assigned['home_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
             assigned['away_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
             assigned['referees'] = GameRefereeManager().get_referees_for_game(game.id)
@@ -799,7 +800,7 @@ def api_assign_data(content_type):
     from flask import jsonify
     from app.models.settings import Settings
     from app.models.game import Game
-    from app.managers.player_game_manager import PlayerGameManager
+    from app.managers.game_player_manager import GamePlayerManager
     from app.managers.player_manager import PlayerManager
     from app.managers.game_referee_manager import GameRefereeManager
     from app.managers.referee_manager import RefereeManager
@@ -825,7 +826,7 @@ def api_assign_data(content_type):
         team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
         team = game.home_team if content_type == 'home-squad' else game.away_team
 
-        pg_mgr = PlayerGameManager()
+        pg_mgr = GamePlayerManager()
         assigned_pgs = pg_mgr.get_players_for_game(game_id, team_id=team_id)
         assigned_ids = {pg.player_id for pg in assigned_pgs}
 
@@ -975,13 +976,13 @@ def api_assign_save(content_type):
     try:
         # ── home_squad / away_squad ──────────────────────────────────────────
         if content_type in ('home-squad', 'away-squad'):
-            from app.managers.player_game_manager import PlayerGameManager
-            from app.models.player_game import PlayerGame
+            from app.managers.game_player_manager import GamePlayerManager
+            from app.models.game_player import GamePlayer
             team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
 
-            pg_mgr = PlayerGameManager()
+            pg_mgr = GamePlayerManager()
             # Remove all current assignments for this team in this game
-            existing = PlayerGame.query.filter_by(game_id=game_id, team_id=team_id).all()
+            existing = GamePlayer.query.filter_by(game_id=game_id, team_id=team_id).all()
             from app.extensions import db
             for pg in existing:
                 db.session.delete(pg)
@@ -1053,14 +1054,14 @@ def api_assign_save(content_type):
 
 
 @current_app.route('/api/player-game/<int:pg_id>', methods=['PATCH'])
-def api_patch_player_game(pg_id):
-    """Update PlayerGame snapshot fields (number, is_goalkeeper, is_captain).
-    If is_captain=True, clears is_captain for all other PlayerGame rows of same team in same game."""
+def api_patch_game_player(pg_id):
+    """Update GamePlayer snapshot fields (number, is_goalkeeper, is_captain).
+    If is_captain=True, clears is_captain for all other GamePlayer rows of same team in same game."""
     from flask import jsonify, request as req
-    from app.models.player_game import PlayerGame
+    from app.models.game_player import GamePlayer
     from app.extensions import db
 
-    pg = PlayerGame.query.get(pg_id)
+    pg = GamePlayer.query.get(pg_id)
     if not pg:
         return jsonify({'error': 'Nie znaleziono rekordu'}), 404
 
@@ -1084,11 +1085,11 @@ def api_patch_player_game(pg_id):
             if player:
                 player.is_captain = is_captain
             if is_captain:
-                # Clear captain for others in same team/game (PlayerGame)
-                others = PlayerGame.query.filter(
-                    PlayerGame.game_id == pg.game_id,
-                    PlayerGame.team_id == pg.team_id,
-                    PlayerGame.id != pg.id,
+                # Clear captain for others in same team/game (GamePlayer)
+                others = GamePlayer.query.filter(
+                    GamePlayer.game_id == pg.game_id,
+                    GamePlayer.team_id == pg.team_id,
+                    GamePlayer.id != pg.id,
                 ).all()
                 for other in others:
                     other.is_captain = False

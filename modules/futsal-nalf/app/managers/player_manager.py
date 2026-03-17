@@ -138,7 +138,7 @@ class PlayerManager:
         """
         Delete player
         
-        Note: This will also delete all PlayerGame associations (cascade)
+        Note: This will also delete all GamePlayer associations (cascade)
 
         Args:
             player_id: Player ID

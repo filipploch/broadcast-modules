@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS "penalties" (
 	PRIMARY KEY("id"),
 	FOREIGN KEY("game_id") REFERENCES "games"("id")
 );
-CREATE TABLE IF NOT EXISTS "player_games" (
+CREATE TABLE IF NOT EXISTS "game_players" (
 	"id"	INTEGER NOT NULL,
 	"player_id"	INTEGER NOT NULL,
 	"game_id"	INTEGER NOT NULL,
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS "player_games" (
 	"number"	INTEGER,
 	"created_at"	DATETIME,
 	"updated_at"	DATETIME,
-	CONSTRAINT "unique_player_game" UNIQUE("player_id","game_id"),
+	CONSTRAINT "unique_game_player" UNIQUE("player_id","game_id"),
 	PRIMARY KEY("id"),
 	FOREIGN KEY("player_id") REFERENCES "players"("id"),
 	FOREIGN KEY("team_id") REFERENCES "teams"("id"),
@@ -489,13 +489,13 @@ CREATE INDEX IF NOT EXISTS "ix_periods_game_id" ON "periods" (
 CREATE UNIQUE INDEX IF NOT EXISTS "ix_penalties_game_id" ON "penalties" (
 	"game_id"
 );
-CREATE INDEX IF NOT EXISTS "ix_player_games_game_id" ON "player_games" (
+CREATE INDEX IF NOT EXISTS "ix_game_players_game_id" ON "game_players" (
 	"game_id"
 );
-CREATE INDEX IF NOT EXISTS "ix_player_games_player_id" ON "player_games" (
+CREATE INDEX IF NOT EXISTS "ix_game_players_player_id" ON "game_players" (
 	"player_id"
 );
-CREATE INDEX IF NOT EXISTS "ix_player_games_team_id" ON "player_games" (
+CREATE INDEX IF NOT EXISTS "ix_game_players_team_id" ON "game_players" (
 	"team_id"
 );
 CREATE INDEX IF NOT EXISTS "ix_game_referees_referee_id" ON "game_referees" (

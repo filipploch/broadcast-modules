@@ -8,9 +8,13 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/classes.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/team-squad.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-table-row-keyframes.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-table-row-elements.css">
 </head>
 <body>
-    <div id="game-screen-container" class="overlay-container hidden">
+    <!-- <div id="game-screen-container" class="overlay-container hidden"> -->
+    <div id="game-screen-container" class="overlay-container">
         <div id="scoreboard-container">
             <div id="top-scoreboard-container" class="scoreboard-row">
                 <div></div>
@@ -56,7 +60,11 @@
                 </div>
             </div>
         </div>
+        <div id="away-team-squad-container">
+            <table id="away-team-squad-table"></table>
+        </div>
     </div>
+    <script src="/overlays/futsal-nalf/js/utils.js"></script>
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
     
     <script>
@@ -67,6 +75,87 @@
     const display = document.getElementById('main-timer-display');
     
     let registered = false;
+
+    function createTeamSquad(arr) {
+        var tableBody = document.createElement('tbody');
+        tableBody.innerHTML = '';
+
+        arr.forEach(function(element, index) {
+            var goalkeeper = '';
+            var captain = '';
+            if (element.is_goalkeeper === true){
+                goalkeeper = ' B '
+            }
+            if (element.is_captain === true){
+                captain = ' C '
+            }
+            var tableRow = document.createElement('tr');
+            addClassName(tableRow, 'squad-player-row');
+            addClassName(tableRow, 'rotate-table-row');
+            addClassName(tableRow, `rotate-table-row${index}`);
+            tableRow.innerHTML = `<td class="squad-player-number">${element.number}</td><td class="squad-player-name">${element.player_name}</td><td class="squad-player-func">${goalkeeper}${captain}</td>`;
+            tableBody.appendChild(tableRow);
+        });
+        return tableBody;
+    }
+
+    function updateScoreboard(data) {
+        let homeTeamScoreElement = document.getElementById('home-team-score');
+        let awayTeamScoreElement = document.getElementById('away-team-score');
+        let homeTeamFoulsElement = document.getElementById('home-team-fouls');
+        let awayTeamFoulsElement = document.getElementById('away-team-fouls');
+        if (typeof data.home_team_goals != "undefined") {
+            if(data.home_team_goals === '' || data.home_team_goals === null){
+                homeTeamScoreElement.textContent = '';
+            }else if(parseInt(data.home_team_goals) !== 'undefined'){
+                homeTeamScoreElement.textContent = data.home_team_goals;
+            }else{
+                
+            }
+        }
+        if (typeof data.away_team_goals != "undefined") {
+            if(data.away_team_goals === '' || data.away_team_goals === null){
+                awayTeamScoreElement.textContent = '';
+            }else if(parseInt(data.home_team_goals) !== 'undefined'){
+                awayTeamScoreElement.textContent = data.away_team_goals;
+            }else{
+                
+            }
+        }
+        if (typeof data.home_team_fouls != "undefined") {
+            if(data.home_team_fouls === '' || data.home_team_fouls === null){
+                homeTeamFoulsElement.textContent = '';
+            }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
+                data.home_team_fouls >= 0 &&
+                data.home_team_fouls < 6){
+                    homeTeamFoulsElement.textContent = '●'.repeat(data.home_team_fouls);
+                    homeTeamFoulsElement.style.color = 'yellow';
+                    if(data.home_team_fouls > 4){
+                        homeTeamFoulsElement.style.color = 'red';
+                    }else if(data.home_team_fouls < 4){
+                        homeTeamFoulsElement.style.color = 'white';
+            }else{
+                
+            }
+        }}
+        if (typeof data.away_team_fouls != "undefined") {
+            if(data.away_team_fouls === '' || data.away_team_fouls === null){
+                awayTeamFoulsElement.textContent = '';
+            }else if(parseInt(data.away_team_fouls) !== 'undefined' &&
+                data.away_team_fouls >= 0 &&
+                data.away_team_fouls < 6){
+                    awayTeamFoulsElement.textContent = '●'.repeat(data.away_team_fouls);
+                    awayTeamFoulsElement.style.color = 'yellow';
+                    if(data.away_team_fouls > 4){
+                        awayTeamFoulsElement.style.color = 'red';
+                    }else if(data.away_team_fouls < 4){
+                        awayTeamFoulsElement.style.color = 'white';
+                    }else{}
+            }else{
+                
+            }
+        }
+    }
     
     ws.onopen = () => {
         console.log('✅ Connected to HUB');
@@ -96,7 +185,7 @@
         if (msg.type === 'registered' && !registered) {
             registered = true;
             console.log('✅ Registered! Now subscribing to timer...');
-            
+
             ws.send(JSON.stringify({
                 type: 'subscribe',
                 from: overlayId,
@@ -105,11 +194,18 @@
                     class: ['timer', 'overlay', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
+
+            ws.send(JSON.stringify({
+                type: 'request_game_data',
+                from: overlayId,
+                to: 'futsal-nalf'
+            }));
         }
         
         // Po subskrypcji
         if (msg.type === 'subscribed') {
             console.log('✅ Subscribed to classes!');
+            
         }
         
         // OBSŁUGA TIMERÓW
@@ -175,61 +271,7 @@
 
         if(msg.type === 'scoreboard_data') {
             const data = msg.payload || msg.data;
-            let homeTeamScoreElement = document.getElementById('home-team-score');
-            let awayTeamScoreElement = document.getElementById('away-team-score');
-            let homeTeamFoulsElement = document.getElementById('home-team-fouls');
-            let awayTeamFoulsElement = document.getElementById('away-team-fouls');
-            if (typeof data.home_team.goals != "undefined") {
-                if(data.home_team.goals === '' || data.home_team.goals === null){
-                    homeTeamScoreElement.textContent = '';
-                }else if(parseInt(data.home_team.goals) !== 'undefined'){
-                    homeTeamScoreElement.textContent = data.home_team.goals;
-                }else{
-                    
-                }
-            }
-            if (typeof data.away_team.goals != "undefined") {
-                if(data.away_team.goals === '' || data.away_team.goals === null){
-                    awayTeamScoreElement.textContent = '';
-                }else if(parseInt(data.home_team.goals) !== 'undefined'){
-                    awayTeamScoreElement.textContent = data.away_team.goals;
-                }else{
-                    
-                }
-            }
-            if (typeof data.home_team.fouls != "undefined") {
-                if(data.home_team.fouls === '' || data.home_team.fouls === null){
-                    homeTeamFoulsElement.textContent = '';
-                }else if(parseInt(data.home_team.fouls) !== 'undefined' &&
-                    data.home_team.fouls >= 0 &&
-                    data.home_team.fouls < 6){
-                        homeTeamFoulsElement.textContent = '●'.repeat(data.home_team.fouls);
-                        homeTeamFoulsElement.style.color = 'yellow';
-                        if(data.home_team.fouls > 4){
-                            homeTeamFoulsElement.style.color = 'red';
-                        }else if(data.home_team.fouls < 4){
-                            homeTeamFoulsElement.style.color = 'white';
-                }else{
-                    
-                }
-            }}
-            if (typeof data.away_team.fouls != "undefined") {
-                if(data.away_team.fouls === '' || data.away_team.fouls === null){
-                    awayTeamFoulsElement.textContent = '';
-                }else if(parseInt(data.away_team.fouls) !== 'undefined' &&
-                    data.away_team.fouls >= 0 &&
-                    data.away_team.fouls < 6){
-                        awayTeamFoulsElement.textContent = '●'.repeat(data.away_team.fouls);
-                        awayTeamFoulsElement.style.color = 'yellow';
-                        if(data.away_team.fouls > 4){
-                            awayTeamFoulsElement.style.color = 'red';
-                        }else if(data.away_team.fouls < 4){
-                            awayTeamFoulsElement.style.color = 'white';
-                        }else{}
-                }else{
-                    
-                }
-            }
+            updateScoreboard(data);
         }
 
         if (msg.type === 'game_data') {
@@ -237,18 +279,25 @@
             console.log('game_data', data);
             let homeTeamShortNameElements = document.querySelectorAll('.home-team-shortname');
             let awayTeamShortNameElements = document.querySelectorAll('.away-team-shortname');
+            let awayTeamSquadContainer = document.getElementById('away-team-squad-container');
 
-            console.log('short Name:', data.away_team.short_name)
-            if (typeof data.home_team.short_name != "undefined") {
+            console.log('short Name:', data.away_team_short_name)
+            if (typeof data.home_team_short_name != "undefined") {
                 homeTeamShortNameElements.forEach(element => {
-                    element.textContent = data.home_team.short_name;
+                    element.textContent = data.home_team_short_name;
                 })
             }
             
-            if (typeof data.away_team.short_name != "undefined") {
+            if (typeof data.away_team_short_name != "undefined") {
                 awayTeamShortNameElements.forEach(element => {
-                    element.textContent = data.away_team.short_name;
+                    element.textContent = data.away_team_short_name;
                 })
+            }
+
+            if (typeof data.away_team_squad != "undefined") {
+                var squad = data.away_team_squad;
+                var elems = createTeamSquad(squad);
+                document.querySelector('#away-team-squad-table').append(elems);
             }
 
 
@@ -260,7 +309,6 @@
     //     window.PenaltyTimers?.clearAll();
     // });
 </script>
-    <script src="/overlays/futsal-nalf/js/utils.js"></script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>
