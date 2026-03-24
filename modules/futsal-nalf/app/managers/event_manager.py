@@ -51,7 +51,7 @@ class EventManager:
 
     def get_all_events(self) -> List[Event]:
         """Get all event types"""
-        return Event.query.order_by(Event.name).all()
+        return Event.query.order_by(Event.id).all()
 
     def get_reported_events(self) -> List[Event]:
         """Get events that require team/player assignment"""

@@ -77,12 +77,16 @@ button.top-bar-element {
 }
 
 .events-td-game-time {
-    width: 35px;
+    width: 30px;
 }
 
-/* .events-td-event-name {
-    width: 200px;
-} */
+.events-td-event-name {
+    width: 40px;
+}
+
+.events-td-player-name {
+    width: 235px;
+}
 
 .events-td-svg-field {
     width: 25px;
@@ -102,7 +106,7 @@ button.top-bar-element {
 }
 
 .event-btn {
-    width: 22px;
-    height: 21px;
+    width: 20px;
+    height: 20px;
     padding: 0;
 }

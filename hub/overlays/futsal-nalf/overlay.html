@@ -33,9 +33,9 @@
                         <div class="flex1 team-uniform-element" style="background-color: rgb(0, 132, 70);">.</div>
                     </div>
                 </div>
-                <div id="home-team-score" class="team-score">18</div>
+                <div id="home-team-score" class="team-score home-team-score">18</div>
                 <div></div>
-                <div id="away-team-score" class="team-score">1</div>
+                <div id="away-team-score" class="team-score away-team-score">1</div>
                 <div class="team-box">
                     <div id="away-team-shortname" class="team-name away-team-shortname">TEB</div>
                     <div id="away-team-uniform" class="team-uniform">
@@ -76,6 +76,11 @@
     
     let registered = false;
 
+    var homeTeamScoreElement = document.getElementById('home-team-score');
+    var awayTeamScoreElement = document.getElementById('away-team-score');
+    var homeTeamFoulsElement = document.getElementById('home-team-fouls');
+    var awayTeamFoulsElement = document.getElementById('away-team-fouls');
+
     function createTeamSquad(arr) {
         var tableBody = document.createElement('tbody');
         tableBody.innerHTML = '';
@@ -99,11 +104,27 @@
         return tableBody;
     }
 
+    function updateFoulsElement(_fouls, _foulsElement) {
+        if(_fouls === '' || _fouls === null){
+            _foulsElement.textContent = '';
+        }else if(parseInt(_fouls) !== 'undefined' && _fouls >= 0 && _fouls < 6) {
+            _foulsElement.textContent = '●'.repeat(_fouls);
+            _foulsElement.style.color = 'yellow';
+            if(_fouls > 4){
+                _foulsElement.style.color = 'red';
+            }else if(_fouls < 4){
+                _foulsElement.style.color = 'white';
+            }else{
+                
+            }
+        }
+    }
+
     function updateScoreboard(data) {
-        let homeTeamScoreElement = document.getElementById('home-team-score');
-        let awayTeamScoreElement = document.getElementById('away-team-score');
-        let homeTeamFoulsElement = document.getElementById('home-team-fouls');
-        let awayTeamFoulsElement = document.getElementById('away-team-fouls');
+        // var homeTeamScoreElement = document.getElementById('home-team-score');
+        // var awayTeamScoreElement = document.getElementById('away-team-score');
+        // var homeTeamFoulsElement = document.getElementById('home-team-fouls');
+        // var awayTeamFoulsElement = document.getElementById('away-team-fouls');
         if (typeof data.home_team_goals != "undefined") {
             if(data.home_team_goals === '' || data.home_team_goals === null){
                 homeTeamScoreElement.textContent = '';
@@ -123,37 +144,40 @@
             }
         }
         if (typeof data.home_team_fouls != "undefined") {
-            if(data.home_team_fouls === '' || data.home_team_fouls === null){
-                homeTeamFoulsElement.textContent = '';
-            }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
-                data.home_team_fouls >= 0 &&
-                data.home_team_fouls < 6){
-                    homeTeamFoulsElement.textContent = '●'.repeat(data.home_team_fouls);
-                    homeTeamFoulsElement.style.color = 'yellow';
-                    if(data.home_team_fouls > 4){
-                        homeTeamFoulsElement.style.color = 'red';
-                    }else if(data.home_team_fouls < 4){
-                        homeTeamFoulsElement.style.color = 'white';
-            }else{
+            updateFoulsElement(data.home_team_foul, homeTeamFoulsElement);
+        //     if(data.home_team_fouls === '' || data.home_team_fouls === null){
+        //         homeTeamFoulsElement.textContent = '';
+        //     }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
+        //         data.home_team_fouls >= 0 &&
+        //         data.home_team_fouls < 6){
+        //             homeTeamFoulsElement.textContent = '●'.repeat(data.home_team_fouls);
+        //             homeTeamFoulsElement.style.color = 'yellow';
+        //             if(data.home_team_fouls > 4){
+        //                 homeTeamFoulsElement.style.color = 'red';
+        //             }else if(data.home_team_fouls < 4){
+        //                 homeTeamFoulsElement.style.color = 'white';
+        //     }else{
                 
-            }
-        }}
+        //     }
+        // }
+        }
         if (typeof data.away_team_fouls != "undefined") {
-            if(data.away_team_fouls === '' || data.away_team_fouls === null){
-                awayTeamFoulsElement.textContent = '';
-            }else if(parseInt(data.away_team_fouls) !== 'undefined' &&
-                data.away_team_fouls >= 0 &&
-                data.away_team_fouls < 6){
-                    awayTeamFoulsElement.textContent = '●'.repeat(data.away_team_fouls);
-                    awayTeamFoulsElement.style.color = 'yellow';
-                    if(data.away_team_fouls > 4){
-                        awayTeamFoulsElement.style.color = 'red';
-                    }else if(data.away_team_fouls < 4){
-                        awayTeamFoulsElement.style.color = 'white';
-                    }else{}
-            }else{
+            updateFoulsElement(data.away_team_foul, awayTeamFoulsElement);
+            // if(data.away_team_fouls === '' || data.away_team_fouls === null){
+            //     awayTeamFoulsElement.textContent = '';
+            // }else if(parseInt(data.away_team_fouls) !== 'undefined' &&
+            //     data.away_team_fouls >= 0 &&
+            //     data.away_team_fouls < 6){
+            //         awayTeamFoulsElement.textContent = '●'.repeat(data.away_team_fouls);
+            //         awayTeamFoulsElement.style.color = 'yellow';
+            //         if(data.away_team_fouls > 4){
+            //             awayTeamFoulsElement.style.color = 'red';
+            //         }else if(data.away_team_fouls < 4){
+            //             awayTeamFoulsElement.style.color = 'white';
+            //         }else{}
+            // }else{
                 
-            }
+            // }
         }
     }
     
@@ -279,7 +303,9 @@
             console.log('game_data', data);
             let homeTeamShortNameElements = document.querySelectorAll('.home-team-shortname');
             let awayTeamShortNameElements = document.querySelectorAll('.away-team-shortname');
-            let awayTeamSquadContainer = document.getElementById('away-team-squad-container');
+            let homeTeamScoreElements = document.querySelectorAll('.home-team-score');
+            let awayTeamScoreElements = document.querySelectorAll('.away-team-score');
+            // let awayTeamSquadContainer = document.getElementById('away-team-squad-container');
 
             console.log('short Name:', data.away_team_short_name)
             if (typeof data.home_team_short_name != "undefined") {
@@ -294,11 +320,33 @@
                 })
             }
 
-            if (typeof data.away_team_squad != "undefined") {
-                var squad = data.away_team_squad;
-                var elems = createTeamSquad(squad);
-                document.querySelector('#away-team-squad-table').append(elems);
+            if (typeof data.home_team_goals != "undefined") {
+                homeTeamScoreElements.forEach(element => {
+                    element.textContent = data.home_team_goals;
+                })
             }
+
+            if (typeof data.away_team_goals != "undefined") {
+                awayTeamScoreElements.forEach(element => {
+                    element.textContent = data.away_team_goals;
+                })
+            }
+
+            if (typeof data.home_team_fouls != "undefined") {
+                updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
+            }
+
+            if (typeof data.away_team_fouls != "undefined") {
+                updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
+            }
+
+            // updateFoulsElement(data.home_team_foul, homeTeamFoulsElement);
+
+            // if (typeof data.away_team_squad != "undefined") {
+            //     var squad = data.away_team_squad;
+            //     var elems = createTeamSquad(squad);
+            //     document.querySelector('#away-team-squad-table').append(elems);
+            // }
 
 
         }

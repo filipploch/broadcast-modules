@@ -663,10 +663,19 @@ def handle_request_ui_monitor_content(data):
         from app.models.settings import Settings
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
-        game_events = game_event_manager.get_events_for_game(current_game_id)
+        from app.managers.game_manager import GameManager
+        game_manager = GameManager()
+        game = game_manager.get_game_by_id(current_game_id)
+        game_periods = game.get_periods_list()
         _game_events = []
-        for event in game_events:
-            _game_events.append(event.to_dict())
+        for period in game_periods:
+            period_events = game_event_manager.get_events_for_game(game_id=current_game_id,
+                                                                period_id=period.id)
+            if len(period_events):
+                for event in period_events:
+                    _game_events.append(event.to_dict())
+                _game_events.append(period.description)
+
         emit('show_ui_monitor_content', {'content_type': 'events',
                                          'events_types': _events_types,
                                          'game_events': _game_events})
@@ -680,22 +689,101 @@ def handle_request_ui_monitor_content(data):
         for event in events_types:
             if event.filter_class:
                 _events_types.append(event.to_dict())
-        from app.managers.game_event_manager import GameEventManager
-        game_event_manager = GameEventManager()
-        game_event = game_event_manager.get_game_event_by_id(game_event_id)
-        game_id = game_event.game_id
-        from app.managers.game_manager import GameManager
-        game_manager = GameManager()
-        game_data = game_manager.get_game_by_id(game_id).to_dict()
+        # from app.managers.game_event_manager import GameEventManager
+        # game_event_manager = GameEventManager()
+        # game_event = game_event_manager.get_game_event_by_id(game_event_id)
+        # game_id = game_event.game_id
+        # from app.managers.game_manager import GameManager
+        # game_manager = GameManager()
+        # _game_data = game_manager.get_game_by_id(game_id).to_dict()
         from app.models.settings import Settings
         settings = Settings.get_settings()
         is_scoreboard_reversed = settings.is_scoreboard_reversed
+        # _game_event = game_event.to_dict()
+        game_event_data = get_game_event_data(game_event_id)
 
         emit('show_ui_monitor_content', {'content_type': 'edit_event',
                                          'events_types': _events_types,
-                                         'game_data': game_data,
                                          'is_scoreboard_reversed': bool(is_scoreboard_reversed),
-                                         'game_event': game_event.to_dict()})
+                                         'team_squad': game_event_data['team_squad'],
+                                         'game_event': game_event_data['game_event']})
+    
+    elif content_type == 'get_event_squad':
+        payload = data.get('payload')
+        new_event_type_id = payload['new_event_type_id']
+        game_event_id = payload['game_event_id']
+        # from app.managers.game_event_manager import GameEventManager
+        # game_event_manager = GameEventManager()
+        # game_event = game_event_manager.get_game_event_by_id(game_event_id)
+        # game_id = game_event.game_id
+        # from app.managers.game_manager import GameManager
+        # game_manager = GameManager()
+        # _game_data = game_manager.get_game_by_id(game_id).to_dict()
+        # _game_event = game_event.to_dict()
+        game_event_data = get_game_event_data(game_event_id, new_event_type_id)
+
+        emit('show_ui_monitor_content', {'content_type': 'get_event_squad',
+                                         'game_event': game_event_data['game_event'],
+                                         'team_squad': game_event_data['team_squad']}),
+
+
+def get_game_event_data(_game_event_id, _new_event_type_id=None):
+    from app.managers.game_event_manager import GameEventManager
+    game_event_manager = GameEventManager()
+    # game_event = game_event_manager.get_game_event_by_id(_game_event_id).to_dict()
+    # game_id = game_event['game_id']
+    game_event = game_event_manager.get_game_event_by_id(_game_event_id)
+    game_id = game_event.game_id
+    from app.managers.game_manager import GameManager
+    game_manager = GameManager()
+    # game_data = game_manager.get_game_by_id(game_id).to_dict()
+    game_data = game_manager.get_game_by_id(game_id)
+
+    new_event_type_id = _new_event_type_id
+    # event_id = game_event['event_id']
+    # event_team_id = game_event['team_id']
+
+
+    # home_team_id = game_data['home_team_id']
+    # home_team_squad = game_data['home_team_squad']
+    # away_team_id = game_data['away_team_id']
+    # away_team_squad = game_data['away_team_squad']
+    # team_squad = None
+    # print(f'PRZED => event_id: {game_event['event_id']}, new_event_type_id: {new_event_type_id}')
+    # if new_event_type_id is 6 and game_event['event_id'] in [1, 2, 3, 4, 5, 7]:
+    #     game_event['team_id'] = away_team_id if game_event['team_id'] == home_team_id else home_team_id
+    #     game_event['event_id'] = new_event_type_id
+    # elif new_event_type_id in [1, 2, 3, 4, 5, 7] and game_event['event_id'] is 6:
+    #     game_event['team_id'] = away_team_id if game_event['team_id'] == home_team_id else home_team_id
+    #     game_event['event_id'] = new_event_type_id
+    # elif new_event_type_id:
+    #     game_event['event_id'] = new_event_type_id
+    # if game_event['event_id'] in [1, 3, 4, 5, 7]:
+    #     team_squad = home_team_squad if game_event['team_id'] == home_team_id else away_team_squad
+    # elif game_event['event_id'] in [2, 6]:
+    #     team_squad = away_team_squad if game_event['team_id'] == home_team_id else home_team_squad
+    # print(f'PO    => event_id: {game_event['event_id']}, new_event_type_id: {new_event_type_id}')
+
+    team_squad = None
+    print(f'PRZED => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
+    if new_event_type_id is 6 and game_event.event_id in [1, 2, 3, 4, 5, 7]:
+        game_event.team_id = game_data.away_team_id if game_event.team_id == game_data.home_team_id else game_data.home_team_id
+        game_event.event_id = new_event_type_id
+    elif new_event_type_id in [1, 2, 3, 4, 5, 7] and game_event.event_id is 6:
+        game_event.team_id = game_data.away_team_id if game_event.team_id == game_data.home_team_id else game_data.home_team_id
+        game_event.event_id = new_event_type_id
+    elif new_event_type_id:
+        game_event.event_id = new_event_type_id
+    if game_event.event_id in [1, 3, 4, 5, 6, 7]:
+        team_squad = 'home_team_squad' if game_event.team_id == game_data.home_team_id else 'away_team_squad'
+    elif game_event.event_id in [2]:
+        team_squad = 'away_team_squad' if game_event.team_id == game_data.home_team_id else 'home_team_squad'
+    print(f'PO    => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
+
+    return {'team_squad': game_data.to_dict()[team_squad] if team_squad is not None else None,
+            'game_event': game_event.to_dict()
+            }
+
 
 
     

@@ -97,7 +97,6 @@ class GameEvent(db.Model):
     @property
     def game_time_formatted(self):
         seconds = int(self.game_time_seconds)
-        print('time///', self.game_time_seconds, f"{seconds // 60:02d}:{seconds % 60:02d}")
         return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
     @property
@@ -115,6 +114,7 @@ class GameEvent(db.Model):
             'event_color':         self.event.color        if self.event  else '#FFFFFF',
             'filter_class':        self.event.filter_class,
             'is_reported':         self.event.is_reported,
+            'player_from_opponent':self.event.player_from_opponent,
             'period_id':           self.period_id,
             'period_description':  self.period.description if self.period else None,
             'team_id':             self.team_id,
