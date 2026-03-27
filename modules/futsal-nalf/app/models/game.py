@@ -28,6 +28,10 @@ class Game(db.Model):
     home_team_fouls = db.Column(db.Integer, nullable=False, default=0)
     away_team_fouls = db.Column(db.Integer, nullable=False, default=0)
 
+    # Uniforms - JSON list of hex colors, default ['#000'] to distinguish from assigned ['#000000']
+    home_team_uniform = db.Column(db.String(500), nullable=False, default='["#000"]')
+    away_team_uniform = db.Column(db.String(500), nullable=False, default='["#000"]')
+
     # Walkover - nowe pola
     is_home_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
     is_away_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
@@ -417,13 +421,17 @@ class Game(db.Model):
             'home_team_id': self.home_team_id,
             'home_team_name': self.home_team.name if self.home_team else None,
             'home_team_short_name': self.home_team.short_name if self.home_team else None,
+            'home_team_logo': self.home_team.logo_path if self.home_team else None,
             'home_team_goals': self.home_team_goals,
             'home_team_fouls': self.home_team_fouls,
             'away_team_id': self.away_team_id,
             'away_team_name': self.away_team.name if self.away_team else None,
             'away_team_short_name': self.away_team.short_name if self.away_team else None,
+            'away_team_logo': self.away_team.logo_path if self.away_team else None,
             'away_team_goals': self.away_team_goals,
             'away_team_fouls': self.away_team_fouls,
+            'home_team_uniform': self.home_team_uniform,
+            'away_team_uniform': self.away_team_uniform,
             'is_home_team_lost_by_wo': self.is_home_team_lost_by_wo,
             'is_away_team_lost_by_wo': self.is_away_team_lost_by_wo,
             'is_walkover': self.is_walkover,

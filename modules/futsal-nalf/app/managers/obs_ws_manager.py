@@ -42,6 +42,8 @@ class ObsWsManager:
     def on_obs_response(self, msg):
         payload = msg.get('payload')
         request_id = payload.get('requestID')
+        if request_id is None:          # ← dodaj
+            return  
         if request_id == 'get-websocket-connection':
             self._emit_to_ui('obs_status', 'connected')
         elif request_id.startswith('get-record-status-'):
@@ -55,13 +57,13 @@ class ObsWsManager:
                     # timer_manager = get_timer_manager()
                     # elapsed_time = timer_manager.get_timer_state(main_timer_id)['elapsed_time']
                     response_data = payload.get('responseData')
-                    record_time = response_data.get('outputDuration')
+                    replay_end_time = response_data.get('outputDuration')
                     manager = GameEventManager()
                     manager.update_game_event(
                         game_event_id=request_id,
                         # game_time=int(elapsed_time/1000),
                         video_path=video_path,
-                        record_time=record_time
+                        replay_end_time=replay_end_time
                         )
                 except Exception as e:
                     current_app.logger.error(f'❌ Failed to save game event: {e}')

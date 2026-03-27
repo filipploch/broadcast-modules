@@ -66,6 +66,28 @@ def handle_disconnect():
 
 @socketio.on('show_overlay_container')
 def handle_show_overlay_container(data):
+    from app.models.settings import Settings
+    settings = Settings.get_settings()
+    from app.models.game import Game
+    current_game_data = Game.query.get(settings.current_game_id).to_dict()
+    container_id = data.get('container_id')
+    match container_id:
+        case 'game-screen-container':
+            pass
+        case 'home-team-squad-container':
+            data.update({
+                'team_name': current_game_data['home_team_name'],
+                'team_short_name': current_game_data['home_team_short_name'],
+                'team_squad': current_game_data['home_team_squad'],
+                'logo': current_game_data['home_team_logo']
+                })
+        case 'away-team-squad-container':
+            data.update({
+                'team_name': current_game_data['away_team_name'],
+                'team_short_name': current_game_data['away_team_short_name'],
+                'team_squad': current_game_data['away_team_squad'],
+                'logo': current_game_data['away_team_logo']
+                })
     hub_client = get_hub_client()
     if hub_client:
         hub_client.broadcast_to_class('overlay', 'show_overlay_container', payload=data)
@@ -774,9 +796,9 @@ def get_game_event_data(_game_event_id, _new_event_type_id=None):
         game_event.event_id = new_event_type_id
     elif new_event_type_id:
         game_event.event_id = new_event_type_id
-    if game_event.event_id in [1, 3, 4, 5, 6, 7]:
+    if game_event.event_id in [1, 3, 4, 5, 7]:
         team_squad = 'home_team_squad' if game_event.team_id == game_data.home_team_id else 'away_team_squad'
-    elif game_event.event_id in [2]:
+    elif game_event.event_id in [2, 6]:
         team_squad = 'away_team_squad' if game_event.team_id == game_data.home_team_id else 'home_team_squad'
     print(f'PO    => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
 
@@ -1205,6 +1227,22 @@ def handle_stop_sequence(data):
 # ============================================================================
 # GAME EVENTS
 # ============================================================================
+
+@socketio.on('broadcast_goal')
+def handle_broadcast_goal(data):
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.models.team import Team
+    settings = Settings.get_settings()
+    current_game = Game.query.get(settings.current_game_id)
+    team_type = data.get('team_type')
+    team = current_game.home_team if team_type == 'home' else current_game.away_team
+    team_data = team.to_dict()
+    hub_client = get_hub_client()
+    if hub_client:
+        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
+        hub_client.send_to_plugin('stream-overlay', 'goal', team_data)
+
 
 @socketio.on('add_game_event_to_db')
 def handle_add_game_event_to_db(data):

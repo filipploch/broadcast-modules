@@ -63,7 +63,7 @@ class RecorderManager:
         game_event_id = payload.get('request_id')
         
 
-        # if not all([game_event_id, camera_id, video_path, record_time is not None]):
+        # if not all([game_event_id, camera_id, video_path, replay_end_time is not None]):
         #     self._log('warning', f'_on_record_file_info: incomplete payload: {payload}')
         #     return
 
@@ -72,7 +72,8 @@ class RecorderManager:
                 _camera = cameras.get(camera)
                 file_name    = _camera.get('file_name')
                 video_path = 'R:/recorder/' + file_name
-                record_time   = _camera.get('output_duration')
+                replay_end_time   = _camera.get('output_duration')
+                replay_start_time = EventCamera.calc_replay_start_time(replay_end_time) if replay_end_time is not None else 0
 
                 existing = EventCamera.query.filter_by(
                     game_event_id=game_event_id,
@@ -80,14 +81,16 @@ class RecorderManager:
                 ).first()
 
                 if existing:
-                    existing.video_path  = video_path
-                    existing.record_time = record_time
+                    existing.video_path = video_path
+                    existing.replay_start_time = replay_start_time
+                    existing.replay_end_time = replay_end_time
                 else:
                     ec = EventCamera(
                         game_event_id=game_event_id,
                         camera_id=camera,
                         video_path=video_path,
-                        record_time=record_time,
+                        replay_start_time=replay_start_time,
+                        replay_end_time=replay_end_time,
                     )
                     db.session.add(ec)
 

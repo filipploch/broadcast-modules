@@ -1130,3 +1130,114 @@ def api_patch_player(player_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
+
+# =========================
+# Uniforms API
+# =========================
+
+@current_app.route('/api/assign/uniforms/data')
+def api_uniforms_data():
+    """Return uniform options for both teams of the current game."""
+    import json as _json
+    from app.models.settings import Settings
+    from app.models.game import Game
+
+    settings = Settings.get_settings()
+    if not settings.current_game_id:
+        return jsonify({'error': 'Brak wybranego meczu'}), 400
+
+    game = Game.query.get(settings.current_game_id)
+    if not game:
+        return jsonify({'error': 'Nie znaleziono meczu'}), 404
+
+    DEFAULT_EXTRA = '#9eff00'
+    DEFAULT_GAME  = '#000'   # sentinel – means "not assigned"
+
+    def _parse(raw, fallback):
+        """Parse JSON string, return list; on error return fallback."""
+        if not raw:
+            return fallback
+        try:
+            v = _json.loads(raw)
+            return v if isinstance(v, list) else fallback
+        except Exception:
+            return fallback
+
+    def _team_options(team, game_uniform_raw):
+        """
+        Build option list for one team side.
+
+        Returns dict:
+          options: [{'colors': [...], 'source': 'home'|'away'|'extra'}]
+          selected_colors: list currently saved in game (or None)
+          extra_colors: colors to pre-fill in the editable extra option
+        """
+        team_uniform = team.get_uniform()   # {'home': [...], 'away': [...]}
+        home_colors  = team_uniform.get('home') or []
+        away_colors  = team_uniform.get('away') or []
+        game_colors  = _parse(game_uniform_raw, None)
+
+        options = []
+        if home_colors:
+            options.append({'colors': home_colors, 'source': 'home'})
+        if away_colors:
+            options.append({'colors': away_colors, 'source': 'away'})
+
+        # Determine default for the editable extra option.
+        # If the game already has colors saved and they don't match home/away,
+        # use those saved colors as the extra default.
+        is_default_game = (game_colors is None or game_colors == [DEFAULT_GAME])
+        known_sets = [home_colors, away_colors]
+        if is_default_game or game_colors in known_sets:
+            extra_colors = [DEFAULT_EXTRA]
+        else:
+            extra_colors = game_colors  # previously saved custom value
+
+        options.append({'colors': extra_colors, 'source': 'extra'})
+
+        return {
+            'options': options,
+            'selected_colors': game_colors,
+        }
+
+    home_data = _team_options(game.home_team, game.home_team_uniform)
+    away_data = _team_options(game.away_team, game.away_team_uniform)
+
+    return jsonify({
+        'home_team_id':   game.home_team_id,
+        'home_team_name': game.home_team.name,
+        'home':           home_data,
+        'away_team_id':   game.away_team_id,
+        'away_team_name': game.away_team.name,
+        'away':           away_data,
+    })
+
+
+@current_app.route('/api/assign/uniforms/save', methods=['POST'])
+def api_uniforms_save():
+    """Save selected uniform colors for both teams into the current game."""
+    import json as _json
+    from app.models.settings import Settings
+    from app.models.game import Game
+
+    settings = Settings.get_settings()
+    if not settings.current_game_id:
+        return jsonify({'error': 'Brak wybranego meczu'}), 400
+
+    game = Game.query.get(settings.current_game_id)
+    if not game:
+        return jsonify({'error': 'Nie znaleziono meczu'}), 404
+
+    data = request.get_json()
+    try:
+        home_colors = data.get('home_colors')
+        away_colors = data.get('away_colors')
+        if home_colors is not None:
+            game.home_team_uniform = _json.dumps(home_colors)
+        if away_colors is not None:
+            game.away_team_uniform = _json.dumps(away_colors)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400

@@ -97,6 +97,10 @@
   padding: 0.05vw;
   background-color: rgb(136, 136, 136);
 }
+.team-uniform-element {
+    flex: 1;
+    display: flex;
+}
 
 #main-timer-display {
     font-family: monospace;
@@ -156,4 +160,25 @@
 
 .timer-updated {
     animation: updatePenaltyTimer 0.2s ease;
+}
+
+#animationArea {
+    position: absolute !important;
+    top: 27px;
+    right: 30px;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    font-family: 'Arial Black';
+    font-weight: 700;
+}
+
+.char-box-0 {
+    color: white;
+    background: linear-gradient(to bottom, #0300d2, #020070);
+}
+
+.char-box-1 {
+    color: #020070;
+    background: linear-gradient(to bottom, #FFFFFF, #909090);
 }

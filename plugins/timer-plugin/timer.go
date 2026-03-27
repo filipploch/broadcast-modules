@@ -396,47 +396,41 @@ func (m *Manager) runTimer(timerID string) {
 	for {
 		select {
 		case <-ticker.C:
-			t.mu.RLock()
+			t.mu.Lock()
 			if t.state != StateRunning {
-				t.mu.RUnlock()
+				t.mu.Unlock()
 				return
 			}
 
 			currentElapsed := m.calculateElapsedTime(t)
 			currentSecond := currentElapsed.Milliseconds() / 1000
-			lastBroadcast := t.lastBroadcastSecond
+
+			shouldBroadcast := currentSecond > t.lastBroadcastSecond
+			if shouldBroadcast {
+				t.lastBroadcastSecond = currentSecond
+			}
+
 			limit := t.limit
 			pauseAtLimit := t.pauseAtLimit
 			hasReachedLimit := t.hasReachedLimit
 			callbacks := t.callbacks
-			t.mu.RUnlock()
+			t.mu.Unlock()
 
-			// Check if we've reached a new full second
-			if currentSecond > lastBroadcast {
-				t.mu.Lock()
-				t.lastBroadcastSecond = currentSecond
-				t.mu.Unlock()
-
-				// Call OnSecondTick callback
-				if callbacks != nil && callbacks.OnSecondTick != nil {
-					broadcastTime := time.Duration(currentSecond*1000) * time.Millisecond
-					go callbacks.OnSecondTick(broadcastTime+t.initialTime, timerID)
-				}
+			if shouldBroadcast && callbacks != nil && callbacks.OnSecondTick != nil {
+				broadcastTime := time.Duration(currentSecond*1000) * time.Millisecond
+				callbacks.OnSecondTick(broadcastTime+t.initialTime, timerID)
 			}
 
-			// Check limit
 			if limit > 0 && currentElapsed >= limit && !hasReachedLimit {
 				t.mu.Lock()
 				t.hasReachedLimit = true
 
 				if pauseAtLimit {
-					// Stop ticker and pause
 					t.state = StatePaused
 					t.elapsedBase = limit
 					t.remainderTime = 0
 					t.mu.Unlock()
 
-					// Call OnLimit callback
 					if callbacks != nil && callbacks.OnLimit != nil {
 						go callbacks.OnLimit(limit+t.initialTime, timerID)
 					}
@@ -445,7 +439,6 @@ func (m *Manager) runTimer(timerID string) {
 				}
 				t.mu.Unlock()
 
-				// Call OnLimit callback (non-pausing)
 				if callbacks != nil && callbacks.OnLimit != nil {
 					go callbacks.OnLimit(limit+t.initialTime, timerID)
 				}

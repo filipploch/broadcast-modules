@@ -18,7 +18,7 @@ class GameEventManager:
     def record_event(self, game_id: int, event_id: int, game_time: int = None,
                     period_id: int = None, team_id: int = None,
                     player_id: int = None, event_place: str = None,
-                    record_time: int = None, video_path: str = None,
+                    replay_end_time: int = None, video_path: str = None,
                     color: str = '#000000', comment: str = None) -> Optional[GameEvent]:
         """
         Record event in a game
@@ -27,7 +27,7 @@ class GameEventManager:
             game_id: Game ID
             event_id: Event type ID
             game_time: Game time in milliseconds (from timer plugin)
-            record_time: Wall-clock recording time in milliseconds
+            replay_end_time: Wall-clock recording time in milliseconds
             video_path: Path to the video file associated with the event
             period_id: Period ID (optional, auto-detect current if not provided)
             team_id: Team ID (required if Event.is_reported=True)
@@ -74,6 +74,7 @@ class GameEventManager:
                 raise ValueError(f"Zawodnik o ID {player_id} nie istnieje")
 
         try:
+            replay_start_time = GameEvent.calc_replay_start_time(replay_end_time) if replay_end_time is not None else None
             game_event = GameEvent(
                 game_id=game_id,
                 event_id=event_id,
@@ -81,7 +82,8 @@ class GameEventManager:
                 team_id=team_id,
                 player_id=player_id,
                 game_time=game_time,
-                record_time=record_time,
+                replay_start_time=replay_start_time,
+                replay_end_time=replay_end_time,
                 video_path=video_path,
                 event_place=event_place,
                 # color=color,
@@ -99,7 +101,7 @@ class GameEventManager:
             raise
 
     def record_event_now(self, game_id: int, event_id: int,
-                        record_time: int, video_path: str,
+                        replay_end_time: int, video_path: str,
                         team_id: int = None, player_id: int = None,
                         event_place: str = None,
                         get_game_time_func=None) -> Optional[GameEvent]:
@@ -109,7 +111,7 @@ class GameEventManager:
         Args:
             game_id: Game ID
             event_id: Event type ID
-            record_time: Wall-clock recording time in milliseconds
+            replay_end_time: Wall-clock recording time in milliseconds
             video_path: Path to the video file associated with the event
             team_id: Team ID (optional, required if Event.is_reported=True)
             player_id: Player ID (optional, required if Event.is_reported=True)
@@ -135,7 +137,7 @@ class GameEventManager:
             game_id=game_id,
             event_id=event_id,
             game_time=current_game_time,
-            record_time=record_time,
+            replay_end_time=replay_end_time,
             video_path=video_path,
             team_id=team_id,
             player_id=player_id,
@@ -172,7 +174,7 @@ class GameEventManager:
         return GameEvent.query.get(game_event_id)
 
     def update_game_event(self, game_event_id: int, event_id: int = None,
-                         game_time: int = None, record_time: int = None,
+                         game_time: int = None, replay_end_time: int = None,
                          video_path: str = None, event_place: str = None,
                          team_id: int = None, player_id: int = None) -> Optional[GameEvent]:
         """
@@ -182,7 +184,7 @@ class GameEventManager:
             game_event_id: GameEvent ID
             event_id: New event type ID (optional)
             game_time: New game time in milliseconds (optional)
-            record_time: New wall-clock recording time in milliseconds (optional)
+            replay_end_time: New wall-clock recording time in milliseconds (optional)
             video_path: New path to the video file (optional)
             event_place: New location on the field (optional)
             team_id: New team ID (optional)
@@ -204,8 +206,9 @@ class GameEventManager:
                 game_event.event_id = event_id
             if game_time is not None:
                 game_event.game_time = game_time
-            if record_time is not None:
-                game_event.record_time = record_time
+            if replay_end_time is not None:
+                game_event.replay_start_time = GameEvent.calc_replay_start_time(replay_end_time)
+                game_event.replay_end_time = replay_end_time
             if video_path is not None:
                 game_event.video_path = video_path
             if event_place is not None:

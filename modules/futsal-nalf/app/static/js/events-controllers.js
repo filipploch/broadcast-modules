@@ -28,6 +28,12 @@ function selectGameFieldCell(selectedCell) {
 }
 
 function addTeamEvent(_team, _event) {
+    if(_event === 'Bramka'){
+        changeGameValue('score', _team, 1)
+        socket.emit('broadcast_goal', {
+            'team_type': _team
+        });
+    }
     if (selectedCellID === null) {
         const reversed = appState.isReversed;
         const isGoal = _event === 'Bramka';

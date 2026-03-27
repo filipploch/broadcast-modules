@@ -6,5 +6,5 @@
   "auto_reconnect": true,
   "max_reconnects": 10,
   "update_interval_ms": 100,         
-  "broadcast_interval_ms": 200
+  "broadcast_interval_ms": 1000
 }

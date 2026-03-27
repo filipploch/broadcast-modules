@@ -31,7 +31,8 @@ class SequenceManager:
         if steps is None:
             builder = self.dynamic_sequences.get(sequence_name)
             if builder:
-                steps = builder(**(context or {}))
+                # steps = builder(**(context or {}))
+                steps = builder(context or {})
 
         if steps is None:
             raise ValueError(f"Unknown sequence: {sequence_name}")
@@ -99,7 +100,7 @@ class SequenceManager:
                 return
 
         for step in steps:
-            payload = {**step["payload"]}
+            payload = {**step.get("payload", {})}
             if context:
                 payload["_context"] = context
             self.hub_client.send({

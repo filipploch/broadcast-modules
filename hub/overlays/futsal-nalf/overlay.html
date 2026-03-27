@@ -8,9 +8,11 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/classes.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
-    <link rel="stylesheet" href="/overlays/futsal-nalf/css/team-squad.css">
-    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-table-row-keyframes.css">
-    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-table-row-elements.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-hide-element-keyframes.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-show-element-keyframes.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-show-element.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/game-container.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/squad.css">
 </head>
 <body>
     <!-- <div id="game-screen-container" class="overlay-container hidden"> -->
@@ -18,31 +20,24 @@
         <div id="scoreboard-container">
             <div id="top-scoreboard-container" class="scoreboard-row">
                 <div></div>
-                <div id="home-team-fouls" class="team-fouls">●●●●●</div>
+                <div id="home-team-fouls" class="team-fouls"></div>
                 <div></div>
                 <div></div>
                 <div></div>
-                <div id="away-team-fouls" class="team-fouls">■■■■■</div>
+                <div id="away-team-fouls" class="team-fouls"></div>
             </div>
             <div id="main-scoreboard-container" class="scoreboard-row">
-                <div id="main-timer-display">00:00</div>
+                <div id="main-timer-display"></div>
                 <div class="team-box">
-                    <div id="home-team-shortname" class="team-name home-team-shortname">TEA</div>
-                    <div id="home-team-uniform" class="team-uniform">
-                        <div class="flex1 team-uniform-element" style="background-color: rgb(255, 255, 255);">.</div>
-                        <div class="flex1 team-uniform-element" style="background-color: rgb(0, 132, 70);">.</div>
-                    </div>
+                    <div id="home-team-shortname" class="team-name home-team-shortname"></div>
+                    <div id="home-team-uniform" class="team-uniform home-team-uniform"></div>
                 </div>
                 <div id="home-team-score" class="team-score home-team-score">18</div>
                 <div></div>
                 <div id="away-team-score" class="team-score away-team-score">1</div>
                 <div class="team-box">
                     <div id="away-team-shortname" class="team-name away-team-shortname">TEB</div>
-                    <div id="away-team-uniform" class="team-uniform">
-                        <div class="flex1 team-uniform-element" style="background-color: blue;">.</div>
-                        <div class="flex1 team-uniform-element" style="background-color: white;">.</div>
-                        <div class="flex1 team-uniform-element" style="background-color: blue;">.</div>
-                    </div>
+                    <div id="away-team-uniform" class="team-uniform away-team-uniform"></div>
                 </div>
             </div>
             <div id="bottom-scoreboard-container" class="scoreboard-row">
@@ -60,50 +55,277 @@
                 </div>
             </div>
         </div>
-        <div id="away-team-squad-container">
-            <table id="away-team-squad-table"></table>
+        <div id="animationArea"><span style="color: rgba(255,255,255,0)">.</span></div>
+        <div id="game-transition" class="game-container-element" style="display: none;">
+            <img src="http://localhost:8081/static/video/transitions/nalf_transition.gif">
         </div>
     </div>
+    <div id="home-team-squad-container" class="squad-container overlay-container" style="display: none;"></div>
+    <div id="away-team-squad-container" class="squad-container overlay-container" style="display: none;"></div>
     <script src="/overlays/futsal-nalf/js/utils.js"></script>
+    <script src="/overlays/futsal-nalf/js/squad.js"></script>
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
     
     <script>
-    // WebSocket z rejestracją jako overlay + subskrypcja timer
-    const overlayId = 'stream-overlay';
-    const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
+        // WebSocket z rejestracją jako overlay + subskrypcja timer
+        const overlayId = 'stream-overlay';
+        const ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
+
+        const rootApp = 'http://localhost:8081/';
+        
+        const display = document.getElementById('main-timer-display');
+        
+        let registered = false;
+        
+        var homeTeamScoreElement = document.getElementById('home-team-score');
+        var awayTeamScoreElement = document.getElementById('away-team-score');
+        var homeTeamFoulsElement = document.getElementById('home-team-fouls');
+        var awayTeamFoulsElement = document.getElementById('away-team-fouls');
+
+        function showTransition() {
+            let gameContainer = document.querySelector('#game-screen-container');
+            let oldTransition = document.querySelector('#game-transition');
+            
+            // Usuń stary element całkowicie
+            if (oldTransition) {
+                oldTransition.remove();
+            }
+            
+            // Stwórz nowy od zera
+            let transitionElement = document.createElement('div');
+            transitionElement.id = 'game-transition';
+            addClassName(transitionElement, 'game-container-element');
+            
+            let image = document.createElement('img');
+            // Dodaj timestamp, żeby uniknąć cache
+            const baseUrl = 'http://localhost:8081/static/video/transitions/nalf_transition.gif';
+            image.src = `${baseUrl}?t=${Date.now()}`;
+            
+            transitionElement.appendChild(image);
+            gameContainer.appendChild(transitionElement);
+            
+            // Pokaż od razu
+            transitionElement.style.display = 'block';
+            
+            setTimeout(() => {
+                transitionElement.style.display = 'none';
+            }, 1450);
+        }
+        
+        function getContainerType(container) {
+            // Określ typ kontenera na podstawie jego klas
+            const classList = container.classList;
+            
+            if (classList.contains('squad-container')) return 'squad';
+            if (classList.contains('container-game')) return 'game';
+            if (classList.contains('container-stats')) return 'stats';
+            
+            // Domyślny typ
+            return 'default';
+        }
+        
+        function showContainer(_data) {
+            let containerId = _data.container_id;
+        
+            // Pobierz wszystkie kontenery
+        // const containers = document.querySelectorAll('.overlay-container');
+        // let activeContainer = null;
+        let targetContainer = document.getElementById(containerId);
+        
+        // Walidacja
+        if (!targetContainer) {
+            console.error(`Kontener o ID "${containerId}" nie istnieje`);
+            return;
+        }
+        
+        // Znajdź aktualnie aktywny kontener (display: block)
+        // for (let container of containers) {
+        //     if (window.getComputedStyle(container).display === 'flex') {
+        //         activeContainer = container;
+        //         break;
+        //     }
+        // }
+        
+        // // Jeśli kliknięto na ten sam kontener, nic nie robimy
+        // if (activeContainer === targetContainer) {
+        //     return;
+        // }
+        
+        const containerType = getContainerType(targetContainer);
+        
+        if(containerType === 'squad') {
+            let teamName = _data.team_name;
+            let teamShortName = _data.team_short_name;
+            let teamSquad = _data.team_squad;
+            let teamLogo = _data.logo;
+            let delayTime = 2000;
+            expandSquadContainer(containerId, teamName, teamShortName, teamSquad, teamLogo);
+            let addedDelayTime = prepareToOpenContainer(openContainer, targetContainer);
+            delayTime += addedDelayTime;
+            activateElementsAfterTime('squad-content', delayTime);
+        }else{
+            prepareToOpenContainer(openContainer, targetContainer);
+        }
+        
+        // Jeśli jest aktywny kontener, wykonaj animację zwijania
+        // if (activeContainer) {
+        //     closeContainer(activeContainer, () => {
+        //         // Po zakończeniu animacji zwijania, pokaż nowy kontener
+        //         openContainer(targetContainer);
+        //     });
+        // } else {
+        //     // Jeśli nie ma aktywnego kontenera, od razu pokaż nowy
+        //     openContainer(targetContainer);
+        // }
+    }
     
-    const display = document.getElementById('main-timer-display');
+    function prepareToOpenContainer(callback, param) {
+        let delayTime = 0;
+        let overlayContainers = document.querySelectorAll('.overlay-container');
+        overlayContainers.forEach(cont => {
+            if(cont.style.display !== 'none') {
+                closeContainer(cont);
+                console.log('cont none');
+                // cont.style.display = 'none';
+                delayTime = 1000;
+            }
+        });
+        setTimeout(() => {            
+            if (callback) callback(param);
+        }, delayTime);
+        return delayTime;
+    }
     
-    let registered = false;
+    function openContainer(container) {        
+        container.style.display = 'flex';
+    }
 
-    var homeTeamScoreElement = document.getElementById('home-team-score');
-    var awayTeamScoreElement = document.getElementById('away-team-score');
-    var homeTeamFoulsElement = document.getElementById('home-team-fouls');
-    var awayTeamFoulsElement = document.getElementById('away-team-fouls');
+    function closeContainer(_container) {
+        let container = _container;
+        let containerType = getContainerType(container);
+        let animationDuration = 1000;
+    
+        console.log(`containerType: ${containerType}`);
+        switch(containerType) {
+            case 'squad':
+                closeSquadContainer(container);
+                console.log('closeSquadContainer()')
+                break;
+            default:
+                closeDefaultContainer(container);
+                console.log('closeDefaultContainer()')
+                break;
+        }
+        
+        // Wyczyść animacje po ich zakończeniu
+        setTimeout(() => {
+            // Usuń tymczasowe animacje
+            clearAnimations(container);
+            container.style.display = 'none';
+        }, animationDuration);
+    }
 
-    function createTeamSquad(arr) {
-        var tableBody = document.createElement('tbody');
-        tableBody.innerHTML = '';
+    function closeSquadContainer(container) {
+        let logo = container.querySelector('img');
+        let players = container.querySelectorAll('.squad-player-row');
+        let squadBody = container.querySelector('.squad-body');
+        let squadHead = container.querySelector('.squad-head');
+        logo.style.animation = `fadeOut 250ms ease both`;
+        players.forEach(player => {
+            player.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
+        });
+        squadBody.style.setProperty('animation','collapseHeight', 'important');
+        squadBody.style.animationDuration = '750ms';
+        squadBody.style.animationDelay = '250ms';
+        squadBody.style.animationFillMode = 'both';
+        squadHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
+    }
 
-        arr.forEach(function(element, index) {
+    function closeDefaultContainer(container) {
+        container.style.animation = `fadeOut 500ms ease forwards`;
+    }
+
+    function clearAnimations(container) {
+        // Usuń animacje z głównego kontenera
+        container.style.animation = '';
+        
+        // Usuń animacje ze wszystkich dzieci
+        const allElements = container.querySelectorAll('*');
+        allElements.forEach(element => {
+            element.style.animation = '';
+            element.style.animationDelay = '';
+        });
+    }
+
+    function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo) {
+        let squadContainer = document.getElementById(_containerId);
+        squadContainer.innerHTML = '';
+        let squadHead = document.createElement('div');
+        addClassName(squadHead, 'rotate-show-element0');
+        addClassName(squadHead, 'animated-element');
+        addClassName(squadHead, 'squad-head');
+        squadHead.dataset.animationOrder = '1';
+        let spanTeamName = document.createElement('span');
+        spanTeamName.innerHTML = _teamName;
+        addClassName(spanTeamName, 'squad-team-name');
+        let spanTeamShortName = document.createElement('span');
+        spanTeamShortName.innerHTML = ` (${_teamShortName})`;
+        addClassName(spanTeamShortName, 'squad-team-short-name');
+        squadHead.appendChild(spanTeamName);
+        squadHead.appendChild(spanTeamShortName);
+        squadContainer.appendChild(squadHead);
+        let squadBody = document.createElement('div');
+        addClassName(squadBody, 'squad-body');
+        addClassName(squadBody, 'animated-element');
+        squadBody.dataset.animationOrder = '2';
+        let squadBodyLeft = document.createElement('div');
+        addClassName(squadBodyLeft, 'squad-body-left');
+        let squadBodyRight = document.createElement('div');
+        addClassName(squadBodyRight, 'squad-body-right');
+        let teamSquadContent = createTeamSquad(_arr, _logo);
+        teamSquadContent.style.display = 'none';
+        addClassName(teamSquadContent,'squad-content');
+        let teamLogo = document.createElement('img');
+        addClassName(teamLogo,'squad-content');
+        addClassName(teamLogo,'squad-team-logo');
+        addClassName(teamLogo, 'animated-element');
+        teamLogo.dataset.animationOrder = '3';
+        teamLogo.src = rootApp + _logo;
+        teamLogo.style.display = 'none';
+        squadBodyLeft.appendChild(teamSquadContent);
+        squadBodyRight.appendChild(teamLogo);
+        squadBody.appendChild(squadBodyLeft);
+        squadBody.appendChild(squadBodyRight);
+        squadContainer.appendChild(squadBody);
+    }
+    
+    function createTeamSquad(_arr, _logo) {
+        var squadContent = document.createElement('div');
+        addClassName(squadContent,'team-squad-content');
+        addClassName(squadContent,'squad-content');
+        squadContent.innerHTML = '';
+        
+        _arr.forEach(function(element, index) {
             var goalkeeper = '';
             var captain = '';
             if (element.is_goalkeeper === true){
-                goalkeeper = ' B '
+                goalkeeper = ' (B) '
             }
             if (element.is_captain === true){
-                captain = ' C '
+                captain = ' (C) '
             }
-            var tableRow = document.createElement('tr');
-            addClassName(tableRow, 'squad-player-row');
-            addClassName(tableRow, 'rotate-table-row');
-            addClassName(tableRow, `rotate-table-row${index}`);
-            tableRow.innerHTML = `<td class="squad-player-number">${element.number}</td><td class="squad-player-name">${element.player_name}</td><td class="squad-player-func">${goalkeeper}${captain}</td>`;
-            tableBody.appendChild(tableRow);
+            var squadPlayerRow = document.createElement('div');
+            addClassName(squadPlayerRow, 'squad-player-row');
+            addClassName(squadPlayerRow, 'rotate-show-element');
+            addClassName(squadPlayerRow, `rotate-show-element${index}`);
+            addClassName(squadPlayerRow, 'animated-element');
+            squadPlayerRow.dataset.animationOrder = '3';
+            squadPlayerRow.innerHTML = `<span class="squad-player-number">${element.number}</span><span class="squad-player-name">${element.player_name}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
+            squadContent.appendChild(squadPlayerRow);
         });
-        return tableBody;
+        return squadContent;
     }
-
+    
     function updateFoulsElement(_fouls, _foulsElement) {
         if(_fouls === '' || _fouls === null){
             _foulsElement.textContent = '';
@@ -119,7 +341,22 @@
             }
         }
     }
-
+    
+    function updateUniformElements(_uniform, _uniformEelements) {
+        let uniform = JSON.parse(_uniform);
+        let uniformElements = document.querySelectorAll(`.${_uniformEelements}`);
+        uniformElements.forEach(element => {
+            element.innerHTML = '';
+            uniform.forEach(color => {
+                let colorElement = document.createElement('div');
+                addClassName(colorElement, 'team-uniform-element');
+                colorElement.style.backgroundColor = color;
+                colorElement.innerHTML = '.';
+                element.appendChild(colorElement);
+            });
+        });
+    }
+    
     function updateScoreboard(data) {
         // var homeTeamScoreElement = document.getElementById('home-team-score');
         // var awayTeamScoreElement = document.getElementById('away-team-score');
@@ -145,50 +382,50 @@
         }
         if (typeof data.home_team_fouls != "undefined") {
             updateFoulsElement(data.home_team_foul, homeTeamFoulsElement);
-        //     if(data.home_team_fouls === '' || data.home_team_fouls === null){
-        //         homeTeamFoulsElement.textContent = '';
-        //     }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
-        //         data.home_team_fouls >= 0 &&
-        //         data.home_team_fouls < 6){
-        //             homeTeamFoulsElement.textContent = '●'.repeat(data.home_team_fouls);
-        //             homeTeamFoulsElement.style.color = 'yellow';
-        //             if(data.home_team_fouls > 4){
-        //                 homeTeamFoulsElement.style.color = 'red';
-        //             }else if(data.home_team_fouls < 4){
-        //                 homeTeamFoulsElement.style.color = 'white';
-        //     }else{
-                
-        //     }
-        // }
-        }
-        if (typeof data.away_team_fouls != "undefined") {
-            updateFoulsElement(data.away_team_foul, awayTeamFoulsElement);
-            // if(data.away_team_fouls === '' || data.away_team_fouls === null){
-            //     awayTeamFoulsElement.textContent = '';
-            // }else if(parseInt(data.away_team_fouls) !== 'undefined' &&
-            //     data.away_team_fouls >= 0 &&
-            //     data.away_team_fouls < 6){
-            //         awayTeamFoulsElement.textContent = '●'.repeat(data.away_team_fouls);
-            //         awayTeamFoulsElement.style.color = 'yellow';
-            //         if(data.away_team_fouls > 4){
-            //             awayTeamFoulsElement.style.color = 'red';
-            //         }else if(data.away_team_fouls < 4){
-            //             awayTeamFoulsElement.style.color = 'white';
-            //         }else{}
-            // }else{
-                
-            // }
-        }
-    }
-    
-    ws.onopen = () => {
-        console.log('✅ Connected to HUB');
-        
-        ws.send(JSON.stringify({
-            type: 'register',
-            from: overlayId,
-            to: 'hub',
-            payload: {
+            //     if(data.home_team_fouls === '' || data.home_team_fouls === null){
+                //         homeTeamFoulsElement.textContent = '';
+                //     }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
+                //         data.home_team_fouls >= 0 &&
+                //         data.home_team_fouls < 6){
+                    //             homeTeamFoulsElement.textContent = '●'.repeat(data.home_team_fouls);
+                    //             homeTeamFoulsElement.style.color = 'yellow';
+                    //             if(data.home_team_fouls > 4){
+                        //                 homeTeamFoulsElement.style.color = 'red';
+                        //             }else if(data.home_team_fouls < 4){
+                            //                 homeTeamFoulsElement.style.color = 'white';
+                            //     }else{
+                                
+                            //     }
+                            // }
+                        }
+                        if (typeof data.away_team_fouls != "undefined") {
+                            updateFoulsElement(data.away_team_foul, awayTeamFoulsElement);
+                            // if(data.away_team_fouls === '' || data.away_team_fouls === null){
+                                //     awayTeamFoulsElement.textContent = '';
+                                // }else if(parseInt(data.away_team_fouls) !== 'undefined' &&
+                                //     data.away_team_fouls >= 0 &&
+                                //     data.away_team_fouls < 6){
+                                    //         awayTeamFoulsElement.textContent = '●'.repeat(data.away_team_fouls);
+                                    //         awayTeamFoulsElement.style.color = 'yellow';
+                                    //         if(data.away_team_fouls > 4){
+                                        //             awayTeamFoulsElement.style.color = 'red';
+                                        //         }else if(data.away_team_fouls < 4){
+                                            //             awayTeamFoulsElement.style.color = 'white';
+                                            //         }else{}
+                                            // }else{
+                                                
+                                            // }
+                                        }
+                                    }
+                                    
+                                    ws.onopen = () => {
+                                        console.log('✅ Connected to HUB');
+                                        
+                                        ws.send(JSON.stringify({
+                                            type: 'register',
+                                            from: overlayId,
+                                            to: 'hub',
+                                            payload: {
                 id: overlayId,
                 component_type: 'overlay',
                 type: 'overlay'
@@ -209,7 +446,7 @@
         if (msg.type === 'registered' && !registered) {
             registered = true;
             console.log('✅ Registered! Now subscribing to timer...');
-
+            
             ws.send(JSON.stringify({
                 type: 'subscribe',
                 from: overlayId,
@@ -218,7 +455,7 @@
                     class: ['timer', 'overlay', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
-
+            
             ws.send(JSON.stringify({
                 type: 'request_game_data',
                 from: overlayId,
@@ -231,9 +468,13 @@
             console.log('✅ Subscribed to classes!');
             
         }
+
+        if (msg.type === 'show_transition') {
+            showTransition();
+        }
         
         // OBSŁUGA TIMERÓW
-        if (msg.type === 'timer_updated') {
+        if (msg.type === 'timer_updated' || msg.type === 'timer_paused' || msg.type === 'timer_reset') {
             const data = msg.payload || msg.data;
             
             // Sprawdź czy to timer karny
@@ -242,17 +483,17 @@
                 const currentTime = data.elapsed_time_formatted || 
                                    FutsalFormatters.formatRemaining(data.elapsed_time, data.limit);
                 
-                if (data.state === 'running' || data.state === 'paused') {
-                    // Utwórz lub zaktualizuj timer
-                    const existingTimer = window.PenaltyTimers?.create(timerId, currentTime);
-                    if (existingTimer) {
-                        // Jeśli timer już istniał, funkcja create zwróci istniejący element
-                        // i nie utworzy nowego, więc musimy zaktualizować czas
-                        if (penaltyTimers?.has(timerId)) {
-                            window.PenaltyTimers.update(timerId, currentTime);
-                        }
-                    }
-                } else if (data.state === 'stopped') {
+                                   if (data.state === 'running' || data.state === 'paused') {
+                                       // Utwórz lub zaktualizuj timer
+                                       const existingTimer = window.PenaltyTimers?.create(timerId, currentTime);
+                                       if (existingTimer) {
+                                           // Jeśli timer już istniał, funkcja create zwróci istniejący element
+                                           // i nie utworzy nowego, więc musimy zaktualizować czas
+                                           if (penaltyTimers?.has(timerId)) {
+                                               window.PenaltyTimers.update(timerId, currentTime);
+                                            }
+                                        }
+                                    } else if (data.state === 'stopped') {
                     // Usuń timer jeśli jest zatrzymany
                     window.PenaltyTimers?.remove(timerId);
                 }
@@ -285,19 +526,22 @@
                 window.PenaltyTimers?.remove(data.timer_id);
             }
         }
-
+        
         if (msg.type === 'show_overlay_container') {
             const data = msg.payload || msg.data;
-            
-            // Sprawdź czy to dotyczy timera karnego
-            showOverlay('game-screen-container');
+            showContainer(data);
         }
-
+        
         if(msg.type === 'scoreboard_data') {
             const data = msg.payload || msg.data;
             updateScoreboard(data);
         }
 
+        if(msg.type === 'goal') {
+            const data = msg.payload || msg.data;
+            animateWord('animationArea', 'GOOOOL', 350, 'scoreboard-container');
+        }
+        
         if (msg.type === 'game_data') {
             const data = msg.payload || msg.data;
             console.log('game_data', data);
@@ -306,7 +550,7 @@
             let homeTeamScoreElements = document.querySelectorAll('.home-team-score');
             let awayTeamScoreElements = document.querySelectorAll('.away-team-score');
             // let awayTeamSquadContainer = document.getElementById('away-team-squad-container');
-
+            
             console.log('short Name:', data.away_team_short_name)
             if (typeof data.home_team_short_name != "undefined") {
                 homeTeamShortNameElements.forEach(element => {
@@ -319,44 +563,52 @@
                     element.textContent = data.away_team_short_name;
                 })
             }
-
+            
             if (typeof data.home_team_goals != "undefined") {
                 homeTeamScoreElements.forEach(element => {
                     element.textContent = data.home_team_goals;
                 })
             }
-
+            
             if (typeof data.away_team_goals != "undefined") {
                 awayTeamScoreElements.forEach(element => {
                     element.textContent = data.away_team_goals;
                 })
             }
-
+            
             if (typeof data.home_team_fouls != "undefined") {
                 updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
             }
-
+            
             if (typeof data.away_team_fouls != "undefined") {
                 updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
             }
-
+            
+            if (typeof data.home_team_uniform != "undefined") {
+                updateUniformElements(data.home_team_uniform, 'home-team-uniform');
+            }
+            
+            if (typeof data.away_team_uniform != "undefined") {
+                updateUniformElements(data.away_team_uniform, 'away-team-uniform');
+            }
+            
             // updateFoulsElement(data.home_team_foul, homeTeamFoulsElement);
-
+            
             // if (typeof data.away_team_squad != "undefined") {
-            //     var squad = data.away_team_squad;
-            //     var elems = createTeamSquad(squad);
-            //     document.querySelector('#away-team-squad-table').append(elems);
-            // }
-
-
+                //     var squad = data.away_team_squad;
+                //     var elems = createTeamSquad(squad);
+                //     document.querySelector('#away-team-squad-table').append(elems);
+                // }
+                
+                
+            }
         }
-    }
-
-    // Opcjonalnie: czyszczenie timerów przy odświeżeniu strony
-    // window.addEventListener('beforeunload', () => {
-    //     window.PenaltyTimers?.clearAll();
-    // });
-</script>
+        
+        // Opcjonalnie: czyszczenie timerów przy odświeżeniu strony
+        // window.addEventListener('beforeunload', () => {
+            //     window.PenaltyTimers?.clearAll();
+            // });
+        </script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>

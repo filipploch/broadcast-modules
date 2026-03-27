@@ -633,6 +633,14 @@ func (p *Plugin) broadcastTimerStarted(internalID, externalID string, _ time.Dur
 		},
 	})
 	log.Printf("📤 [STARTED] %s: elapsed=%dms initial=%dms", externalID, timerInfo.ElapsedTime.Milliseconds(), timerInfo.InitialTime.Milliseconds())
+
+	// After 100ms send a follow-up update with the actual elapsed_time —
+	// the initial broadcast fires before the ticker has ticked even once,
+	// so the UI receives a stale value on slow connections.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p.broadcastTimerUpdated(internalID, externalID, 0)
+	}()
 }
 
 func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, _ time.Duration) {

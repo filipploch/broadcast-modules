@@ -32,7 +32,8 @@ class GameEvent(db.Model):
     comment = db.Column(db.String, nullable=True)
 
     # Fallback video data (e.g. OBS stream output) — nullable, populated separately
-    record_time = db.Column(db.Integer, nullable=True)   # file length at moment of event (ms)
+    replay_start_time = db.Column(db.Integer, nullable=True)
+    replay_end_time = db.Column(db.Integer, nullable=True)   # file length at moment of event (ms)
     video_path = db.Column(db.String, nullable=True)     # path to fallback video file
 
     # Timestamps
@@ -57,11 +58,16 @@ class GameEvent(db.Model):
         if value is not None and not isinstance(value, int):
             raise TypeError("game_time must be an integer (milliseconds) or None")
         return value
+    
+    @staticmethod
+    def calc_replay_start_time(replay_end_time: int) -> int:
+        """Calculate replay_start_time from replay_end_time (10s before, min 0)."""
+        return max(0, replay_end_time - 10000)
 
-    @validates('record_time')
-    def validate_record_time(self, key, value):
+    @validates('replay_end_time')
+    def validate_replay_end_time(self, key, value):
         if value is not None and not isinstance(value, int):
-            raise TypeError("record_time must be an integer (milliseconds)")
+            raise TypeError("replay_end_time must be an integer (milliseconds)")
         return value
 
     @validates('video_path')
@@ -121,12 +127,14 @@ class GameEvent(db.Model):
             'team_name':           self.team.name          if self.team   else None,
             'team_short_name':     self.team.short_name    if self.team   else None,
             'player_id':           self.player_id,
+            'player_number':       self.player.number      if self.player else None,
             'player_name':         self.player.full_name   if self.player else None,
             'game_time':           self.game_time,
             'game_time_seconds':   self.game_time_seconds,
             'game_time_formatted': self.game_time_formatted,
             'event_place':         self.event_place,
-            'record_time':         self.record_time,
+            'replay_start_time':   self.replay_start_time,
+            'replay_end_time':     self.replay_end_time,
             'video_path':          self.video_path,
             'has_camera_data':     self.has_camera_data,
             'event_cameras':       [gc.to_dict() for gc in self.event_cameras],
