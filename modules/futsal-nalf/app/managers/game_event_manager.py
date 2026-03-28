@@ -34,6 +34,9 @@ class GameEventManager:
             player_id: Player ID (required if Event.is_reported=True)
             event_place: Location on the field where the event occurred (optional)
 
+        home_team_goals and away_team_goals are populated automatically from the
+        current score in the games table at the moment of recording.
+
         Returns:
             GameEvent object or None if error
 
@@ -86,6 +89,8 @@ class GameEventManager:
                 replay_end_time=replay_end_time,
                 video_path=video_path,
                 event_place=event_place,
+                home_team_goals=game.home_team_goals,
+                away_team_goals=game.away_team_goals,
                 # color=color,
                 comment=comment,
             )
@@ -173,10 +178,10 @@ class GameEventManager:
         """Get GameEvent by ID"""
         return GameEvent.query.get(game_event_id)
 
-    def update_game_event(self, game_event_id: int, event_id: int = None,
-                         game_time: int = None, replay_end_time: int = None,
-                         video_path: str = None, event_place: str = None,
-                         team_id: int = None, player_id: int = None) -> Optional[GameEvent]:
+    def update_game_event(self, game_event_id: int, event_id: int = None, game_time: int = None,
+                        replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
+                        event_place: str = None, team_id: int = None, player_id: int = None,
+                        home_team_goals: int = None, away_team_goals: int = None) -> Optional[GameEvent]:
         """
         Update game event
 
@@ -189,6 +194,8 @@ class GameEventManager:
             event_place: New location on the field (optional)
             team_id: New team ID (optional)
             player_id: New player ID (optional)
+            home_team_goals: Score snapshot — home team (optional, from UI)
+            away_team_goals: Score snapshot — away team (optional, from UI)
 
         Returns:
             Updated GameEvent object or None if error
@@ -209,6 +216,8 @@ class GameEventManager:
             if replay_end_time is not None:
                 game_event.replay_start_time = GameEvent.calc_replay_start_time(replay_end_time)
                 game_event.replay_end_time = replay_end_time
+            if replay_start_time is not None:
+                game_event.replay_start_time = replay_start_time
             if video_path is not None:
                 game_event.video_path = video_path
             if event_place is not None:
@@ -217,6 +226,10 @@ class GameEventManager:
                 game_event.team_id = team_id
             if player_id is not None:
                 game_event.player_id = player_id
+            if home_team_goals is not None:
+                game_event.home_team_goals = home_team_goals
+            if away_team_goals is not None:
+                game_event.away_team_goals = away_team_goals
 
             db.session.commit()
             logger.info(f"Updated GameEvent ID {game_event_id}")

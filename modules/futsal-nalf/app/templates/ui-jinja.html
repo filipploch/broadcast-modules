@@ -275,13 +275,13 @@ Online HTML, CSS and JavaScript editor to run code online.
 				</div>
 			</div>
 				<div id="bottom-events-controllers-container">
-					<div id="hahaha-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/hahaha.png') }})"></div>
+					<div id="hahaha-controller" class="event-controller" onclick="addNoReplayEvent('HAHAHA')" style="background-image: url({{ url_for('static', filename='images/ui/hahaha.png') }})"></div>
 					<div id="hidded-events-controllers-container" class="hidden">
-						<div id="var-controller" class="event-controller" onclick="addFieldEvent('var');" style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
-						<div id="foul-controller" class="event-controller" onclick="addFieldEvent('foul');" style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
+						<div id="var-controller" class="event-controller" onclick="addFieldEvent('VAR');" style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
+						<div id="foul-controller" class="event-controller" onclick="addFieldEvent('Faul');" style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
 						<div id="cancel-btn" class="event-controller" onclick="unselectAllGameFieldCells();" style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
 					</div>
-					<div id="bum-controller" class="event-controller" style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
+					<div id="bum-controller" class="event-controller" onclick="addNoReplayEvent('Bum')" style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
 				</div>
 			</div>
 	</div>

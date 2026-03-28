@@ -27,6 +27,14 @@ function selectGameFieldCell(selectedCell) {
     showEventsControllers();
 }
 
+function showUiMonitorEvents() {
+    let uiMonitorContentElement = document.querySelector('#ui-monitor-content');
+    let isUpdateBlockedData = uiMonitorContentElement.dataset.isEventsUpdateBlocked;
+    if(isUpdateBlockedData === 'false') {
+        showUiMonitorContent('events');
+    }
+}
+
 function addTeamEvent(_team, _event) {
     if(_event === 'Bramka'){
         changeGameValue('score', _team, 1)
@@ -48,8 +56,24 @@ function addTeamEvent(_team, _event) {
         'selected_cell_id': selectedCellID
     });
     unselectAllGameFieldCells();
+    setTimeout(showUiMonitorEvents, 200);
 }
 
 function addFieldEvent(_event){
+    socket.emit('add_game_event_to_db', {
+        'team_type': null,
+        'event_type': _event,
+        'selected_cell_id': selectedCellID
+    });
+    unselectAllGameFieldCells();
+    setTimeout(showUiMonitorEvents, 100);
+}
+
+function addNoReplayEvent(_event){
+    socket.emit('add_game_event_to_db', {
+        'team_type': null,
+        'event_type': _event,
+        'selected_cell_id': null
+    });
     unselectAllGameFieldCells();
 }

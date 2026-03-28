@@ -81,7 +81,21 @@ button.top-bar-element {
 }
 
 .events-td-event-name {
-    width: 40px;
+    width: 25px;
+}
+
+.events-td-player-number {
+    display: inline-block;
+    width: 15px;
+    text-align: right;
+}
+
+.events-td-team-short-name {
+    width: 30px;
+}
+
+.events-td-result {
+    width: 30px;
 }
 
 .events-td-player-name {
@@ -109,4 +123,29 @@ button.top-bar-element {
     width: 20px;
     height: 20px;
     padding: 0;
+}
+
+#game-event-edit-result {
+    display: flex;
+}
+
+.game-event-edit-result-controller-btn {
+    display: block;
+    width: 23px;
+    height: 23px;
+}
+
+#game-event-edit-result-content {
+    width: 50px;
+    text-align: center;
+}
+
+#game-event-current-result {
+    background-color: gray;
+    height: 23px;
+}
+
+#game-event-new-result {
+    background-color: darkgoldenrod;
+    height: 23px;
 }

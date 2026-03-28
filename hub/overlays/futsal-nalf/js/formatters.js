@@ -13,7 +13,7 @@ const FutsalFormatters = {
      * @param {object} options - Formatting options
      * @returns {string} Formatted time string
      */
-    formatElapsedTime(milliseconds, options = {}) {
+    formatElapsedTime(elapsedTime, initialTime, options = {}) {
         const {
             format = 'mm:ss',           // Default format
             showHours = false,          // Show hours if > 60 minutes
@@ -22,6 +22,8 @@ const FutsalFormatters = {
             separator = ':',            // Time separator
             negativeSign = '-'          // Sign for negative values
         } = options;
+
+        let milliseconds = elapsedTime + initialTime;
 
         // Handle negative values
         const isNegative = milliseconds < 0;
@@ -125,16 +127,16 @@ const FutsalFormatters = {
     /**
      * Format timer limit (same as elapsed time)
      */
-    formatLimit(milliseconds, options = {}) {
-        return this.formatElapsedTime(milliseconds, options);
+    formatLimit(elapsedTime, initialTime, options = {}) {
+        return this.formatElapsedTime(elapsedTime, initialTime, options);
     },
 
     /**
      * Format remaining time (limit - elapsed)
      */
-    formatRemaining(elapsedMs, limitMs, options = {}) {
+    formatRemaining(elapsedMs, initialTime, limitMs, options = {}) {
         const remaining = limitMs - elapsedMs;
-        return this.formatElapsedTime(remaining, options);
+        return this.formatElapsedTime(remaining, initialTime, options);
     },
 
     /**

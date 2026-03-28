@@ -15,5 +15,9 @@
 }
 
 .selected-game-field-cell {
+    background-color: rgba(255, 183, 0, 0.5) !important;
+}
+
+.current-game-field-cell {
     background-color: rgba(0, 0, 0, 0.3) !important;
 }

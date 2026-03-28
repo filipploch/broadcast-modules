@@ -758,47 +758,22 @@ def get_game_event_data(_game_event_id, _new_event_type_id=None):
     game_id = game_event.game_id
     from app.managers.game_manager import GameManager
     game_manager = GameManager()
-    # game_data = game_manager.get_game_by_id(game_id).to_dict()
     game_data = game_manager.get_game_by_id(game_id)
 
     new_event_type_id = _new_event_type_id
-    # event_id = game_event['event_id']
-    # event_team_id = game_event['team_id']
-
-
-    # home_team_id = game_data['home_team_id']
-    # home_team_squad = game_data['home_team_squad']
-    # away_team_id = game_data['away_team_id']
-    # away_team_squad = game_data['away_team_squad']
-    # team_squad = None
-    # print(f'PRZED => event_id: {game_event['event_id']}, new_event_type_id: {new_event_type_id}')
-    # if new_event_type_id is 6 and game_event['event_id'] in [1, 2, 3, 4, 5, 7]:
-    #     game_event['team_id'] = away_team_id if game_event['team_id'] == home_team_id else home_team_id
-    #     game_event['event_id'] = new_event_type_id
-    # elif new_event_type_id in [1, 2, 3, 4, 5, 7] and game_event['event_id'] is 6:
-    #     game_event['team_id'] = away_team_id if game_event['team_id'] == home_team_id else home_team_id
-    #     game_event['event_id'] = new_event_type_id
-    # elif new_event_type_id:
-    #     game_event['event_id'] = new_event_type_id
-    # if game_event['event_id'] in [1, 3, 4, 5, 7]:
-    #     team_squad = home_team_squad if game_event['team_id'] == home_team_id else away_team_squad
-    # elif game_event['event_id'] in [2, 6]:
-    #     team_squad = away_team_squad if game_event['team_id'] == home_team_id else home_team_squad
-    # print(f'PO    => event_id: {game_event['event_id']}, new_event_type_id: {new_event_type_id}')
-
     team_squad = None
     print(f'PRZED => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
-    if new_event_type_id is 6 and game_event.event_id in [1, 2, 3, 4, 5, 7]:
+    if new_event_type_id is 3 and game_event.event_id in [1, 2, 4, 5, 6, 7]:
         game_event.team_id = game_data.away_team_id if game_event.team_id == game_data.home_team_id else game_data.home_team_id
         game_event.event_id = new_event_type_id
-    elif new_event_type_id in [1, 2, 3, 4, 5, 7] and game_event.event_id is 6:
+    elif new_event_type_id in [1, 2, 4, 5, 6, 7] and game_event.event_id is 3:
         game_event.team_id = game_data.away_team_id if game_event.team_id == game_data.home_team_id else game_data.home_team_id
         game_event.event_id = new_event_type_id
     elif new_event_type_id:
         game_event.event_id = new_event_type_id
-    if game_event.event_id in [1, 3, 4, 5, 7]:
+    if game_event.event_id in [1, 4, 5, 6, 7]:
         team_squad = 'home_team_squad' if game_event.team_id == game_data.home_team_id else 'away_team_squad'
-    elif game_event.event_id in [2, 6]:
+    elif game_event.event_id in [2, 3]:
         team_squad = 'away_team_squad' if game_event.team_id == game_data.home_team_id else 'home_team_squad'
     print(f'PO    => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
 
@@ -807,53 +782,39 @@ def get_game_event_data(_game_event_id, _new_event_type_id=None):
             }
 
 
+@socketio.on('update_game_event')
+def handle_update_game_event(data):
+    print('handle_update_game_event:', data)
+    from app.managers.game_event_manager import GameEventManager
+    game_event_manager = GameEventManager()
+    game_event_id = data.get('game_event_id')
+    event_id = data.get('event_id')
+    game_time = data.get('game_time')
+    replay_end_time = data.get('replay_end_time')
+    replay_start_time = data.get('replay_start_time')
+    video_path = data.get('video_path')
+    event_place = data.get('event_place')
+    team_id = data.get('team_id')
+    player_id = data.get('player_id')
+    home_team_goals = data.get('home_team_goals')
+    away_team_goals = data.get('away_team_goals')
 
-    
-    # # ALWAYS sync penalty state with parent state
-    # parent_state = timer_manager.get_timer_state(game_timer_id)
-    
-    # if parent_state:
-    #     # Copy parent's state to penalty
-    #     current_parent_state = parent_state.get('state', 'idle')
-        
-    #     if current_parent_state == 'running':
-    #         # Parent is running - start penalty immediately
-    #         timer_manager.start_timer(penalty_timer_id)
-    #         penalty_state = 'running'
-    #     elif current_parent_state == 'paused':
-    #         # Parent is paused - start penalty then immediately pause it
-    #         timer_manager.start_timer(penalty_timer_id)
-    #         timer_manager.pause_timer(penalty_timer_id)
-    #         penalty_state = 'paused'
-    #     else:
-    #         # Parent is idle or other state
-    #         penalty_state = current_parent_state
-    # else:
-    #     # No parent state found - default to idle
-    #     penalty_state = 'idle'
-    
-    # # Add to Settings.current_timers
-    # penalty_data = {
-    #     "timer_id": penalty_timer_id,
-    #     "timer_type": "dependent",
-    #     "parent_id": game_timer_id,
-    #     "initial_time": 0,
-    #     "limit": duration_minutes * 60000,
-    #     "state": penalty_state,
-    #     "metadata": {
-    #         "team": team,
-    #         "team_name": team_name,
-    #         "timer_class": "penalty",
-    #         "duration_minutes": duration_minutes
-    #     }
-    # }
-    # Settings.add_penalty_timer(penalty_data)
-    
-    # emit('penalty_timer_created', {
-    #     'timer_id': penalty_timer_id,
-    #     'team': team,
-    #     'team_name': team_name
-    # }, broadcast=True)
+    success = game_event_manager.update_game_event(
+        game_event_id=game_event_id,
+        event_id=event_id,
+        game_time=game_time,
+        replay_end_time=replay_end_time,
+        replay_start_time=replay_start_time,
+        video_path=video_path,
+        event_place=event_place,
+        team_id=team_id,
+        player_id=player_id,
+        home_team_goals=home_team_goals,
+        away_team_goals=away_team_goals,
+    )
+    if success:
+        emit('game_event_updated', {'game_event_id':success.id})
+
 
 
 # ============================================================================
@@ -1258,7 +1219,8 @@ def handle_add_game_event_to_db(data):
     settings = Settings.get_settings()
     game_id   = settings.current_game_id
     period_id = settings.current_period_id
-    timer_id = settings.get_current_timers()['main']['timer_id']
+    main_timer = settings.get_current_timers().get('main')
+    timer_id = main_timer.get('timer_id') if main_timer else None
 
     if not game_id or not period_id:
         emit('error', {'message': 'Brak aktywnego meczu lub okresu'})
@@ -1267,9 +1229,10 @@ def handle_add_game_event_to_db(data):
     current_period_data = period_manager.get_period_by_id(period_id=period_id).to_dict()
     current_period_initial_time_in_seconds = int(current_period_data['initial_time_seconds'])
     timer_manager = get_timer_manager()
-    timer_state = timer_manager.get_timer_state(timer_id=timer_id)
-    elapsed_seconds = int(timer_state['elapsed_time']/1000)
+    timer_state = timer_manager.get_timer_state(timer_id=timer_id) if timer_id else None
+    elapsed_seconds = int(timer_state['elapsed_time'] / 1000) if timer_state else 0
     game_time = elapsed_seconds + current_period_initial_time_in_seconds
+
     # Resolve team_id from team_type ('home'/'away')
     team_id = None
     team_type = data.get('team_type')
@@ -1280,7 +1243,6 @@ def handle_add_game_event_to_db(data):
 
     event_type     = data.get('event_type')
     selected_cell  = data.get('selected_cell_id')
-
 
     print(f'elapsed_seconds: {elapsed_seconds} - typ {type(elapsed_seconds)},')
     print(f'current_period_initial_time_in_seconds: {current_period_initial_time_in_seconds} - typ {type(current_period_initial_time_in_seconds)},')
@@ -1301,15 +1263,8 @@ def handle_add_game_event_to_db(data):
         emit('error', {'message': str(e)})
         return
 
-    # current_app.logger.info(f'✅ GameEvent saved: id={game_event.id} type={event_type}')
-
-    # # Notify UI
-    # emit('game_event_saved', {'game_event_id': game_event.id}, broadcast=True)
-
-    # Request recording data from all recorder_device plugins
     hub_client = get_hub_client()
     if hub_client:
-        # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
         hub_client.broadcast(msg_type='recording_command', payload={
             'requestType': 'GetRecordStatus',
             'requestData': {},
@@ -1336,4 +1291,4 @@ def _resolve_event_id(event_type: str):
     ).first()
     if not event:
         raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")
-    return event.id 
+    return event.id

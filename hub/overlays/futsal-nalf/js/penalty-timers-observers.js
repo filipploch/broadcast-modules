@@ -1,9 +1,9 @@
 // penalty-timers-observer.js
+const penaltyTimers = new Map(); // key: timer_id, value: { element, container }
 (function() {
     'use strict';
 
     // Przechowujemy referencje do istniejących timerów
-    const penaltyTimers = new Map(); // key: timer_id, value: { element, container }
 
     // Funkcja tworząca element timera karnego
     function createPenaltyTimerElement(timerId, initialTime) {
@@ -70,14 +70,6 @@
         if (penaltyTimers.has(timerId)) {
             const { element } = penaltyTimers.get(timerId);
             element.textContent = newTime;
-            
-            // Opcjonalnie: dodaj efekt mignięcia przy aktualizacji
-            element.classList.add('timer-updated');
-            setTimeout(() => {
-                element.classList.remove('timer-updated');
-            }, 200);
-            
-            console.log(`🔄 Updated penalty timer: ${timerId} -> ${newTime}`);
         } else {
             console.warn(`Cannot update ${timerId} - timer doesn't exist`);
         }

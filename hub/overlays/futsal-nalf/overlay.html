@@ -65,6 +65,8 @@
     <script src="/overlays/futsal-nalf/js/utils.js"></script>
     <script src="/overlays/futsal-nalf/js/squad.js"></script>
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
+	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
+
     
     <script>
         // WebSocket z rejestracją jako overlay + subskrypcja timer
@@ -341,7 +343,7 @@
             }
         }
     }
-    
+
     function updateUniformElements(_uniform, _uniformEelements) {
         let uniform = JSON.parse(_uniform);
         let uniformElements = document.querySelectorAll(`.${_uniformEelements}`);
@@ -474,58 +476,35 @@
         }
         
         // OBSŁUGA TIMERÓW
-        if (msg.type === 'timer_updated' || msg.type === 'timer_paused' || msg.type === 'timer_reset') {
-            const data = msg.payload || msg.data;
-            
-            // Sprawdź czy to timer karny
-            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
-                const timerId = data.timer_id;
-                const currentTime = data.elapsed_time_formatted || 
-                                   FutsalFormatters.formatRemaining(data.elapsed_time, data.limit);
-                
-                                   if (data.state === 'running' || data.state === 'paused') {
-                                       // Utwórz lub zaktualizuj timer
-                                       const existingTimer = window.PenaltyTimers?.create(timerId, currentTime);
-                                       if (existingTimer) {
-                                           // Jeśli timer już istniał, funkcja create zwróci istniejący element
-                                           // i nie utworzy nowego, więc musimy zaktualizować czas
-                                           if (penaltyTimers?.has(timerId)) {
-                                               window.PenaltyTimers.update(timerId, currentTime);
-                                            }
-                                        }
-                                    } else if (data.state === 'stopped') {
-                    // Usuń timer jeśli jest zatrzymany
-                    window.PenaltyTimers?.remove(timerId);
-                }
+if (msg.type === 'timer_updated' || msg.type === 'timer_paused' || msg.type === 'timer_reset') {
+    const data = msg.payload || msg.data;
+
+    if (data.timer_id && data.timer_id.startsWith('penalty_')) {
+        const timerId = data.timer_id;
+        const currentTime = data.elapsed_time_formatted ||
+                           FutsalFormatters.formatRemaining(data.elapsed_time, data.initial_time, data.limit);
+
+        if (data.state === 'running' || data.state === 'paused') {
+            if (penaltyTimers.has(timerId)) {
+                window.PenaltyTimers.update(timerId, currentTime);
             } else {
-                // To jest główny timer meczu
-                const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time);
-                display.textContent = formatted;
-                console.log(`⏱️ Main Timer: ${formatted} [${data.state}]`);
+                window.PenaltyTimers.create(timerId, currentTime);
             }
         }
-        
-        // OBSŁUGA SYGNAŁU LIMIT_REACHED
-        if (msg.type === 'limit_reached') {
-            const data = msg.payload || msg.data;
-            
-            // Sprawdź czy to dotyczy timera karnego
-            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
-                console.log(`🏁 Limit reached for penalty timer: ${data.timer_id}`);
-                window.PenaltyTimers?.remove(data.timer_id);
-            }
-        }
-        
-        // NOWA OBSŁUGA: SYGNAŁ TIMER_REMOVED
-        if (msg.type === 'timer_removed') {
-            const data = msg.payload || msg.data;
-            
-            // Sprawdź czy to dotyczy timera karnego
-            if (data.timer_id && data.timer_id.startsWith('penalty_')) {
-                console.log(`🗑️ Timer removed signal for: ${data.timer_id}`);
-                window.PenaltyTimers?.remove(data.timer_id);
-            }
-        }
+    } else if(data.elapsed_time === undefined ) {
+        display.textContent = '';
+    } else {
+        const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time, data.initial_time);
+        display.textContent = formatted;
+    }
+}
+
+if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
+    const data = msg.payload || msg.data;
+    if (data.timer_id && data.timer_id.startsWith('penalty_')) {
+        window.PenaltyTimers.remove(data.timer_id);  // animacja chowania jest już w remove()
+    }
+}
         
         if (msg.type === 'show_overlay_container') {
             const data = msg.payload || msg.data;
@@ -609,6 +588,5 @@
             //     window.PenaltyTimers?.clearAll();
             // });
         </script>
-	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 </body>
 </html>

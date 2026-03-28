@@ -31,6 +31,10 @@ class GameEvent(db.Model):
     # Optional free-text note added by the operator
     comment = db.Column(db.String, nullable=True)
 
+    # Score at the moment the event occurred (snapshot from games table)
+    home_team_goals = db.Column(db.Integer, nullable=True)
+    away_team_goals = db.Column(db.Integer, nullable=True)
+
     # Fallback video data (e.g. OBS stream output) — nullable, populated separately
     replay_start_time = db.Column(db.Integer, nullable=True)
     replay_end_time = db.Column(db.Integer, nullable=True)   # file length at moment of event (ms)
@@ -132,6 +136,8 @@ class GameEvent(db.Model):
             'game_time':           self.game_time,
             'game_time_seconds':   self.game_time_seconds,
             'game_time_formatted': self.game_time_formatted,
+            'home_team_goals':     self.home_team_goals,
+            'away_team_goals':     self.away_team_goals,
             'event_place':         self.event_place,
             'replay_start_time':   self.replay_start_time,
             'replay_end_time':     self.replay_end_time,

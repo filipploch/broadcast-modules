@@ -665,7 +665,7 @@ function addPenaltyTimer(teamType, penaltyDuration=2) {
     
     
     // Show loading message
-    alert(`Dodawanie kary dla drużyny ${team}...`);
+    // alert(`Dodawanie kary dla drużyny ${team}...`);
 }
 
 // ============================================================================
@@ -810,9 +810,17 @@ function gameEventPlayerNameGenerator(_gameEvent) {
     if(_gameEvent.is_reported === true && _gameEvent.player_id === null){
         return `<span style="color: red;" onclick="openGameEventEditForm(${_gameEvent.id})">WYBIERZ ZAWODNIKA</span>`
     } else if (_gameEvent.is_reported === true) {
-        return _gameEvent.player_name
+        return `<span class="events-td-player-number">${_gameEvent.player_number}</span> ${_gameEvent.player_name}`
     } else {
         return ''
+    }
+}
+
+function gameEventTeamShortNameGenerator(_gameEvent) {
+    if(_gameEvent.team_short_name !== null) {
+        return `(${_gameEvent.team_short_name})`;
+    }else{
+        return '';
     }
 }
 
@@ -961,6 +969,10 @@ function showReplay(videoPath, replayStartTime, replayEndTime) {
     }});
 }
 
+function showInfo(_gameEventId, _teamId) {
+    socket.emit('show_info', {game_event_id: _gameEventId, team_id: _teamId});
+}
+
 // function showReplay(videoPath, replayStartTime, replayEndTime) {
 //     socket.emit('show_replay', {
 //         video_path: videoPath,
@@ -1083,7 +1095,8 @@ function eventEditRadioGenerator(_gameEvent, _eventTypes) {
 
 function toggleGameFieldCell(selectedCell) {
     console.log('toggleGameFieldCell');
-    let field = document.querySelector('#event-edit-game-field');
+    // let field = document.querySelector('#event-edit-game-field');
+    let field = document.querySelector('#new-game-event-data');
     let allCells = document.querySelectorAll('.event-edit-game-field-cell');
     let selectedGameFieldCell = selectedCell;
     let selectedGameFieldCellId = selectedGameFieldCell.dataset.cellId;
@@ -1113,7 +1126,7 @@ function eventEditGameFieldGenerator(_eventCellID, cols = 8, rows = 5) {
             const cellId = letter + row;
             let _class = '';
             if(cellId === eventCellID) {
-                _class = 'selected-game-field-cell';
+                _class = 'selected-game-field-cell current-game-field-cell';
                 _cellId = cellId;
             }
             html += `<div ondblclick="toggleGameFieldCell(this);" style="background-image: url(/static/images/field/empty.png)"
@@ -1125,6 +1138,60 @@ function eventEditGameFieldGenerator(_eventCellID, cols = 8, rows = 5) {
     let currentGameEventData = document.getElementById('current-game-event-data');
     currentGameEventData.dataset.cellId = _cellId;
     return html.replace('data-cell-id="none"', `data-cell-id="${_cellId}"`);
+}
+
+function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
+    let html = `
+    <div id="game-event-edit-result">
+        <div id="game-event-edit-result-home-team-controllers">
+            <button type="button"
+                class="game-event-edit-result-controller-btn"
+                onclick="changeGameEventResult('home', 1);"
+            >+</button>
+            <button type="button"
+                class="game-event-edit-result-controller-btn"
+                onclick="changeGameEventResult('home', -1);"
+            >-</button>
+        </div>
+        <div id="game-event-edit-result-content">
+            <div id="game-event-current-result">${_homeTeamGoals}:${_awayTeamGoals}</div>
+            <div id="game-event-new-result">
+                <span id="game-event-home-team-new-result">
+                    ${_homeTeamGoals}</span>:<span id="game-event-away-team-new-result">${_awayTeamGoals}
+                </span>
+            </div>
+        </div>
+        <div id="game-event-edit-result-away-team-controllers">
+            <button type="button"
+                class="game-event-edit-result-controller-btn"
+                onclick="changeGameEventResult('away', 1);"
+            >+</button>
+            <button type="button"
+                class="game-event-edit-result-controller-btn"
+                onclick="changeGameEventResult('away', -1);"
+            >-</button>
+        </div>
+    </div>
+    `;
+
+    return html;
+}
+
+function changeGameEventResult(teamType, value) {
+    let teamNewResultSpan = document.querySelector(`#game-event-${teamType}-team-new-result`);
+    let teamNewResult = parseInt(teamNewResultSpan.textContent);
+    let teamChangedResult = teamNewResult + value;
+    if(teamChangedResult < 0){
+        teamChangedResult = teamNewResult;
+    }
+    teamNewResultSpan.innerHTML = teamChangedResult;
+    let updatedDataContainer = document.querySelector('#new-game-event-data');
+    let teamDataResult;
+    if(teamType === 'home'){
+        teamDataResult = updatedDataContainer.dataset.homeTeamGoals = teamChangedResult;
+    }else{
+        teamDataResult = updatedDataContainer.dataset.awayTeamGoals = teamChangedResult;
+    }
 }
 
 // function eventEditGetTeamByGameEvent(_gameData, _gameEvent, _eventTypes) {
@@ -1226,6 +1293,39 @@ function eventEditGameFieldListeners(){
         });
     });
 }
+
+function updateGameEvent() {
+    let gameEventupdatedDataContainer = document.querySelector('#new-game-event-data');
+    let gameEventId = parseInt(gameEventupdatedDataContainer.dataset.gameEventId);
+    let eventId = parseInt(gameEventupdatedDataContainer.dataset.eventTypeId);
+    let gameTime = null;
+    let replayEndTime = null;
+    let replayStartTime = null;
+    let videoPath = null;
+    let eventPlace = gameEventupdatedDataContainer.dataset.cellId;
+    let teamId = gameEventupdatedDataContainer.dataset.teamId;
+    if(teamId !== 'null') {teamId = parseInt(teamId);}else{teamId = null;}
+    let playerId = gameEventupdatedDataContainer.dataset.selectedPlayerId;
+    if(playerId !== 'null') {playerId = parseInt(playerId);}else{playerId = null;}
+    let homeTeamGoals = gameEventupdatedDataContainer.dataset.homeTeamGoals;
+    let awayTeamGoals = gameEventupdatedDataContainer.dataset.awayTeamGoals;
+    socket.emit('update_game_event',
+        {
+            'game_event_id': gameEventId,
+            'event_id': eventId,
+            'game_time': gameTime,
+            'replay_end_time': replayEndTime,
+            'replay_start_time': replayStartTime,
+            'video_path': videoPath,
+            'event_place': eventPlace,
+            'team_id': teamId,
+            'player_id': playerId,
+            'home_team_goals': homeTeamGoals,
+            'away_team_goals': awayTeamGoals
+        }
+    );
+}
+
 socket.on('show_ui_monitor_content', data => {
     console.log('data', data);
     let uiMonitorContent = document.getElementById('ui-monitor-content');
@@ -1239,11 +1339,11 @@ socket.on('show_ui_monitor_content', data => {
         eventsTypeSelectorsContainer.style.height = '8vh';
         eventsTypeSelectorsContainer.innerHTML = `
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'goal')">GOLE</button>
-          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'yellow_card')">Ż.KARTKI</button>
-          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'red_card')">CZ.KARTKI</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'save')">OBRONY</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'miss')">PUDŁA</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'foul')">FAULE</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'yellow_card')">Ż.KARTKI</button>
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'red_card')">CZ.KARTKI</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'var')">VARY</button>`
         ;
         let gameEventsContainer = document.createElement('div');
@@ -1263,27 +1363,32 @@ socket.on('show_ui_monitor_content', data => {
             let gameEventTableRow = document.createElement('tr');
             if(typeof gameEvent === 'string'){
                 gameEventTableRow.className = 'perriod-tr';
-                gameEventTableRow.innerHTML = `<td"></td><td></td>
+                gameEventTableRow.innerHTML = `<td></td><td></td><td></td><td></td><td></td>
                 <td class="period-td" style="color: white;">${gameEvent}</td>`
             }else{
-                const svgCode = fieldSvgGenerator(gameEvent.event_place, gameEvent.event_color);
-                const playerName = gameEventPlayerNameGenerator(gameEvent);
-                console.log(gameEvent.event_cameras);
-                const replaysPopupBtn = replaysPopupGen(gameEvent);
-                const eventInfoBtn = gameEventInfoBtnGenerator(gameEvent);
-                const eventEditBtn = gameEventEditBtnGenerator(gameEvent);
-                gameEventTableRow.className = gameEvent.filter_class;
-                addClassName(gameEventTableRow, 'game-event-table-row')
-                gameEventTableRow.style.color = gameEvent.event_color;
-                gameEventTableRow.innerHTML = `
-                <td class="events-td-game-time">${gameEvent.game_time_formatted}</td>
-                <td class="events-td-event-name">${gameEvent.event_short_name}</td>
-                <td class="events-td-player-name">${playerName}</td>
-                <td class="events-td-svg-field">${svgCode}</td>
-                <td class="events-td-open-replays-popup">${replaysPopupBtn}</td>
-                <td class="events-td-event-info">${eventInfoBtn}</td>
-                <td class="events-td-event-edit">${eventEditBtn}</td>
-                `;
+                if(gameEvent.event_place !== null){
+                    const svgCode = fieldSvgGenerator(gameEvent.event_place, gameEvent.event_color);
+                    const playerName = gameEventPlayerNameGenerator(gameEvent);
+                    const teamShortName = gameEventTeamShortNameGenerator(gameEvent);
+                    console.log(gameEvent.event_cameras);
+                    const replaysPopupBtn = replaysPopupGen(gameEvent);
+                    const eventInfoBtn = gameEventInfoBtnGenerator(gameEvent);
+                    const eventEditBtn = gameEventEditBtnGenerator(gameEvent);
+                    gameEventTableRow.className = gameEvent.filter_class;
+                    addClassName(gameEventTableRow, 'game-event-table-row')
+                    gameEventTableRow.style.color = gameEvent.event_color;
+                    gameEventTableRow.innerHTML = `
+                    <td class="events-td-svg-field">${svgCode}</td>
+                    <td class="events-td-game-time">${gameEvent.game_time_formatted}</td>
+                    <td class="events-td-event-name">${gameEvent.event_short_name}</td>
+                    <td class="events-td-team-short-name">${teamShortName}</td>
+                    <td class="events-td-result">${gameEvent.home_team_goals}:${gameEvent.away_team_goals}</td>
+                    <td class="events-td-player-name">${playerName}</td>
+                    <td class="events-td-open-replays-popup">${replaysPopupBtn}</td>
+                    <td class="events-td-event-info">${eventInfoBtn}</td>
+                    <td class="events-td-event-edit">${eventEditBtn}</td>
+                    `;
+                }
             }
             gameEventsTable.appendChild(gameEventTableRow);
         });
@@ -1300,8 +1405,11 @@ socket.on('show_ui_monitor_content', data => {
         gameEventDataContainer.innerHTML = `
         <div id="current-game-event-data" style="background-color: gray;"
             data-event-type-id="${gameEvent.event_id}"
+            data-game-event-id="${gameEvent.id}"
             data-cell-id="${gameEvent.event_place}"
             data-team-id="${gameEvent.team_id}"
+            data-home-team-goals="${gameEvent.home_team_goals}"
+            data-away-team-goals="${gameEvent.away_team_goals}"
             data-selected-player-id="${gameEvent.player_id}">
             <span id="edit-event-current-event-type">${gameEvent.event_short_name}</span> 
             <span id="edit-event-current-team-short-name">(${gameEvent.team_short_name})</span>
@@ -1309,8 +1417,11 @@ socket.on('show_ui_monitor_content', data => {
         </div>
         <div id="new-game-event-data" style="background-color: darkgoldenrod;"
             data-event-type-id="${gameEvent.event_id}"
+            data-game-event-id="${gameEvent.id}"
             data-cell-id="${gameEvent.event_place}"
             data-team-id="${gameEvent.team_id}"
+            data-home-team-goals="${gameEvent.home_team_goals}"
+            data-away-team-goals="${gameEvent.away_team_goals}"
             data-selected-player-id="${gameEvent.player_id}">
             <span id="edit-event-new-event-type">${gameEvent.event_short_name}</span> 
             <span id="edit-event-new-team-short-name">(${gameEvent.team_short_name})</span>       
@@ -1328,7 +1439,11 @@ socket.on('show_ui_monitor_content', data => {
         let eventEditLeftColumn = document.createElement('div');
         eventEditLeftColumn.style.width = '160px';
         eventEditLeftColumn.innerHTML = eventEditGameFieldGenerator(gameEvent.event_place);
-        eventEditGameFieldListeners();
+        eventEditLeftColumn.innerHTML += eventEditGameResultGenerator(gameEvent.home_team_goals, gameEvent.away_team_goals);
+        eventEditLeftColumn.innerHTML += `
+        <div>
+            <button type"button" onclick="updateGameEvent()">ZAPISZ</button>
+        </div>`;
         let eventEditRightColumn = document.createElement('div');
         eventEditRightColumn.id = 'event-edit-right-column';
         eventEditRightColumn.style.width = '260px';
@@ -1338,6 +1453,7 @@ socket.on('show_ui_monitor_content', data => {
         eventEditContainer.append(eventEditLeftColumn);
         eventEditContainer.append(eventEditRightColumn);
         eventEditRightColumn.append(teamSelect);
+        eventEditGameFieldListeners();
         uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
     } else if(data.content_type === 'get_event_squad') {
         const gameEvent = data.game_event;
@@ -1359,6 +1475,11 @@ socket.on('show_ui_monitor_content', data => {
             eventEditRightColumn.append(teamSelect);
         }
     }
+});
+
+socket.on('game_event_updated', data => {
+    let gameEventId = data.game_event_id;
+    openGameEventEditForm(gameEventId);
 });
 
 
