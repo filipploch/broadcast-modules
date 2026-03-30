@@ -1,3 +1,15 @@
+/* ── Game Field Config ──────────────────────────────────
+   Grid: 15 columns × 9 rows
+   Cell size: ~14px × 12px (keeps overall footprint ~210×108px)
+   ──────────────────────────────────────────────────── */
+
+:root {
+    --field-cols: 15;
+    --field-rows: 9;
+    --cell-w: 14px;
+    --cell-h: 11px;
+}
+
 #game-field {
     width: 160px;
     height: 100px;
@@ -5,13 +17,13 @@
 }
 
 .game-field-cell {
-    width: 20px;
-    height: 20px;
+    width: var(--cell-w);
+    height: var(--cell-h);
 }
 
 .event-edit-game-field-cell {
-    width: 20px;
-    height: 20px;
+    width: var(--cell-w);
+    height: var(--cell-h);
 }
 
 .selected-game-field-cell {

@@ -1,3 +1,8 @@
+// ── Konfiguracja siatki boiska (musi być spójna z events-controllers.js) ─────
+// Używamy var, żeby nie kolidować z const w events-controllers.js
+var FIELD_COLS = 15;
+var FIELD_ROWS = 9;
+
 /**
  * UI-JINJA.JS - Simplified timer UI with Jinja2 rendering
  * 
@@ -786,17 +791,8 @@ function getAllTimerIds() {
 }
 
 
-document.querySelectorAll('.game-field-cell').forEach(element => {
-    element.addEventListener('mouseover', () => {
-        element.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
-    });
-});
-
-document.querySelectorAll('.game-field-cell').forEach(element => {
-    element.addEventListener('mouseout', () => {
-        element.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-    });
-});
+// Hover dla .game-field-cell obsługiwany przez attachGameFieldHoverListeners()
+// wywoływaną po wygenerowaniu siatki w events-controllers.js
 
 
 
@@ -985,32 +981,33 @@ function showInfo(_gameEventId, _teamId) {
 // }
 
 function fieldSvgGenerator(cellId, color) {
-    // Mapowanie liter kolumn na indeksy (0–7)
-    const colMap = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7 };
-
-    // Walidacja i parsowanie parametru cellId (np. "A3", "H5")
-    const colLetter = cellId.charAt(0).toUpperCase();
-    const rowNumber = parseInt(cellId.slice(1), 10);
-
-    if (!(colLetter in colMap) || rowNumber < 1 || rowNumber > 5) {
-        throw new Error('Nieprawidłowy identyfikator komórki. Użyj formatu A1-H5.');
+    // Dynamiczne mapowanie kolumn na podstawie FIELD_COLS (A–O dla 15 kolumn)
+    const colMap = {};
+    for (let i = 0; i < FIELD_COLS; i++) {
+        colMap[String.fromCharCode(65 + i)] = i;
     }
 
-    const colIndex = colMap[colLetter];      // 0 – A, 1 – B, ..., 7 – H
-    const rowIndex = rowNumber - 1;           // 0 – wiersz 1, 1 – wiersz 2, ..., 4 – wiersz 5
+    // Walidacja i parsowanie parametru cellId (np. „A3", „O9")
+    const colLetter = cellId.charAt(0).toUpperCase();
+    const rowNumber = parseInt(cellId.slice(1), 10);
+    const lastColLetter = String.fromCharCode(65 + FIELD_COLS - 1);
 
-    // Wymiary viewBox: szerokość = 8 (kolumny), wysokość = 5 (wiersze)
-    const width = 8;
-    const height = 5;
-    const cellSize = 1;                       // bok kwadratu = 1 jednostka
+    if (!(colLetter in colMap) || rowNumber < 1 || rowNumber > FIELD_ROWS) {
+        throw new Error(`Nieprawidłowy identyfikator komórki. Użyj formatu A1-${lastColLetter}${FIELD_ROWS}.`);
+    }
 
-    // Pozycja kwadratu w viewBox
+    const colIndex = colMap[colLetter];
+    const rowIndex = rowNumber - 1;
+
+    // Proporcje SVG dopasowane do siatki (30px × 18px dla 15×9)
+    const cellSize = 1;
     const x = colIndex * cellSize;
     const y = rowIndex * cellSize;
+    const svgW = Math.round(FIELD_COLS * 2);
+    const svgH = Math.round(FIELD_ROWS * 2);
 
-    // Generowanie kodu SVG (dodano atrybuty width/height w px dla wygody)
-    return `<svg class="svg-field" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="24" height="15">
-    <rect width="${width}" height="${height}" fill="white" stroke="none" />
+    return `<svg class="svg-field" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${FIELD_COLS} ${FIELD_ROWS}" width="${svgW}" height="${svgH}">
+    <rect width="${FIELD_COLS}" height="${FIELD_ROWS}" fill="white" stroke="none" />
     <rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#${color}" stroke="none" />
     </svg>`;
 }
@@ -1117,7 +1114,7 @@ function toggleGameFieldCell(selectedCell) {
     }
 }
 
-function eventEditGameFieldGenerator(_eventCellID, cols = 8, rows = 5) {
+function eventEditGameFieldGenerator(_eventCellID, cols = FIELD_COLS, rows = FIELD_ROWS) {
     let _cellId = ''
     let html = `<div id="event-edit-game-field"
     class="game-field-selector" data-cell-id="none">`;
