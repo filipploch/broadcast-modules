@@ -33,18 +33,18 @@
         </div>
         
         <div class="form-group">
-            <label for="name_20">
-                Nazwa Skrócona (max 20 znaków) *
+            <label for="name_14">
+                Nazwa Skrócona (max 14 znaków) *
             </label>
             <input 
                 type="text" 
-                id="name_20" 
-                name="name_20" 
-                maxlength="20"
+                id="name_14" 
+                name="name_14" 
+                maxlength="14"
                 required
                 placeholder="np. {{ team.name[:20] }}"
                 value="{{ team.name[:20] }}">
-            <small id="name20_counter">0 / 20 znaków</small>
+            <small id="name14_counter">0 / 14 znaków</small>
         </div>
         
         <div class="form-group">
@@ -106,8 +106,8 @@
                         <td><span id="preview_short_name" style="font-weight: bold; color: #2c3e50;">---</span></td>
                     </tr>
                     <tr>
-                        <td style="font-weight: 600;">Nazwa 20:</td>
-                        <td><span id="preview_name_20" style="color: #2c3e50;">---</span></td>
+                        <td style="font-weight: 600;">Nazwa 14:</td>
+                        <td><span id="preview_name_14" style="color: #2c3e50;">---</span></td>
                     </tr>
                     <tr>
                         <td style="font-weight: 600;">Pełna nazwa:</td>
@@ -130,7 +130,7 @@
     </div>
     
     <ul style="margin-left: 1.5rem; line-height: 2;">
-        <li><strong>Nazwa 20:</strong> Używana w raportach i tabelach gdzie brakuje miejsca na pełną nazwę</li>
+        <li><strong>Nazwa 14:</strong> Używana w raportach i tabelach gdzie brakuje miejsca na pełną nazwę</li>
         <li><strong>Skrót 3-literowy:</strong> Unikalny kod zespołu (TLA - Three Letter Acronym)</li>
         <li><strong>Logo:</strong> Możesz użyć domyślnego logo i zmienić je później podczas edycji</li>
     </ul>
@@ -187,10 +187,10 @@
         };
     }
     // Live preview
-    document.getElementById('name_20').addEventListener('input', function() {
+    document.getElementById('name_14').addEventListener('input', function() {
         const value = this.value;
-        document.getElementById('preview_name_20').textContent = value || '---';
-        document.getElementById('name20_counter').textContent = value.length + ' / 20 znaków';
+        document.getElementById('preview_name_14').textContent = value || '---';
+        document.getElementById('name14_counter').textContent = value.length + ' / 14 znaków';
     });
     
     document.getElementById('short_name').addEventListener('input', function() {
@@ -199,7 +199,7 @@
     });
     
     // Initialize preview
-    document.getElementById('name_20').dispatchEvent(new Event('input'));
+    document.getElementById('name_14').dispatchEvent(new Event('input'));
     document.getElementById('short_name').dispatchEvent(new Event('input'));
 </script>
 {% endblock %}

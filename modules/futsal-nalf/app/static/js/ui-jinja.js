@@ -87,7 +87,7 @@ function updateTimerDisplay(timerData) {
     console.log("timerData:", timerData);
     const timerId = timerData.timer_id;
     const elapsedMs = timerData.elapsed_time;
-    const timerLimit = timerData.limit   || 0;
+    let timerLimit = timerData.limit   || 0;
     const initialMs  = timerData.initial_time || 0;
     const timerState = timerData.state;
     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
@@ -111,7 +111,9 @@ function updateTimerDisplay(timerData) {
     if (timerLimit > 0) {
         // Count down: show remaining = limit - (initialTime + elapsed)
         // Subtract 1ms so display changes exactly on the second boundary
-        const shown = initialMs + elapsed;
+        const shown = elapsed;
+        timerLimit = timerLimit - initialTime;
+        // const shown = initialMs + elapsed;
         displayTime = timerState === 'idle'
             ? Math.max(0, timerLimit - shown)
             : Math.max(0, timerLimit - shown - 1);
@@ -967,6 +969,7 @@ function showReplay(videoPath, replayStartTime, replayEndTime) {
         'replay_start_time': replayStartTime,
         'replay_end_time': replayEndTime
     }});
+    closeReplaysPopup();
 }
 
 function showInfo(_gameEventId, _teamId) {
@@ -1294,7 +1297,7 @@ function eventEditGameFieldListeners(){
     });
 }
 
-function updateGameEvent() {
+function updateGameEvent(_contentType = '') {
     let gameEventupdatedDataContainer = document.querySelector('#new-game-event-data');
     let gameEventId = parseInt(gameEventupdatedDataContainer.dataset.gameEventId);
     let eventId = parseInt(gameEventupdatedDataContainer.dataset.eventTypeId);
@@ -1321,7 +1324,8 @@ function updateGameEvent() {
             'team_id': teamId,
             'player_id': playerId,
             'home_team_goals': homeTeamGoals,
-            'away_team_goals': awayTeamGoals
+            'away_team_goals': awayTeamGoals,
+            'content_type': _contentType
         }
     );
 }
@@ -1441,8 +1445,9 @@ socket.on('show_ui_monitor_content', data => {
         eventEditLeftColumn.innerHTML = eventEditGameFieldGenerator(gameEvent.event_place);
         eventEditLeftColumn.innerHTML += eventEditGameResultGenerator(gameEvent.home_team_goals, gameEvent.away_team_goals);
         eventEditLeftColumn.innerHTML += `
-        <div>
-            <button type"button" onclick="updateGameEvent()">ZAPISZ</button>
+        <div style="display: flex;">
+            <button type"button" class="flex1" onclick="updateGameEvent()">ZACHOWAJ</button>
+            <button type"button" class="flex1" onclick="updateGameEvent('events')"> ZAPISZ </button>
         </div>`;
         let eventEditRightColumn = document.createElement('div');
         eventEditRightColumn.id = 'event-edit-right-column';
@@ -1479,7 +1484,12 @@ socket.on('show_ui_monitor_content', data => {
 
 socket.on('game_event_updated', data => {
     let gameEventId = data.game_event_id;
-    openGameEventEditForm(gameEventId);
+    let contentType = data.content_type;
+    if(contentType !== ''){
+        showUiMonitorContent(contentType);
+    }else{
+        openGameEventEditForm(gameEventId);
+    }
 });
 
 

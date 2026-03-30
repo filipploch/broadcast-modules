@@ -96,10 +96,10 @@ class CommentatorManager:
             return False
 
         try:
-            commentator_name = commentator.full_name
+            name = commentator.full_name
             db.session.delete(commentator)
             db.session.commit()
-            logger.info(f"Deleted commentator: {commentator_name}")
+            logger.info(f"Deleted commentator: {name}")
             return True
 
         except Exception as e:

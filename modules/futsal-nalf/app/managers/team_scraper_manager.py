@@ -211,7 +211,7 @@ class TeamScraperManager:
         session.pop(self.SCRAPED_TEAMS_SESSION_KEY, None)
         session.modified = True
 
-    def complete_team_from_scraping(self, team_url: str, name_20: str,
+    def complete_team_from_scraping(self, team_url: str, name_14: str,
                                    short_name: str, logo_path: str = None,
                                    foreign_id: str = None) -> Optional[Team]:
         """Complete a scraped team with additional data and save to database"""
@@ -235,7 +235,7 @@ class TeamScraperManager:
 
         team = team_manager.create_team(
             name=pending_team['name'],
-            name_20=name_20,
+            name_14=name_14,
             short_name=short_name,
             team_url=team_url,
             logo_path=logo_path,

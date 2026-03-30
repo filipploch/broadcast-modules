@@ -324,7 +324,7 @@ def create_team():
             uniform_away = request.form.getlist('uniform_away[]')
             team = team_manager.create_team(
                 name=request.form['name'],
-                name_20=request.form['name_20'],
+                name_14=request.form['name_14'],
                 short_name=request.form['short_name'],
                 team_url=request.form['team_url'],
                 logo_path=request.form.get('logo_path', 'static/images/logos/default.png'),
@@ -358,7 +358,7 @@ def edit_team(team_id):
             team_manager.update_team(
                 team_id=team_id,
                 name=request.form.get('name'),
-                name_20=request.form.get('name_20'),
+                name_14=request.form.get('name_14'),
                 short_name=request.form.get('short_name'),
                 team_url=request.form.get('team_url'),
                 logo_path=request.form.get('logo_path'),
@@ -464,7 +464,7 @@ def complete_team(team_url):
         try:
             team = team_scraper_manager.complete_team_from_scraping(
                 team_url=team_url,
-                name_20=request.form['name_20'],
+                name_14=request.form['name_14'],
                 short_name=request.form['short_name'],
                 logo_path=request.form.get('logo_path', 'static/images/logos/default.png')
             )

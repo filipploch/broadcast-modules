@@ -10,7 +10,7 @@ class Team(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    name_20 = db.Column(db.String(20), nullable=False)  # Shortened name (max 20 chars)
+    name_14 = db.Column(db.String(14), nullable=False)  # Shortened name (max 14 chars)
     short_name = db.Column(db.String(3), nullable=False, index=True)  # 3-letter abbreviation
     team_url = db.Column(db.String(500), nullable=False)
     logo_path = db.Column(db.String(500), default='static/images/logos/default.png')
@@ -72,7 +72,7 @@ class Team(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'name_20': self.name_20,
+            'name_14': self.name_14,
             'short_name': self.short_name,
             'team_url': self.team_url,
             'logo_path': self.logo_path,

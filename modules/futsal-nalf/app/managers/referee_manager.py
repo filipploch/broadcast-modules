@@ -96,10 +96,10 @@ class RefereeManager:
             return False
 
         try:
-            referee_name = referee.full_name
+            name = referee.full_name
             db.session.delete(referee)
             db.session.commit()
-            logger.info(f"Deleted referee: {referee_name}")
+            logger.info(f"Deleted referee: {name}")
             return True
 
         except Exception as e:

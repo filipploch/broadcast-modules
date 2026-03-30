@@ -23,12 +23,13 @@ def replay_sequence(context):
     _replay_duration = _replay_end_time - _replay_start_time
     return [
         set_replay_file(_file_path),                                      # t=0
-        start_replay(),                                                    # t=0
-        set_replay_start_time(_replay_start_time, delay_ms=500),          # t=500
-        show_transition(delay_ms=600),                                     # t=600
-        show_source(delay_ms=1620),                                         # t=700
-        show_transition(delay_ms=1620 + _replay_duration),                  # t=700+duration
-        show_source(is_visible=False, delay_ms=1620 + _replay_duration + 1000)  # t=700+duration+700
+        start_replay(delay_ms=200),                                                    # t=0
+        set_replay_start_time(_replay_start_time, delay_ms=400),          # t=500
+        # show_transition(delay_ms=600),                                     # t=600
+        show_source(delay_ms=600),                                         # t=700
+        set_replay_start_time(_replay_start_time, delay_ms=700),          # t=500
+        # show_transition(delay_ms=1620 + _replay_duration),                  # t=700+duration
+        show_source(is_visible=False, delay_ms=700 + _replay_duration)  # t=700+duration+700
     ]
 
 SEQUENCES = {

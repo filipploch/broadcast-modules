@@ -45,7 +45,7 @@ class GameCommentator(db.Model):
             'id': self.id,
             'game_id': self.game_id,
             'commentator_id': self.commentator_id,
-            'commentator_name': self.commentator.full_name if self.commentator else None,
+            'name': self.commentator.full_name if self.commentator else None,
             'type': self.type,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None

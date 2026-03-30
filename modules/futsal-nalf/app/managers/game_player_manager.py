@@ -123,6 +123,10 @@ class GamePlayerManager:
     def get_game_player_by_id(self, game_player_id: int) -> Optional[GamePlayer]:
         """Get GamePlayer by ID"""
         return GamePlayer.query.get(game_player_id)
+    
+    def get_game_player_by_player_id(self, player_id: int) -> Optional[GamePlayer]:
+        """Get GamePlayer by ID"""
+        return GamePlayer.query.filter_by(player_id=player_id).first()
 
     def update_game_player(self, game_player_id: int,
                           team_id: int = None,

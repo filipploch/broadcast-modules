@@ -125,7 +125,7 @@ def init_database():
             team_iglomen = Team(
                 id=1,
                 name="IGLOMEN",
-                name_20="Iglomen",
+                name_14="Iglomen",
                 short_name="IGL",
                 team_url="https://nalffutsal.pl/?sp_team=bidvest-krakow"
             )
@@ -135,7 +135,7 @@ def init_database():
             team_galactik = Team(
                 id=2,
                 name="Galactik Futsal",
-                name_20="Galactik Futsal",
+                name_14="Galactik Futsal",
                 short_name="GAL",
                 team_url="https://nalffutsal.pl/?sp_team=galactik-futsal"
             )
@@ -146,7 +146,7 @@ def init_database():
             team_example = Team(
                 id=3,
                 name="Example Team",
-                name_20="Example Team",
+                name_14="Example Team",
                 short_name="EXT",
                 team_url="https://nalffutsal.pl/?sp_team=example-team"
             )

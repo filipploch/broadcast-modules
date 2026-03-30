@@ -13,10 +13,12 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-show-element.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/game-container.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/squad.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/animate-word.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/action.css">
 </head>
 <body>
     <!-- <div id="game-screen-container" class="overlay-container hidden"> -->
-    <div id="game-screen-container" class="overlay-container">
+    <div id="game-screen-container" class="overlay-container" style="display: none;">
         <div id="scoreboard-container">
             <div id="top-scoreboard-container" class="scoreboard-row">
                 <div></div>
@@ -32,9 +34,9 @@
                     <div id="home-team-shortname" class="team-name home-team-shortname"></div>
                     <div id="home-team-uniform" class="team-uniform home-team-uniform"></div>
                 </div>
-                <div id="home-team-score" class="team-score home-team-score">18</div>
+                <div id="home-team-score" class="team-score home-team-score"> </div>
                 <div></div>
-                <div id="away-team-score" class="team-score away-team-score">1</div>
+                <div id="away-team-score" class="team-score away-team-score"> </div>
                 <div class="team-box">
                     <div id="away-team-shortname" class="team-name away-team-shortname">TEB</div>
                     <div id="away-team-uniform" class="team-uniform away-team-uniform"></div>
@@ -56,14 +58,28 @@
             </div>
         </div>
         <div id="animationArea"><span style="color: rgba(255,255,255,0)">.</span></div>
-        <div id="game-transition" class="game-container-element" style="display: none;">
-            <img src="http://localhost:8081/static/video/transitions/nalf_transition.gif">
-        </div>
+		<div id="action_info_container">
+			<div class="action_square" id="action_icon"><img id="action_icon_img"></div>
+			<div id="action_info_text">
+				<div class="action_minute"><span id="action_time"></span></div>
+				<div id="action_player">
+                    <span id="action_player_name"></span>
+                    <span id="action_player_team_short_name"></span>
+                </div>
+				<div class="action_minute invisible_text"></div>
+				<div class="cleaner"></div>
+				<div id="action_team_name"></div>
+			</div>
+			<div class="action_square"><p></p></div>
+		</div>
     </div>
-    <div id="home-team-squad-container" class="squad-container overlay-container" style="display: none;"></div>
-    <div id="away-team-squad-container" class="squad-container overlay-container" style="display: none;"></div>
+    <div id="start-container" class="start-container info-container overlay-container" style="display: none;"></div>
+    <div id="break-container" class="break-container info-container overlay-container" style="display: none;"></div>
+    <div id="home-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
+    <div id="away-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
     <script src="/overlays/futsal-nalf/js/utils.js"></script>
     <script src="/overlays/futsal-nalf/js/squad.js"></script>
+    <script type="application/javascript" src="/overlays/futsal-nalf/js/animate-word.js"></script>
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
 
@@ -118,7 +134,9 @@
             // Określ typ kontenera na podstawie jego klas
             const classList = container.classList;
             
+            if (classList.contains('start-container')) return 'start';
             if (classList.contains('squad-container')) return 'squad';
+            if (classList.contains('break-container')) return 'break';
             if (classList.contains('container-game')) return 'game';
             if (classList.contains('container-stats')) return 'stats';
             
@@ -155,16 +173,20 @@
         
         const containerType = getContainerType(targetContainer);
         
+        let delayTime = 2000;
         if(containerType === 'squad') {
             let teamName = _data.team_name;
             let teamShortName = _data.team_short_name;
             let teamSquad = _data.team_squad;
             let teamLogo = _data.logo;
-            let delayTime = 2000;
             expandSquadContainer(containerId, teamName, teamShortName, teamSquad, teamLogo);
             let addedDelayTime = prepareToOpenContainer(openContainer, targetContainer);
             delayTime += addedDelayTime;
             activateElementsAfterTime('squad-content', delayTime);
+        }else if (containerType === 'start'){
+            expandStartContainer(_data);
+            prepareToOpenContainer(openContainer, targetContainer);
+            activateElementsAfterTime('start-content', 2500, 'flex');
         }else{
             prepareToOpenContainer(openContainer, targetContainer);
         }
@@ -231,7 +253,7 @@
         let logo = container.querySelector('img');
         let players = container.querySelectorAll('.squad-player-row');
         let squadBody = container.querySelector('.squad-body');
-        let squadHead = container.querySelector('.squad-head');
+        let infoHead = container.querySelector('.info-head');
         logo.style.animation = `fadeOut 250ms ease both`;
         players.forEach(player => {
             player.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
@@ -240,7 +262,7 @@
         squadBody.style.animationDuration = '750ms';
         squadBody.style.animationDelay = '250ms';
         squadBody.style.animationFillMode = 'both';
-        squadHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
+        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
     }
 
     function closeDefaultContainer(container) {
@@ -259,23 +281,173 @@
         });
     }
 
+    function expandStartBottomSpecificContainer(_headerText, _arr) {
+        let html = '';
+        let header = `
+            <div class="start-bottom-header">${_headerText}</div>
+        `;
+        html += header;
+        _body = '';
+        _arr.forEach(el => {
+            let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
+            _body += _bodyElement;
+        });
+        html += _body;
+        return html;
+    } 
+    
+    function expandStartBottomInfoContainer(_gameData) {
+        let wrapper = document.createElement('div');
+        wrapper.id = 'start-bottom-info-container';
+        let currentDate = getCurrentDate();
+        let stadium = _gameData.stadium;
+        let commentators = _gameData.commentators;
+        let referees = _gameData.referees;
+        let dateAndStadiumContainer = document.createElement('div');
+        addClassName(dateAndStadiumContainer, 'start-bottom-info-element');
+        dateAndStadiumContainer.style.animationDelay = '2000ms';
+        let refereesContainer = document.createElement('div');
+        addClassName(refereesContainer, 'start-bottom-info-element');
+        refereesContainer.style.animationDelay = '9000ms';
+        let commentatorsContainer = document.createElement('div');
+        addClassName(commentatorsContainer, 'start-bottom-info-element');
+        commentatorsContainer.style.animationDelay = '16000ms';
+        refereesContainer.innerHTML = expandStartBottomSpecificContainer('Arbiter', referees);
+        commentatorsContainer.innerHTML = expandStartBottomSpecificContainer('Komentarz', commentators);
+        let address1Element = document.createElement('div');
+        addClassName(address1Element, 'start-bottom-header');
+        address1Element.innerText = stadium.name;
+        let address2Element = document.createElement('div');
+        addClassName(address2Element, 'start-bottom-header');
+        address2Element.innerText = stadium.address;
+        let currentDateElement = document.createElement('div');
+        addClassName(currentDateElement, 'start-bottom-body');
+        currentDateElement.innerText = currentDate;
+        dateAndStadiumContainer.appendChild(address1Element);
+        dateAndStadiumContainer.appendChild(address2Element);
+        dateAndStadiumContainer.appendChild(currentDateElement);
+
+        wrapper.appendChild(dateAndStadiumContainer);
+        wrapper.appendChild(refereesContainer);
+        wrapper.appendChild(commentatorsContainer);
+        return wrapper;
+    }
+
+    function expandStartContainer(_gameData) {
+        let data = _gameData;
+        let _startContainer = document.getElementById('start-container');
+        _startContainer.innerHTML = '';
+        let startContainer = document.createElement('div');
+        startContainer.style.display = 'block';
+        let infoHead = document.createElement('div');
+        addClassName(infoHead, 'rotate-show-element0');
+        addClassName(infoHead, 'animated-element');
+        addClassName(infoHead, 'info-head');
+        let nalfTitleElement = document.createElement('div');
+        addClassName(nalfTitleElement, 'start-container-nalf-title');
+        nalfTitleElement.innerText = 'Nowohucka Amatorska Liga Futsalu';
+        let roundTitleElement = document.createElement('div');
+        addClassName(roundTitleElement, 'start-container-round-title');
+        roundTitleElement.innerText = `${data.round_name}`;
+        infoHead.appendChild(nalfTitleElement);
+        infoHead.appendChild(roundTitleElement);
+        startContainer.appendChild(infoHead);
+
+        let startBody = document.createElement('div');
+        addClassName(startBody, 'info-body');
+        addClassName(startBody, 'start-body');
+        addClassName(startBody, 'animated-element');
+        startBody.style.display = 'flex';
+
+        let startBodyLogosContainer = document.createElement('div');
+        startBodyLogosContainer.style.display = 'none';
+        addClassName(startBodyLogosContainer, 'start-content');
+
+        let homeTeamLogoContainer = document.createElement('div');
+        homeTeamLogoContainer.style.display = 'flex';
+        homeTeamLogoContainer.id = 'start-home-team-logo';
+        // addClassName(homeTeamLogoContainer, 'flex2');
+        addClassName(homeTeamLogoContainer, 'start-logo');
+        let homeTeamLogoImg = document.createElement('img');
+        homeTeamLogoImg.src = rootApp+`${data.home_team_logo}`;
+        homeTeamLogoContainer.appendChild(homeTeamLogoImg);
+        let nalfLogoContainer = document.createElement('div');
+        nalfLogoContainer.id = 'start-nalf-logo';
+        nalfLogoContainer.style.display = 'flex';
+        // addClassName(nalfLogoContainer, 'flex1');
+        // addClassName(nalfLogoContainer, 'start-logo');
+        let nalfLogoImg = document.createElement('img');
+        nalfLogoImg.src = rootApp+'/static/images/nalf/logoNALF.png';
+        nalfLogoContainer.appendChild(nalfLogoImg);
+        let awayTeamLogoContainer = document.createElement('div');
+        awayTeamLogoContainer.style.display = 'flex';
+        awayTeamLogoContainer.id = 'start-away-team-logo';
+        // addClassName(awayTeamLogoContainer, 'flex2');
+        addClassName(awayTeamLogoContainer, 'start-logo');
+        let awayTeamLogoImg = document.createElement('img');
+        awayTeamLogoImg.src = rootApp+`${data.away_team_logo}`;
+        awayTeamLogoContainer.appendChild(awayTeamLogoImg);
+
+        startBodyLogosContainer.appendChild(homeTeamLogoContainer);
+        startBodyLogosContainer.appendChild(nalfLogoContainer);
+        startBodyLogosContainer.appendChild(awayTeamLogoContainer);
+
+        startBody.appendChild(startBodyLogosContainer);
+
+        let startBodyTeamsContainer = document.createElement('div');
+        startBodyTeamsContainer.style.display = 'none';
+        addClassName(startBodyTeamsContainer, 'start-content');
+        startBodyTeamsContainer.id = 'start-teams-container';
+        let startBodyTeamsInternalElement = document.createElement('div');
+        startBodyTeamsInternalElement.style.width = '800px';
+        startBodyTeamsInternalElement.style.textAlign = 'center';
+
+        let homeTeamNameElement = document.createElement('div');
+        addClassName(homeTeamNameElement, 'start-team');
+        addClassName(homeTeamNameElement, 'rotate-show-element1');
+        homeTeamNameElement.innerText = data.home_team_name;
+        // let vsElement = document.createElement('div');
+        // addClassName(vsElement, 'start-vs');
+        // vsElement.innerText = ' ';
+        let awayTeamNameElement = document.createElement('div');
+        addClassName(awayTeamNameElement, 'start-team');
+        addClassName(awayTeamNameElement, 'rotate-show-element1');
+        awayTeamNameElement.innerText = data.away_team_name;
+        startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
+        // startBodyTeamsInternalElement.appendChild(vsElement);
+        startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
+        startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
+        startBody.appendChild(startBodyTeamsContainer);
+
+        let startBottom = document.createElement('div');
+        startBottom.id = 'start-bottom-container';
+        let bottomInfoContainer = expandStartBottomInfoContainer(_gameData);
+        startBottom.appendChild(bottomInfoContainer);
+        startBody.appendChild(startBottom);
+
+
+
+        startContainer.appendChild(startBody);
+        _startContainer.appendChild(startContainer);
+    }
+
     function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo) {
         let squadContainer = document.getElementById(_containerId);
         squadContainer.innerHTML = '';
-        let squadHead = document.createElement('div');
-        addClassName(squadHead, 'rotate-show-element0');
-        addClassName(squadHead, 'animated-element');
-        addClassName(squadHead, 'squad-head');
-        squadHead.dataset.animationOrder = '1';
+        let infoHead = document.createElement('div');
+        addClassName(infoHead, 'rotate-show-element0');
+        addClassName(infoHead, 'animated-element');
+        addClassName(infoHead, 'info-head');
+        infoHead.dataset.animationOrder = '1';
         let spanTeamName = document.createElement('span');
         spanTeamName.innerHTML = _teamName;
         addClassName(spanTeamName, 'squad-team-name');
         let spanTeamShortName = document.createElement('span');
         spanTeamShortName.innerHTML = ` (${_teamShortName})`;
         addClassName(spanTeamShortName, 'squad-team-short-name');
-        squadHead.appendChild(spanTeamName);
-        squadHead.appendChild(spanTeamShortName);
-        squadContainer.appendChild(squadHead);
+        infoHead.appendChild(spanTeamName);
+        infoHead.appendChild(spanTeamShortName);
+        squadContainer.appendChild(infoHead);
         let squadBody = document.createElement('div');
         addClassName(squadBody, 'squad-body');
         addClassName(squadBody, 'animated-element');
@@ -435,6 +607,17 @@
         }));
     };
     
+    // function actionPlayerInfoGenerator(_playerNumber, _playerName) {
+
+    // }
+
+    function actionPlayerTeamShortNameElementGenerator(_playerTeamShortName, _eventTypeId) {
+        if(_eventTypeId === 2) {
+            return `(${_playerTeamShortName})`;
+        }
+        return '';
+    }
+    
     ws.onclose = () => {
         console.log('❌ Disconnected from HUB');
         setTimeout(() => location.reload(), 3000);
@@ -518,7 +701,15 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
 
         if(msg.type === 'goal') {
             const data = msg.payload || msg.data;
-            animateWord('animationArea', 'GOOOOL', 350, 'scoreboard-container');
+            animateWord(
+                'animationArea',
+                'GOOOOL',
+                350,
+                'scoreboard-container',
+                'class1',
+                'class2',
+                data.name_14,
+                60);
         }
         
         if (msg.type === 'game_data') {
@@ -530,7 +721,6 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             let awayTeamScoreElements = document.querySelectorAll('.away-team-score');
             // let awayTeamSquadContainer = document.getElementById('away-team-squad-container');
             
-            console.log('short Name:', data.away_team_short_name)
             if (typeof data.home_team_short_name != "undefined") {
                 homeTeamShortNameElements.forEach(element => {
                     element.textContent = data.home_team_short_name;
@@ -581,7 +771,42 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
                 
                 
             }
+            
+        if (msg.type === 'show_info') {
+            let data = msg.payload;
+            let actionInfoContainer = document.querySelector('#action_info_container');
+            let actionInfoElements = document.querySelector('.action_square');
+            let actionImgElement = document.querySelector('#action_icon_img');
+            let actionInfoTextElement = document.querySelector('#action_info_text');
+            let actionTimeElements = document.querySelector('.action_minute');
+            let actionTimeElement = document.querySelector('#action_time');
+            let actionPlayerInfoElement = document.querySelector('#action_player_name');
+            let actionPlayerTeamShortNameElement = document.querySelector('#action_player_team_short_name');
+            let actionTeamNameElement = document.querySelector('#action_team_name');
+
+            actionImgElement.src = '';
+            actionImgElement.src = `${rootApp}${data.event_image_path}`;
+            // actionInfoTextElement.textContent = '';
+            // actionInfoTextElement.textContent = data.event_name;
+            actionTimeElement.textContent = '';
+            actionTimeElement.textContent = FutsalFormatters.formatElapsedTime(data.game_time, 0, {
+                'format': 'min',
+                'unit': 's'
+            });
+            actionPlayerInfoElement.textContent = '';
+            actionPlayerInfoElement.textContent = `${data.player_number} ${data.player_name}`;
+            actionPlayerTeamShortNameElement.textContent = ''; 
+            actionPlayerTeamShortNameElement.textContent = 
+                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name, data.event_type_id);
+            actionTeamNameElement.textContent = '';
+            actionTeamNameElement.textContent = data.team_name;
+
+            actionInfoContainer.style.display = 'block';
+            setTimeout(() => {
+                actionInfoContainer.style.display = 'none';
+            }, 11100);
         }
+    }
         
         // Opcjonalnie: czyszczenie timerów przy odświeżeniu strony
         // window.addEventListener('beforeunload', () => {

@@ -56,7 +56,7 @@ class TeamManager:
         """Get team by team_url (unique identifier)"""
         return Team.query.filter_by(name=name).first()
     
-    def create_team(self, name: str, name_20: str, short_name: str, 
+    def create_team(self, name: str, name_14: str, short_name: str, 
                    team_url: str, logo_path: str = 'static/images/logos/default.png',
                    foreign_id: str = None, uniform: dict = None) -> Team:
         """
@@ -64,7 +64,7 @@ class TeamManager:
         
         Args:
             name: Full team name
-            name_20: Shortened name (max 20 chars)
+            name_14: Shortened name (max 20 chars)
             short_name: 3-letter abbreviation
             team_url: Unique URL from NALF
             logo_path: Path to logo image
@@ -76,7 +76,7 @@ class TeamManager:
         import json
         team = Team(
             name=name,
-            name_20=name_20,
+            name_14=name_14,
             short_name=short_name.upper(),
             team_url=team_url,
             logo_path=logo_path,
@@ -105,7 +105,7 @@ class TeamManager:
         if not team:
             return None
         
-        allowed_fields = ['name', 'name_20', 'short_name', 'team_url', 'logo_path', 'uniform']
+        allowed_fields = ['name', 'name_14', 'short_name', 'team_url', 'logo_path', 'uniform']
         
         import json
         for field, value in kwargs.items():

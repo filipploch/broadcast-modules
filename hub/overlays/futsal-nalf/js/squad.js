@@ -1,4 +1,4 @@
-function activateElementsAfterTime(_elementsClassName, _time) {
+function activateElementsAfterTime(_elementsClassName, _time, _displayValue='block') {
   // Ustaw opóźnienie (np. 1 sekunda)
   setTimeout(function() {
     console.log('squad.js')
@@ -10,7 +10,7 @@ function activateElementsAfterTime(_elementsClassName, _time) {
       if (el.tagName === 'TABLE') {
         el.style.display = 'table';
       } else {
-        el.style.display = 'block';
+        el.style.display = _displayValue;
       }
     });
   }, _time);

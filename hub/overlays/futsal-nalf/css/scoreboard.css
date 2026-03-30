@@ -166,7 +166,7 @@
     position: absolute !important;
     top: 27px;
     right: 30px;
-    width: 100%;
+    /* width: 100%; */
     padding: 0;
     margin: 0;
     font-family: 'Arial Black';

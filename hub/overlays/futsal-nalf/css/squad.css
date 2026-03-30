@@ -19,8 +19,9 @@ body {
   margin: 0;
 }
 
-.squad-container {
-  font-family: 'Bebas Neue';
+.info-container {
+  /* font-family: 'Bebas Neue'; */
+  font-family: 'Varela Round';
   position: absolute;
   width: 1820px;
   height: 980px;
@@ -30,13 +31,76 @@ body {
   flex-direction: column;  /* ← dodane */
 }
 
-.squad-head {
-  background-color: red;
-  background-image: linear-gradient(to bottom, red, #AA0000);
+.squad-container {
+
+}
+
+.info-head {
+  /* background-color: red;
+  background-image: linear-gradient(to bottom, red, #AA0000); */
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
   color: white;
   padding: 15px 0 15px 130px;
   font-size: 60px;
   font-family: 'Varela Round';
+}
+
+.start-logo {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.start-content {
+    animation: fadeIn 500ms both;
+}
+
+#start-home-team-logo {
+
+}
+
+#start-away-team-logo {
+  
+}
+
+#start-nalf-logo, #start-teams-container, #start-bottom-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* #start-teams-container {
+  padding-top: 80px;
+} */
+
+.start-logo img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.start-container-nalf-title {
+  font-size: 45px;
+  font-weight: 700;
+}
+
+.start-container-round-title {
+  font-size: 40px;
+  font-weight: 500;
+}
+
+.start-team {
+  color: white;
+  /* background-color: red;
+  background-image: linear-gradient(to bottom, red, #AA0000); */
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
+  padding: 5px 0;
+  font-size: 50px;
+  margin-top: 20px;
 }
 
 .squad-team-name {
@@ -53,6 +117,16 @@ body {
   background-color: rgba(34, 34, 34, 0.7);
   transform-origin: top;
   animation: expandHeight 1000ms ease-out 1000ms both;
+}
+
+.start-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background-color: rgba(34, 34, 34, 0.7);
+  transform-origin: top;
+  animation: expandHeight 1000ms ease-out 500ms both;
+  height: 850px;
 }
 
 @keyframes expandHeight {
@@ -104,10 +178,11 @@ body {
 .squad-player-row {
 	display: flex;
   color: white;
-    background: rgba(0, 3, 155, 0.5);
-    background: linear-gradient(0deg,rgba(0, 1, 53, 0.9) 0%, rgba(0, 3, 155, 0.7) 100%);
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
 	font-size: 45px;
   width: 800px;
+  padding: 5px 0;
 }
 
 .squad-player-row>span {
@@ -134,6 +209,42 @@ body {
   animation: fadeIn 1000ms both;
 }
 
+#start-bottom-container {
+  height: 200px;
+}
+
+#start-bottom-info-container {
+  width: 800px;
+}
+
+.start-bottom-info-element{
+  position: absolute;
+  opacity: 0;
+  animation-name: fadeInOut;
+  animation-duration: 7000ms;
+  animation-fill-mode: both;
+  animation-direction: normal;
+  width: inherit;
+  font-size: 30px;
+  bottom: 20px;
+}
+
+.start-bottom-info-element>div{
+  text-align: center;
+}
+
+.start-bottom-header {
+  color: white;
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
+}
+
+.start-bottom-body {
+  color: #000030;
+  background-color: #ffffff;
+  font-weight: 700;
+}
+
 @keyframes fadeIn {
   0% {
     opacity: 0;
@@ -145,6 +256,21 @@ body {
 
 @keyframes fadeOut {
   0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
     opacity: 1;
   }
   100% {

@@ -56,6 +56,8 @@ class GamePlayer(db.Model):
             'game_id': self.game_id,
             'team_id': self.team_id,
             'team_name': self.team.name if self.team else None,
+            'team_name_14': self.team.name_14 if self.team else None,
+            'team_short_name': self.team.short_name if self.team else None,
             'is_goalkeeper': self.is_goalkeeper,
             'is_captain': self.is_captain,
             'number': self.number,

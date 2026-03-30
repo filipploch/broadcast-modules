@@ -1,0 +1,165 @@
+.cleaner
+{
+	clear: both;
+}
+
+#action_info_container{
+/*    width: 1920px;*/
+	position: absolute;
+    left: 50%;
+    transform: translateX(-56%);
+	bottom: 100px;
+	height: 100px;
+    text-align: center;
+    overflow: hidden;
+    display: none;
+}
+
+.action_square{
+    display: inline-block;
+    position: relative;
+    height: 100%;
+    width: 100px;
+}
+
+
+
+#action_info_text
+{
+    position: relative;
+    display: inline-block;
+    margin-right: 20px;
+    margin-left: 20px;
+	font-weight: 500;
+	letter-spacing: 1px;
+    background-color: rgba(255,255,255,0.7);
+/*    margin: 0em 1em;*/
+
+/*	top: 3px;*/
+}
+
+.action_minute{
+/*    bottom: 10px;*/
+    float: left;
+    color: red;
+    position: relative;
+    top: 0px;
+    left: 0px;
+    font-size: 40px;
+    text-align: center;
+    transform: none;
+    padding: 0px 10px;
+	width: 60px;
+}
+
+#action_player{
+    float: left;
+    position: relative;
+    font-size: 40px;
+    overflow: hidden;
+    height: 50px;
+    min-width: 500px;
+    padding: 0em 1em;
+    color: red;
+}
+
+#action_player_name{}
+
+#action_player_team_short_name{}
+
+#action_team_name{
+    position: relative;
+    font-size: 35px;
+    color: white;
+    overflow: hidden;
+    height: 50px;
+    padding: 0em 1em;
+    background-color: rgba(255,0,0,0.8);
+
+}
+
+#action_icon{
+    position: relative;
+    display: inline-block;
+    height: 100%;
+    padding-right: 20px;
+/*    width: 133px;*/
+}
+
+#action_icon img{
+    width: 100%;
+    height: 100%;
+}
+
+.invisible_text{
+    color: rgba(255,255,255,0);
+}
+
+#action_icon img{
+    animation: matchActionBarImage 11s ease 0s 1 normal both;
+}
+
+
+@keyframes matchActionBarImage {
+	0% {
+		opacity: 0;
+	}
+
+	10% {
+		opacity: 1;
+	}
+	90% {
+		opacity: 1;
+	}
+
+	100% {
+		opacity: 0;
+	}
+}
+
+#action_info_text {
+    animation: matchActionBarTextBackground 10s ease 200ms 1 normal both;
+}
+
+
+@keyframes matchActionBarTextBackground {
+	0% {
+		transform: scaleY(0);
+		opacity: 0;
+	}
+
+	5% {
+		transform: scaleY(1);
+		opacity: 1;
+	}
+	90% {
+		transform: scaleY(1);
+        opacity: 1;
+	}
+
+	100% {
+		transform: scaleY(0);
+        opacity: 0;
+	}
+}
+
+.action-content{
+    animation: matchActionBarText 500ms ease 8s 1 normal both;
+}
+
+@keyframes matchActionBarText {
+	0% {
+		opacity: 0;
+	}
+
+	5% {
+		opacity: 1;
+	}
+	95% {
+		opacity: 1;
+	}
+
+	100% {
+		opacity: 0;
+	}
+}

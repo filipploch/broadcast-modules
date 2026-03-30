@@ -1,4 +1,4 @@
-id,name,name_20,short_name,team_url,logo_path,foreign_id,uniform,created_at,updated_at
+id,name,name_14,short_name,team_url,logo_path,foreign_id,uniform,created_at,updated_at
 1,16 Batalion,16 Batalion,BAT,https://nalffutsal.pl/?sp_team=16-batalion-powietrznodesantowy,/static/images/logos/16Batalion.png,16-batalion-powietrznodesantowy,"{""home"": [""#ff0000""], ""away"": [""#ffffff""]}",2026-02-24 21:38:10.057502,2026-02-24 22:07:45.328057
 2,Boanerges,Boanerges,BOA,https://nalffutsal.pl/?sp_team=650-2,static/images/logos/Boanerges.png,650-2,,2026-02-24 21:40:34.250022,2026-02-24 21:40:34.250027
 3,Żarłacze,Żarłacze,ŻAR,https://nalffutsal.pl/?sp_team=zarlacze,static/images/logos/Zarlacze.png,zarlacze,,2026-02-24 21:40:48.332591,2026-02-24 21:40:48.332599

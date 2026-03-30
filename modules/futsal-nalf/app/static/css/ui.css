@@ -149,3 +149,33 @@ button.top-bar-element {
     background-color: darkgoldenrod;
     height: 23px;
 }
+
+.cards-container {
+    padding: 2px 1px;
+    background-color: rgb(166, 166, 166);
+}
+
+.cards {
+    display: flex;
+    padding: 0 5px;
+}
+
+.cards-middle-element {
+    background-color: darkgray !important;
+    border-width: 0 !important;
+}
+
+.card {
+    border-width: 0 !important;
+    height: 20px;
+    scale: 0.9;
+    margin: 0 5px;
+}
+
+.yellowCard {
+    background-color: rgb(255, 255, 0) !important;
+}
+
+.redCard {
+    background-color: rgb(255, 0, 0) !important;
+}

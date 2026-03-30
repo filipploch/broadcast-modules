@@ -20,14 +20,26 @@ const FutsalFormatters = {
             padZeros = true,            // Pad with zeros (09:05 vs 9:5)
             showMilliseconds = false,   // Show .ms at the end
             separator = ':',            // Time separator
-            negativeSign = '-'          // Sign for negative values
+            negativeSign = '-',          // Sign for negative values
+            unit = 'ms'
         } = options;
 
-        let milliseconds = elapsedTime + initialTime;
+        let divider;
+
+        switch(unit){
+            case 'ms':
+                divider = 1000;
+                break;
+            case 's':
+                divider = 1;
+                break;
+        }
+
+        let totalTime = elapsedTime + initialTime;
 
         // Handle negative values
-        const isNegative = milliseconds < 0;
-        const absMs = Math.abs(milliseconds);
+        const isNegative = totalTime < 0;
+        const absTime = Math.abs(totalTime);
 
         // WZÓR DO ZAIMPLEMENTOWANIA
         // const minutes = Math.floor(elapsedMs / 60000);
@@ -35,11 +47,11 @@ const FutsalFormatters = {
         // const dseconds = Math.floor((elapsedMs % 1000) / 100);
 
         // Calculate time components
-        const totalSeconds = Math.floor(absMs / 1000);
+        const totalSeconds = Math.floor(absTime / divider);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        const ms = Math.floor((absMs % 1000) / 10); // Two digits for ms
+        const ms = Math.floor((absTime % divider) / 10); // Two digits for ms
 
         // Build formatted string based on format
         let formatted = '';
@@ -57,6 +69,14 @@ const FutsalFormatters = {
                 const mq = padZeros ? String(minutes).padStart(2, '0') : minutes;
                 const sq = padZeros ? String(seconds).padStart(2, '0') : seconds;
                 formatted = `${mq}${separator}${sq}`;
+                break;
+
+            case 'min':
+                if(seconds === 0) {
+                    formatted = `${minutes}'`;
+                }else{
+                    formatted = `${minutes + 1}'`;
+                }
                 break;
 
             case 'hh:mm:ss':

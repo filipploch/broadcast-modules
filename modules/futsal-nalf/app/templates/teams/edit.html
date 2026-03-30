@@ -24,17 +24,17 @@
         </div>
         
         <div class="form-group">
-            <label for="name_20">
-                Nazwa Skrócona (max 20 znaków) *
+            <label for="name_14">
+                Nazwa Skrócona (max 14 znaków) *
             </label>
             <input 
                 type="text" 
-                id="name_20" 
-                name="name_20" 
-                maxlength="20"
+                id="name_14" 
+                name="name_14" 
+                maxlength="14"
                 required
-                value="{{ team.name_20 }}">
-            <small id="name20_counter">{{ team.name_20|length }} / 20 znaków</small>
+                value="{{ team.name_14 }}">
+            <small id="name14_counter">{{ team.name_14|length }} / 14 znaków</small>
         </div>
         
         <div class="form-group">
@@ -179,10 +179,10 @@
 {% block extra_js %}
 <script>
     
-    // Character counter for name_20
-    document.getElementById('name_20').addEventListener('input', function() {
+    // Character counter for name_14
+    document.getElementById('name_14').addEventListener('input', function() {
         const value = this.value;
-        document.getElementById('name20_counter').textContent = value.length + ' / 20 znaków';
+        document.getElementById('name14_counter').textContent = value.length + ' / 14 znaków';
     });
     
     // Auto-uppercase for short_name

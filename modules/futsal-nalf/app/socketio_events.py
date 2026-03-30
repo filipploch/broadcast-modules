@@ -64,6 +64,28 @@ def handle_reverse_scoreboard(data):
 def handle_disconnect():
     current_app.logger.info('🔌 UI client disconnected')
 
+def _round_nr_to_round_name(_round_nr, _league_name):
+    if not _round_nr or _round_nr == 0:
+        return ''
+    if not _league_name:
+        return str(_round_nr)
+    if 'Dywizja' in _league_name:
+        _division = _league_name.replace('Dywizja', 'Dywizji')
+        return f'{_round_nr}. kolejka {_division}'
+    if 'Puchar' in _league_name:
+        _cup = _league_name.replace('Puchar', 'Pucharu')
+        cup_rounds = {
+            '1': '1/16 finału',
+            '2': '1/8 finału',
+            '3': 'Ćwierćfinał',
+            '4': 'Półfinał',
+            '5': 'Mecz o 3. miejsce',
+            '6': 'Finał'
+        }
+        print(f'round name: {cup_rounds[str(_round_nr)]} {_cup}')
+        return f'{cup_rounds[str(_round_nr)]} {_cup}'
+    return ''
+
 @socketio.on('show_overlay_container')
 def handle_show_overlay_container(data):
     from app.models.settings import Settings
@@ -88,6 +110,22 @@ def handle_show_overlay_container(data):
                 'team_squad': current_game_data['away_team_squad'],
                 'logo': current_game_data['away_team_logo']
                 })
+        case 'start-container':
+            data.update({
+                'league_group_nr': current_game_data['group_nr'],
+                'round': current_game_data['round'],
+                'referees': current_game_data['referees'],
+                'commentators': current_game_data['commentators'],
+                'date': current_game_data['date'],
+                'stadium': current_game_data['stadium'],
+                'round_name': _round_nr_to_round_name(current_game_data['round'], current_game_data['league_name']),
+                'home_team_name': current_game_data['home_team_name'],
+                'home_team_short_name': current_game_data['home_team_short_name'],
+                'home_team_logo': current_game_data['home_team_logo'],
+                'away_team_name': current_game_data['away_team_name'],
+                'away_team_short_name': current_game_data['away_team_short_name'],
+                'away_team_logo': current_game_data['away_team_logo']
+            })
     hub_client = get_hub_client()
     if hub_client:
         hub_client.broadcast_to_class('overlay', 'show_overlay_container', payload=data)
@@ -763,7 +801,7 @@ def get_game_event_data(_game_event_id, _new_event_type_id=None):
     new_event_type_id = _new_event_type_id
     team_squad = None
     print(f'PRZED => event_id: {game_event.event_id}, new_event_type_id: {new_event_type_id}')
-    if new_event_type_id is 3 and game_event.event_id in [1, 2, 4, 5, 6, 7]:
+    if new_event_type_id == 3 and game_event.event_id in [1, 2, 4, 5, 6, 7]:
         game_event.team_id = game_data.away_team_id if game_event.team_id == game_data.home_team_id else game_data.home_team_id
         game_event.event_id = new_event_type_id
     elif new_event_type_id in [1, 2, 4, 5, 6, 7] and game_event.event_id is 3:
@@ -798,6 +836,7 @@ def handle_update_game_event(data):
     player_id = data.get('player_id')
     home_team_goals = data.get('home_team_goals')
     away_team_goals = data.get('away_team_goals')
+    content_type = data.get('content_type')
 
     success = game_event_manager.update_game_event(
         game_event_id=game_event_id,
@@ -813,7 +852,7 @@ def handle_update_game_event(data):
         away_team_goals=away_team_goals,
     )
     if success:
-        emit('game_event_updated', {'game_event_id':success.id})
+        emit('game_event_updated', {'game_event_id':success.id, 'content_type':content_type})
 
 
 
@@ -1204,6 +1243,33 @@ def handle_broadcast_goal(data):
         # hub_client.broadcast_to_class(class_name='recorder_device', msg_type='recording_command', payload={
         hub_client.send_to_plugin('stream-overlay', 'goal', team_data)
 
+@socketio.on('show_info')
+def handle_show_info(data):
+    from app.managers.game_event_manager import GameEventManager
+    from app.managers.game_player_manager import GamePlayerManager
+    from app.managers import get_hub_client
+    game_event_manager = GameEventManager()
+    game_player_manager = GamePlayerManager()
+    game_event_id = data.get('game_event_id')
+    game_event = game_event_manager.get_game_event_by_id(game_event_id)
+    game_event_data = game_event.to_dict()
+    game_player = game_player_manager.get_game_player_by_player_id(game_event_data['player_id'])
+    game_player_data = game_player.to_dict()
+    game_player_team_short_name = game_player_data['team_short_name']
+    hub_client = get_hub_client()
+    payload = {
+        'event_type_id': game_event_data['event_id'],
+        'event_name': game_event_data['event_name'],
+        'event_image_path': game_event_data['event_image_path'],
+        'team_name': game_event_data['team_name'],
+        'team_name_14': game_event_data['team_name_14'],
+        'player_number': game_event_data['player_number'],
+        'player_name': game_event_data['player_name'],
+        'player_team_short_name': game_player_team_short_name,
+        'game_time': game_event_data['game_time']
+    }
+    if hub_client:
+        hub_client.send_to_plugin(plugin_id='stream-overlay', msg_type='show_info', payload=payload)
 
 @socketio.on('add_game_event_to_db')
 def handle_add_game_event_to_db(data):

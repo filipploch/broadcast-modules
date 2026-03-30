@@ -36,6 +36,7 @@ socket.on('initial_data', (data) => {
     }
     let timer = appState.mainTimer;
     console.log('initial_data timer: ', timer);
+    window.initialTime = timer.initial_time;
     updateTimerDisplay(timer);
     fillPenaltiesTimersContainer(appState.home_penalties, 'home');
     fillPenaltiesTimersContainer(appState.away_penalties, 'away');

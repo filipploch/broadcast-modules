@@ -53,12 +53,21 @@ def set_replay_file(file_path, delay_ms: int = 0, input_name="Replay"):
         "payload": {
             "requestType":"SetInputSettings",
             "requestData":{
-                "inputName":input_name,
-                "inputSettings":{
-                    "local_file": file_path
-                    },
-                "overlay":True
-                }
+                "inputName": "Replay",
+                "inputSettings": {
+                "loop": False,
+                "playback_behavior": "stop_restart",
+                "playlist": [
+                    {
+                    "hidden": False,
+                    "selected": False,
+                    "uuid": "a0f86de7-e18c-4768-929b-d111820145ea",
+                    "value": file_path
+                    }
+                ]
+                },
+                "overlay": True
+            }
             },
         "delay_ms": delay_ms
     }
@@ -106,7 +115,7 @@ def pause_replay(delay_ms: int = 0, input_name="Replay"):
         "delay_ms": delay_ms
     }
 
-def show_source(scene_name:str="VIDEO_SOURCES", source_id:int=2, is_visible:bool=True, delay_ms: int = 0):
+def show_source(scene_name:str="OUTPUT", source_id:int=6, is_visible:bool=True, delay_ms: int = 0):
     _request = {
         "target": "obs-ws-plugin",
         "action": "obs_command",

@@ -62,6 +62,7 @@ class Game(db.Model):
     game_players = db.relationship('GamePlayer', backref='game', lazy='dynamic', cascade='all, delete-orphan')
     game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
     game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    game_commentators = db.relationship('GameCommentator', backref='game', lazy='dynamic', cascade='all, delete-orphan')
 
     # Indexes
     __table_args__ = (
@@ -274,6 +275,21 @@ class Game(db.Model):
         if referee_type:
             query = query.filter_by(type=referee_type)
         return query.all()
+    
+    def get_commentators_list(self, commentators_type=None):
+        """
+        Get list of commentators for this game
+        
+        Args:
+            commentators_type: Optional filter by type ("Główny", "Asystent")
+        
+        Returns:
+            List of GameCommentator objects
+        """
+        query = self.game_commentators
+        if commentators_type:
+            query = query.filter_by(type=commentators_type)
+        return query.all()
 
     @property
     def total_players(self):
@@ -412,6 +428,8 @@ class Game(db.Model):
                 .all()
             )
         return [gp.to_dict() for gp in _sorted(team_id)]
+
+
     
     def to_dict(self):
         """Convert to dictionary"""
@@ -420,12 +438,14 @@ class Game(db.Model):
             'foreign_id': self.foreign_id,
             'home_team_id': self.home_team_id,
             'home_team_name': self.home_team.name if self.home_team else None,
+            'home_team_name_14': self.home_team.name_14 if self.home_team else None,
             'home_team_short_name': self.home_team.short_name if self.home_team else None,
             'home_team_logo': self.home_team.logo_path if self.home_team else None,
             'home_team_goals': self.home_team_goals,
             'home_team_fouls': self.home_team_fouls,
             'away_team_id': self.away_team_id,
             'away_team_name': self.away_team.name if self.away_team else None,
+            'away_team_name_14': self.away_team.name_14 if self.away_team else None,
             'away_team_short_name': self.away_team.short_name if self.away_team else None,
             'away_team_logo': self.away_team.logo_path if self.away_team else None,
             'away_team_goals': self.away_team_goals,
@@ -444,6 +464,7 @@ class Game(db.Model):
             'stadium': {
                 'id': self.stadium_id,
                 'name': self.stadium.name if self.stadium else None,
+                'address': self.stadium.address if self.stadium else None,
                 'city': self.stadium.city if self.stadium else None
             },
             'date': self.date.isoformat() if self.date else None,
@@ -464,6 +485,7 @@ class Game(db.Model):
             'away_team_squad': self.get_squad(self.away_team_id),
             'events': [ge.to_dict() for ge in self.get_events_list()],
             'referees': [gr.to_dict() for gr in self.get_referees_list()],
+            'commentators': [gc.to_dict() for gc in self.get_commentators_list()],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
