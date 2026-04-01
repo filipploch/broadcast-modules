@@ -70,6 +70,14 @@ function stopRecording(){
     socket.emit('stop_recording');
 }
 
+function startStream(){
+    socket.emit('trigger_sequence', { sequence: 'start_live', context: {}});
+}
+
+function stopStream(){
+    socket.emit('trigger_sequence', { sequence: 'end_live', context: {}});
+}
+
 function getObsWsConnection() {
     socket.emit('get_obs_ws_connection');
 }

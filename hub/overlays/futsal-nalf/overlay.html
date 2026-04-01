@@ -17,8 +17,8 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/action.css">
 </head>
 <body>
-    <!-- <div id="game-screen-container" class="overlay-container hidden"> -->
-    <div id="game-screen-container" class="overlay-container" style="display: none;">
+    <div id="empty-container" style="display: none;"></div>
+    <div id="game-container" class="overlay-container game-container" style="display: none;">
         <div id="scoreboard-container">
             <div id="top-scoreboard-container" class="scoreboard-row">
                 <div></div>
@@ -101,7 +101,7 @@
         var awayTeamFoulsElement = document.getElementById('away-team-fouls');
 
         function showTransition() {
-            let gameContainer = document.querySelector('#game-screen-container');
+            let gameContainer = document.querySelector('#game-container');
             let oldTransition = document.querySelector('#game-transition');
             
             // Usuń stary element całkowicie
@@ -137,11 +137,11 @@
             if (classList.contains('start-container')) return 'start';
             if (classList.contains('squad-container')) return 'squad';
             if (classList.contains('break-container')) return 'break';
-            if (classList.contains('container-game')) return 'game';
+            if (classList.contains('game-container')) return 'game';
             if (classList.contains('container-stats')) return 'stats';
             
             // Domyślny typ
-            return 'default';
+            return 'none';
         }
         
         function showContainer(_data) {
@@ -174,7 +174,9 @@
         const containerType = getContainerType(targetContainer);
         
         let delayTime = 2000;
-        if(containerType === 'squad') {
+        if(containerType === 'none') {
+            prepareToOpenContainer();
+        }else if(containerType === 'squad') {
             let teamName = _data.team_name;
             let teamShortName = _data.team_short_name;
             let teamSquad = _data.team_squad;
@@ -187,6 +189,10 @@
             expandStartContainer(_data);
             prepareToOpenContainer(openContainer, targetContainer);
             activateElementsAfterTime('start-content', 2500, 'flex');
+        }else if (containerType === 'break'){
+            expandStartContainer(_data, true);
+            prepareToOpenContainer(openContainer, targetContainer);
+            activateElementsAfterTime('break-content', 2500, 'flex');
         }else{
             prepareToOpenContainer(openContainer, targetContainer);
         }
@@ -333,9 +339,42 @@
         return wrapper;
     }
 
-    function expandStartContainer(_gameData) {
+    function generateScorersList(_scorers) {
+        let wrapper = document.createElement('div');
+        addClassName(wrapper, 'break-scorers-wrapper');
+        _scorers.forEach((scorer, index)=> {
+            let _row = document.createElement('div');
+            addClassName(_row, 'break-scorer-element');
+            addClassName(_row, `rotate-show-element${index}`);
+            let firstName = document.createElement('span');
+            addClassName(firstName, 'break-scorer-first-name');
+            let lastName = document.createElement('span');
+            addClassName(lastName, 'break-scorer-last-name');
+            let goalTimeContainer = document.createElement('span');
+            addClassName(goalTimeContainer, 'break-goal-time');
+            firstName.innerText = scorer.player_first_name;
+            lastName.innerText = scorer.player_last_name;
+            goalTimeContainer.innerText = '';
+            let goals = scorer.goals;
+            goals.forEach(goal => {
+                if(goal.is_own_goal === true){
+                    goalTimeContainer.innerText += `(s)${goal.minute}' `;
+                }else{
+                    goalTimeContainer.innerText += `${goal.minute}' `;
+                }
+            });
+            _row.appendChild(firstName);
+            _row.appendChild(lastName);
+            _row.appendChild(goalTimeContainer);
+            wrapper.appendChild(_row);
+        });
+        return wrapper;
+    }
+
+    function expandStartContainer(_gameData, _break=false) {
         let data = _gameData;
-        let _startContainer = document.getElementById('start-container');
+        const targetId = _break ? 'break-container' : 'start-container';
+        let _startContainer = document.getElementById(targetId);
         _startContainer.innerHTML = '';
         let startContainer = document.createElement('div');
         startContainer.style.display = 'block';
@@ -362,6 +401,7 @@
         let startBodyLogosContainer = document.createElement('div');
         startBodyLogosContainer.style.display = 'none';
         addClassName(startBodyLogosContainer, 'start-content');
+        addClassName(startBodyLogosContainer, 'break-content');
 
         let homeTeamLogoContainer = document.createElement('div');
         homeTeamLogoContainer.style.display = 'flex';
@@ -394,38 +434,68 @@
 
         startBody.appendChild(startBodyLogosContainer);
 
-        let startBodyTeamsContainer = document.createElement('div');
-        startBodyTeamsContainer.style.display = 'none';
-        addClassName(startBodyTeamsContainer, 'start-content');
-        startBodyTeamsContainer.id = 'start-teams-container';
-        let startBodyTeamsInternalElement = document.createElement('div');
-        startBodyTeamsInternalElement.style.width = '800px';
-        startBodyTeamsInternalElement.style.textAlign = 'center';
+        if(_break === true){
+            startBodyLogosContainer.style.height = '200px';
+            startBodyLogosContainer.style.paddingTop = '20px';
+            nalfLogoImg.remove();
+            nalfLogoContainer.innerText = _gameData.result;
+            let scorersContainer = document.createElement('div');
+            scorersContainer.id = 'scorers-container';
+            scorersContainer.style.display = 'none';
+            addClassName(scorersContainer, 'break-content');
 
-        let homeTeamNameElement = document.createElement('div');
-        addClassName(homeTeamNameElement, 'start-team');
-        addClassName(homeTeamNameElement, 'rotate-show-element1');
-        homeTeamNameElement.innerText = data.home_team_name;
-        // let vsElement = document.createElement('div');
-        // addClassName(vsElement, 'start-vs');
-        // vsElement.innerText = ' ';
-        let awayTeamNameElement = document.createElement('div');
-        addClassName(awayTeamNameElement, 'start-team');
-        addClassName(awayTeamNameElement, 'rotate-show-element1');
-        awayTeamNameElement.innerText = data.away_team_name;
-        startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
-        // startBodyTeamsInternalElement.appendChild(vsElement);
-        startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
-        startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
-        startBody.appendChild(startBodyTeamsContainer);
+            let homeTeamScorersContainer = document.createElement('div');
+            homeTeamScorersContainer.id = 'home-team-scorers-container';
+            addClassName(homeTeamScorersContainer, 'team-scorers-container');
+            let homeTeamScorers = _gameData.home_team_scorers.scorers;
+            let homeTeamScorersWrapper = generateScorersList(homeTeamScorers);
+            homeTeamScorersContainer.appendChild(homeTeamScorersWrapper);
 
-        let startBottom = document.createElement('div');
-        startBottom.id = 'start-bottom-container';
-        let bottomInfoContainer = expandStartBottomInfoContainer(_gameData);
-        startBottom.appendChild(bottomInfoContainer);
-        startBody.appendChild(startBottom);
+            let awayTeamScorersContainer = document.createElement('div');
+            awayTeamScorersContainer.id = 'away-team-scorers-container';
+            addClassName(awayTeamScorersContainer, 'team-scorers-container');
+            let awayTeamScorers = _gameData.away_team_scorers.scorers;
+            let awayTeamScorersWrapper = generateScorersList(awayTeamScorers);
+            awayTeamScorersContainer.appendChild(awayTeamScorersWrapper);
 
+            scorersContainer.appendChild(homeTeamScorersContainer);
+            scorersContainer.appendChild(awayTeamScorersContainer);
 
+            startBody.appendChild(scorersContainer);
+        }else{
+
+            let startBodyTeamsContainer = document.createElement('div');
+            startBodyTeamsContainer.style.display = 'none';
+            addClassName(startBodyTeamsContainer, 'start-content');
+            startBodyTeamsContainer.id = 'start-teams-container';
+            let startBodyTeamsInternalElement = document.createElement('div');
+            startBodyTeamsInternalElement.style.width = '800px';
+            startBodyTeamsInternalElement.style.textAlign = 'center';
+
+            let homeTeamNameElement = document.createElement('div');
+            addClassName(homeTeamNameElement, 'start-team');
+            addClassName(homeTeamNameElement, 'rotate-show-element1');
+            homeTeamNameElement.innerText = data.home_team_name;
+            // let vsElement = document.createElement('div');
+            // addClassName(vsElement, 'start-vs');
+            // vsElement.innerText = ' ';
+            let awayTeamNameElement = document.createElement('div');
+            addClassName(awayTeamNameElement, 'start-team');
+            addClassName(awayTeamNameElement, 'rotate-show-element1');
+            awayTeamNameElement.innerText = data.away_team_name;
+            startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
+            // startBodyTeamsInternalElement.appendChild(vsElement);
+            startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
+            startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
+            startBody.appendChild(startBodyTeamsContainer);
+
+            let startBottom = document.createElement('div');
+            startBottom.id = 'start-bottom-container';
+            let bottomInfoContainer = expandStartBottomInfoContainer(_gameData);
+            startBottom.appendChild(bottomInfoContainer);
+            startBody.appendChild(startBottom);
+
+        }
 
         startContainer.appendChild(startBody);
         _startContainer.appendChild(startContainer);

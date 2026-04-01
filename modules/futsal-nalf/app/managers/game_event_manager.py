@@ -1,4 +1,6 @@
 """GameEvent Manager - handles game events timeline"""
+import math
+from dataclasses import dataclass, field
 from typing import List, Optional
 from app.extensions import db
 from app.models.game_event import GameEvent
@@ -10,6 +12,98 @@ from app.models.player import Player
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Data transfer objects
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GoalEntry:
+    """
+    Single goal entry for the scorers summary.
+
+    Attributes:
+        player_id:          DB id zawodnika (None dla anonimowej bramki)
+        player_first_name:  Imię zawodnika
+        player_last_name:   Nazwisko zawodnika
+        player_number:      Numer na koszulce
+        minute:             Minuta zdobycia bramki (1-based, zaokrąglona w górę)
+        added_time:         Minuty doliczonego czasu (None jeśli w czasie regulaminowym)
+        period_order:       Numer części meczu (1 = pierwsza połowa, 2 = druga, …)
+        period_description: Czytelny opis części meczu (np. „1. połowa")
+        is_own_goal:        True jeśli bramka samobójcza
+        team_id:            DB id drużyny, na konto której wpisana bramka
+        game_time_s:        Surowy czas gry w sekundach (do sortowania)
+    """
+    player_id:          Optional[int]
+    player_first_name:  Optional[str]
+    player_last_name:   Optional[str]
+    player_number:      Optional[int]
+    minute:             int
+    added_time:         Optional[int]
+    period_order:       int
+    period_description: str
+    is_own_goal:        bool
+    team_id:            int
+    game_time_s:        int
+
+    @property
+    def minute_display(self) -> str:
+        """Zwraca czas w formacie wyświetlania, np. '10\'' lub '90+2\''."""
+        if self.added_time:
+            return f"{self.minute}+{self.added_time}'"
+        return f"{self.minute}'"
+
+
+@dataclass
+class ScorerEntry:
+    """
+    Jeden strzelec i wszystkie jego bramki dla danej drużyny.
+
+    Attributes:
+        player_id:          DB id zawodnika (None = anonimowa)
+        player_first_name:  Imię zawodnika
+        player_last_name:   Nazwisko zawodnika
+        player_number:      Numer na koszulce
+        goals:              Lista GoalEntry posortowana chronologicznie
+    """
+    player_id:         Optional[int]
+    player_first_name: Optional[str]
+    player_last_name:  Optional[str]
+    player_number:     Optional[int]
+    goals: List[GoalEntry] = field(default_factory=list)
+
+
+@dataclass
+class TeamGoalsSummary:
+    """
+    Zestawienie bramek jednej drużyny z podziałem na strzelców.
+    Strzelcy posortowani wg czasu pierwszej bramki (chronologicznie).
+
+    Attributes:
+        team_id:  DB id drużyny
+        team_name: Pełna nazwa drużyny
+        scorers:  Lista ScorerEntry
+    """
+    team_id: int
+    team_name: str
+    scorers: List[ScorerEntry] = field(default_factory=list)
+
+
+@dataclass
+class GameGoalsSummary:
+    """
+    Kompletne zestawienie bramek meczu z podziałem na drużyny.
+
+    Attributes:
+        game_id:    DB id meczu
+        home:       Bramki strzelone na konto drużyny gospodarzy
+        away:       Bramki strzelone na konto drużyny gości
+    """
+    game_id: int
+    home: TeamGoalsSummary
+    away: TeamGoalsSummary
 
 
 class GameEventManager:
@@ -278,3 +372,158 @@ class GameEventManager:
             List of GameEvent objects with all relationships loaded
         """
         return GameEvent.query.filter_by(game_id=game_id).order_by(GameEvent.game_time).all()
+
+    # -----------------------------------------------------------------------
+    # Goals summary
+    # -----------------------------------------------------------------------
+
+    def get_goals_summary(self, game_id: int) -> GameGoalsSummary:
+        """
+        Pobiera zestawienie strzelców bramek dla wskazanego meczu,
+        z podziałem na drużyny.
+
+        Bramki samobójcze (event.player_from_opponent = True) są przypisywane
+        do drużyny przeciwnej względem team_id zdarzenia, tak jak w rzeczywistości
+        (tj. gol wpada do bramki drużyny, do której należy zawodnik).
+
+        Czas bramki obliczany jest na podstawie game_time (ms) oraz limitu
+        poprzednich części (period.initial_time), co pozwala wydzielić minuty
+        doliczonego czasu gry.
+
+        Args:
+            game_id: ID meczu
+
+        Returns:
+            GameGoalsSummary z bramkami pogrupowanymi na home / away
+
+        Raises:
+            ValueError: gdy mecz nie istnieje
+        """
+        game = Game.query.get(game_id)
+        if not game:
+            raise ValueError(f"Mecz o ID {game_id} nie istnieje")
+
+        # Pobieramy wszystkie zdarzenia będące bramkami dla tego meczu.
+        # Bramki identyfikujemy przez filter_class = 'goal' (obejmuje
+        # zarówno zwykłe bramki, jak i samobójcze).
+        goal_events: List[GameEvent] = (
+            GameEvent.query
+            .join(GameEvent.event)
+            .filter(
+                GameEvent.game_id == game_id,
+                Event.filter_class == 'goal',
+            )
+            .order_by(GameEvent.game_time)
+            .all()
+        )
+
+        home_summary = TeamGoalsSummary(
+            team_id=game.home_team_id,
+            team_name=game.home_team.name if game.home_team else str(game.home_team_id),
+        )
+        away_summary = TeamGoalsSummary(
+            team_id=game.away_team_id,
+            team_name=game.away_team.name if game.away_team else str(game.away_team_id),
+        )
+
+        # Słowniki pomocnicze: player_id -> ScorerEntry, osobno dla każdej drużyny.
+        # None jako klucz obsługuje bramki bez przypisanego zawodnika.
+        home_scorers: dict = {}
+        away_scorers: dict = {}
+
+        for ge in goal_events:
+            entry = self._build_goal_entry(ge)
+            if entry is None:
+                continue
+
+            is_own_goal = bool(ge.event and ge.event.player_from_opponent)
+
+            # Bramka (zwykła lub samobójcza) jest zawsze przypisywana do słownika
+            # drużyny której team_id nosi zdarzenie. Dla bramek samobójczych
+            # team_id wskazuje drużynę która zdobyła punkt (przeciwną względem
+            # zawodnika), a is_own_goal = True pozwala overlay wyświetlić adnotację.
+            scorers = home_scorers if ge.team_id == game.home_team_id else away_scorers
+
+            key = ge.player_id  # None dla anonimowych
+            if key not in scorers:
+                scorers[key] = ScorerEntry(
+                    player_id=entry.player_id,
+                    player_first_name=entry.player_first_name,
+                    player_last_name=entry.player_last_name,
+                    player_number=entry.player_number,
+                )
+            scorers[key].goals.append(entry)
+
+        # Budujemy listy strzelców posortowane wg czasu pierwszej bramki
+        home_summary.scorers = sorted(home_scorers.values(), key=lambda s: s.goals[0].game_time_s)
+        away_summary.scorers = sorted(away_scorers.values(), key=lambda s: s.goals[0].game_time_s)
+
+        return GameGoalsSummary(
+            game_id=game_id,
+            home=home_summary,
+            away=away_summary,
+        )
+
+    # -----------------------------------------------------------------------
+    # Internal helpers
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _build_goal_entry(ge: GameEvent) -> Optional[GoalEntry]:
+        """
+        Buduje obiekt GoalEntry na podstawie rekordu GameEvent.
+
+        Logika czasu:
+        - game_time (s) to czas globalny całego meczu w sekundach.
+        - period.limit i period.initial_time są w ms — przeliczamy do sekund
+          przez dzielenie przez 1000.
+        - Minuta globalna = ceil(game_time_s / 60), min. 1.
+        - Doliczony czas = nadwyżka ponad regulaminowy koniec tej części
+          (period.limit / 1000).
+        """
+        if ge.game_time is None:
+            logger.warning(f"GameEvent id={ge.id} nie ma game_time, pomijam")
+            return None
+
+        period: Optional[Period] = ge.period
+        if period is None:
+            logger.warning(f"GameEvent id={ge.id} nie ma przypisanej części meczu, pomijam")
+            return None
+
+        # Przelicz limity części z ms na sekundy
+        period_limit_s = period.limit / 1000
+
+        # Doliczony czas: nadwyżka ponad regulaminowy koniec tej części
+        overtime_s = max(0, ge.game_time - period_limit_s)
+
+        if overtime_s > 0:
+            base_minute = max(1, math.ceil(period_limit_s / 60))
+            added_time  = max(1, math.ceil(overtime_s / 60))
+        else:
+            base_minute = max(1, math.ceil(ge.game_time / 60))
+            added_time  = None
+
+        # Imię i nazwisko zawodnika jako osobne pola
+        player_first_name: Optional[str] = None
+        player_last_name:  Optional[str] = None
+        player_number:     Optional[int] = None
+        if ge.player:
+            player_first_name = ge.player.first_name or None
+            player_last_name  = ge.player.last_name  or None
+            player_number     = ge.player.number
+
+        is_own_goal = bool(ge.event and ge.event.player_from_opponent)
+
+        return GoalEntry(
+            player_id=ge.player_id,
+            player_first_name=player_first_name,
+            player_last_name=player_last_name,
+            player_number=player_number,
+            minute=base_minute,
+            added_time=added_time,
+            period_order=period.period_order,
+            period_description=period.description,
+            is_own_goal=is_own_goal,
+            team_id=ge.team_id,
+            game_time_s=ge.game_time,
+        )

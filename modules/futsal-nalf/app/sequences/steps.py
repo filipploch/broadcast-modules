@@ -1,6 +1,6 @@
 # app/sequences/steps.py
 
-def obs_mute(input_name: str, muted: bool, delay_ms: int = 0) -> dict:
+def obs_mute(input_name: str, muted: bool=True, delay_ms: int = 0) -> dict:
     return {
         "target": "obs-ws-plugin",
         "action": "obs_command",
@@ -153,6 +153,74 @@ def move_source(_index, scene_name:str="OUTPUT", source_id:int=7, delay_ms: int 
             }
         }
         ,"delay_ms": delay_ms
+    }
+
+def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
+    import datetime
+    return {
+        "target": "broadcast",
+        "action": "recording_command",
+        "payload": {
+            'requestType': 'StartRecord',
+            'requestData': {},
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            'cameras':{'camera1': True,
+                       'camera2': False,
+                       'camera3': False,
+                       'camera4': False}},
+        "delay_ms": delay_ms
+    }
+
+def stop_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
+    import datetime
+    return {
+        "target": "broadcast",
+        "action": "recording_command",
+        "payload": {
+            'requestType': 'StopRecord',
+            'requestData': {},
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            'cameras':{'camera1': True,
+                       'camera2': False,
+                       'camera3': False,
+                       'camera4': False}},
+        "delay_ms": delay_ms
+    }
+
+def start_stream(delay_ms: int=0) -> dict:
+    import datetime
+    return {
+        "target": "obs-ws-plugin",
+        "action": "obs_command",
+        "payload": {
+            'requestType': 'StartStream',
+            'requestData': {},
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            },
+        "delay_ms": delay_ms
+    }
+
+def stop_stream(delay_ms: int=0) -> dict:
+    import datetime
+    return {
+        "target": "obs-ws-plugin",
+        "action": "obs_command",
+        "payload": {
+            'requestType': 'StopStream',
+            'requestData': {},
+            'request_id': f'my-unique-id-{datetime.datetime.now()}',
+            },
+        "delay_ms": delay_ms
+    }
+
+def show_overlay_container(_data, delay_ms: int=0) -> dict:
+    from app.utils.socketio_events_utils import generate_show_overlay_data
+    data = generate_show_overlay_data(_data)
+    return {
+        "target": "stream-overlay",
+        "action": "show_overlay_container",
+        "payload": data,
+        "delay_ms": delay_ms
     }
 
 # def _get_scene_item_list(scene_name="OUTPUT"):

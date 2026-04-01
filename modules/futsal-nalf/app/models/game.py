@@ -97,9 +97,9 @@ class Game(db.Model):
     def score_string(self):
         """Get formatted score string"""
         if self.home_team_goals is None or self.away_team_goals is None:
-            return "- : -"
+            return "-:-"
 
-        score = f"{self.home_team_goals} : {self.away_team_goals}"
+        score = f"{self.home_team_goals}:{self.away_team_goals}"
 
         if self.is_walkover:
             score += " (WO)"
