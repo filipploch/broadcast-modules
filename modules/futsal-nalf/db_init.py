@@ -84,6 +84,7 @@ def init_database():
                 id=1,
                 season_id=1,
                 name="Dywizja A",
+                allows_draw=True,   # liga grupowa
                 games_url="https://nalffutsal.pl/?page_id=34",
                 table_url="https://nalffutsal.pl/?page_id=16",
                 scorers_url="https://nalffutsal.pl/?page_id=50",
@@ -97,6 +98,7 @@ def init_database():
                 id=2,
                 season_id=1,
                 name="Dywizja B",
+                allows_draw=True,   # liga grupowa
                 games_url="https://nalffutsal.pl/?page_id=52",
                 table_url="https://nalffutsal.pl/?page_id=36",
                 scorers_url="https://nalffutsal.pl/?page_id=18",
@@ -110,6 +112,7 @@ def init_database():
                 id=3,
                 season_id=1,
                 name="Puchar Ligi",
+                allows_draw=False,  # rozgrywki pucharowe
                 games_url="https://nalffutsal.pl/?page_id=32",
                 table_url=None,
                 scorers_url="https://nalffutsal.pl/?page_id=38",

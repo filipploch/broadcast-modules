@@ -20,6 +20,7 @@ from app.models.referee import Referee
 from app.models.game_referee import GameReferee
 from app.models.commentator import Commentator
 from app.models.game_commentator import GameCommentator
+from app.models.game_timer import GameTimer
 
 __all__ = [
     # 'Plugin',
@@ -42,5 +43,6 @@ __all__ = [
     'Referee',
     'GameReferee',
     'Commentator',
-    'GameCommentator'
+    'GameCommentator',
+    'GameTimer',
 ]

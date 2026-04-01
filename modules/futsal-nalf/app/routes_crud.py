@@ -159,7 +159,8 @@ def create_league(season_id=None):
                 scorers_url=request.form['scorers_url'],
                 assists_url=request.form['assists_url'],
                 canadian_url=request.form['canadian_url'],
-                table_url=request.form.get('table_url', '')
+                table_url=request.form.get('table_url', ''),
+                allows_draw=('allows_draw' in request.form),
             )
             
             flash(f'Utworzono ligę: {league.name}', 'success')
@@ -194,7 +195,8 @@ def edit_league(league_id):
                 table_url=request.form.get('table_url'),
                 scorers_url=request.form.get('scorers_url'),
                 assists_url=request.form.get('assists_url'),
-                canadian_url=request.form.get('canadian_url')
+                canadian_url=request.form.get('canadian_url'),
+                allows_draw=('allows_draw' in request.form),
             )
             
             flash(f'Zaktualizowano ligę: {league.name}', 'success')

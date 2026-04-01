@@ -475,11 +475,12 @@ class GameEventManager:
 
         Logika czasu:
         - game_time (s) to czas globalny całego meczu w sekundach.
-        - period.limit i period.initial_time są w ms — przeliczamy do sekund
-          przez dzielenie przez 1000.
+        - period.limit (ms) to czas trwania tej części.
+        - period.initial_time (ms) to suma limitów poprzednich części.
+        - Globalny koniec regularnego czasu tej części:
+            period_global_end_s = (period.initial_time + period.limit) / 1000
         - Minuta globalna = ceil(game_time_s / 60), min. 1.
-        - Doliczony czas = nadwyżka ponad regulaminowy koniec tej części
-          (period.limit / 1000).
+        - Doliczony czas = nadwyżka ponad globalny koniec tej części.
         """
         if ge.game_time is None:
             logger.warning(f"GameEvent id={ge.id} nie ma game_time, pomijam")
@@ -490,14 +491,14 @@ class GameEventManager:
             logger.warning(f"GameEvent id={ge.id} nie ma przypisanej części meczu, pomijam")
             return None
 
-        # Przelicz limity części z ms na sekundy
-        period_limit_s = period.limit / 1000
+        # Globalny koniec regularnego czasu tej części w sekundach
+        period_global_end_s = (period.initial_time + period.limit) / 1000
 
-        # Doliczony czas: nadwyżka ponad regulaminowy koniec tej części
-        overtime_s = max(0, ge.game_time - period_limit_s)
+        # Doliczony czas: nadwyżka ponad globalny koniec tej części
+        overtime_s = max(0, ge.game_time - period_global_end_s)
 
         if overtime_s > 0:
-            base_minute = max(1, math.ceil(period_limit_s / 60))
+            base_minute = max(1, math.ceil(period_global_end_s / 60))
             added_time  = max(1, math.ceil(overtime_s / 60))
         else:
             base_minute = max(1, math.ceil(ge.game_time / 60))

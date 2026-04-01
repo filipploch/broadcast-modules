@@ -1,113 +1,232 @@
-// penalty-timers-observer.js
-const penaltyTimers = new Map(); // key: timer_id, value: { element, container }
-(function() {
+/**
+ * penalty-timers-observers.js
+ *
+ * Obsługa wyświetlania timerów kar w overlay — architektura derived-variable.
+ *
+ * Źródło prawdy o karach: sygnał `penalty_state` z backendu (nie timer-plugin).
+ * Czas pozostały kary obliczany lokalnie przy każdym ticku głównego timera.
+ *
+ * Publiczne API (window.PenaltyTimers):
+ *   .syncState(penalties)          — zastąp stan kar danymi z backendu
+ *   .tickMain(mainElapsedMs)       — przelicz i odśwież wszystkie kary
+ *   .remove(id)                    — usuń konkretną karę (animacja)
+ *   .clearAll()                    — usuń wszystkie kary
+ */
+
+(function () {
     'use strict';
 
-    // Przechowujemy referencje do istniejących timerów
+    // -------------------------------------------------------------------------
+    // Stan
+    // -------------------------------------------------------------------------
 
-    // Funkcja tworząca element timera karnego
-    function createPenaltyTimerElement(timerId, initialTime) {
-        // Sprawdź czy timer już istnieje
-        if (penaltyTimers.has(timerId)) {
-            console.log(`Timer ${timerId} already exists, updating time...`);
-            const existing = penaltyTimers.get(timerId);
-            existing.element.textContent = initialTime;
-            return existing.element;
-        }
+    /**
+     * Mapa aktywnych kar.
+     * key: id (GameTimer.id z backendu, string)
+     * value: {
+     *   id, team, player_id, limit_ms, start_offset_ms, adjustment_ms, state,
+     *   element   — referencja do elementu DOM (null jeśli jeszcze nie utworzony)
+     *   container — referencja do kontenera DOM
+     * }
+     */
+    const penalties = new Map();
 
-        // Określ kontener docelowy na podstawie timer_id
-        let containerId;
-        if (timerId.startsWith('penalty_home')) {
-            containerId = 'home-team-penalty-timer-container';
-        } else if (timerId.startsWith('penalty_away')) {
-            containerId = 'away-team-penalty-timer-container';
-        } else {
-            console.error(`Unknown timer type: ${timerId}`);
-            return null;
-        }
+    // -------------------------------------------------------------------------
+    // Helpers obliczeniowe
+    // -------------------------------------------------------------------------
 
-        const container = document.getElementById(containerId);
+    /**
+     * Oblicza pozostały czas kary w ms na podstawie elapsed głównego timera.
+     * Odpowiednik penalty_remaining_ms() z modelu GameTimer w Pythonie.
+     *
+     * @param {Object} pen   — obiekt kary z penalties Map
+     * @param {number} mainElapsedMs — aktualny elapsed_time głównego timera
+     * @returns {number} pozostały czas w ms (min. 0)
+     */
+    function calcRemaining(pen, mainElapsedMs) {
+        const elapsedInPenalty =
+            mainElapsedMs - pen.start_offset_ms + (pen.adjustment_ms || 0);
+        return Math.max(0, pen.limit_ms - elapsedInPenalty);
+    }
+
+    /**
+     * Formatuje ms → "M:SS"
+     * @param {number} ms
+     * @returns {string}
+     */
+    function formatMs(ms) {
+        const totalSeconds = Math.ceil(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    // -------------------------------------------------------------------------
+    // DOM
+    // -------------------------------------------------------------------------
+
+    function getContainer(team) {
+        const id = team === 'home'
+            ? 'home-team-penalty-timer-container'
+            : 'away-team-penalty-timer-container';
+        return document.getElementById(id);
+    }
+
+    /**
+     * Tworzy element DOM timera kary i dodaje go do kontenera.
+     * @param {Object} pen
+     * @returns {HTMLElement|null}
+     */
+    function createPenaltyElement(pen) {
+        const container = getContainer(pen.team);
         if (!container) {
-            console.error(`Container ${containerId} not found`);
+            console.error(`[PenaltyTimers] Brak kontenera dla drużyny: ${pen.team}`);
             return null;
         }
 
-        // Usuń istniejący timer w kontenerze (jeśli istnieje)
-        // const existingTimer = container.querySelector('.penalty-timer');
-        // if (existingTimer) {
-        //     container.removeChild(existingTimer);
-        // }
+        const el = document.createElement('div');
+        el.className = 'penalty-timer';
+        el.setAttribute('data-penalty-id', pen.id);
+        el.textContent = formatMs(pen.limit_ms);
+        container.appendChild(el);
 
-        // Utwórz nowy element timera
-        const timerElement = document.createElement('div');
-        timerElement.className = 'penalty-timer';
-        timerElement.setAttribute('data-timer-id', timerId);
-        timerElement.textContent = initialTime;
+        // Animacja pojawienia się
+        el.classList.add('show-penalty-timer');
+        setTimeout(() => el.classList.remove('show-penalty-timer'), 300);
 
-        // Dodaj do kontenera
-        container.appendChild(timerElement);
+        console.log(`[PenaltyTimers] Utworzono element kary id=${pen.id} (${pen.team})`);
+        return el;
+    }
 
-        // Zapisz referencję
-        penaltyTimers.set(timerId, {
-            element: timerElement,
-            container: container
-        });
-
-        // Wywołaj animację pojawienia się
-        timerElement.classList.add('show-penalty-timer');
-        
-        // Usuń klasę animacji po jej zakończeniu (opcjonalnie)
+    /**
+     * Usuwa element DOM kary z animacją.
+     * @param {Object} pen
+     */
+    function removePenaltyElement(pen) {
+        if (!pen.element) return;
+        const { element, container } = pen;
+        element.classList.add('hide-penalty-timer');
         setTimeout(() => {
-            timerElement.classList.remove('show-penalty-timer');
+            if (element.parentNode === container) {
+                container.removeChild(element);
+            }
         }, 300);
-
-        console.log(`✅ Created penalty timer: ${timerId} with time ${initialTime}`);
-        return timerElement;
     }
 
-    // Funkcja aktualizująca istniejący timer
-    function updatePenaltyTimer(timerId, newTime) {
-        if (penaltyTimers.has(timerId)) {
-            const { element } = penaltyTimers.get(timerId);
-            element.textContent = newTime;
-        } else {
-            console.warn(`Cannot update ${timerId} - timer doesn't exist`);
-        }
-    }
+    // -------------------------------------------------------------------------
+    // Publiczne API
+    // -------------------------------------------------------------------------
 
-    // Funkcja usuwająca timer
-    function removePenaltyTimer(timerId) {
-        if (penaltyTimers.has(timerId)) {
-            const { element, container } = penaltyTimers.get(timerId);
-            
-            // Dodaj animację zniknięcia
-            element.classList.add('hide-penalty-timer');
-            
-            // Usuń po zakończeniu animacji
-            setTimeout(() => {
-                if (element.parentNode === container) {
-                    container.removeChild(element);
-                }
-                penaltyTimers.delete(timerId);
-                console.log(`❌ Removed penalty timer: ${timerId}`);
-            }, 300);
-        }
-    }
+    /**
+     * Synchronizuje lokalny stan kar z danymi z backendu.
+     * Wywoływane przy sygnale `penalty_state`.
+     *
+     * @param {{ home: Object[], away: Object[] }} data — payload z to_dict() kar
+     */
+    function syncState(data) {
+        const incomingIds = new Set();
 
-    // Funkcja czyszcząca wszystkie timery
-    function clearAllPenaltyTimers() {
-        penaltyTimers.forEach((_, timerId) => {
-            removePenaltyTimer(timerId);
+        const allPenalties = [
+            ...(data.home || []),
+            ...(data.away || []),
+        ];
+
+        allPenalties.forEach(p => {
+            const id = String(p.id);
+            incomingIds.add(id);
+
+            if (penalties.has(id)) {
+                // Aktualizuj dane bez dotykania elementu DOM
+                const existing = penalties.get(id);
+                existing.start_offset_ms = p.start_offset_ms;
+                existing.adjustment_ms   = p.adjustment_ms  || 0;
+                existing.limit_ms        = p.limit_ms;
+                existing.state           = p.state;
+            } else {
+                // Nowa kara — zarejestruj, element DOM powstanie przy pierwszym ticku
+                penalties.set(id, {
+                    id:              id,
+                    team:            p.team,
+                    player_id:       p.player_id,
+                    limit_ms:        p.limit_ms,
+                    start_offset_ms: p.start_offset_ms,
+                    adjustment_ms:   p.adjustment_ms || 0,
+                    state:           p.state,
+                    element:         null,
+                    container:       null,
+                });
+                console.log(`[PenaltyTimers] Zarejestrowano karę id=${id} (${p.team})`);
+            }
+        });
+
+        // Usuń kary których już nie ma w danych backendu
+        penalties.forEach((pen, id) => {
+            if (!incomingIds.has(id)) {
+                removePenaltyById(id);
+            }
         });
     }
 
-    // Eksponuj funkcje do globalnego zasięgu (dla dostępu z WebSocket)
+    /**
+     * Przelicza i odświeża wyświetlanie wszystkich aktywnych kar.
+     * Wywoływane przy każdym `timer_updated` głównego timera.
+     *
+     * @param {number} mainElapsedMs — elapsed_time głównego timera w ms
+     */
+    function tickMain(mainElapsedMs) {
+        penalties.forEach(pen => {
+            if (pen.state === 'removed') return;
+
+            const remainingMs = calcRemaining(pen, mainElapsedMs);
+
+            // Leniwe tworzenie elementu DOM przy pierwszym ticku
+            if (!pen.element) {
+                pen.element   = createPenaltyElement(pen);
+                pen.container = pen.element ? pen.element.parentNode : null;
+            }
+
+            if (!pen.element) return;
+
+            pen.element.textContent = formatMs(remainingMs);
+
+            // Kara dobiegła końca — ukryj (backend wyśle penalty_state bez niej)
+            if (remainingMs === 0) {
+                pen.element.classList.add('penalty-timer--expired');
+            }
+        });
+    }
+
+    /**
+     * Usuwa konkretną karę po id (np. po sygnale limit_reached z backendu).
+     * @param {string|number} id
+     */
+    function removePenaltyById(id) {
+        const pen = penalties.get(String(id));
+        if (!pen) return;
+        removePenaltyElement(pen);
+        penalties.delete(String(id));
+        console.log(`[PenaltyTimers] Usunięto karę id=${id}`);
+    }
+
+    /**
+     * Usuwa wszystkie kary (np. przy przeładowaniu overlay).
+     */
+    function clearAll() {
+        penalties.forEach((pen, id) => removePenaltyById(id));
+    }
+
+    // -------------------------------------------------------------------------
+    // Eksport
+    // -------------------------------------------------------------------------
+
     window.PenaltyTimers = {
-        create: createPenaltyTimerElement,
-        update: updatePenaltyTimer,
-        remove: removePenaltyTimer,
-        clearAll: clearAllPenaltyTimers
+        syncState,
+        tickMain,
+        remove:   removePenaltyById,
+        clearAll,
+        // Tylko do debugowania
+        _state: () => penalties,
     };
 
-    console.log('✅ Penalty Timers Observer initialized');
+    console.log('[PenaltyTimers] Zainicjalizowano (architektura derived-variable)');
 })();

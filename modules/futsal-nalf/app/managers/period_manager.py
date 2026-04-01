@@ -42,20 +42,19 @@ class PeriodManager:
             raise ValueError(f"Część {period_order} już istnieje dla tego meczu")
 
         try:
-            # Calculate initial_time
+            # initial_time = suma limitów wszystkich poprzednich części
+            # limit        = czas trwania tej części (timer-plugin liczy od 0)
             if auto_calculate_initial_time:
                 initial_time = Period.calculate_initial_time_for_period(game_id, period_order)
-                cumulative_limit = Period.calculate_limit_for_period(game_id, period_order, limit)
             else:
                 initial_time = 0
-                cumulative_limit = limit
 
             period = Period(
                 game_id=game_id,
                 period_order=period_order,
                 description=description,
                 initial_time=initial_time,
-                limit=cumulative_limit,
+                limit=limit,          # czas trwania tej części, NIE suma kumulatywna
                 pause_at_limit=pause_at_limit,
                 status=Period.STATUS_NOT_STARTED
             )

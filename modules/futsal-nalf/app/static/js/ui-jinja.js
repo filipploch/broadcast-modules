@@ -101,7 +101,7 @@ function updateTimerDisplay(timerData) {
     const timerId = timerData.timer_id;
     const elapsedMs = timerData.elapsed_time;
     let timerLimit = timerData.limit   || 0;
-    const initialMs  = timerData.initial_time || 0;
+    const initialTime  = timerData.initial_time || 0;
     const timerState = timerData.state;
     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
     const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
@@ -125,14 +125,14 @@ function updateTimerDisplay(timerData) {
         // Count down: show remaining = limit - (initialTime + elapsed)
         // Subtract 1ms so display changes exactly on the second boundary
         const shown = elapsed;
-        timerLimit = timerLimit - initialTime;
+        // timerLimit = timerLimit - initialTime;
         // const shown = initialMs + elapsed;
         displayTime = timerState === 'idle'
             ? Math.max(0, timerLimit - shown)
             : Math.max(0, timerLimit - shown - 1);
     } else {
         // Count up: show initialTime + elapsed
-        displayTime = initialMs + elapsed;
+        displayTime = initialTime + elapsed;
     }
 
     const minutes  = Math.floor(displayTime / 60000);

@@ -33,7 +33,8 @@ class LeagueManager:
         return League.query.get(league_id)
 
     def create_league(self, season_id, name, games_url, scorers_url, assists_url,
-                      canadian_url, table_url=None, foreign_id=None):
+                      canadian_url, table_url=None, foreign_id=None,
+                      allows_draw=True):
         """
         Create new league
 
@@ -45,6 +46,8 @@ class LeagueManager:
             assists_url: URL to assists table
             canadian_url: URL to canadian points table
             table_url: Optional URL to league table
+            allows_draw: True = liga grupowa (remis dozwolony),
+                         False = rozgrywki pucharowe (remis → rzuty karne)
 
         Returns:
             League object or None if error
@@ -66,6 +69,7 @@ class LeagueManager:
             league = League(
                 season_id=season_id,
                 name=name,
+                allows_draw=allows_draw,
                 games_url=games_url,
                 table_url=table_url,
                 scorers_url=scorers_url,
@@ -90,7 +94,8 @@ class LeagueManager:
             return None
 
     def update_league(self, league_id, name=None, games_url=None, table_url=None,
-                      scorers_url=None, assists_url=None, canadian_url=None, foreign_id=None):
+                      scorers_url=None, assists_url=None, canadian_url=None,
+                      foreign_id=None, allows_draw=None):
         """
         Update league
 
@@ -115,6 +120,8 @@ class LeagueManager:
 
         try:
             # Update name if provided
+            if allows_draw is not None:
+                league.allows_draw = allows_draw
             if name is not None and name != league.name:
                 # Check if new name is unique within the season
                 existing = League.query.filter(

@@ -728,29 +728,46 @@
             showTransition();
         }
         
-        // OBSŁUGA TIMERÓW
-if (msg.type === 'timer_updated' || msg.type === 'timer_paused' || msg.type === 'timer_reset') {
-    const data = msg.payload || msg.data;
+        // ── GŁÓWNY TIMER ─────────────────────────────────────────────────────────
+        // timer_updated: tick z timer-plugin (tylko główny timer, ~100ms)
+        // timer_paused / timer_reset: zmiany stanu
+        if (msg.type === 'timer_updated' ||
+            msg.type === 'timer_paused'  ||
+            msg.type === 'timer_reset') {
 
-    if (data.timer_id && data.timer_id.startsWith('penalty_')) {
-        const timerId = data.timer_id;
-        const currentTime = data.elapsed_time_formatted ||
-                           FutsalFormatters.formatRemaining(data.elapsed_time, data.initial_time, data.limit);
+            const data = msg.payload || msg.data;
 
-        if (data.state === 'running' || data.state === 'paused') {
-            if (penaltyTimers.has(timerId)) {
-                window.PenaltyTimers.update(timerId, currentTime);
+            if (data.elapsed_time === undefined) {
+                display.textContent = '';
             } else {
-                window.PenaltyTimers.create(timerId, currentTime);
+                // Aktualizuj wyświetlanie głównego zegara
+                display.textContent = FutsalFormatters.formatElapsedTime(
+                    data.elapsed_time, data.initial_time
+                );
+
+                // Cache ostatniego elapsed — potrzebny przy rehydratacji po reload
+                window._lastMainElapsed = data.elapsed_time;
+
+                // Prześlij tick do modułu kar — przelicza remaining każdej kary
+                window.PenaltyTimers.tickMain(data.elapsed_time);
             }
         }
-    } else if(data.elapsed_time === undefined ) {
-        display.textContent = '';
-    } else {
-        const formatted = FutsalFormatters.formatElapsedTime(data.elapsed_time, data.initial_time);
-        display.textContent = formatted;
-    }
-}
+
+        // ── STAN KAR ──────────────────────────────────────────────────────────
+        // Wysyłany przez backend przy każdej zmianie stanu kar oraz przy
+        // request_game_data (reload overlay). Zastępuje indywidualne
+        // timer_updated per-kara.
+        if (msg.type === 'penalty_state') {
+            const data = msg.payload || msg.data;
+            window.PenaltyTimers.syncState(data);
+
+            // Jednorazowy tick żeby wyrenderować kary natychmiast po reloadzie,
+            // nawet jeśli główny timer jest aktualnie zapauzowany.
+            const cachedElapsed = window._lastMainElapsed;
+            if (cachedElapsed !== undefined) {
+                window.PenaltyTimers.tickMain(cachedElapsed);
+            }
+        }
 
 if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
     const data = msg.payload || msg.data;

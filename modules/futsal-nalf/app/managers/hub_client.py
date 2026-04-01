@@ -378,6 +378,7 @@ class HubClient:
 
         # Timer Plugin messages
         if msg_from == 'timer-plugin':
+            print('msg from timer-plugin', msg)
             from app.managers import get_timer_manager
             timer_manager = get_timer_manager()
 

@@ -247,6 +247,84 @@ def reset_period_status(period_id):
     return redirect(url_for('index'))
 
 
+@current_app.route('/game/<int:game_id>/penalty-shootout/start')
+def start_penalty_shootout(game_id):
+    """
+    Rozpocznij konkurs rzutów karnych:
+    1. Utwórz rekord Penalty (jeśli nie istnieje).
+    2. Ustaw current_penalty_id w Settings.
+    3. Przekieruj do UI dashboard.
+    """
+    from app.managers.penalty_manager import PenaltyManager
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.models.period import Period
+
+    game = Game.query.get(game_id)
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('index'))
+
+    # Walidacja: liga musi nie dopuszczać remisu
+    if game.league and game.league.allows_draw:
+        flash('Ta liga dopuszcza remis — konkurs rzutów karnych niedostępny.', 'error')
+        return redirect(url_for('index'))
+
+    # Walidacja: wszystkie okresy muszą być zakończone
+    periods = game.get_periods_list()
+    if not periods or not all(p.status == Period.STATUS_FINISHED for p in periods):
+        flash('Wszystkie okresy meczu muszą być zakończone przed konkursem rzutów karnych.', 'error')
+        return redirect(url_for('index'))
+
+    # Walidacja: wynik musi być remisowy
+    if game.home_team_goals != game.away_team_goals:
+        flash('Konkurs rzutów karnych jest dostępny tylko przy remisie po regulaminowym czasie gry.', 'error')
+        return redirect(url_for('index'))
+
+    penalty_manager = PenaltyManager()
+
+    try:
+        # Utwórz rekord Penalty jeśli jeszcze nie istnieje
+        if not game.penalty:
+            penalty_manager.create_penalty_shootout(game_id=game_id)
+            # Odśwież obiekt żeby załadować nową relację
+            db.session.refresh(game)
+
+        # Ustaw jako aktywny konkurs w Settings
+        Settings.set_current_penalty(game.penalty.id)
+
+        flash('Rozpoczęto konkurs rzutów karnych.', 'success')
+        return redirect(url_for('ui_dashboard'))
+
+    except Exception as e:
+        logger.error(f"Error starting penalty shootout: {e}")
+        flash(f'Błąd podczas rozpoczynania konkursu: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+
+@current_app.route('/game/<int:game_id>/penalty-shootout/finish')
+def finish_penalty_shootout(game_id):
+    """Zakończ konkurs rzutów karnych i wróć do panelu."""
+    from app.models.settings import Settings
+    from app.models.game import Game
+
+    game = Game.query.get(game_id)
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('index'))
+
+    try:
+        Settings.set_current_penalty(None)
+        game.set_finished()
+        db.session.commit()
+        flash('Zakończono konkurs rzutów karnych.', 'success')
+    except Exception as e:
+        logger.error(f"Error finishing penalty shootout: {e}")
+        flash(f'Błąd: {str(e)}', 'error')
+
+    return redirect(url_for('index'))
+
+
 @current_app.route('/overlay/scoreboard')
 def overlay_scoreboard():
     """Scoreboard overlay"""

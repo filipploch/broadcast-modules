@@ -35,7 +35,8 @@ def create_app(config_name='default'):
             Team,
             LeagueTeam,
             Stadium,
-            Game
+            Game,
+            GameTimer,
         )
 
         # Create tables

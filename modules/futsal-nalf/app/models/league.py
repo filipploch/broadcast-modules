@@ -19,6 +19,10 @@ class League(db.Model):
     assists_url = db.Column(db.String(500), nullable=False)
     canadian_url = db.Column(db.String(500), nullable=False)
 
+    # True  = liga grupowa (remis kończy mecz, brak rzutów karnych)
+    # False = rozgrywki pucharowe (remis → konkurs rzutów karnych)
+    allows_draw = db.Column(db.Boolean, nullable=False, default=True)
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -67,6 +71,7 @@ class League(db.Model):
             'assists_url': self.assists_url,
             'canadian_url': self.canadian_url,
             'total_teams': self.total_teams,
+            'allows_draw': self.allows_draw,
             'total_games': self.total_games,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None

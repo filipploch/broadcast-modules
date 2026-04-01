@@ -470,13 +470,23 @@ class GameManager:
 
     def handle_request_game_data(self, msg):
         from app.models.settings import Settings
-        settings = Settings.get_settings()
+        from app.managers import get_timer_manager
+
+        settings        = Settings.get_settings()
         current_game_id = settings.current_game_id
-        current_game = Game.query.get(current_game_id).to_dict()
-        msg_from = msg.get('from', '')
+        current_game    = Game.query.get(current_game_id).to_dict()
+        msg_from        = msg.get('from', '')
 
         hub_client = get_hub_client()
-        print('hub_client = get_hub_client()')
-        if hub_client:
-            print('if hub_client:')
-            hub_client.send_to_plugin(msg_from, 'game_data', current_game)
+        if not hub_client:
+            return
+
+        # Dane meczu (wynik, drużyny, składy…)
+        hub_client.send_to_plugin(msg_from, 'game_data', current_game)
+
+        # Aktualny stan kar — overlay potrzebuje go przy każdym starcie/reload,
+        # żeby zbudować lokalną mapę i zacząć liczyć czas z ticków głównego timera.
+        timer_manager = get_timer_manager()
+        if timer_manager:
+            penalties = timer_manager._get_penalties_dict(current_game_id)
+            hub_client.send_to_plugin(msg_from, 'penalty_state', penalties)

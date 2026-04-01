@@ -1,339 +1,189 @@
 """Timer Manager - Manages timer plugin communication and state"""
-from flask import current_app
-from datetime import datetime
-from app.models import Settings
-# from app.managers import get_timer_manager
 import threading
+from datetime import datetime
+
+from flask import current_app
+
+from app.extensions import db
+from app.models.game_timer import GameTimer
 
 
 class TimerManager:
-    """Manages communication with Timer Plugin and caches timer states"""
-    
-    def __init__(self, hub_client):
-        """
-        Initialize Timer Manager
-        
-        Args:
-            hub_client: HubClient instance for WebSocket communication
-        """
-        self.hub_client = hub_client
-        # plugin_manager = get_timer_manager()
-        self.timer_plugin_id = 'timer-plugin'
-        self.timers = {}  # Cache: {timer_id: timer_state}
-        self.lock = threading.Lock()
-        
-        current_app.logger.info("TimerManager initialized")
-    
-    # ========================================================================
-    # TIMER LIFECYCLE
-    # ========================================================================
-    
-    def create_timer(self, timer_id, timer_type='independent', **kwargs):
-        """
-        Create a new timer
-        
-        Args:
-            timer_id: Unique timer identifier
-            timer_type: 'independent' or 'dependent'
-            **kwargs: Additional timer config (parent_id, limit, etc.)
-        
-        Returns:
-            bool: Success status
-        """
-        payload = {
-            'timer_id': timer_id,
-            'timer_type': timer_type,
-            **kwargs
-        }
+    """Manages communication with Timer Plugin and caches timer states."""
 
+    def __init__(self, hub_client):
+        self.hub_client = hub_client
+        self.timer_plugin_id = 'timer-plugin'
+        # Lekki in-memory cache: {plugin_timer_id: {...}}
+        # Używany tylko do odczytów między tickami — źródłem prawdy jest DB.
+        self.timers = {}
+        self.lock = threading.Lock()
+        current_app.logger.info('TimerManager initialized')
+
+    # =========================================================================
+    # TIMER LIFECYCLE — komunikacja z pluginem
+    # =========================================================================
+
+    def create_timer(self, timer_id, timer_type='independent', **kwargs):
+        payload = {'timer_id': timer_id, 'timer_type': timer_type, **kwargs}
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'create_timer',
-            payload
+            self.timer_plugin_id, 'create_timer', payload
         )
-        
         if success:
-            # Initialize cache
             with self.lock:
                 self.timers[timer_id] = {
-                    'timer_id': timer_id,
-                    'timer_type': timer_type,
-                    'state': 'idle',
+                    'timer_id':     timer_id,
+                    'timer_type':   timer_type,
+                    'state':        'idle',
                     'initial_time': kwargs.get('initial_time'),
-                    'metadata': kwargs.get('metadata', {}),
-                    'parent_id': kwargs.get('parent_id'),
-                    'limit': kwargs.get('limit'),
+                    'elapsed_time': 0,
+                    'initial_time': kwargs.get('initial_time'),
+                    'limit':        kwargs.get('limit'),
+                    'parent_id':    kwargs.get('parent_id'),
+                    'metadata':     kwargs.get('metadata', {}),
                 }
-            
-            current_app.logger.info(f"✅ Created timer: {timer_id} ({timer_type})")
+            current_app.logger.info(f'✅ Created timer: {timer_id} ({timer_type})')
         else:
-            current_app.logger.error(f"❌ Failed to create timer: {timer_id}")
-        
+            current_app.logger.error(f'❌ Failed to create timer: {timer_id}')
         return success
-    
+
     def start_timer(self, timer_id):
-        """Start a timer"""
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'start_timer',
-            {'timer_id': timer_id}
+            self.timer_plugin_id, 'start_timer', {'timer_id': timer_id}
         )
-        
         if success:
             with self.lock:
                 if timer_id in self.timers:
                     self.timers[timer_id]['state'] = 'running'
-            current_app.logger.info(f"▶️  Started timer: {timer_id}")
-        
+            current_app.logger.info(f'▶️  Started timer: {timer_id}')
         return success
-    
+
     def pause_timer(self, timer_id):
-        """Pause a timer"""
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'pause_timer',
-            {'timer_id': timer_id}
+            self.timer_plugin_id, 'pause_timer', {'timer_id': timer_id}
         )
-        
         if success:
             with self.lock:
                 if timer_id in self.timers:
                     self.timers[timer_id]['state'] = 'paused'
-            current_app.logger.info(f"⏸️  Paused timer: {timer_id}")
+            current_app.logger.info(f'⏸️  Paused timer: {timer_id}')
+        return success
 
     def resume_timer(self, timer_id):
-        """Resume a paused timer"""
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'resume_timer',
-            {'timer_id': timer_id}
+            self.timer_plugin_id, 'resume_timer', {'timer_id': timer_id}
         )
-        
         if success:
             with self.lock:
                 if timer_id in self.timers:
                     self.timers[timer_id]['state'] = 'running'
-            current_app.logger.info(f"▶️  Resumed timer: {timer_id}")
-        
+            current_app.logger.info(f'▶️  Resumed timer: {timer_id}')
         return success
-    
+
     def reset_timer(self, timer_id):
-        """
-        Send reset request to timer-plugin.
-        Cache is updated when plugin confirms via on_timer_reset().
-        """
         return self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'reset_timer',
-            {'timer_id': timer_id}
+            self.timer_plugin_id, 'reset_timer', {'timer_id': timer_id}
         )
-    
+
     def remove_timer(self, timer_id):
-        """Remove a timer"""
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'remove_timer',
-            {'timer_id': timer_id}
+            self.timer_plugin_id, 'remove_timer', {'timer_id': timer_id}
         )
-        
         if success:
             with self.lock:
-                if timer_id in self.timers:
-                    del self.timers[timer_id]
-            current_app.logger.info(f"🗑️  Removed timer: {timer_id}")
-        
+                self.timers.pop(timer_id, None)
+            current_app.logger.info(f'🗑️  Removed timer: {timer_id}')
         return success
-    
-    # ========================================================================
+
+    # =========================================================================
     # TIME SYNCHRONIZATION
-    # ========================================================================
-    
+    # =========================================================================
+
     def adjust_time(self, timer_id, delta):
-        """
-        Adjust timer time by delta
-        
-        Args:
-            timer_id: Timer to adjust
-            delta: Milliseconds to add (positive) or subtract (negative)
-        
-        Returns:
-            bool: Success status
-        """
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'adjust_time',
-            {
-                'timer_id': timer_id,
-                'delta': delta
-            }
+            self.timer_plugin_id, 'adjust_time',
+            {'timer_id': timer_id, 'delta': delta}
         )
-        
         if success:
-            current_app.logger.info(
-                f"⏱️  Adjusted timer {timer_id} by {delta}ms"
-            )
-        
+            current_app.logger.info(f'⏱️  Adjusted timer {timer_id} by {delta}ms')
         return success
-    
+
     def set_elapsed_time(self, timer_id, elapsed_time):
-        """
-        Set specific elapsed time
-        
-        Args:
-            timer_id: Timer to update
-            elapsed_time: Target elapsed time in milliseconds
-        
-        Returns:
-            bool: Success status
-        """
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'set_elapsed_time',
-            {
-                'timer_id': timer_id,
-                'elapsed_time': elapsed_time
-            }
+            self.timer_plugin_id, 'set_elapsed_time',
+            {'timer_id': timer_id, 'elapsed_time': elapsed_time}
         )
-        
         if success:
-            current_app.logger.info(
-                f"⏱️  Set timer {timer_id} to {elapsed_time}ms"
-            )
-        
+            current_app.logger.info(f'⏱️  Set timer {timer_id} to {elapsed_time}ms')
         return success
-    
-    # ========================================================================
+
+    # =========================================================================
     # BATCH OPERATIONS
-    # ========================================================================
-    
+    # =========================================================================
+
     def start_multiple(self, timer_ids):
-        """
-        Start multiple timers simultaneously
-        
-        Args:
-            timer_ids: List of timer IDs to start
-        
-        Returns:
-            bool: Success status
-        """
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'start_multiple',
-            {'timer_ids': timer_ids}
+            self.timer_plugin_id, 'start_multiple', {'timer_ids': timer_ids}
         )
-        
         if success:
             with self.lock:
-                for timer_id in timer_ids:
-                    if timer_id in self.timers:
-                        self.timers[timer_id]['state'] = 'running'
-            
+                for tid in timer_ids:
+                    if tid in self.timers:
+                        self.timers[tid]['state'] = 'running'
             current_app.logger.info(
-                f"▶️  Started {len(timer_ids)} timers simultaneously"
+                f'▶️  Started {len(timer_ids)} timers simultaneously'
             )
-        
         return success
-    
-    # ========================================================================
-    # STATE MANAGEMENT
-    # ========================================================================
-    
+
+    # =========================================================================
+    # STATE — in-memory cache
+    # =========================================================================
+
     def get_timer_state(self, timer_id):
-        """
-        Get cached timer state
-        
-        Args:
-            timer_id: Timer identifier
-        
-        Returns:
-            dict: Timer state or None
-        """
         with self.lock:
             return self.timers.get(timer_id)
-    
+
     def get_all_timers(self):
         success = self.hub_client.send_to_plugin(
-            self.timer_plugin_id,
-            'get_all_timers',
-            {}
+            self.timer_plugin_id, 'get_all_timers', {}
         )
-
-        if success:
-            current_app.logger.info(
-                "Signal 'get_all_timers' sent to Timer Plugin"
-            )
-        else:
-            current_app.logger.warning("Timer Plugin is offline - cannot fetch timers")
-
+        if not success:
+            current_app.logger.warning('Timer Plugin is offline - cannot fetch timers')
         return success
-    
+
     def update_timer_state(self, timer_id, updates):
-        """
-        Update cached timer state (called from WebSocket handler)
-        
-        Args:
-            timer_id: Timer to update
-            updates: Dictionary of updates
-        """
         with self.lock:
             if timer_id not in self.timers:
                 self.timers[timer_id] = {'id': timer_id}
-            
             self.timers[timer_id].update(updates)
-    
+
     def clear_all_timers(self):
-        """Clear all cached timers"""
         with self.lock:
             self.timers.clear()
-        current_app.logger.info("🗑️  Cleared all timers from cache")
-    
-    # ========================================================================
+        current_app.logger.info('🗑️  Cleared all timers from cache')
+
+    # =========================================================================
     # HIGH-LEVEL BUSINESS LOGIC
-    # ========================================================================
-    
+    # =========================================================================
+
     def create_game_timer(self, game_id, duration_minutes=40):
-        """
-        Create a timer for a match
-        
-        Args:
-            game_id: Match identifier
-            duration_minutes: Match duration in minutes
-        
-        Returns:
-            str: Timer ID
-        """
         timer_id = f'match-{game_id}'
-        
         self.create_timer(
             timer_id=timer_id,
             timer_type='independent',
             limit=duration_minutes * 60 * 1000,
             pause_at_limit=False,
             update_interval_ms=100,
-            metadata={
-                'game_id': game_id,
-                'type': 'match',
-                'duration_minutes': duration_minutes
-            }
+            metadata={'game_id': game_id, 'type': 'match',
+                      'duration_minutes': duration_minutes},
         )
-        
         return timer_id
-    
-    def create_penalty_timer(self, game_timer_id, player_info, 
-                           duration_minutes=2):
-        """
-        Create a dependent timer for a penalty
-        
-        Args:
-            game_timer_id: Parent match timer ID
-            player_info: Dictionary with player details
-            duration_minutes: Penalty duration in minutes
-        
-        Returns:
-            str: Timer ID
-        """
-        timer_id = f'penalty-{player_info.get("number", "unknown")}-{datetime.now().timestamp()}'
-        
+
+    def create_penalty_timer(self, game_timer_id, player_info, duration_minutes=2):
+        timer_id = (
+            f'penalty-{player_info.get("number", "unknown")}'
+            f'-{datetime.now().timestamp()}'
+        )
         self.create_timer(
             timer_id=timer_id,
             timer_type='dependent',
@@ -341,273 +191,212 @@ class TimerManager:
             limit=duration_minutes * 60 * 1000,
             pause_at_limit=True,
             update_interval_ms=1000,
-            metadata={
-                **player_info,
-                'type': 'penalty',
-                'duration_minutes': duration_minutes
-            }
+            metadata={**player_info, 'type': 'penalty',
+                      'duration_minutes': duration_minutes},
         )
-        
         return timer_id
-    
+
     def create_rafting_timer(self, team_name, start_number):
-        """
-        Create independent timer for rafting team
-        
-        Args:
-            team_name: Team name
-            start_number: Start order number
-        
-        Returns:
-            str: Timer ID
-        """
         timer_id = f'rafting-{start_number}'
-        
         self.create_timer(
             timer_id=timer_id,
             timer_type='independent',
-            update_interval_ms=10,  # 10ms precision for rafting
-            metadata={
-                'team': team_name,
-                'start_number': start_number,
-                'type': 'rafting'
-            }
+            update_interval_ms=10,
+            metadata={'team': team_name, 'start_number': start_number,
+                      'type': 'rafting'},
         )
-        
         return timer_id
-    
+
     def create_parallel_skiing_timers(self, skier_blue, skier_red):
-        """
-        Create two parallel timers for skiing
-        
-        Args:
-            skier_blue: Blue lane skier info
-            skier_red: Red lane skier info
-        
-        Returns:
-            tuple: (blue_timer_id, red_timer_id)
-        """
         blue_id = f'ski-blue-{datetime.now().timestamp()}'
-        red_id = f'ski-red-{datetime.now().timestamp()}'
-        
-        # Create both timers
-        self.create_timer(
-            timer_id=blue_id,
-            timer_type='independent',
-            update_interval_ms=10,
-            metadata={**skier_blue, 'lane': 'blue', 'type': 'skiing'}
-        )
-        
-        self.create_timer(
-            timer_id=red_id,
-            timer_type='independent',
-            update_interval_ms=10,
-            metadata={**skier_red, 'lane': 'red', 'type': 'skiing'}
-        )
-        
+        red_id  = f'ski-red-{datetime.now().timestamp()}'
+        self.create_timer(timer_id=blue_id, timer_type='independent',
+                          update_interval_ms=10,
+                          metadata={**skier_blue, 'lane': 'blue', 'type': 'skiing'})
+        self.create_timer(timer_id=red_id, timer_type='independent',
+                          update_interval_ms=10,
+                          metadata={**skier_red, 'lane': 'red', 'type': 'skiing'})
         return blue_id, red_id
-    
-    # ========================================================================
+
+    # =========================================================================
+    # DB HELPERS
+    # =========================================================================
+
+    @staticmethod
+    def get_db_timer(plugin_timer_id: str):
+        return GameTimer.query.filter_by(plugin_timer_id=plugin_timer_id).first()
+
+    @staticmethod
+    def get_active_main_timer(period_id: int):
+        return GameTimer.query.filter(
+            GameTimer.period_id == period_id,
+            GameTimer.timer_type == GameTimer.TYPE_MAIN,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).first()
+
+    @staticmethod
+    def get_active_penalties(period_id: int):
+        return GameTimer.query.filter(
+            GameTimer.period_id == period_id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).order_by(GameTimer.created_at).all()
+
+    @staticmethod
+    def get_active_penalties_by_team(game_id: int, team: str):
+        return GameTimer.query.filter(
+            GameTimer.game_id == game_id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.team == team,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).order_by(GameTimer.created_at).all()
+
+    # =========================================================================
     # WEBSOCKET MESSAGE HANDLERS
-    # ========================================================================
-    
+    # =========================================================================
+
     def on_timer_updated(self, msg):
-        """
-        Handle timer_updated message from Timer Plugin
-        
-        Args:
-            msg: Update payload
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
+        payload      = msg.get('payload', {})
+        print('on_timer_updated', payload)
+        timer_id     = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time', 0)
-        state = payload.get('state', 'unknown')
-        limit = payload.get('limit', 0)
-        
+        state        = payload.get('state', 'unknown')
+        limit        = payload.get('limit', 0)
+        initial_time = payload.get('initial_time', 0)
+
         self.update_timer_state(timer_id, {
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
-            'last_update': datetime.now().isoformat()
+            'elapsed_time': elapsed_time, 'state': state, 'initial_time': initial_time,
+            'limit': limit, 'last_update': datetime.now().isoformat(),
         })
-        
-        # Emit to frontend via SocketIO
-        self._emit_to_ui(msg_type, {
-            'timer_id': timer_id,
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
+        self._sync_db_timer(timer_id, elapsed_time, state)
+        self._emit_to_ui(msg.get('type'), {
+            'timer_id': timer_id, 'elapsed_time': elapsed_time,
+            'state': state, 'limit': limit, 'initial_time': initial_time,
         })
 
     def on_timer_started(self, msg):
-        """
-        Handle timer_started message from Timer Plugin
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
+        state        = payload.get('state', 'unknown')
+        limit        = payload.get('limit', 0)
+        elapsed_time = payload.get('elapsed_time') or 0
+        initial_time = payload.get('initial_time', 0)
 
-        Args:
-            msg: Update payload
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
-        state = payload.get('state', 'unknown')
-        limit = payload.get('limit', 0)
-        elapsed_time = 0
-        _et = payload.get('elapsed_time')
-        if isinstance(_et, int):
-            elapsed_time = _et
         self.update_timer_state(timer_id, {
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
-            'last_update': datetime.now().isoformat()
+            'elapsed_time': elapsed_time, 'state': state, 'initial_time': initial_time,
+            'limit': limit, 'last_update': datetime.now().isoformat(),
         })
-
-        # Emit to frontend via SocketIO
-        self._emit_to_ui(msg_type, {
-            'timer_id': timer_id,
-            'elapsed_time': elapsed_time,
-            'limit': limit,
-            'state': state
+        self._sync_db_timer(timer_id, elapsed_time, state)
+        self._emit_to_ui(msg.get('type'), {
+            'timer_id': timer_id, 'elapsed_time': elapsed_time,
+            'limit': limit, 'state': state, 'initial_time': initial_time,
         })
 
     def on_timer_paused(self, msg):
-        """
-        Handle timer_paused message from Timer Plugin
-
-        Args:
-            msg: Update payload
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
-        elapsed_time = payload.get('elapsed_time')
-        state = payload.get('state', 'unknown')
-        limit = payload.get('limit', 0)
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
+        elapsed_time = payload.get('elapsed_time', 0)
+        state        = payload.get('state', 'unknown')
+        limit        = payload.get('limit', 0)
+        initial_time = payload.get('initial_time', 0)
 
         self.update_timer_state(timer_id, {
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
-            'last_update': datetime.now().isoformat()
+            'elapsed_time': elapsed_time, 'state': state, 'initial_time': initial_time,
+            'limit': limit, 'last_update': datetime.now().isoformat(),
         })
-
-        # Emit to frontend via SocketIO
-        self._emit_to_ui(msg_type, {
-            'timer_id': timer_id,
-            'elapsed_time': elapsed_time,
-            'limit': limit,
-            'state': state
+        self._sync_db_timer(timer_id, elapsed_time, state)
+        self._emit_to_ui(msg.get('type'), {
+            'timer_id': timer_id, 'elapsed_time': elapsed_time,
+            'limit': limit, 'state': state, 'initial_time': initial_time,
         })
 
     def on_timer_reset(self, msg):
-        """
-        Handle timer_paused message from Timer Plugin
-
-        Args:
-            msg: Update payload
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
-        elapsed_time = payload.get('elapsed_time')
-        state = payload.get('state', 'unknown')
-        limit = payload.get('limit', 0)
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
+        elapsed_time = payload.get('elapsed_time', 0)
+        state        = payload.get('state', 'unknown')
+        limit        = payload.get('limit', 0)
+        initial_time = payload.get('initial_time', 0)
 
         self.update_timer_state(timer_id, {
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
-            'last_update': datetime.now().isoformat()
+            'elapsed_time': elapsed_time, 'state': state, 'initial_time': initial_time,
+            'limit': limit, 'last_update': datetime.now().isoformat(),
         })
-
-        # Emit to frontend via SocketIO
-        self._emit_to_ui(msg_type, {
-            'timer_id': timer_id,
-            'elapsed_time': elapsed_time,
-            'limit': limit,
-            'state': state
+        self._sync_db_timer(timer_id, elapsed_time, state)
+        self._emit_to_ui(msg.get('type'), {
+            'timer_id': timer_id, 'elapsed_time': elapsed_time,
+            'limit': limit, 'state': state, 'initial_time': initial_time,
         })
 
     def on_timer_adjusted(self, msg):
-        """
-        Handle timer_updated message from Timer Plugin
-
-        Args:
-            msg: Update payload
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time', 0)
-        state = payload.get('state', 'idle')
-        limit = payload.get('limit', 0)
+        state        = payload.get('state', 'idle')
+        limit        = payload.get('limit', 0)
+        initial_time = payload.get('initial_time', 0)
 
         self.update_timer_state(timer_id, {
-            'elapsed_time': elapsed_time,
-            'state': state,
-            'limit': limit,
-            'last_update': datetime.now().isoformat()
+            'elapsed_time': elapsed_time, 'state': state, 'initial_time': initial_time,
+            'limit': limit, 'last_update': datetime.now().isoformat(),
         })
-
-        # Emit to frontend via SocketIO
-        self._emit_to_ui(msg_type, {
-            'timer_id': timer_id,
-            'elapsed_time': elapsed_time,
-            'limit': limit,
-            'state': state
+        self._sync_db_timer(timer_id, elapsed_time, state)
+        self._emit_to_ui(msg.get('type'), {
+            'timer_id': timer_id, 'elapsed_time': elapsed_time,
+            'limit': limit, 'state': state, 'initial_time': initial_time,
         })
 
     def on_timer_event(self, data):
-        """
-        Handle timer_event message from Timer Plugin
-        
-        Args:
-            data: Event payload
-        """
-        timer_id = data.get('timer_id')
-        event = data.get('event')
+        timer_id     = data.get('timer_id')
+        event        = data.get('event')
         elapsed_time = data.get('elapsed_time', 0)
-        
+
         current_app.logger.info(
-            f"⏱️  Timer event: {timer_id} - {event} ({elapsed_time}ms)"
+            f'⏱️  Timer event: {timer_id} - {event} ({elapsed_time}ms)'
         )
-        
-        # Update state based on event
+
         state_map = {
             'limit_reached': 'limit_reached',
-            'paused': 'paused',
-            'resumed': 'running',
-            'stopped': 'stopped',
-            'running': 'running'
+            'paused':        'paused',
+            'resumed':       'running',
+            'stopped':       'stopped',
+            'running':       'running',
         }
-
         if event in state_map:
+            new_state = state_map[event]
             self.update_timer_state(timer_id, {
-                'state': state_map[event],
-                'elapsed_time': elapsed_time
+                'state': new_state, 'elapsed_time': elapsed_time,
             })
-        
-        # Emit to frontend
+            self._sync_db_timer(timer_id, elapsed_time, new_state)
+
         self._emit_to_ui('timer_event', {
-            'timer_id': timer_id,
-            'event': event,
-            'elapsed_time': elapsed_time
+            'timer_id': timer_id, 'event': event, 'elapsed_time': elapsed_time,
         })
 
     def on_timer_created(self, msg):
         """
-        Handle timer_created confirmation from Timer Plugin.
-        Updates local cache with confirmed state, then persists to Settings
-        and notifies UI.
+        Potwierdzenie utworzenia timera z pluginu.
+        Zapisuje rekord GameTimer w DB i powiadamia UI.
         """
-        payload = msg.get('payload', {})
-        timer_id = payload.get('timer_id')
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
         initial_time = payload.get('initial_time', 0) or 0
-        limit = payload.get('limit', 0) or 0
-        state = payload.get('state', 'idle')
+        limit        = payload.get('limit', 0) or 0
+        state        = payload.get('state', 'idle')
+        metadata     = payload.get('metadata', {}) or {}
 
-        # Confirm cache — elapsed always 0 at creation
         self.update_timer_state(timer_id, {
             'elapsed_time': 0,
             'initial_time': initial_time,
@@ -616,178 +405,191 @@ class TimerManager:
             'last_update': datetime.now().isoformat()
         })
 
-        game_timers = Settings.get_current_timers()
+        is_penalty = (timer_id.startswith('penalty_home') or
+                      timer_id.startswith('penalty_away'))
 
-        if timer_id.startswith('penalty_home'):
-            team = 'home'
-        elif timer_id.startswith('penalty_away'):
-            team = 'away'
+        if is_penalty:
+            self._handle_penalty_timer_created(timer_id, limit, state, metadata)
         else:
-            team = None
+            self._handle_main_timer_created(timer_id, initial_time, limit,
+                                            state, metadata)
 
-        if team is not None:
-            # --- PENALTY TIMER ---
-            game_timer_id = (game_timers.get('main') or {}).get('timer_id')
-            main_state = (game_timers.get('main') or {}).get('state', 'idle')
+    def _handle_main_timer_created(self, timer_id, initial_time, limit,
+                                   state, metadata):
+        from app.models.settings import Settings
+        settings  = Settings.get_settings()
+        game_id   = settings.current_game_id
+        period_id = settings.current_period_id
 
-            # If main timer already at limit treat as paused, not running
-            penalty_state = 'paused' if main_state == 'limit_reached' else main_state
-
-            penalty_data = {
-                'timer_id': timer_id,
-                'timer_type': 'dependent',
-                'parent_id': game_timer_id,
-                'elapsed_time': 0,
-                'initial_time': 0,
-                'limit': limit,
-                'state': penalty_state,
-                'metadata': {
-                    'team': team,
-                    'timer_class': 'penalty',
-                    'duration_minutes': int(limit / 60000) if limit else 0
-                }
-            }
-            Settings.add_penalty_timer(team, penalty_data)
-
-            # Auto-start if main timer is running
-            if main_state == 'running':
-                self.start_timer(timer_id)
-
-            updated_timers = Settings.get_current_timers()
-            self._emit_to_ui('reload_penalty_timers', {
-                'penalties': updated_timers.get('penalties', {'home': [], 'away': []})
-            })
-
+        gt = GameTimer.query.filter_by(plugin_timer_id=timer_id).first()
+        if gt is None:
+            gt = GameTimer(
+                game_id=game_id, period_id=period_id,
+                timer_type=GameTimer.TYPE_MAIN,
+                plugin_timer_id=timer_id,
+                elapsed_time_ms=0, limit_ms=limit,
+                state=GameTimer.STATE_IDLE,
+            )
+            db.session.add(gt)
         else:
-            # --- MAIN TIMER ---
-            timer_data = {
-                'timer_id': timer_id,
-                'timer_type': 'independent',
-                'elapsed_time': 0,
-                'initial_time': initial_time,
-                'limit': limit,
-                'pause_at_limit': True,
-                'state': 'idle',
-            }
-            Settings.update_main_timer(timer_data)
+            gt.elapsed_time_ms = 0
+            gt.limit_ms        = limit
+            gt.state           = GameTimer.STATE_IDLE
+            gt.updated_at      = datetime.utcnow()
 
-            self._emit_to_ui('timer_created', {
-                'timer_id': timer_id,
-                'elapsed_time': 0,
-                'initial_time': initial_time,
+        db.session.commit()
+
+        self._emit_to_ui('timer_created', {
+            'timer_id': timer_id, 'elapsed_time': 0,
+            'initial_time': initial_time, 'state': state, 'limit': limit,
+        })
+
+    def _handle_penalty_timer_created(self, timer_id, limit, state, metadata):
+        from app.models.settings import Settings
+        settings  = Settings.get_settings()
+        game_id   = settings.current_game_id
+        period_id = settings.current_period_id
+
+        team         = 'home' if timer_id.startswith('penalty_home') else 'away'
+        main_gt      = self.get_active_main_timer(game_id)
+        main_state   = main_gt.state if main_gt else GameTimer.STATE_IDLE
+        start_offset = main_gt.elapsed_time_ms if main_gt else 0
+
+        penalty_state = (
+            GameTimer.STATE_PAUSED
+            if main_state == GameTimer.STATE_LIMIT_REACHED
+            else main_state
+        )
+
+        gt = GameTimer(
+            game_id=game_id, period_id=period_id,
+            timer_type=GameTimer.TYPE_PENALTY,
+            team=team, plugin_timer_id=timer_id,
+            elapsed_time_ms=0, limit_ms=limit,
+            state=penalty_state, start_offset_ms=start_offset,
+        )
+        db.session.add(gt)
+        db.session.commit()
+
+        if main_state == GameTimer.STATE_RUNNING:
+            self.start_timer(timer_id)
+
+        penalties = self._get_penalties_dict(game_id)
+        self._emit_to_ui('reload_penalty_timers', {'penalties': penalties})
+        self._broadcast_penalty_state(game_id)
+
+    def on_limit_reached(self, msg):
+        payload        = msg.get('payload', {})
+        timer_id       = payload.get('timer_id')
+        elapsed_time   = payload.get('elapsed_time', 0)
+        state          = payload.get('state', GameTimer.STATE_LIMIT_REACHED)
+        pause_at_limit = payload.get('pause_at_limit', True)
+
+        gt = self.get_db_timer(timer_id)
+        if gt is None:
+            current_app.logger.warning(
+                f'on_limit_reached: nieznany timer {timer_id}'
+            )
+            return
+
+        gt.sync_from_plugin(elapsed_time, state)
+
+        if gt.timer_type == GameTimer.TYPE_MAIN:
+            # Pauzuj wszystkie aktywne kary w jednej transakcji
+            for pen in self.get_active_penalties(gt.game_id):
+                if pen.state != GameTimer.STATE_LIMIT_REACHED:
+                    pen.sync_from_plugin(pen.elapsed_time_ms,
+                                         GameTimer.STATE_PAUSED)
+                    if pen.plugin_timer_id:
+                        self.pause_timer(pen.plugin_timer_id)
+
+            db.session.commit()
+            penalties = self._get_penalties_dict(gt.game_id)
+            self._emit_to_ui('reload_penalty_timers', {'penalties': penalties})
+            self._broadcast_penalty_state(gt.game_id)
+        else:
+            db.session.commit()
+
+        if pause_at_limit:
+            self._emit_to_ui(msg.get('type'), {
+                'timer_id': timer_id, 'elapsed_time': elapsed_time,
                 'state': state,
-                'limit': limit,
-                'game_timers': game_timers
             })
-    
-    def on_timer_plugin_online(self):
-        """Handle Timer Plugin coming online"""
-        current_app.logger.info("✅ Timer Plugin is online")
 
-        # Optionally: Re-create timers if needed
-        # Or request current state
+    def on_timer_plugin_online(self):
+        current_app.logger.info('✅ Timer Plugin is online')
 
     def on_timer_plugin_offline(self):
-        """Handle Timer Plugin going offline"""
-        current_app.logger.warning("⚠️  Timer Plugin is offline")
-
-        # Mark all timers as disconnected
+        current_app.logger.warning('⚠️  Timer Plugin is offline')
         with self.lock:
             for timer_id in self.timers:
                 self.timers[timer_id]['state'] = 'disconnected'
 
     def on_all_timers(self, msg):
-        """
-        Handle 'all_timers' response from timer-plugin
-        
-        This is called when timer-plugin sends list of all timers
-        Used for recovery after crash/restart
-        """
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        count = payload.get('count')
-        timers = payload.get('timers', [])
-        
-        current_app.logger.info(f"📥 Received all timers from plugin: {count} timer(s)")
-        
-        # Log timers for debugging
-        for timer in timers:
-            timer_id = timer.get('timer_id')
-            state = timer.get('state')
-            current_app.logger.debug(f"  - {timer_id}: {state}")
-        
-        # Emit to frontend via SocketIO with specific event name
-        # This event will be caught by timer-recovery.js
+        payload = msg.get('payload', {})
+        timers  = payload.get('timers', [])
+        count   = payload.get('count', len(timers))
+        current_app.logger.info(
+            f'📥 Received all timers from plugin: {count} timer(s)'
+        )
         self._emit_to_ui('timer_plugin_all_timers', {
-            'count': count,
-            'timers': timers
+            'count': count, 'timers': timers,
         })
-        
-        current_app.logger.info(f"📤 Sent all timers to UI")
 
-    def on_limit_reached(self, msg):
-        from app.models.settings import Settings
-        
-        msg_type = msg.get('type')
-        payload = msg.get('payload')
-        timer_id = payload.get('timer_id')
-        elapsed_time = payload.get('elapsed_time')
-        state = payload.get('state')
-        pause_at_limit = payload.get('pause_at_limit')
-        
-        # Update timer state in Settings
-        current_timers = Settings.get_current_timers()
-        main_timer = current_timers.get("main")
-        
-        if main_timer and main_timer.get("timer_id") == timer_id:
-            # Main timer reached limit
-            main_timer["state"] = state
-            main_timer["elapsed_time"] = elapsed_time
-            Settings.update_main_timer(main_timer)
+    # =========================================================================
+    # PRIVATE HELPERS
+    # =========================================================================
 
-            # Pause all penalty timers that have not reached their limit yet
-            _penalties = current_timers.get("penalties", {"home": [], "away": []})
-            penalties = _penalties['home'] + _penalties['away']
-            for penalty in penalties:
-                if penalty.get("state") != "limit_reached":
-                    penalty_id = penalty.get("timer_id")
-                    if penalty_id:
-                        self.pause_timer(penalty_id)
-                        penalty_state = self.get_timer_state(penalty_id)
-                        penalty["state"] = "paused"
-                        penalty["elapsed_time"] = (
-                            penalty_state.get("elapsed_time", penalty.get("elapsed_time", 0))
-                            if penalty_state else penalty.get("elapsed_time", 0)
-                        )
-                        Settings.update_penalty_timer(penalty_id, penalty)
+    def _sync_db_timer(self, plugin_timer_id: str,
+                       elapsed_time_ms: int, state: str):
+        try:
+            gt = GameTimer.query.filter_by(
+                plugin_timer_id=plugin_timer_id
+            ).first()
+            if gt is None:
+                return
+            gt.sync_from_plugin(elapsed_time_ms, state)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(
+                f'_sync_db_timer({plugin_timer_id}): {e}'
+            )
 
-            self._emit_to_ui('reload_penalty_timers', {
-                'penalties': Settings.get_current_timers().get("penalties", {"home": [], "away": []})
-            })
-        else:
-            # Penalty timer reached limit
-            _penalties = current_timers.get("penalties", {"home": [], "away": []})
-            penalties = _penalties['home'] + _penalties['away']
-            for penalty in penalties:
-                if penalty.get("timer_id") == timer_id:
-                    penalty["state"] = state
-                    penalty["elapsed_time"] = elapsed_time
-                    Settings.update_penalty_timer(timer_id, penalty)
-                    break
+    @staticmethod
+    def _get_penalties_dict(game_id: int) -> dict:
+        penalties = GameTimer.query.filter(
+            GameTimer.game_id == game_id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).order_by(GameTimer.created_at).all()
 
-        if pause_at_limit:
-            self._emit_to_ui(msg_type, {
-                'timer_id': timer_id,
-                'elapsed_time': elapsed_time,
-                'state': state
-            })
+        result = {'home': [], 'away': []}
+        for p in penalties:
+            result[p.team].append(p.to_dict())
+        return result
 
-    
     def _emit_to_ui(self, msg_type, data):
-        """Emit event to UI clients via SocketIO"""
         try:
             from app.extensions import socketio
-            # socketio.emit(event, data, broadcast=True)
             socketio.emit(msg_type, data)
         except Exception as e:
-            current_app.logger.error(f"Failed to emit to UI: {e}")
+            current_app.logger.error(f'Failed to emit to UI: {e}')
+
+    def _broadcast_penalty_state(self, game_id: int):
+        """
+        Broadkastuje aktualny stan aktywnych kar do klasy 'overlay' przez hub.
+        Wywoływać po każdej zmianie stanu kar (nowa kara, usunięcie, limit_reached).
+        """
+        from app.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.broadcast_to_class(
+                'overlay',
+                'penalty_state',
+                self._get_penalties_dict(game_id),
+            )

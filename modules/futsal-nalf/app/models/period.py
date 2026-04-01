@@ -113,31 +113,45 @@ class Period(db.Model):
     @staticmethod
     def calculate_initial_time_for_period(game_id, period_order):
         """
-        Calculate initial_time for a period based on sum of limit of previous periods
-        
+        Oblicza initial_time dla części meczu jako sumę limitów wszystkich
+        poprzednich części.
+
+        initial_time jest wysyłany do timer-plugin jako przesunięcie czasowe
+        (offset) — informuje overlay od jakiego momentu globalnego czasu meczu
+        zaczyna się ta część. Timer-plugin zawsze liczy od 0; initial_time
+        służy wyłącznie do prawidłowego wyświetlania czasu w UI i overlay.
+
+        Przykład dla meczu 2×20 minut:
+            1. połowa: initial_time = 0         (brak poprzednich części)
+            2. połowa: initial_time = 1 200 000 (limit 1. połowy = 20 min)
+
         Args:
-            game_id: Game ID
-            period_order: Period order number (1, 2, 3, etc.)
-        
+            game_id: ID meczu
+            period_order: Numer kolejny części (1, 2, 3, …)
+
         Returns:
-            Initial time in milliseconds (sum of previous periods' limit)
+            Przesunięcie w ms (0 dla pierwszej części)
         """
         if period_order == 1:
             return 0
-        
-        # Sum limit of all previous periods for this game
+
+        # Suma limitów wszystkich poprzednich części tego meczu
         previous_periods = Period.query.filter(
             Period.game_id == game_id,
             Period.period_order < period_order
         ).all()
-        
-        total_time = sum(p.limit for p in previous_periods)
-        return total_time
+
+        return sum(p.limit for p in previous_periods)
     
     @staticmethod
     def calculate_limit_for_period(game_id, period_order, own_duration_ms):
-        initial_time = Period.calculate_initial_time_for_period(game_id, period_order)
-        return initial_time + own_duration_ms
+        """
+        Zwraca limit dla części meczu.
+        Limit = czas trwania tej części (own_duration_ms).
+        initial_time (suma poprzednich części) jest przechowywane osobno
+        i wysyłane do timer-plugin jako dodatkowy parametr initial_time.
+        """
+        return own_duration_ms
 
     def update_score(self, home_goals, away_goals):
         """Update period score"""
