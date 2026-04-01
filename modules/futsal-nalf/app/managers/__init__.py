@@ -28,6 +28,9 @@ _obs_ws_manager = None
 # _game_manager = None
 _initialization_lock = threading.Lock()
 _initialized = False
+# w sekcji globals na górze
+_shootout_kick_manager = None
+
 
 
 def initialize_all_managers(app):
@@ -196,6 +199,13 @@ def get_current_game_manager():
 
     return _current_game_manager
 
+def get_shootout_kick_manager():
+    global _shootout_kick_manager
+    if _shootout_kick_manager is None:
+        from app.managers.shootout_kick_manager import ShootoutKickManager
+        _shootout_kick_manager = ShootoutKickManager()
+    return _shootout_kick_manager
+
 
 def get_recorder_manager():
     """Get Recorder Manager instance (lazy initialization)"""
@@ -227,7 +237,7 @@ def shutdown_all_managers():
     """
     # global _plugin_manager, _hub_client, _current_game_manager
     global _hub_client, _current_game_manager, _plugin_manager, _sequence_manager, _team_scraper_manager
-    global _recorder_manager, _timer_manager, _initialized, _obs_ws_manager, _game_manager
+    global _recorder_manager, _timer_manager, _initialized, _obs_ws_manager, _game_manager, _shootout_kick_manager
 
     current_app.logger.info("=" * 60)
     current_app.logger.info("SHUTTING DOWN MANAGERS")
@@ -249,6 +259,7 @@ def shutdown_all_managers():
     _plugin_manager = None
     _sequence_manager = None
     _team_scraper_manager = None
+    _shootout_kick_manager = None
     _obs_ws_manager = None
     _game_manager = None
     _initialized = False
@@ -279,7 +290,7 @@ from app.managers.player_scraper_manager import PlayerScraperManager
 from app.managers.camera_manager import CameraManager
 from app.managers.period_manager import PeriodManager
 from app.managers.game_camera_manager import GameCameraManager
-from app.managers.penalty_manager import PenaltyManager
+from app.managers.shootout_manager import ShootoutManager
 from app.managers.player_manager import PlayerManager
 from app.managers.game_player_manager import GamePlayerManager
 from app.managers.event_manager import EventManager

@@ -75,6 +75,19 @@ def generate_show_overlay_data(data):
                 'home_team_scorers': scorers['home'],
                 'away_team_scorers': scorers['away']
             })
+        case 'shootout-container':
+            from app.managers.shootout_manager import ShootoutManager
+            shootout_manager = ShootoutManager()
+            shootout = shootout_manager.get_shootout_by_game(current_game_data['id'])
+            shootout_data = shootout.to_dict()
+            data.update({
+                'home_team_logo':       current_game_data['home_team_logo'],
+                'away_team_logo':       current_game_data['away_team_logo'],
+                'home_team_name':       current_game_data['home_team_name'],
+                'away_team_name':       current_game_data['away_team_name'],
+                'home_team_shootouts':  shootout_data['home_team_shootouts'],
+                'away_team_shootouts':  shootout_data['away_team_shootouts'],
+            })
         case 'empty-container':
             pass
     return data

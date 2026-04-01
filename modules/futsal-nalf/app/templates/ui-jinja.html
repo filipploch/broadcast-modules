@@ -136,7 +136,10 @@ Online HTML, CSS and JavaScript editor to run code online.
 					<button type="button" ondblclick="startStream()">S.START</button>
 					<button type="button" ondblclick="stopStream()">S.STOP</button>
 				</div>
-				<div><button type="button" onclick="getObsWsConnection()">GET STATUS</button></div>
+				<div style="display:flex;">
+					<button type="button" onclick="getObsWsConnection()">GET STATUS</button>
+					<button type="button" ondblclick="showOverlay('shootout-container')">KAR</button>
+				</div>
 			</div>
 		</div>
 		

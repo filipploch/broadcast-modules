@@ -451,7 +451,7 @@ class TimerManager:
         period_id = settings.current_period_id
 
         team         = 'home' if timer_id.startswith('penalty_home') else 'away'
-        main_gt      = self.get_active_main_timer(game_id)
+        main_gt      = self.get_active_main_timer(period_id)
         main_state   = main_gt.state if main_gt else GameTimer.STATE_IDLE
         start_offset = main_gt.elapsed_time_ms if main_gt else 0
 

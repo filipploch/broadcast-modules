@@ -150,7 +150,7 @@
                             </div>
                             <div style="display:flex;gap:.5rem;flex-direction:column;">
                                 <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary" style="white-space:nowrap;">🎮 Przejdź do UI</a>
-                                <a href="{{ url_for('finish_penalty_shootout', game_id=game.id) }}"
+                                <a href="{{ url_for('finish_shootout', game_id=game.id) }}"
                                    class="btn btn-warning" style="white-space:nowrap;"
                                    onclick="return confirm('Zakończyć konkurs rzutów karnych?');">⏹️ Zakończ konkurs</a>
                             </div>
@@ -185,7 +185,7 @@
                                     Remis {{ game.home_team_goals }}:{{ game.away_team_goals }} po regulaminowym czasie gry.
                                 </p>
                             </div>
-                            <a href="{{ url_for('start_penalty_shootout', game_id=game.id) }}"
+                            <a href="{{ url_for('start_shootout', game_id=game.id) }}"
                                class="btn btn-warning" style="white-space:nowrap;"
                                onclick="return confirm('Rozpocząć konkurs rzutów karnych?');">🥅 Rozpocznij konkurs</a>
                         </div>

@@ -58,7 +58,7 @@ class Game(db.Model):
     # New relationships
     periods = db.relationship('Period', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='Period.period_order')
     game_cameras = db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
-    penalty = db.relationship('Penalty', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
+    shootout = db.relationship('Shootout', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
     game_players = db.relationship('GamePlayer', backref='game', lazy='dynamic', cascade='all, delete-orphan')
     game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
     game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
@@ -188,9 +188,9 @@ class Game(db.Model):
         return self.game_cameras.count()
 
     @property
-    def has_penalty_shootout(self):
+    def has_shootout(self):
         """Check if game has penalty shootout"""
-        return self.penalty is not None
+        return self.shootout is not None
 
     @property
     def full_score_string(self):
@@ -204,8 +204,8 @@ class Game(db.Model):
         """
         base_score = self.score_string
         
-        if self.has_penalty_shootout:
-            return f"{base_score} k. {self.penalty.score_string}"
+        if self.has_shootout:
+            return f"{base_score} k. {self.shootout.score_string}"
         
         return base_score
 
@@ -222,10 +222,10 @@ class Game(db.Model):
         from app.models.period import Period
         return self.periods.filter_by(status=Period.STATUS_PENDING).first()
 
-    def get_penalty_winner_id(self):
+    def get_shootout_winner_id(self):
         """Get winner ID from penalty shootout (if exists)"""
-        if self.has_penalty_shootout:
-            return self.penalty.winner_id
+        if self.has_shootout:
+            return self.shootout.winner_id
         return None
 
     def get_players_list(self, team_id=None):
@@ -474,11 +474,11 @@ class Game(db.Model):
             'winner_id': self.winner_id,
             'total_periods': self.total_periods,
             'total_cameras': self.total_cameras,
-            'has_penalty_shootout': self.has_penalty_shootout,
+            'has_shootout': self.has_shootout,
             'full_score_string': self.full_score_string,
             'periods': [p.to_dict() for p in self.get_periods_list()],
             'cameras': [gc.to_dict() for gc in self.get_cameras_list()],
-            'penalty': self.penalty.to_dict() if self.penalty else None,
+            'shootout': self.shootout.to_dict() if self.shootout else None,
             'total_players': self.total_players,
             'total_events': self.total_events,
             'total_referees': self.total_referees,

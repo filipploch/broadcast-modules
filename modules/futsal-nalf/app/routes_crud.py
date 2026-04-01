@@ -389,7 +389,7 @@ def create_game(league_id=None):
 @current_app.route('/games/<int:game_id>/edit', methods=['GET', 'POST'])
 def edit_game(game_id):
     """Edit existing game"""
-    from app.managers.penalty_manager import PenaltyManager
+    from app.managers.shootout_manager import ShootoutManager
     
     game = game_manager.get_game_by_id(game_id)
     
@@ -399,7 +399,7 @@ def edit_game(game_id):
     
     teams = Team.query.order_by(Team.name).all()
     stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
-    penalty_manager = PenaltyManager()
+    shootout_manager = ShootoutManager()
     
     if request.method == 'POST':
         try:
@@ -424,13 +424,13 @@ def edit_game(game_id):
             )
             
             # Update penalty shootout if exists
-            if game.penalty:
+            if game.shootout:
                 home_penalties = request.form.get('home_team_penalties')
                 away_penalties = request.form.get('away_team_penalties')
                 
                 if home_penalties is not None and away_penalties is not None:
-                    penalty_manager.update_penalty_score(
-                        penalty_id=game.penalty.id,
+                    shootout_manager.update_shootout_score(
+                        shootout_id=game.shootout.id,
                         home_penalties=int(home_penalties),
                         away_penalties=int(away_penalties)
                     )
@@ -512,10 +512,10 @@ def select_game_for_broadcast(game_id):
         return redirect(url_for('edit_game', game_id=game_id))
 
 
-@current_app.route('/games/<int:game_id>/add-penalty-shootout')
-def add_penalty_shootout(game_id):
+@current_app.route('/games/<int:game_id>/add-shootout')
+def add_shootout(game_id):
     """Add penalty shootout to game"""
-    from app.managers.penalty_manager import PenaltyManager
+    from app.managers.shootout_manager import ShootoutManager
     
     game = game_manager.get_game_by_id(game_id)
     
@@ -524,14 +524,14 @@ def add_penalty_shootout(game_id):
         return redirect(url_for('list_games'))
     
     # Check if penalty shootout already exists
-    if game.penalty:
+    if game.shootout:
         flash('Rzuty karne są już dodane do tego meczu', 'warning')
         return redirect(url_for('edit_game', game_id=game_id))
     
-    penalty_manager = PenaltyManager()
+    shootout_manager = ShootoutManager()
     
     try:
-        penalty_manager.create_penalty_shootout(game_id=game_id)
+        shootout_manager.create_shootout(game_id=game_id)
         flash('Dodano rzuty karne do meczu', 'success')
     except ValueError as e:
         flash(str(e), 'error')

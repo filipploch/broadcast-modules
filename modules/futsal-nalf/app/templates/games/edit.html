@@ -51,19 +51,19 @@
         </div>
         
         <!-- Rzuty karne -->
-        {% if not game.penalty %}
+        {% if not game.shootout %}
         <div class="form-group">
-            <button type="button" class="btn btn-primary" onclick="addPenaltyShootout()">➕ Dodaj rzuty karne</button>
+            <button type="button" class="btn btn-primary" onclick="addShootout()">➕ Dodaj rzuty karne</button>
         </div>
         {% else %}
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
-                <label for="home_team_penalties">Bramki (rzuty karne - gospodarz)</label>
-                <input type="number" id="home_team_penalties" name="home_team_penalties" value="{{ game.penalty.home_team_penalties }}" min="0">
+                <label for="home_team_shootouts">Bramki (rzuty karne - gospodarz)</label>
+                <input type="number" id="home_team_shootouts" name="home_team_shootouts" value="{{ game.shootout.home_team_shootouts }}" min="0">
             </div>
             <div class="form-group">
-                <label for="away_team_penalties">Bramki (rzuty karne - gość)</label>
-                <input type="number" id="away_team_penalties" name="away_team_penalties" value="{{ game.penalty.away_team_penalties }}" min="0">
+                <label for="away_team_shootouts">Bramki (rzuty karne - gość)</label>
+                <input type="number" id="away_team_shootouts" name="away_team_shootouts" value="{{ game.shootout.away_team_shootouts }}" min="0">
             </div>
         </div>
         {% endif %}
@@ -107,10 +107,10 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-function addPenaltyShootout() {
+function addShootout() {
     if (confirm('Czy na pewno chcesz dodać rzuty karne do tego meczu?')) {
         // Redirect to endpoint that will create penalty shootout
-        window.location.href = "{{ url_for('add_penalty_shootout', game_id=game.id) }}";
+        window.location.href = "{{ url_for('add_shootout', game_id=game.id) }}";
     }
 }
 </script>

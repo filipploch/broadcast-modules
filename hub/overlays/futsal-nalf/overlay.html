@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/squad.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/animate-word.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/action.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/shootout.css">
 </head>
 <body>
     <div id="empty-container" style="display: none;"></div>
@@ -77,11 +78,13 @@
     <div id="break-container" class="break-container info-container overlay-container" style="display: none;"></div>
     <div id="home-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
     <div id="away-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
+    <div id="shootout-container" class="shootout-container overlay-container" style="display: none;"></div>
     <script src="/overlays/futsal-nalf/js/utils.js"></script>
     <script src="/overlays/futsal-nalf/js/squad.js"></script>
     <script type="application/javascript" src="/overlays/futsal-nalf/js/animate-word.js"></script>
     <script src="/overlays/futsal-nalf/js/formatters.js"></script>
 	<script src="/overlays/futsal-nalf/js/penalty-timers-observers.js"></script>
+	<script src="/overlays/futsal-nalf/js/shootout.js"></script>
 
     
     <script>
@@ -138,7 +141,7 @@
             if (classList.contains('squad-container')) return 'squad';
             if (classList.contains('break-container')) return 'break';
             if (classList.contains('game-container')) return 'game';
-            if (classList.contains('container-stats')) return 'stats';
+            if (classList.contains('shootout-container')) return 'shootout';
             
             // Domyślny typ
             return 'none';
@@ -193,6 +196,10 @@
             expandStartContainer(_data, true);
             prepareToOpenContainer(openContainer, targetContainer);
             activateElementsAfterTime('break-content', 2500, 'flex');
+        }else if (containerType === 'shootout'){
+            fillShootoutContainer(_data);
+            prepareToOpenContainer(openContainer, targetContainer);
+            // activateElementsAfterTime('break-content', 2500, 'flex');
         }else{
             prepareToOpenContainer(openContainer, targetContainer);
         }
@@ -625,7 +632,7 @@
             }
         }
         if (typeof data.home_team_fouls != "undefined") {
-            updateFoulsElement(data.home_team_foul, homeTeamFoulsElement);
+            updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
             //     if(data.home_team_fouls === '' || data.home_team_fouls === null){
                 //         homeTeamFoulsElement.textContent = '';
                 //     }else if(parseInt(data.home_team_fouls) !== 'undefined' &&
@@ -643,7 +650,7 @@
                             // }
                         }
                         if (typeof data.away_team_fouls != "undefined") {
-                            updateFoulsElement(data.away_team_foul, awayTeamFoulsElement);
+                            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
                             // if(data.away_team_fouls === '' || data.away_team_fouls === null){
                                 //     awayTeamFoulsElement.textContent = '';
                                 // }else if(parseInt(data.away_team_fouls) !== 'undefined' &&

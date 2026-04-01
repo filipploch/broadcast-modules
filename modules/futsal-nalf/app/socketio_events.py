@@ -25,6 +25,49 @@ def handle_disconnect():
 
 
 # =============================================================================
+# SHOOTOUT DATA
+# =============================================================================
+@socketio.on('get_shootouts')
+def handle_get_shootout_data():
+    from app.managers.shootout_manager import ShootoutManager
+    from app.managers import get_shootout_kick_manager
+    from app.models.settings import Settings
+    settings = Settings.get_settings()
+    current_game_id = settings.current_game_id
+    shootout_manager = ShootoutManager()
+    shootout = shootout_manager.get_shootout_by_game(current_game_id).to_dict()
+    sh_kick_manager = get_shootout_kick_manager()
+    kicks = sh_kick_manager.get_kicks_by_game(current_game_id)
+    emit('response_get_shootouts', {'shootout': shootout, 'kicks': kicks})
+
+@socketio.on('get_game_teams')
+def handle_get_game_teams():
+    from app.managers.game_player_manager import GamePlayerManager
+    from app.managers.game_player_manager import GamePlayer
+    from app.managers.game_manager import GameManager
+    from app.models.settings import Settings
+    import json
+    settings = Settings.get_settings()
+    current_game_id = settings.current_game_id
+    game_manager = GameManager()
+    game = game_manager.get_game_by_id(game_id=current_game_id)
+    print('game:', game.to_dict())
+    game_data = game.to_dict()
+    game_player_manager = GamePlayerManager()
+    game_player = GamePlayer()
+    home_team_id = game_data['home_team_id']
+    away_team_id = game_data['away_team_id']
+    home_players = [gp.to_squad_dict() for gp in game_player_manager.get_players_for_game(game_id=game.id, team_id=home_team_id)]
+    away_players = [gp.to_squad_dict() for gp in game_player_manager.get_players_for_game(game_id=game.id, team_id=away_team_id)]
+
+
+    emit('response_get_game_teams', {
+        'game_data': game_data,
+        'home_team_players': home_players,
+        'away_team_players': away_players,
+    })
+
+# =============================================================================
 # INITIAL DATA
 # =============================================================================
 
@@ -198,12 +241,12 @@ def handle_timer_pause(data):
 
     from app.models.settings import Settings
     from app.extensions import db
-    game_id = Settings.get_settings().current_game_id
-    main_gt = tm.get_active_main_timer(game_id)
+    period_id = Settings.get_settings().current_period_id
+    main_gt = tm.get_active_main_timer(period_id)
 
     if main_gt and main_gt.plugin_timer_id == timer_id:
         # Główny timer zapauzowany — pauzuj wszystkie kary
-        for pen in tm.get_active_penalties(game_id):
+        for pen in tm.get_active_penalties(period_id):
             if pen.plugin_timer_id:
                 tm.pause_timer(pen.plugin_timer_id)
             pen.state = GameTimer.STATE_PAUSED
@@ -228,12 +271,12 @@ def handle_timer_resume(data):
 
     from app.models.settings import Settings
     from app.extensions import db
-    game_id = Settings.get_settings().current_game_id
-    main_gt = tm.get_active_main_timer(game_id)
+    period_id = Settings.get_settings().current_period_id
+    main_gt = tm.get_active_main_timer(period_id)
 
     if main_gt and main_gt.plugin_timer_id == timer_id:
         # Wznów kary które były paused (nie te co dobiegły limitu)
-        for pen in tm.get_active_penalties(game_id):
+        for pen in tm.get_active_penalties(period_id):
             if pen.state == GameTimer.STATE_PAUSED and pen.plugin_timer_id:
                 tm.resume_timer(pen.plugin_timer_id)
                 pen.state = GameTimer.STATE_RUNNING
@@ -453,7 +496,7 @@ def handle_add_game_event_to_db(data):
 
     # Czas zdarzenia — z DB timera lub cache
     tm = get_timer_manager()
-    main_gt = tm.get_active_main_timer(game_id) if tm else None
+    main_gt = tm.get_active_main_timer(period_id) if tm else None
     elapsed_ms = main_gt.elapsed_time_ms if main_gt else 0
 
     period_manager = PeriodManager()

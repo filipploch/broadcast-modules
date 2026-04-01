@@ -58,24 +58,34 @@ def ui_dashboard():
                 'away': Team.query.get(game.away_team_id)
             }
     
-    # Get current timers from Settings
-    current_timers = settings.get_current_timers()
-    main_timer = current_timers.get('main')
-    home_penalties = current_timers.get('penalties')['home']
-    away_penalties = current_timers.get('penalties')['away']
-    penalties = home_penalties + away_penalties
-    
-    # Log for debugging
-    current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
-    current_app.logger.info(f"Main timer: {main_timer.get('timer_id') if main_timer else None}")
-    current_app.logger.info(f"Penalties: {len(penalties)}")
-    
-    return render_template('ui-jinja.html',
-                          period=period,
-                          game=game,
-                          main_timer=main_timer,
-                          teams=teams,
-                          penalties=penalties)
+        # Get current timers from Settings
+        current_timers = settings.get_current_timers()
+        main_timer = current_timers.get('main')
+        home_penalties = current_timers.get('penalties')['home']
+        away_penalties = current_timers.get('penalties')['away']
+        penalties = home_penalties + away_penalties
+        
+        # Log for debugging
+        current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
+        current_app.logger.info(f"Main timer: {main_timer.get('timer_id') if main_timer else None}")
+        current_app.logger.info(f"Penalties: {len(penalties)}")
+        
+        return render_template('ui-jinja.html',
+                            period=period,
+                            game=game,
+                            main_timer=main_timer,
+                            teams=teams,
+                            penalties=penalties)
+    else:
+        current_game_id = settings.current_game_id
+        
+        game = Game.query.get(current_game_id)
+        teams = {
+            'home': Team.query.get(game.home_team_id),
+            'away': Team.query.get(game.away_team_id)
+        }
+
+        return render_template('shootout_ui.html')
 
 
 @current_app.route('/')
@@ -93,7 +103,7 @@ def index():
 
     game = None
     periods = []
-    penalty = None
+    shootout = None
     assigned = {
         'home_squad': [],
         'away_squad': [],
@@ -106,7 +116,7 @@ def index():
         game = Game.query.get(settings.current_game_id)
         if game:
             periods = Period.query.filter_by(game_id=game.id).all()
-            penalty = game.penalty
+            shootout = game.shootout
 
             pg_mgr = GamePlayerManager()
             assigned['home_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
@@ -118,7 +128,7 @@ def index():
     return render_template('index.html',
                            game=game,
                            periods=periods,
-                           penalty=penalty,
+                           shootout=shootout,
                            settings=settings,
                            assigned=assigned)
 
@@ -247,15 +257,15 @@ def reset_period_status(period_id):
     return redirect(url_for('index'))
 
 
-@current_app.route('/game/<int:game_id>/penalty-shootout/start')
-def start_penalty_shootout(game_id):
+@current_app.route('/game/<int:game_id>/shootout/start')
+def start_shootout(game_id):
     """
     Rozpocznij konkurs rzutów karnych:
-    1. Utwórz rekord Penalty (jeśli nie istnieje).
-    2. Ustaw current_penalty_id w Settings.
+    1. Utwórz rekord Shootout (jeśli nie istnieje).
+    2. Ustaw current_shootout_id w Settings.
     3. Przekieruj do UI dashboard.
     """
-    from app.managers.penalty_manager import PenaltyManager
+    from app.managers.shootout_manager import ShootoutManager
     from app.models.settings import Settings
     from app.models.game import Game
     from app.models.period import Period
@@ -281,17 +291,17 @@ def start_penalty_shootout(game_id):
         flash('Konkurs rzutów karnych jest dostępny tylko przy remisie po regulaminowym czasie gry.', 'error')
         return redirect(url_for('index'))
 
-    penalty_manager = PenaltyManager()
+    shootout_manager = ShootoutManager()
 
     try:
-        # Utwórz rekord Penalty jeśli jeszcze nie istnieje
-        if not game.penalty:
-            penalty_manager.create_penalty_shootout(game_id=game_id)
+        # Utwórz rekord Shootout jeśli jeszcze nie istnieje
+        if not game.shootout:
+            shootout_manager.create_shootout(game_id=game_id)
             # Odśwież obiekt żeby załadować nową relację
             db.session.refresh(game)
 
         # Ustaw jako aktywny konkurs w Settings
-        Settings.set_current_penalty(game.penalty.id)
+        Settings.set_current_shootout(game.shootout.id)
 
         flash('Rozpoczęto konkurs rzutów karnych.', 'success')
         return redirect(url_for('ui_dashboard'))
@@ -302,8 +312,8 @@ def start_penalty_shootout(game_id):
         return redirect(url_for('index'))
 
 
-@current_app.route('/game/<int:game_id>/penalty-shootout/finish')
-def finish_penalty_shootout(game_id):
+@current_app.route('/game/<int:game_id>/shootout/finish')
+def finish_shootout(game_id):
     """Zakończ konkurs rzutów karnych i wróć do panelu."""
     from app.models.settings import Settings
     from app.models.game import Game
@@ -314,7 +324,7 @@ def finish_penalty_shootout(game_id):
         return redirect(url_for('index'))
 
     try:
-        Settings.set_current_penalty(None)
+        Settings.set_current_shootout(None)
         game.set_finished()
         db.session.commit()
         flash('Zakończono konkurs rzutów karnych.', 'success')

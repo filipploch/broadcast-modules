@@ -12,7 +12,7 @@ class Settings(db.Model):
     current_season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)
     current_game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
     current_period_id  = db.Column(db.Integer, db.ForeignKey('periods.id'),  nullable=True)
-    current_penalty_id = db.Column(db.Integer, db.ForeignKey('penalties.id'), nullable=True)
+    current_shootout_id = db.Column(db.Integer, db.ForeignKey('shootouts.id'), nullable=True)
     current_timers = db.Column(db.Text, nullable=True)  # JSON: {"main": {...}, "penalties": [{...}]}
     is_scoreboard_reversed = db.Column(db.Boolean, default=False)
     obs_record_filepath = db.Column(db.String(500), nullable=True)
@@ -25,7 +25,7 @@ class Settings(db.Model):
     current_season = db.relationship('Season', foreign_keys=[current_season_id], backref='settings_ref')
     current_game = db.relationship('Game', foreign_keys=[current_game_id], backref='settings_ref')
     current_period  = db.relationship('Period',  foreign_keys=[current_period_id],  backref='settings_ref')
-    current_penalty = db.relationship('Penalty', foreign_keys=[current_penalty_id], backref='settings_ref')
+    current_shootout = db.relationship('Shootout', foreign_keys=[current_shootout_id], backref='settings_ref')
 
     def __repr__(self):
         return f'<Settings season_id={self.current_season_id} game_id={self.current_game_id} period_id={self.current_period_id}>'
@@ -87,21 +87,21 @@ class Settings(db.Model):
         db.session.commit()
 
     @classmethod
-    def set_current_penalty(cls, penalty_id):
+    def set_current_shootout(cls, shootout_id):
         """Set current active penalty shootout (None = brak aktywnego konkursu)"""
         settings = cls.get_settings()
-        settings.current_penalty_id = penalty_id
+        settings.current_shootout_id = shootout_id
         settings.updated_at = datetime.utcnow()
         db.session.commit()
 
     @classmethod
-    def get_current_penalty(cls):
+    def get_current_shootout(cls):
         """Get current active penalty shootout object or None"""
         settings = cls.get_settings()
-        if settings.current_penalty_id is None:
+        if settings.current_shootout_id is None:
             return None
-        from app.models.penalty import Penalty
-        return Penalty.query.get(settings.current_penalty_id)
+        from app.models.shootout import Shootout
+        return Shootout.query.get(settings.current_shootout_id)
     
     @classmethod
     def validate_period_for_game(cls):
