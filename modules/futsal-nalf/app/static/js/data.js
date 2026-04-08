@@ -16,8 +16,3 @@ console.log('appState: ', appState);
 
 var cellID;
 var clickTimer;
-
-
-
-// var isReordering = false; // Flaga blokująca równoczesne wykonania
-// var isReversed = false;

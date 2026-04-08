@@ -85,12 +85,52 @@ def ui_dashboard():
             'away': Team.query.get(game.away_team_id)
         }
 
-        return render_template('shootout_ui.html')
+        return render_template('ui-shootout.html')
 
 
 @current_app.route('/')
 def index():
-    """Broadcast control panel - manage periods and game state"""
+    """
+    Period-control page — timer + scoreboard only.
+    Standalone UI for the operator running the clock during a match.
+    Mirrors the ui_dashboard data-loading logic but renders index.html.
+    """
+    from app.models.settings import Settings
+    from app.models.period import Period
+    from app.models.game import Game
+    from app.models.team import Team
+
+    settings = Settings.get_settings()
+    current_period_id = settings.current_period_id
+
+    period = None
+    game   = None
+    teams  = {'home': None, 'away': None}
+    main_timer = None
+
+    if current_period_id:
+        period = Period.query.filter_by(id=current_period_id).first()
+        if period:
+            game = Game.query.get(period.game_id)
+            if game:
+                teams = {
+                    'home': Team.query.get(game.home_team_id),
+                    'away': Team.query.get(game.away_team_id),
+                }
+
+        current_timers = settings.get_current_timers()
+        main_timer = current_timers.get('main')
+
+    return render_template('index.html',
+                           period=period,
+                           game=game,
+                           main_timer=main_timer,
+                           teams=teams)
+
+
+@current_app.route('/game-setup')
+def game_setup():
+    """Game setup page — manage periods, squads, referees, cameras."""
     from app.models.settings import Settings
     from app.models.game import Game
     from app.models.period import Period
@@ -101,37 +141,63 @@ def index():
 
     settings = Settings.get_settings()
 
-    game = None
-    periods = []
+    game     = None
+    periods  = []
     shootout = None
     assigned = {
-        'home_squad': [],
-        'away_squad': [],
-        'referees': [],
+        'home_squad':   [],
+        'away_squad':   [],
+        'referees':     [],
         'commentators': [],
-        'cameras': [],
+        'cameras':      [],
     }
 
     if settings.current_game_id:
         game = Game.query.get(settings.current_game_id)
         if game:
-            periods = Period.query.filter_by(game_id=game.id).all()
+            periods  = Period.query.filter_by(game_id=game.id).all()
             shootout = game.shootout
 
             pg_mgr = GamePlayerManager()
-            assigned['home_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
-            assigned['away_squad'] = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
-            assigned['referees'] = GameRefereeManager().get_referees_for_game(game.id)
+            assigned['home_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
+            assigned['away_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
+            assigned['referees']     = GameRefereeManager().get_referees_for_game(game.id)
             assigned['commentators'] = GameCommentatorManager().get_commentators_for_game(game.id)
-            assigned['cameras'] = GameCameraManager().get_cameras_for_game(game.id)
+            assigned['cameras']      = GameCameraManager().get_cameras_for_game(game.id)
 
-    return render_template('index.html',
+    return render_template('game-setup.html',
                            game=game,
                            periods=periods,
                            shootout=shootout,
                            settings=settings,
                            assigned=assigned)
 
+
+
+@current_app.route('/game-period-choice')
+def game_period_choice():
+    """Period selection page — start, finish, reset periods and shootout."""
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.models.period import Period
+
+    settings = Settings.get_settings()
+
+    game     = None
+    periods  = []
+    penalty  = None
+
+    if settings.current_game_id:
+        game = Game.query.get(settings.current_game_id)
+        if game:
+            periods = Period.query.filter_by(game_id=game.id).all()
+            penalty = game.shootout
+
+    return render_template('game-period-choice.html',
+                           game=game,
+                           periods=periods,
+                           penalty=penalty,
+                           settings=settings)
 
 @current_app.route('/period/<int:period_id>/start')
 def start_period(period_id):
@@ -150,13 +216,13 @@ def start_period(period_id):
     
     if not period:
         flash('Nie znaleziono okresu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
     
     # Check if this period can be started
     game = Game.query.get(period.game_id)
     if not game:
         flash('Nie znaleziono meczu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
     
     # Check if previous period is finished (if not first period)
     if period.period_order > 1:
@@ -169,7 +235,7 @@ def start_period(period_id):
         for prev_period in previous_periods:
             if prev_period.status != Period.STATUS_FINISHED:
                 flash(f'Nie można rozpocząć {period.description}. Poprzedni okres nie został zakończony.', 'error')
-                return redirect(url_for('index'))
+                return redirect(url_for('game_period_choice'))
     
     try:
         # Start the period
@@ -184,12 +250,14 @@ def start_period(period_id):
             db.session.commit()
         
         flash(f'Rozpoczęto {period.description}', 'success')
-        return redirect(url_for('ui_dashboard'))
+        from app.extensions import socketio
+        socketio.emit('reload_ui_dashboard')
+        return redirect(url_for('index'))
         
     except Exception as e:
         logger.error(f"Error starting period: {e}")
         flash(f'Błąd podczas rozpoczynania okresu: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
 
 @current_app.route('/period/<int:period_id>/finish')
@@ -204,7 +272,7 @@ def finish_period(period_id):
     
     if not period:
         flash('Nie znaleziono okresu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
     
     try:
         # Finish the period
@@ -227,12 +295,12 @@ def finish_period(period_id):
             else:
                 flash(f'Zakończono {period.description}', 'success')
         
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
         
     except Exception as e:
         logger.error(f"Error finishing period: {e}")
         flash(f'Błąd podczas kończenia okresu: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
 
 @current_app.route('/period/<int:period_id>/reset-status')
@@ -245,7 +313,7 @@ def reset_period_status(period_id):
     
     if not period:
         flash('Nie znaleziono okresu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
     
     try:
         period_manager.set_period_status(period_id, Period.STATUS_NOT_STARTED)
@@ -254,7 +322,7 @@ def reset_period_status(period_id):
         logger.error(f"Error resetting period status: {e}")
         flash(f'Błąd podczas resetowania statusu: {str(e)}', 'error')
     
-    return redirect(url_for('index'))
+    return redirect(url_for('game_period_choice'))
 
 
 @current_app.route('/game/<int:game_id>/shootout/start')
@@ -273,23 +341,23 @@ def start_shootout(game_id):
     game = Game.query.get(game_id)
     if not game:
         flash('Nie znaleziono meczu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
     # Walidacja: liga musi nie dopuszczać remisu
     if game.league and game.league.allows_draw:
         flash('Ta liga dopuszcza remis — konkurs rzutów karnych niedostępny.', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
     # Walidacja: wszystkie okresy muszą być zakończone
     periods = game.get_periods_list()
     if not periods or not all(p.status == Period.STATUS_FINISHED for p in periods):
         flash('Wszystkie okresy meczu muszą być zakończone przed konkursem rzutów karnych.', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
     # Walidacja: wynik musi być remisowy
     if game.home_team_goals != game.away_team_goals:
         flash('Konkurs rzutów karnych jest dostępny tylko przy remisie po regulaminowym czasie gry.', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
     shootout_manager = ShootoutManager()
 
@@ -304,13 +372,39 @@ def start_shootout(game_id):
         Settings.set_current_shootout(game.shootout.id)
 
         flash('Rozpoczęto konkurs rzutów karnych.', 'success')
-        return redirect(url_for('ui_dashboard'))
+        from app.extensions import socketio
+        socketio.emit('reload_ui_dashboard')
+        return redirect(url_for('index'))
 
     except Exception as e:
         logger.error(f"Error starting penalty shootout: {e}")
         flash(f'Błąd podczas rozpoczynania konkursu: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
+
+@current_app.route('/game/<int:game_id>/shootout/reset')
+def reset_shootout(game_id):
+    """Reset shootout — delete record and clear current_shootout_id in Settings."""
+    from app.models.settings import Settings
+    from app.models.game import Game
+    from app.managers.shootout_manager import ShootoutManager
+
+    game = Game.query.get(game_id)
+    if not game:
+        flash('Nie znaleziono meczu', 'error')
+        return redirect(url_for('game_period_choice'))
+
+    try:
+        shootout_manager = ShootoutManager()
+        if game.shootout:
+            shootout_manager.delete_shootout(game.shootout.id)
+        Settings.set_current_shootout(None)
+        flash('Zresetowano konkurs rzutów karnych', 'success')
+    except Exception as e:
+        logger.error(f"Error resetting shootout: {e}")
+        flash(f'Błąd podczas resetowania konkursu: {str(e)}', 'error')
+
+    return redirect(url_for('game_period_choice'))
 
 @current_app.route('/game/<int:game_id>/shootout/finish')
 def finish_shootout(game_id):
@@ -321,7 +415,7 @@ def finish_shootout(game_id):
     game = Game.query.get(game_id)
     if not game:
         flash('Nie znaleziono meczu', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
 
     try:
         Settings.set_current_shootout(None)
@@ -332,13 +426,7 @@ def finish_shootout(game_id):
         logger.error(f"Error finishing penalty shootout: {e}")
         flash(f'Błąd: {str(e)}', 'error')
 
-    return redirect(url_for('index'))
-
-
-@current_app.route('/overlay/scoreboard')
-def overlay_scoreboard():
-    """Scoreboard overlay"""
-    return render_template('overlays/scoreboard.html')
+    return redirect(url_for('game_period_choice'))
 
 
 @current_app.route('/api/status')
@@ -667,74 +755,6 @@ def api_clear_current_timers():
         'message': 'Timers cleared'
     })
 
-# @current_app.route('/api/settings')
-# def api_get_settings():
-#     """
-#     Get complete settings including current period, game and timers
-    
-#     Returns JSON:
-#     {
-#         "current_season_id": int or null,
-#         "current_game_id": int or null,
-#         "current_period_id": int or null,
-#         "current_timers": {
-#             "main": {...} or null,
-#             "penalties": [...]
-#         },
-#         "period": {
-#             "id": int,
-#             "description": str,
-#             "main_timer_name": str,
-#             ...
-#         } or null,
-#         "game": {
-#             "id": int,
-#             ...
-#         } or null
-#     }
-#     """
-#     from app.models.settings import Settings
-#     from app.models.period import Period
-#     from app.models.game import Game
-    
-#     settings = Settings.get_settings()
-#     current_timers = settings.get_current_timers()
-    
-#     # Get period details if exists
-#     period_data = None
-#     if settings.current_period_id:
-#         period = Period.query.get(settings.current_period_id)
-#         if period:
-#             period_data = {
-#                 "id": period.id,
-#                 "description": period.description,
-#                 "period_order": period.period_order,
-#                 "main_timer_name": period.main_timer_name,
-#                 "initial_time": period.initial_time,
-#                 "limit": period.limit,
-#                 "pause_at_limit": period.pause_at_limit,
-#                 "status": period.status
-#             }
-    
-#     # Get game details if exists
-#     game_data = None
-#     if settings.current_game_id:
-#         game = Game.query.get(settings.current_game_id)
-#         if game:
-#             game_data = {
-#                 "id": game.id,
-#                 # Add other game fields as needed
-#             }
-    
-#     return jsonify({
-#         "current_season_id": settings.current_season_id,
-#         "current_game_id": settings.current_game_id,
-#         "current_period_id": settings.current_period_id,
-#         "current_timers": current_timers,
-#         "period": period_data,
-#         "game": game_data
-#     })
-
 @current_app.route('/api/settings')
 def api_get_settings():
     """
@@ -846,26 +866,6 @@ def get_scoreboard_state():
     return jsonify({
         'is_reversed': settings.is_scoreboard_reversed
     })
-
-# # Endpoint do zapisywania stanu
-# @app.route('/api/scoreboard-state', methods=['POST'])
-# def update_scoreboard_state():
-#     data = request.get_json()
-#     setting = Setting.query.get(1)
-    
-#     if setting:
-#         setting.is_scoreboard_reversed = data.get('is_reversed', False)
-#         setting.updated_at = datetime.utcnow()
-#     else:
-#         setting = Setting(
-#             id=1, 
-#             is_scoreboard_reversed=data.get('is_reversed', False)
-#         )
-#         db.session.add(setting)
-    
-#     db.session.commit()
-    
-#     return jsonify({'success': True, 'is_reversed': setting.is_scoreboard_reversed})
 
 @current_app.route('/teams/<int:team_id>/scrape-players')
 def scrape_players(team_id):

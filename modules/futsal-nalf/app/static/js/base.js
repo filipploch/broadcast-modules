@@ -10,7 +10,7 @@ function clearSocketMonitor(){
     });
 }
 
-const socket = io();
+var socket = (typeof socket !== 'undefined') ? socket : io();
 
 socket.on('connect', () => {
     console.log('✅ WebSocket connected');

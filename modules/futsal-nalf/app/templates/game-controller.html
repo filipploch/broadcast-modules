@@ -8,7 +8,6 @@ Online HTML, CSS and JavaScript editor to run code online.
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
-		<!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css') }}"> -->
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/timer.css') }}">
 		<link rel="stylesheet" href="{{ url_for('static', filename='css/penalty-timer-modal.css') }}">
@@ -59,49 +58,15 @@ Online HTML, CSS and JavaScript editor to run code online.
 				</div>
 			</div>
 			<button class="thin-wide-button bg_red" onclick="openModal(modalID='modal-penalties-timers')">KARY</button>
-			<!-- <div id="modal-penalties-timers" class="hidden"> -->
 			<div id="modal-penalties-timers" class="">
 				<div id="modal-penalties-header">
 					<button class="top-bar-element bg_red" onclick="closeModal(modalID='modal-penalties-timers');">X</button>
 				</div>
 				<div id="penalties-timers" class="modal-content reversible">
 					<div id="home-team-penalties-timers-container" class="penalties-timers-container flex1">
-						<!-- <div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">1:15</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div>
-						<div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">1:34</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div> -->
+
 					</div>
 					<div id="away-team-penalties-timers-container" class="penalties-timers-container flex1">
-						<!-- <div class="penalty-element">
-							<div class="penalty-element-content">
-								<button class="penalty-modal-button bg_red remove-penalty-button">X</button>
-								<div class="penalty-display">0:44</div>
-							</div>
-							<div class="penalty-element-controllers">
-								<div class="gap"></div>
-								<button class="penalty-modal-button adjust-penalty-time-button">-</button>
-								<button class="penalty-modal-button adjust-penalty-time-button">+</button>
-							</div>
-						</div>
-						<button class="add-penalty-button" onclick="addPenaltyTimer('away')">KARA<br>2 min.</button> -->
 					</div>
 				</div>
 			</div>
@@ -159,11 +124,6 @@ Online HTML, CSS and JavaScript editor to run code online.
     // Game data
     var game = {{ game.to_dict() | tojson if game else 'null' }};
     
-    // Main timer data
-    // var mainTimerData = {{ main_timer | tojson if main_timer else 'null' }};
-    
-    // Penalties data
-    // var penaltiesData = {{ penalties | tojson if penalties else '[]' }};
   </script>
 
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>

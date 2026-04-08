@@ -1,6 +1,6 @@
 # app/sequences/sequences.py
 from app.sequences.steps import obs_mute, obs_switch_scene, overlay_show, overlay_play_animation, set_replay_file,\
-    set_replay_start_time, start_replay, show_transition, show_source, start_recording, stop_recording,\
+    set_replay_start_time, start_replay, pause_replay, show_transition, show_source, start_recording, stop_recording,\
     start_stream, stop_stream, show_overlay_container
 
 def goal_sequence(team: str, player_name: str) -> list:
@@ -24,11 +24,13 @@ def replay_sequence(context):
     _replay_duration = _replay_end_time - _replay_start_time
     return [
         set_replay_file(_file_path),                                      # t=0
-        start_replay(delay_ms=200),                                                    # t=0
-        set_replay_start_time(_replay_start_time, delay_ms=400),          # t=500
+        start_replay(delay_ms=400),
+        pause_replay(delay_ms=500),
+        # set_replay_start_time(_replay_start_time, delay_ms=400),          # t=500
         # show_transition(delay_ms=600),                                     # t=600
         show_source(delay_ms=600),                                         # t=700
         set_replay_start_time(_replay_start_time, delay_ms=700),          # t=500
+        start_replay(delay_ms=800),
         # show_transition(delay_ms=1620 + _replay_duration),                  # t=700+duration
         show_source(is_visible=False, delay_ms=700 + _replay_duration)  # t=700+duration+700
     ]

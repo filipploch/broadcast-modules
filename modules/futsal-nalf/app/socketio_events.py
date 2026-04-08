@@ -29,16 +29,17 @@ def handle_disconnect():
 # =============================================================================
 @socketio.on('get_shootouts')
 def handle_get_shootout_data():
-    from app.managers.shootout_manager import ShootoutManager
+    from app.models.shootout import Shootout
     from app.managers import get_shootout_kick_manager
     from app.models.settings import Settings
     settings = Settings.get_settings()
     current_game_id = settings.current_game_id
-    shootout_manager = ShootoutManager()
-    shootout = shootout_manager.get_shootout_by_game(current_game_id).to_dict()
-    sh_kick_manager = get_shootout_kick_manager()
-    kicks = sh_kick_manager.get_kicks_by_game(current_game_id)
-    emit('response_get_shootouts', {'shootout': shootout, 'kicks': kicks})
+    current_shootout_id = settings.current_shootout_id
+    if current_shootout_id:
+        shootout = Shootout.query.get(current_shootout_id).to_dict()
+        sh_kick_manager = get_shootout_kick_manager()
+        kicks = sh_kick_manager.get_kicks_by_game(current_game_id)
+        emit('response_get_shootouts', {'shootout': shootout, 'kicks': kicks})
 
 @socketio.on('get_game_teams')
 def handle_get_game_teams():
@@ -77,41 +78,76 @@ def handle_request_initial_data():
     from app.models.period import Period
     from app.models.game import Game
 
-    settings   = Settings.get_settings()
-    period     = Period.query.get(settings.current_period_id)
-    game       = Game.query.get(period.game_id).to_dict()
+    settings    = Settings.get_settings()
     is_reversed = bool(settings.is_scoreboard_reversed)
+    period      = Period.query.get(settings.current_period_id) if settings.current_period_id else None
+    game_obj    = Game.query.get(period.game_id) if period else None
+    game        = game_obj.to_dict() if game_obj else None
 
     timer_manager = get_timer_manager()
     main_gt = (
         timer_manager.get_active_main_timer(settings.current_period_id)
-        if timer_manager else None
+        if (timer_manager and period) else None
     )
     penalties = (
         timer_manager._get_penalties_dict(settings.current_period_id)
-        if timer_manager else {'home': [], 'away': []}
+        if (timer_manager and period) else {'home': [], 'away': []}
     )
 
     hub_client = get_hub_client()
-    if hub_client:
+    if hub_client and game:
         hub_client.broadcast_to_class('overlay', 'game_data', game)
 
-    emit('initial_data', {
-        'home_team_goals':  game['home_team_goals'],
-        'away_team_goals':  game['away_team_goals'],
-        'home_team_fouls':  game['home_team_fouls'],
-        'away_team_fouls':  game['away_team_fouls'],
-        'home_penalties':   penalties['home'],
-        'away_penalties':   penalties['away'],
-        'main_timer':       main_gt.to_dict() if main_gt else None,
-        'is_reversed':      is_reversed,
-    })
+    if game:
+        emit('initial_data', {
+            'home_team_goals':   game['home_team_goals'],
+            'away_team_goals':   game['away_team_goals'],
+            'home_team_fouls':   game['home_team_fouls'],
+            'away_team_fouls':   game['away_team_fouls'],
+            'home_team_uniform': game['home_team_uniform'],
+            'away_team_uniform': game['away_team_uniform'],
+            'home_penalties':    penalties['home'],
+            'away_penalties':    penalties['away'],
+            'main_timer':        main_gt.to_dict() if main_gt else None,
+            'is_reversed':       is_reversed,
+        })
+    else:
+        from app.models.shootout import Shootout
+        game_obj = Game.query.get(settings.current_game_id) if settings.current_game_id else None
+        game = game_obj.to_dict() if game_obj else None
+
+        shootout_obj = Shootout.query.get(settings.current_shootout_id) if settings.current_shootout_id else None
+        _data = {
+            'home_team_short_name': game['home_team_short_name'],
+            'away_team_short_name': game['away_team_short_name'],
+        }
+        if shootout_obj:
+            shootout = shootout_obj.to_dict() if shootout_obj else None
+            _data.update({
+                'home_team_shootouts': shootout['home_team_shootouts'],
+                'away_team_shootouts': shootout['away_team_shootouts'],
+                'score_string': shootout['score_string']
+            })
+
+        emit('shootout_initial_data', _data)
 
 
 @socketio.on('reverse_scoreboard')
 def handle_reverse_scoreboard(data):
     from app.models.settings import Settings
-    Settings.set_scoreboard_order(data.get('is_scoreboard_reversed'))
+    is_reversed = data.get('is_scoreboard_reversed')
+    Settings.set_scoreboard_order(is_reversed)
+    # Broadcast to ALL clients so both index.html and ui-jinja.html stay in sync
+    socketio.emit('scoreboard_reversed', {'is_reversed': bool(is_reversed)})
+
+
+@socketio.on('set_reversed')
+def handle_set_reversed(data):
+    from app.models.settings import Settings
+    is_reversed = data.get('is_reversed')
+    Settings.set_scoreboard_order(is_reversed)
+    # Broadcast to ALL clients so both index.html and ui-jinja.html stay in sync
+    socketio.emit('scoreboard_reversed', {'is_reversed': bool(is_reversed)})
 
 
 # =============================================================================
@@ -496,8 +532,10 @@ def handle_add_game_event_to_db(data):
 
     # Czas zdarzenia — z DB timera lub cache
     tm = get_timer_manager()
-    main_gt = tm.get_active_main_timer(period_id) if tm else None
-    elapsed_ms = main_gt.elapsed_time_ms if main_gt else 0
+    main_timer = tm.get_active_main_timer(period_id)
+    main_timer_id = main_timer.id
+    timer_state = tm.get_timer_state(main_timer_id)  # z in-memory cache
+    elapsed_ms  = timer_state.get('elapsed_time', 0) if timer_state else 0
 
     period_manager = PeriodManager()
     period_data    = period_manager.get_period_by_id(period_id).to_dict()

@@ -8,19 +8,7 @@ body {
     position: absolute;
     display: flex;
     height:264px;
-    width:165px;
-    border:1px solid black;
-    margin:0px;
-    padding:0;
-    background-color:#2b2e38;
-    overflow:hidden;
-}
-
-#container2 {
-    position: absolute;
-    display: flex;
-    height:264px;
-    width:645px;
+    width:162px;
     border:1px solid black;
     margin:0px;
     padding:0;

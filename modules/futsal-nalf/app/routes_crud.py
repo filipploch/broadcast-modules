@@ -3,7 +3,6 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 from app.managers.season_manager import SeasonManager
 from app.managers.league_manager import LeagueManager
 from app.managers.game_manager import GameManager
-# from app.managers import get_game_manager
 from app.managers.camera_manager import CameraManager
 from app.managers.game_camera_manager import GameCameraManager
 from app.models.stadium import Stadium
@@ -464,7 +463,7 @@ def prepare_game_for_broadcast(game_id):
     # Check if game already has periods
     if game.periods.count() > 0:
         flash('Mecz ma już utworzone okresy', 'warning')
-        return redirect(url_for('index'))
+        return redirect(url_for('game_period_choice'))
     
     camera_manager = CameraManager()
     main_camera = camera_manager.get_camera_by_id(1)
@@ -504,8 +503,19 @@ def select_game_for_broadcast(game_id):
     
     try:
         Settings.set_current_game(game_id)
-        flash(f'Wybrano mecz do transmisji: {game.home_team_short_name} vs {game.away_team_short_name}', 'success')
-        return redirect(url_for('index'))
+        flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
+        
+        # Notify UI clients (index.html, game-period-choice.html) via Flask-SocketIO
+        from app.extensions import socketio
+        socketio.emit('game_changed', {'game_id': game_id})
+
+        # Notify stream overlay via hub
+        from app.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.broadcast_to_class('overlay', 'reload', {'reason': 'game_changed'})
+
+        return redirect(url_for('game_setup'))
     except Exception as e:
         logger.error(f"Error selecting game for broadcast: {e}")
         flash(f'Błąd podczas wyboru meczu: {str(e)}', 'error')
@@ -986,3 +996,37 @@ def delete_event(event_id):
     _event_manager.delete_event(event_id)
     flash('Zdarzenie usunięte', 'success')
     return redirect(url_for('list_events'))
+
+# =============================================================================
+# GAME STATUS API
+# =============================================================================
+
+@current_app.route('/api/games/<int:game_id>/status', methods=['PATCH'])
+def api_update_game_status(game_id):
+    """API: Update game status. Body: {status: 0|1|2}"""
+    from flask import jsonify
+    from app.extensions import db
+    game = game_manager.get_game_by_id(game_id)
+    if not game:
+        return jsonify({'error': 'Nie znaleziono meczu'}), 404
+    data = request.get_json(silent=True) or {}
+    new_status = data.get('status')
+    if new_status not in (0, 1, 2):
+        return jsonify({'error': 'Nieprawidłowy status (dozwolone: 0, 1, 2)'}), 400
+    try:
+        game.status = new_status
+        db.session.commit()
+        return jsonify({'ok': True, 'game': game.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@current_app.route('/api/games/scrape/status')
+def api_games_scrape_status():
+    """API: Get current game scraping status"""
+    from app.managers.game_scraper_manager import GameScraperManager
+    from flask import jsonify
+    game_scraper_manager = GameScraperManager()
+    status = game_scraper_manager.get_scraping_status()
+    return jsonify(status)

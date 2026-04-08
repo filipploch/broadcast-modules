@@ -21,7 +21,7 @@
                 </div>
             </div>
             <nav>
-                <a href="{{ url_for('index') }}">MECZ</a>
+                <a href="{{ url_for('game_setup') }}">MECZ</a>
                 {% if broadcast_game_id %}
                     <a href="{{ url_for('edit_game', game_id=broadcast_game_id) }}" class="broadcast-link">📡 Na żywo</a>
                 {% endif %}

@@ -13,10 +13,7 @@ class Config:
 
     MODULE_ID = 'futsal-nalf'
     MODULE_NAME = 'FUTSAL NALF'
-    # HUB_HOST = 'broadcast-hub.local'
     HUB_HOST = 'ws://localhost:8080/ws'
-    # HUB_HOST = 'broadcast-hub'
-    # HUB_PORT = 8080
     APP_HOST = '0.0.0.0'
     APP_PORT = 8081
 

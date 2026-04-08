@@ -23,6 +23,7 @@ function fillPenaltiesTimersContainer(_penalties, teamType){
     // const penalties = Array.of(appState.penalties[team]);
     let penaltiesContainerId = `${teamType}-team-penalties-timers-container`;
     let penaltiesContainer = document.getElementById(penaltiesContainerId);
+    if (!penaltiesContainer) return;
     let itemsHtml = '';
     if(penalties.length > 0) {
         penalties.forEach(penalty => {

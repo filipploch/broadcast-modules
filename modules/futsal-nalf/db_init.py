@@ -43,29 +43,6 @@ def init_database():
         print("\n🌱 Step 3: Seeding initial data...\n")
 
         try:
-            # ========== PLUGINS ==========
-            # print("   📦 Adding Plugins...")
-            #
-            # timer_plugin = Plugin(
-            #     id='timer-plugin',
-            #     name='Timer Plugin',
-            #     type='timer',
-            #     executable_path='../../plugins/timer-plugin/timer-plugin.exe',
-            #     expected_host='localhost',
-            #     expected_port=0,
-            #     is_critical=True,
-            #     startup_priority=10,
-            #     startup_delay_ms=500
-            # )
-            # timer_plugin.config = {
-            #     'plugin_id': 'timer-plugin',
-            #     'hub_url': 'ws://localhost:8080/ws',
-            #     'auto_reconnect': True,
-            #     'max_reconnects': 5,
-            #     'update_interval_ms': 100
-            # }
-            # db.session.add(timer_plugin)
-            # print("      ✅ Timer Plugin")
 
             # ========== SEASON ==========
             print("\n   🏆 Adding Season...")

@@ -41,11 +41,6 @@ const FutsalFormatters = {
         const isNegative = totalTime < 0;
         const absTime = Math.abs(totalTime);
 
-        // WZÓR DO ZAIMPLEMENTOWANIA
-        // const minutes = Math.floor(elapsedMs / 60000);
-        // const seconds = Math.floor((elapsedMs % 60000) / 1000);
-        // const dseconds = Math.floor((elapsedMs % 1000) / 100);
-
         // Calculate time components
         const totalSeconds = Math.floor(absTime / divider);
         const hours = Math.floor(totalSeconds / 3600);

@@ -84,3 +84,47 @@ function updateCamerasIndicators(camerasDict) {
         }
     }
 }
+
+function setMultiColorBackground(elementId, colors) {
+  const el = document.getElementById(elementId);
+  if (!el || !Array.isArray(colors) || colors.length === 0) return;
+
+  const n = colors.length;
+  const step = 100 / n;
+
+  const stops = colors.map((color, i) => {
+    const start = i * step;
+    const end = (i + 1) * step;
+    return `${color} ${start}%, ${color} ${end}%`;
+  });
+
+  el.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+}
+
+function applyReversedState(isReversed) {
+    document.querySelectorAll('.reversible').forEach(function(el) {
+        var children = Array.from(el.children);
+        if (children.length < 2) return;
+
+        var anchor = children.find(function(c) {
+            return c.hasAttribute('data-reverse-anchor');
+        });
+        if (!anchor) return;
+
+        var anchorIsFirst = children[0] === anchor;
+        var shouldFlip = (isReversed && anchorIsFirst) || (!isReversed && !anchorIsFirst);
+
+        if (shouldFlip) {
+            children.reverse().forEach(function(c) {
+                el.appendChild(c);
+            });
+        }
+    });
+
+    appState.isReversed = isReversed;
+}
+
+function changeGameValue(valueType, teamType, value) {
+   socket.emit('change_game_value', {value_type: valueType, team_type: teamType, value: value});
+}
+

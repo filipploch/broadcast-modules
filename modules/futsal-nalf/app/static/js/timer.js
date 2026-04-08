@@ -7,7 +7,7 @@
 // WEBSOCKET CONNECTION
 // ============================================================================
 
-//const socket = io();
+//var socket = (typeof socket !== 'undefined') ? socket : io();
 
 // ============================================================================
 // BASIC TIMER OPERATIONS

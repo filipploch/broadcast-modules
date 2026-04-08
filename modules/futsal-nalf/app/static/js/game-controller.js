@@ -16,7 +16,7 @@
 // WEBSOCKET SETUP
 // ============================================================================
 
-const socket = io();
+var socket = (typeof socket !== 'undefined') ? socket : io();
 
 var homeScoreLabel = document.getElementById('labelScoreHome');
 var awayScoreLabel = document.getElementById('labelScoreAway');
@@ -476,33 +476,6 @@ function reorderReversible() {
   appState.isReordering = false;
 }
 
-// document.addEventListener('DOMContentLoaded', () => {
-//     console.log('UI initialized with Jinja2 rendering');
-//     console.log('Period:', period);
-//     console.log('Main timer:', appState.mainTimer);
-//     console.log('Penalties:', appState.penalties);
-    
-//     // Initialize displays with current data
-//     if (appState.mainTimer) {
-//         updateTimerDisplay(appState.mainTimer.timer_id, appState.mainTimer.initial_time, appState.mainTimer.limit);
-//         updateTimerState(appState.mainTimer.timer_id, appState.mainTimer.state || 'idle');
-//     }
-    
-//     // if (penaltiesData && penaltiesData.length > 0) {
-//     //     penaltiesData.forEach(penalty => {
-//     //         updateTimerDisplay(penalty.timer_id, penalty.initial_time || 0);
-//     //         updateTimerState(penalty.timer_id, penalty.state || 'idle');
-//     //     });
-//     // }
-    
-//     console.log('✅ UI ready - listening for WebSocket updates');
-// });
-
-// ============================================================================
-// ERROR HANDLING
-// ============================================================================
-
-// Error handler moved to removeTimerFromUI section
 
 // ============================================================================
 // UTILITY FUNCTIONS

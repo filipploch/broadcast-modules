@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 )
 
 // RecorderManager coordinates recording across all configured cameras.
@@ -15,6 +16,11 @@ type RecorderManager struct {
 	hubClient *HubClient // used to notify main_module on recording start/stop
 	mu        sync.RWMutex
 }
+
+const (
+	autoRestartDelay   = 3 * time.Second // pauza przed restartem po crashu ffmpeg
+	autoRestartMaxTries = 5              // max prób restartu z rzędu zanim się podda
+)
 
 // NewRecorderManager creates a RecorderManager from the loaded Config.
 func NewRecorderManager(cfg Config) *RecorderManager {
@@ -28,7 +34,15 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 			log.Printf("⏭️  Camera %s is disabled — skipping", camCfg.ID)
 			continue
 		}
-		rm.cameras[camCfg.ID] = NewCameraRecorder(camCfg, cfg.OutputDir)
+		cam := NewCameraRecorder(camCfg, cfg.OutputDir)
+		rm.cameras[camCfg.ID] = cam
+
+		// Capture camCfg.ID for closure
+		camID := camCfg.ID
+		cam.SetOnUnexpectedStop(func(cameraID string, meta RecordingMeta) {
+			rm.handleUnexpectedStop(cameraID, meta)
+		})
+		_ = camID // used in closure above
 		log.Printf("📷 Camera registered: %s (service: %s)", camCfg.ID, camCfg.ServiceName)
 	}
 
@@ -85,6 +99,75 @@ func (rm *RecorderManager) notifyRecordingStopped(cameraID string) {
 		},
 	})
 	log.Printf("📡 [%s] Notified main_module: recording_stopped", cameraID)
+}
+
+// handleUnexpectedStop is called by CameraRecorder when ffmpeg exits without
+// an explicit StopRecord command. It notifies main_module and auto-restarts.
+func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingMeta) {
+	log.Printf("🔄 [%s] Unexpected stop detected — scheduling auto-restart", cameraID)
+
+	// Powiadom main_module z reason="crash"
+	rm.mu.RLock()
+	hc := rm.hubClient
+	rm.mu.RUnlock()
+
+	if hc != nil {
+		_ = hc.Send(&Message{
+			To:   "futsal-nalf",
+			Type: "recording_stopped",
+			Payload: map[string]interface{}{
+				"camera_id": cameraID,
+				"reason":    "crash",
+			},
+		})
+	}
+
+	// Auto-restart w tle
+	go func() {
+		for attempt := 1; attempt <= autoRestartMaxTries; attempt++ {
+			log.Printf("⏳ [%s] Auto-restart attempt %d/%d in %v",
+				cameraID, attempt, autoRestartMaxTries, autoRestartDelay)
+			time.Sleep(autoRestartDelay)
+
+			if err := rm.StartRecord(cameraID, meta); err != nil {
+				log.Printf("❌ [%s] Auto-restart attempt %d failed: %v",
+					cameraID, attempt, err)
+				continue
+			}
+
+			log.Printf("✅ [%s] Auto-restart successful (attempt %d)", cameraID, attempt)
+
+			// Powiadom main_module o wznowieniu
+			rm.mu.RLock()
+			hc2 := rm.hubClient
+			rm.mu.RUnlock()
+			if hc2 != nil {
+				_ = hc2.Send(&Message{
+					To:   "futsal-nalf",
+					Type: "recording_restarted",
+					Payload: map[string]interface{}{
+						"camera_id":  cameraID,
+						"attempt":    attempt,
+						"match_id":   meta.MatchID,
+						"period_id":  meta.PeriodID,
+					},
+				})
+			}
+			return
+		}
+
+		log.Printf("🛑 [%s] Auto-restart gave up after %d attempts", cameraID, autoRestartMaxTries)
+		if hc != nil {
+			_ = hc.Send(&Message{
+				To:   "futsal-nalf",
+				Type: "recording_restart_failed",
+				Payload: map[string]interface{}{
+					"camera_id": cameraID,
+					"attempts":  autoRestartMaxTries,
+				},
+			})
+		}
+	}()
 }
 
 // StartRecord starts recording for the given camera.

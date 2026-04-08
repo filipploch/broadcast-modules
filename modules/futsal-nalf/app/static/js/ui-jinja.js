@@ -24,7 +24,7 @@ var FIELD_ROWS = 9;
 
 
 
-const socket = io();
+var socket = (typeof socket !== 'undefined') ? socket : io();
 
 var homeScoreLabel = document.getElementById('scoreHome');
 var awayScoreLabel = document.getElementById('scoreAway');
@@ -44,6 +44,22 @@ socket.on('disconnect', () => {
     console.log('❌ WebSocket disconnected');
 });
 
+socket.on('initial_data', (data) => {
+    applyReversedState(data.is_reversed);
+    if (data.home_team_uniform) {
+        setMultiColorBackground(
+            'home-side-events-controllers-container',
+            JSON.parse(data.home_team_uniform)
+        );
+    }
+    if (data.away_team_uniform) {
+        setMultiColorBackground(
+            'away-side-events-controllers-container',
+            JSON.parse(data.away_team_uniform)
+        );
+    }
+});
+
 socket.on('sequence_started', ({ sequence_id }) => {
     currentSequenceId = sequence_id;
 });
@@ -56,6 +72,11 @@ socket.on('sequence_stopped', ({ sequence_id }) => {
 
 socket.on('all_sequences_stopped', ({}) => {
     currentSequenceId = null;
+});
+
+// Redirect to period choice when broadcast game changes
+socket.on('reload_ui_dashboard', function() {
+    window.location.href = '/ui';
 });
 
 function runSequence(){
@@ -82,332 +103,7 @@ function getObsWsConnection() {
     socket.emit('get_obs_ws_connection');
 }
 
-// ============================================================================
-// TIMER DISPLAY FORMATTING
-// ============================================================================
 
-/**
- * Format milliseconds to MM:SS display
- */
-function formatTime(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function updateTimerDisplay(timerData) {
-    console.log("timerData:", timerData);
-    const timerId = timerData.timer_id;
-    const elapsedMs = timerData.elapsed_time;
-    let timerLimit = timerData.limit   || 0;
-    const initialTime  = timerData.initial_time || 0;
-    const timerState = timerData.state;
-    const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
-    const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
-    const dsecondsDisplay = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
-    if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
-
-    const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
-
-    let displayTime;
-
-    // if (timerLimit > 0) {
-    //     displayTime = Math.max(0, timerLimit - elapsed - 1);
-    //     if(timerState === 'idle'){
-    //         displayTime = timerLimit - elapsed;
-    //     }
-    // } else {
-    //     displayTime = elapsed;
-    // }
-
-    if (timerLimit > 0) {
-        // Count down: show remaining = limit - (initialTime + elapsed)
-        // Subtract 1ms so display changes exactly on the second boundary
-        const shown = elapsed;
-        // timerLimit = timerLimit - initialTime;
-        // const shown = initialMs + elapsed;
-        displayTime = timerState === 'idle'
-            ? Math.max(0, timerLimit - shown)
-            : Math.max(0, timerLimit - shown - 1);
-    } else {
-        // Count up: show initialTime + elapsed
-        displayTime = initialTime + elapsed;
-    }
-
-    const minutes  = Math.floor(displayTime / 60000);
-    const seconds  = Math.floor((displayTime % 60000) / 1000);
-    const dseconds = Math.floor((displayTime % 1000) / 100);
-
-    minutesDisplay.textContent  = minutes.toString().padStart(2, '0');
-    secondsDisplay.textContent  = seconds.toString().padStart(2, '0');
-    dsecondsDisplay.textContent = dseconds.toString();
-}
-
-
-// function updateTimerDisplay(timerId, elapsedMs, timerLimit = 0) {
-//     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
-//     const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
-//     const dsecondsDisplay = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
-//     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
-
-//     const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
-
-//     let displayTime;
-//     if (timerLimit > 0) {
-//         // Odliczanie malejąco — pokaż następną pełną sekundę która będzie wyświetlona
-//         // Math.floor na elapsed zaokrągla w dół do pełnej sekundy, więc display zmienia się
-//         // dokładnie co sekundę i jest spójny przy pauzie/resume
-//         const elapsedSeconds = Math.floor(elapsed / 100) * 100;
-//         displayTime = Math.max(0, timerLimit - elapsedSeconds - 1);
-//     } else {
-//         displayTime = elapsed;
-//     }
-
-//     const minutes  = Math.floor(displayTime / 60000);
-//     const seconds  = Math.floor((displayTime % 60000) / 1000);
-//     const dseconds = Math.floor((displayTime % 1000) / 100);
-
-//     minutesDisplay.textContent  = minutes.toString().padStart(2, '0');
-//     secondsDisplay.textContent  = seconds.toString().padStart(2, '0');
-//     dsecondsDisplay.textContent = dseconds.toString();
-// }
-
-/**
- * Update timer state badge
- */
-function updateTimerState(timerId, state) {
-    const timerStateFor = document.querySelector(`[data-state-for="${timerId}"]`);
-    const timerMainControllers = document.querySelectorAll('.timer-main-controller')
-    
-    if (!timerStateFor || !timerMainControllers) return;
-
-    timerStateFor.classList.remove('timer-state-idle', 'timer-state-running', 
-                                   'timer-state-paused', 'timer-state-limit_reached');
-
-    timerStateFor.classList.add(`timer-state-${state}`);
-    
-    timerMainControllers.forEach(controller =>{
-        addClassName(controller, 'nodisplayed');
-        if(controller.getAttribute('data-timer-state')===state){
-            removeClassName(controller, 'nodisplayed');
-        }
-    });
-}
-
-function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit, initialTime=0) {
-    // console.log('updatePenaltyTimerDisplay');
-    const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
-    // Penalties count down: remaining = limit - (initialTime + elapsed)
-    const elapsedTime = timerLimit > 0
-        ? Math.max(0, timerLimit - initialTime - elapsedMs)
-        : initialTime + elapsedMs;
-    console.log('updatePenalty', elapsedTime);
-    if (!penaltyDisplay) return;
-    // Format time as MM:SS.CS
-    const minutes = Math.floor(elapsedTime / 60000);
-    const seconds = Math.floor((elapsedTime % 60000) / 1000);
-    
-    const minutesString = minutes.toString();
-    const secondsString = seconds.toString().padStart(2, '0');
-    
-    penaltyDisplay.textContent = `${minutesString}:${secondsString}`;
-}
-
-// function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit) {
-//     // console.log('updatePenaltyTimerDisplay');
-//     const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
-//     let elapsedTime = elapsedMs;
-//     if(timerLimit>0){
-//         elapsedTime = timerLimit - elapsedMs;
-//     }
-//     console.log('updatePenalty', elapsedTime);
-//     if (!penaltyDisplay) return;
-//     // Format time as MM:SS.CS
-//     const minutes = Math.floor(elapsedTime / 60000);
-//     const seconds = Math.floor((elapsedTime % 60000) / 1000);
-    
-//     const minutesString = minutes.toString();
-//     const secondsString = seconds.toString().padStart(2, '0');
-    
-//     penaltyDisplay.textContent = `${minutesString}:${secondsString}`;
-// }
-
-// ============================================================================
-// WEBSOCKET EVENT HANDLERS - UPDATES ONLY
-// ============================================================================
-
-
-/**
- * Handle timer updated event
- */
-socket.on('timer_updated', (data) => {
-    console.log('Timer updated:', data);
-    if (data.elapsed_time !== undefined) {
-        if(data.timer_id.startsWith('penalty')){
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
-        } else {
-            updateTimerDisplay(data);
-        }
-    }
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-/**
- * Handle timer started event
- */
-socket.on('timer_started', (data) => {
-    console.log('Timer started:', data);
-    document.querySelectorAll('.ds-element').forEach(el => addClassName(el, 'hidden'));
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-
-/**
- * Handle timer paused event
- */
-socket.on('timer_paused', (data) => {
-    console.log('Timer paused:', data);
-    if (data.elapsed_time !== undefined) {
-        let dsElements = document.querySelectorAll('.ds-element');
-        dsElements.forEach(element => {
-            removeClassName(element, 'hidden');
-        })
-        updateTimerDisplay(data);
-    }
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-/**
- * Handle timer reset event
- */
-socket.on('timer_reset', (data) => {
-    console.log('Timer reset:', data);
-        updateTimerDisplay(data);
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-/**
- * Handle timer adjusted event
- */
-socket.on('timer_adjusted', (data) => {
-    console.log('Timer adjusted:', data);
-    if (data.elapsed_time !== undefined) {
-        if (data.timer_id.startsWith('penalty')) {
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
-        } else {
-            updateTimerDisplay(data);
-        }
-    }
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-socket.on('timer_resumed', (data) => {
-    console.log('Timer resumed:', data);
-    document.querySelectorAll('.ds-element').forEach(el => addClassName(el, 'hidden'));
-    if (data.elapsed_time !== undefined) {
-        if (data.timer_id.startsWith('penalty')) {
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
-        } else {
-            updateTimerDisplay(data);
-        }
-    }
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-});
-
-/**
- * Handle limit reached event
- */
-socket.on('limit_reached', (data) => {
-    console.log('Timer limit reached:', data);
-    if (data.elapsed_time !== undefined) {
-        updateTimerDisplay(data);
-    }
-    if (data.state) {
-        updateTimerState(data.timer_id, data.state);
-    }
-    
-    // Optional: Show notification
-    if (data.timer_id === appState.mainTimer?.timer_id) {
-        console.log('⏰ Główny timer osiągnął limit!');
-    }
-});
-
-/**
- * Handle timer created event (for penalties added during period)
- */
-socket.on('penalty_timer_created', (data) => {
-    console.log('Penalty timer created:', data);
-    
-    // Reload page to get new penalty in DOM
-    // Alternative: Could dynamically create DOM element, but Jinja2 is cleaner
-    setTimeout(() => {
-        window.location.reload();
-    }, 500);
-});
-
-socket.on('home_penalty_timer_created', (data) => {
-    // 1. Pobierz element div id="away"
-    console.log("socket.on 'home_penalty_timer_created'");
-    const homeDiv = document.getElementById('home-team-penalties-timers-container');
-    
-    if (!homeDiv) {
-        console.error('Nie znaleziono elementu div id="home-(...)"');
-        return;
-    }
-    
-    // 2. Sprawdź ile divów class="penalty-timer" jest wewnątrz pobranego diva
-    const penaltyTimers = homeDiv.querySelectorAll('.penalty-element');
-    const timerCount = penaltyTimers.length;
-    
-    console.log(`Liczba timerów kary: ${timerCount}`);
-    
-    // 3. Jeśli ilość divów o klasie "penalty-timer" jest mniejsza od 2
-    if (timerCount < 2) {
-        // Generuj unikalne ID dla timera (możesz użyć data.timer_id lub timestamp)
-        const timerId = data?.timer_id || `penalty_home_${Date.now()}`;
-        
-        // Tworzenie nowego diva penalty-timer z pełną strukturą
-        const newPenaltyTimer = document.createElement('div');
-        // newPenaltyTimer.className = 'timer-card penalty-timer';
-        
-        // Wypełnienie wewnętrznej struktury HTML
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-        `;
-        
-        // Dodaj nowy timer do diva away
-        homeDiv.appendChild(newPenaltyTimer);
-        
-        console.log(`Dodano nowy timer kary z ID: ${timerId}`);
-        return timerId;
-    } else {
-        console.log('Osiągnięto maksymalną liczbę timerów kary (2)');
-        return false;
-    }
-});
 
 socket.on('flash_msg', (data) => {
     
@@ -435,73 +131,7 @@ socket.on('flash_msg', (data) => {
     }
 });
 
-socket.on('away_penalty_timer_created', (data) => {
 
-    // 1. Pobierz element div id="away"
-    const awayDiv = document.getElementById('away-team-penalties-timers-container');
-    
-    if (!awayDiv) {
-        console.error('Nie znaleziono elementu div id="away-(...)"');
-        return;
-    }
-    
-    // 2. Sprawdź ile divów class="penalty-timer" jest wewnątrz pobranego diva
-    const penaltyTimers = awayDiv.querySelectorAll('.penalty-element');
-    const timerCount = penaltyTimers.length;
-
-    const addPenaltyButton = awayDiv.querySelector('add-penalty-button');
-    
-    console.log(`Liczba timerów kary: ${timerCount}`);
-    
-    // 3. Jeśli ilość divów o klasie "penalty-timer" jest mniejsza od 2
-    // Generuj unikalne ID dla timera (możesz użyć data.timer_id lub timestamp)
-    const timerId = data?.timer_id || `penalty_away_${Date.now()}`;
-    
-    // Tworzenie nowego diva penalty-timer z pełną strukturą
-    const newPenaltyTimer = document.createElement('div');
-    newPenaltyTimer.className = 'timer-card penalty-timer';
-    
-    if (timerCount === 0) {
-        // Wypełnienie wewnętrznej struktury HTML
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-            ${addPenaltyButton.getHTML}
-        `;
-        
-    } else if(timerCount < 2) {
-        newPenaltyTimer.innerHTML = `
-            <div class="penalty-element" data-timer-id="${timerId}">
-                <div class="penalty-element-content">
-                    <button class="penalty-modal-button bg_red remove-penalty-button" onclick="removeTimer('${timerId}')">X</button>
-                    <div class="penalty-display"></div>
-                </div>
-                <div class="penalty-element-controllers">
-                    <div class="gap"></div>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', -1000);">-</button>
-                    <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${timerId}', 1000);">+</button>
-                </div>
-            </div>
-        `;
-    } else {
-        console.log('Osiągnięto maksymalną liczbę timerów kary (2)');
-        return false;
-    }
-    // Dodaj nowy timer do diva away
-    awayDiv.appendChild(newPenaltyTimer);
-    addPenaltyButton.remove();
-    console.log(`Dodano nowy timer kary z ID: ${timerId}`);
-    return timerId;
-});
 
 socket.on('recording_status_response', data => {
     console.log(data);
@@ -515,110 +145,7 @@ socket.on('recording_stopped', cameras => {
     updateCamerasIndicators(cameras);
 });
 
-// ============================================================================
-// TIMER CONTROL FUNCTIONS
-// ============================================================================
 
-/**
- * Start a timer
- */
-function startTimer(timerId) {
-    console.log('Starting timer:', timerId);
-    socket.emit('timer_start', { timer_id: timerId });
-}
-
-/**
- * Pause a timer
- */
-function pauseTimer(timerId) {
-    console.log('Pausing timer:', timerId);
-    socket.emit('timer_pause', { timer_id: timerId });
-}
-
-/**
- * Resume a paused timer
- */
-function resumeTimer(timerId) {
-    console.log('Resuming timer:', timerId);
-    socket.emit('timer_resume', { timer_id: timerId });
-}
-
-/**
- * Reset a timer
- */
-function resetTimer(timerId) {
-    if (!confirm('Czy na pewno chcesz zresetować timer?')) {
-        return;
-    }
-    console.log('Resetting timer:', timerId);
-    socket.emit('timer_reset', { timer_id: timerId });
-}
-
-/**
- * Adjust timer time
- */
-function adjustTimer(timerId, delta, isPenalty=false) {
-    if(isPenalty == true){
-        console.log(`Adjusting timer ${timerId} by ${delta}ms`);
-        socket.emit('timer_adjust', {
-            timer_id: timerId,
-            delta: delta
-        });
-    } else {
-        let allTimersIds = getAllTimerIds();
-        allTimersIds.forEach(tmrId => {
-            console.log(`Adjusting timer ${tmrId} by ${delta}ms`);
-            socket.emit('timer_adjust', {
-                timer_id: tmrId,
-                delta: delta
-            });
-        });
-    }
-}
-
-/**
- * Remove timer from UI and backend
- */
-function removeTimer(timerId) {
-    if (!confirm('Czy na pewno chcesz usunąć ten timer?')) {
-        return;
-    }
-    
-    console.log('🗑️  Removing timer:', timerId);
-    socket.emit('timer_remove', { timer_id: timerId });
-}
-
-/**
- * Handle timer removed event
- */
-socket.on('timer_removed', (data) => {
-    console.log('✅ Timer removed from backend:', data.timer_id);
-    
-    // Remove from DOM
-    const timerCard = document.querySelector(`[data-timer-id="${data.timer_id}"]`);
-    if (timerCard) {
-        console.log('Removing timer card from DOM');
-        timerCard.remove();
-    } else {
-        console.warn('⚠️  Timer card not found in DOM:', data.timer_id);
-    }
-});
-
-socket.on('reload_penalty_timers', (data) => {
-    appState.home_penalties = data.penalties['home'];
-    appState.away_penalties = data.penalties['away'];
-
-    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
-    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
-});
-
-socket.on('scoreboard_data', (data) => {
-    let gameData = data['payload'];
-    homeScoreLabel.innerText = gameData['home_team_goals'];
-    awayScoreLabel.innerText = gameData['away_team_goals'];
-    homeFoulsLabel.innerText = gameData['home_team_fouls'];
-    awayFoulsLabel.innerText = gameData['away_team_fouls'];
-})
 
 /**
  * Handle error event
@@ -628,60 +155,7 @@ socket.on('error', (data) => {
     alert(`Błąd: ${data.message}`);
 });
 
-// ============================================================================
-// PENALTY MANAGEMENT
-// ============================================================================
 
-/**
- * Show add penalty dialog
- */
-function showAddPenaltyDialog() {
-    document.getElementById('penalty-dialog').style.display = 'block';
-    document.getElementById('penalty-overlay').style.display = 'block';
-}
-
-/**
- * Hide add penalty dialog
- */
-function hideAddPenaltyDialog() {
-    document.getElementById('penalty-dialog').style.display = 'none';
-    document.getElementById('penalty-overlay').style.display = 'none';
-}
-
-/**
- * Add penalty timer
- */
-function addPenaltyTimer(teamType, penaltyDuration=2) {
-    const team = teamType;
-    let _penalties = appState.home_penalties;
-    if(team === 'away') _penalties = appState.away_penalties;
-    const duration = penaltyDuration;
-    
-    if (_penalties.length >= 2) return;
-    if (!appState.mainTimer) {
-        alert('Brak aktywnego głównego timera!');
-        return;
-    }
-    
-    // Get team name
-    let teamName = '';
-    if (game) {
-        teamName = team === 'home' ? game.home_team_name : game.away_team_name;
-    }
-    
-    console.log('Adding penalty:', { team, teamName, duration });
-    
-    socket.emit('penalty_timer_create', {
-        game_timer_id: appState.mainTimer.timer_id,
-        team: team,
-        team_name: teamName,
-        duration_minutes: duration
-    });
-    
-    
-    // Show loading message
-    // alert(`Dodawanie kary dla drużyny ${team}...`);
-}
 
 // ============================================================================
 // PERIOD FINISH
@@ -690,19 +164,19 @@ function addPenaltyTimer(teamType, penaltyDuration=2) {
 /**
  * Finish current period
  */
-function finishPeriod() {
-    if (!period) {
-        alert('Brak aktywnego okresu!');
-        return;
-    }
+// function finishPeriod() {
+//     if (!period) {
+//         alert('Brak aktywnego okresu!');
+//         return;
+//     }
     
-    if (!confirm('Czy na pewno chcesz zakończyć tę część meczu?')) {
-        return;
-    }
+//     if (!confirm('Czy na pewno chcesz zakończyć tę część meczu?')) {
+//         return;
+//     }
     
-    console.log('Finishing period:', period.id);
-    window.location.href = `/period/${period.id}/finish`;
-}
+//     console.log('Finishing period:', period.id);
+//     window.location.href = `/period/${period.id}/finish`;
+// }
 
 // ============================================================================
 // INITIALIZATION
@@ -710,97 +184,42 @@ function finishPeriod() {
 
 
 
-function reorderReversible(onLoad=false) {
-  // Zapobiegnij równoczesnym wywołaniom
-  if (appState.isReordering) {
-    return;
-  }
-  
-  appState.isReordering = true;
-  
-  // Pobierz wszystkie elementy z klasą "reversible"
-  const reversibleElements = document.querySelectorAll('.reversible');
+// function onReverseButtonClick() {
+//     applyReversedState(!appState.isReversed);
+//     socket.emit('set_reversed', { is_reversed: appState.isReversed });
+// }
 
-  // Dla każdego takiego elementu
-  reversibleElements.forEach(element => {
-    // Pobierz wszystkie bezpośrednie dzieci
-    const children = Array.from(element.children);
-    
-    // Odwróć kolejność tablicy
-    const reversedChildren = children.reverse();
-    
-    // Wstaw dzieci z powrotem w odwróconej kolejności
-    reversedChildren.forEach(child => element.appendChild(child));
-  });
-  console.log('is onload', onLoad);
-  if(onLoad === false){      
-    // Zmień stan flagi globalnej
-    appState.isReversed = !appState.isReversed;
-    console.log('isReversed:', appState.isReversed);
-    socket.emit('reverse_scoreboard', {is_scoreboard_reversed: appState.isReversed});
-  }
-  
-  // Odblokuj możliwość ponownego wywołania
-  appState.isReordering = false;
-}
+// // ---------------------------------------------------------------------------
+// // Reversible layout — deterministic, anchor-based
+// // ---------------------------------------------------------------------------
 
-// document.addEventListener('DOMContentLoaded', () => {
-//     console.log('UI initialized with Jinja2 rendering');
-//     console.log('Period:', period);
-//     console.log('Main timer:', appState.mainTimer);
-//     console.log('Penalties:', appState.penalties);
-    
-//     // Initialize displays with current data
-//     if (appState.mainTimer) {
-//         updateTimerDisplay(appState.mainTimer.timer_id, appState.mainTimer.initial_time, appState.mainTimer.limit);
-//         updateTimerState(appState.mainTimer.timer_id, appState.mainTimer.state || 'idle');
-//     }
-    
-//     // if (penaltiesData && penaltiesData.length > 0) {
-//     //     penaltiesData.forEach(penalty => {
-//     //         updateTimerDisplay(penalty.timer_id, penalty.initial_time || 0);
-//     //         updateTimerState(penalty.timer_id, penalty.state || 'idle');
-//     //     });
-//     // }
-    
-//     console.log('✅ UI ready - listening for WebSocket updates');
-// });
+// function applyReversedState(isReversed) {
+//     document.querySelectorAll('.reversible').forEach(function(el) {
+//         var children = Array.from(el.children);
+//         if (children.length < 2) return;
 
-// ============================================================================
-// ERROR HANDLING
-// ============================================================================
+//         var anchor = children.find(function(c) {
+//             return c.hasAttribute('data-reverse-anchor');
+//         });
+//         if (!anchor) return;
 
-// Error handler moved to removeTimerFromUI section
+//         var anchorIsFirst = children[0] === anchor;
+//         var shouldFlip = (isReversed && anchorIsFirst) || (!isReversed && !anchorIsFirst);
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+//         if (shouldFlip) {
+//             children.reverse().forEach(function(c) {
+//                 el.appendChild(c);
+//             });
+//         }
+//     });
 
-/**
- * Get timer element by ID
- */
-function getTimerElement(timerId) {
-    return document.querySelector(`[data-timer-id="${timerId}"]`);
-}
+//     appState.isReversed = isReversed;
+// }
 
-/**
- * Check if timer exists in DOM
- */
-function timerExists(timerId) {
-    return getTimerElement(timerId) !== null;
-}
-
-/**
- * Get all timer IDs currently in DOM
- */
-function getAllTimerIds() {
-    const timerElements = document.querySelectorAll('[data-timer-id]');
-    return [...new Set(Array.from(timerElements).map(el => el.getAttribute('data-timer-id')))];
-}
-
-
-// Hover dla .game-field-cell obsługiwany przez attachGameFieldHoverListeners()
-// wywoływaną po wygenerowaniu siatki w events-controllers.js
+// Keep in sync when the other page triggers a reverse
+socket.on('scoreboard_reversed', function(data) {
+    applyReversedState(data.is_reversed);
+});
 
 
 
@@ -1511,15 +930,3 @@ window.debugTimers = () => {
     console.log('DOM timer IDs:', getAllTimerIds());
     console.log('Socket connected:', socket.connected);
 };
-
-// Expose functions to global scope for onclick handlers
-window.startTimer = startTimer;
-window.pauseTimer = pauseTimer;
-window.resumeTimer = resumeTimer;
-window.resetTimer = resetTimer;
-window.adjustTimer = adjustTimer;
-window.removeTimer = removeTimer;
-window.showAddPenaltyDialog = showAddPenaltyDialog;
-window.hideAddPenaltyDialog = hideAddPenaltyDialog;
-window.addPenaltyTimer = addPenaltyTimer;
-window.finishPeriod = finishPeriod;
