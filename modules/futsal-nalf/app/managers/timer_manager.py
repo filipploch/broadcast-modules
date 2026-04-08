@@ -421,6 +421,7 @@ class TimerManager:
         game_id   = settings.current_game_id
         period_id = settings.current_period_id
 
+        # Zapisz/zaktualizuj rekord w game_timers
         gt = GameTimer.query.filter_by(plugin_timer_id=timer_id).first()
         if gt is None:
             gt = GameTimer(
@@ -435,9 +436,27 @@ class TimerManager:
             gt.elapsed_time_ms = 0
             gt.limit_ms        = limit
             gt.state           = GameTimer.STATE_IDLE
+            gt.period_id       = period_id  # odśwież period_id na wypadek zmiany
             gt.updated_at      = datetime.utcnow()
 
         db.session.commit()
+
+        # Zsynchronizuj settings.current_timers — to jest źródło prawdy dla UI/timer-plugin
+        # przy starcie okresu period_manager.start_period() już woła Settings.update_main_timer(),
+        # ale robimy to tu ponownie żeby zagwarantować spójność po asynchronicznym potwierdzeniu
+        # z pluginu (on_timer_created może nadejść z opóźnieniem po zmianie period_id w settings).
+        pause_at_limit = metadata.get('pause_at_limit', True)
+        main_timer_data = {
+            'timer_id':      timer_id,
+            'timer_type':    'independent',
+            'initial_time':  initial_time,
+            'limit':         limit,
+            'pause_at_limit': pause_at_limit,
+            'state':         GameTimer.STATE_IDLE,
+            'elapsed_time':  0,
+            'metadata':      metadata,
+        }
+        Settings.update_main_timer(main_timer_data)
 
         self._emit_to_ui('timer_created', {
             'timer_id': timer_id, 'elapsed_time': 0,

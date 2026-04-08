@@ -530,18 +530,31 @@ def handle_add_game_event_to_db(data):
         emit('error', {'message': 'Brak aktywnego meczu lub okresu'})
         return
 
-    # Czas zdarzenia — z DB timera lub cache
+    # Czas zdarzenia — z in-memory cache timera (aktualny elapsed_ms),
+    # z fallbackiem na DB (ostatni zsynchronizowany stan).
+    # WAŻNE: cache jest indeksowany przez plugin_timer_id (np. "main-p2"),
+    # nie przez DB id — stąd używamy main_timer.plugin_timer_id jako klucza.
     tm = get_timer_manager()
-    main_timer = tm.get_active_main_timer(period_id)
-    main_timer_id = main_timer.id
-    timer_state = tm.get_timer_state(main_timer_id)  # z in-memory cache
-    elapsed_ms  = timer_state.get('elapsed_time', 0) if timer_state else 0
+    main_timer    = tm.get_active_main_timer(period_id)
+    plugin_timer_id = main_timer.plugin_timer_id if main_timer else None
+    timer_state   = tm.get_timer_state(plugin_timer_id) if plugin_timer_id else None
+
+    if timer_state is not None:
+        # Cache aktualny — używaj go (najbardziej aktualny elapsed_ms z ticków)
+        elapsed_ms = timer_state.get('elapsed_time', 0)
+    elif main_timer is not None:
+        # Cache zimny (np. po restarcie serwera) — fallback na DB
+        elapsed_ms = main_timer.elapsed_time_ms
+    else:
+        elapsed_ms = 0
 
     period_manager = PeriodManager()
-    period_data    = period_manager.get_period_by_id(period_id).to_dict()
-    initial_s      = int(period_data['initial_time_seconds'])
-    elapsed_s      = elapsed_ms // 1000
-    game_time      = elapsed_s + initial_s
+    period         = period_manager.get_period_by_id(period_id)
+    # game_time zapisujemy w sekundach (spójnie z game_time_formatted i _build_goal_entry)
+    # initial_time okresu to suma limitów poprzednich części w ms → dzielimy przez 1000
+    initial_s = period.initial_time // 1000
+    elapsed_s = elapsed_ms // 1000
+    game_time = elapsed_s + initial_s
 
     # Drużyna
     team_id   = None

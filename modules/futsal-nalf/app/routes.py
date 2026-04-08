@@ -207,23 +207,19 @@ def start_period(period_id):
     from app.models.game import Game
     from app.managers import get_timer_manager
 
-    timer_manager = get_timer_manager()
-    _previous_main_timer_id = Settings.get_current_timers()['main']['timer_id']
-    timer_manager.remove_timer(_previous_main_timer_id)
-
     period_manager = PeriodManager()
     period = period_manager.get_period_by_id(period_id)
-    
+
     if not period:
         flash('Nie znaleziono okresu', 'error')
         return redirect(url_for('game_period_choice'))
-    
+
     # Check if this period can be started
     game = Game.query.get(period.game_id)
     if not game:
         flash('Nie znaleziono meczu', 'error')
         return redirect(url_for('game_period_choice'))
-    
+
     # Check if previous period is finished (if not first period)
     if period.period_order > 1:
         previous_periods = Period.query.filter_by(
@@ -231,29 +227,39 @@ def start_period(period_id):
         ).filter(
             Period.period_order < period.period_order
         ).all()
-        
+
         for prev_period in previous_periods:
             if prev_period.status != Period.STATUS_FINISHED:
                 flash(f'Nie można rozpocząć {period.description}. Poprzedni okres nie został zakończony.', 'error')
                 return redirect(url_for('game_period_choice'))
-    
+
     try:
-        # Start the period
-        period_manager.start_period(period_id)
-        
-        # Set period as actual in settings
+        # WAŻNA KOLEJNOŚĆ:
+        # 1. Najpierw usuń poprzedni timer (jeśli istnieje)
+        timer_manager = get_timer_manager()
+        current_timers = Settings.get_current_timers()
+        previous_main = current_timers.get('main')
+        if previous_main and previous_main.get('timer_id'):
+            timer_manager.remove_timer(previous_main['timer_id'])
+
+        # 2. Ustaw current_period_id w Settings PRZED start_period,
+        #    żeby on_timer_created() mógł odczytać prawidłowy period_id
+        #    przy potwierdzeniu z pluginu (unikamy race condition: period_id=None).
         Settings.set_current_period(period_id)
-        
-        # If this is first period, set game as PENDING
+
+        # 3. Teraz uruchom okres — create_timer wysyła wiadomość do pluginu
+        period_manager.start_period(period_id)
+
+        # 4. Jeśli to pierwsza część, ustaw mecz jako trwający
         if period.period_order == 1:
             game.set_live()
             db.session.commit()
-        
+
         flash(f'Rozpoczęto {period.description}', 'success')
         from app.extensions import socketio
         socketio.emit('reload_ui_dashboard')
         return redirect(url_for('index'))
-        
+
     except Exception as e:
         logger.error(f"Error starting period: {e}")
         flash(f'Błąd podczas rozpoczynania okresu: {str(e)}', 'error')

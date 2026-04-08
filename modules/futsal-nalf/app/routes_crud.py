@@ -489,22 +489,29 @@ def prepare_game_for_broadcast(game_id):
 def select_game_for_broadcast(game_id):
     """Select game as current broadcast game"""
     from app.models.settings import Settings
-    
+
     game = game_manager.get_game_by_id(game_id)
-    
+
     if not game:
         flash('Nie znaleziono meczu', 'error')
         return redirect(url_for('list_games'))
-    
+
     # Check if game has periods
     if game.periods.count() == 0:
         flash('Mecz nie ma utworzonych okresów. Najpierw przygotuj mecz do transmisji.', 'error')
         return redirect(url_for('edit_game', game_id=game_id))
-    
+
     try:
+        # Resetuj stan poprzedniego meczu przed ustawieniem nowego.
+        # Kolejność ma znaczenie: najpierw czyścimy pola zależne (period, timers, shootout),
+        # potem ustawiamy nowy game_id — unikamy chwilowej niespójności w settings.
+        Settings.set_current_period(None)
+        Settings.clear_timers()
+        Settings.set_current_shootout(None)
         Settings.set_current_game(game_id)
+
         flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
-        
+
         # Notify UI clients (index.html, game-period-choice.html) via Flask-SocketIO
         from app.extensions import socketio
         socketio.emit('game_changed', {'game_id': game_id})
