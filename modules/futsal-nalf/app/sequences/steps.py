@@ -73,8 +73,10 @@ def set_replay_file(file_path, delay_ms: int = 0, input_name="Replay"):
     }
 
 
-def set_replay_start_time(start_time: int, delay_ms: int = 0, input_name: str="Replay"):
-    return {
+def set_replay_start_time(start_time: int, delay_ms: int = 0, input_name: str = "Replay",
+                          wait_for_obs_event: str = None,
+                          timeout_ms: int = 5000):
+    step = {
         "target": "obs-ws-plugin",
         "action": "obs_command",
         "payload": {
@@ -86,6 +88,10 @@ def set_replay_start_time(start_time: int, delay_ms: int = 0, input_name: str="R
             },
         "delay_ms": delay_ms
     }
+    if wait_for_obs_event:
+        step["wait_for_obs_event"] = wait_for_obs_event
+        step["timeout_ms"] = timeout_ms
+    return step
 
 def start_replay(delay_ms: int = 0, input_name: str="Replay"):
     return {

@@ -69,14 +69,22 @@ class ObsWsManager:
                     current_app.logger.error(f'❌ Failed to save game event: {e}')
                     self._emit_to_ui('error', {'message': str(e)})
                     return
-        elif request_id.startswith('rec-status-'):
-            response_data = payload.get('responseData')
-            self._emit_to_ui('obs_recording_status_updated', response_data)
 
     def on_obs_event(self, msg):
         payload = msg.get('payload')
         event_type = payload.get('eventType')
         event_data = payload.get('eventData')
+
+        # Powiadom SequenceManager o każdym evencie OBS —
+        # sekwencje z wait_for_obs_event czekają na konkretne typy eventów.
+        try:
+            from app.managers import get_sequence_manager
+            seq_mgr = get_sequence_manager()
+            if seq_mgr:
+                seq_mgr.notify_obs_event(event_type, event_data)
+        except Exception as e:
+            current_app.logger.error(f"notify_obs_event failed: {e}")
+
         if event_type == 'RecordStateChanged':
             output_state = event_data.get('outputState')
             match output_state:

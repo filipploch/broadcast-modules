@@ -18,21 +18,46 @@ def goal_sequence(team: str, player_name: str) -> list:
 
 
 def replay_sequence(context):
-    _file_path = context['video_path']
+    _file_path         = context['video_path']
     _replay_start_time = context['replay_start_time']
-    _replay_end_time = context['replay_end_time']
-    _replay_duration = _replay_end_time - _replay_start_time
+    _replay_end_time   = context['replay_end_time']
+    _replay_duration   = _replay_end_time - _replay_start_time
+
+    # Wybór eventu do synchronizacji SetMediaInputCursor:
+    #
+    # MediaInputPlaybackStarted — emitowany przy każdym starcie odtwarzania,
+    # również przy resecie źródła przez SetInputSettings (stop_restart).
+    # Dlatego nie nadaje się jako trigger — możemy złapać fałszywy event
+    # przed faktycznym PLAY.
+    #
+    # MediaInputActionTriggered — emitowany WYŁĄCZNIE w odpowiedzi na
+    # TriggerMediaInputAction. Nie jest emitowany przy autostarcie z
+    # SetInputSettings. Jednoznacznie identyfikuje wykonanie naszego PLAY.
+    # Po tym evencie źródło jest w trakcie przechodzenia do PLAYING —
+    # SetMediaInputCursor wysłany natychmiast po nim zostanie przyjęty.
+    #
+    # Listener jest rejestrowany na starcie sekwencji (przed SetInputSettings),
+    # więc nawet gdyby OBS emitował MediaInputActionTriggered z innego powodu,
+    # filtr arrived_at > registered_at go odrzuci.
+
     return [
-        set_replay_file(_file_path),                                      # t=0
-        start_replay(delay_ms=400),
-        pause_replay(delay_ms=500),
-        # set_replay_start_time(_replay_start_time, delay_ms=400),          # t=500
-        # show_transition(delay_ms=600),                                     # t=600
-        show_source(delay_ms=600),                                         # t=700
-        set_replay_start_time(_replay_start_time, delay_ms=700),          # t=500
+        # t=0 — załaduj nowy plik; OBS resetuje źródło do STOPPED
+        set_replay_file(_file_path),
+
+        # t=600 — pokaż źródło w scenie zanim zacznie grać
+        show_source(delay_ms=600),
+
+        # t=800 — wyślij PLAY → OBS emituje MediaInputActionTriggered
         start_replay(delay_ms=800),
-        # show_transition(delay_ms=1620 + _replay_duration),                  # t=700+duration
-        show_source(is_visible=False, delay_ms=700 + _replay_duration)  # t=700+duration+700
+
+        # eventowy — czeka na MediaInputActionTriggered (tylko po TriggerMediaInputAction)
+        # arrived_at > registered_at gwarantuje że nie złapiemy eventu sprzed PLAY
+        set_replay_start_time(_replay_start_time,
+                              wait_for_obs_event='MediaInputActionTriggered',
+                              timeout_ms=5000),
+
+        # t=800+duration — ukryj źródło po zakończeniu powtórki
+        show_source(is_visible=False, delay_ms=800 + _replay_duration),
     ]
 
 def start_live_sequence(context):
