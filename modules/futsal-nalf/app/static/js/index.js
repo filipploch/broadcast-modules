@@ -87,6 +87,22 @@ socket.on('game_changed', function() {
     window.location.href = '/game-period-choice';
 });
 
+function startRecording(){
+    socket.emit('start_recording');
+}
+
+function stopRecording(){
+    socket.emit('stop_recording');
+}
+
+function startStream(){
+    socket.emit('trigger_sequence', { sequence: 'start_live', context: {}});
+}
+
+function stopStream(){
+    socket.emit('trigger_sequence', { sequence: 'end_live', context: {}});
+}
+
 
 // ============================================================================
 // TIMER DISPLAY

@@ -53,6 +53,9 @@ class RecorderManager:
                 payload['request_id'] = request_id.split('get-record-status-')[1]
                 self._on_record_status(payload)
                 # TODO
+            elif request_id.startswith('rec-status-'):
+                cameras = payload.get('cameras')
+                self._emit_to_ui('recording_status_updated', cameras)
 
     def _on_record_status(self, payload):
 

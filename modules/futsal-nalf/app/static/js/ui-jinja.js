@@ -37,6 +37,7 @@ var currentSequenceId = null;
 socket.on('connect', () => {
     console.log('✅ WebSocket connected');
     socket.emit('request_initial_data');
+    socket.emit('get_record_status');
     getObsWsConnection()
 });
 
@@ -83,21 +84,21 @@ function runSequence(){
     socket.emit('trigger_sequence', { sequence: 'halftime_start', context: {} });
 }
 
-function startRecording(){
-    socket.emit('start_recording');
-}
+// function startRecording(){
+//     socket.emit('start_recording');
+// }
 
-function stopRecording(){
-    socket.emit('stop_recording');
-}
+// function stopRecording(){
+//     socket.emit('stop_recording');
+// }
 
-function startStream(){
-    socket.emit('trigger_sequence', { sequence: 'start_live', context: {}});
-}
+// function startStream(){
+//     socket.emit('trigger_sequence', { sequence: 'start_live', context: {}});
+// }
 
-function stopStream(){
-    socket.emit('trigger_sequence', { sequence: 'end_live', context: {}});
-}
+// function stopStream(){
+//     socket.emit('trigger_sequence', { sequence: 'end_live', context: {}});
+// }
 
 function getObsWsConnection() {
     socket.emit('get_obs_ws_connection');
@@ -143,6 +144,14 @@ socket.on('recording_started', cameras => {
 
 socket.on('recording_stopped', cameras => {
     updateCamerasIndicators(cameras);
+});
+
+socket.on('recording_status_updated', cameras => {
+    updateRecordingIndicators(cameras);
+});
+
+socket.on('obs_recording_status_updated', responseData => {
+    updateObsRecordingIndicator(responseData);
 });
 
 

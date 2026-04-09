@@ -55,6 +55,38 @@ function convertToClassName(str) {
         .toLowerCase();
 }
 
+function updateObsRecordingIndicator(responseData) {
+    const _obsRecordingIndicator = document.getElementById('obs-recording-indicator');
+    const _obsRecordingIndicatorIcon = _obsRecordingIndicator.querySelector('img');
+    if(responseData.outputActive === true) {
+        removeClassName(_obsRecordingIndicatorIcon, 'filter-yellow');
+        addClassName(_obsRecordingIndicatorIcon, 'filter-green');
+    }else{
+        removeClassName(_obsRecordingIndicatorIcon, 'filter-green');
+        removeClassName(_obsRecordingIndicatorIcon, 'filter-yellow');
+    }
+}
+
+function updateRecordingIndicators(cameras) {
+  for (let cameraKey in cameras) {
+    const camera = cameras[cameraKey];
+    const element = document.querySelector(`.recording-indicator[data-camera-id="${cameraKey}"]`);
+
+  if (!element) continue;
+
+  const elementImg = element.querySelector('img');
+
+  if (camera.is_recording === true) {
+    removeClassName(element, 'important_bg_orange');
+    addClassName(element, 'important_bg_black');
+    addClassName(elementImg, 'filter-red');
+  } else {
+    removeClassName(element, 'important_bg_orange');
+    removeClassName(element, 'important_bg_black');
+    removeClassName(elementImg, 'filter-red');
+  }
+}}
+
 function updateCamerasIndicators(camerasDict) {
     for (let cameraId in camerasDict) {
         if (camerasDict.hasOwnProperty(cameraId)) {

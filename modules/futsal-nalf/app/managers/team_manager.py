@@ -32,7 +32,6 @@ class TeamManager:
         if os.path.exists(logos_dir):
             allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
             for file in os.listdir(logos_dir):
-                print(f'file: {file}')
                 if any(file.lower().endswith(ext) for ext in allowed_extensions):
                     logos.append({
                         'filename': file,

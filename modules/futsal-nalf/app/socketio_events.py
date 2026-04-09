@@ -194,6 +194,18 @@ def handle_stop_recording():
                         'camera3': False, 'camera4': False},
         })
 
+@socketio.on('get_record_status')
+def handle_get_record_status():
+    hub_client = get_hub_client()
+    if hub_client:
+        hub_client.broadcast(msg_type='recording_command', payload={
+            'requestType': 'GetRecordStatus',
+            'requestData': {},
+            'request_id': f'rec-status-{datetime.datetime.now()}',
+            'cameras': {'camera1': True, 'camera2': False,
+                        'camera3': False, 'camera4': False},
+        })
+
 
 @socketio.on('get_obs_ws_connection')
 def handle_get_obs_ws_connection():

@@ -69,6 +69,9 @@ class ObsWsManager:
                     current_app.logger.error(f'❌ Failed to save game event: {e}')
                     self._emit_to_ui('error', {'message': str(e)})
                     return
+        elif request_id.startswith('rec-status-'):
+            response_data = payload.get('responseData')
+            self._emit_to_ui('obs_recording_status_updated', response_data)
 
     def on_obs_event(self, msg):
         payload = msg.get('payload')
