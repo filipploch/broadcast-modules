@@ -14,6 +14,9 @@
     "connection_timeout_ms": 10000,
     "event_subscriptions": 321
   },
+  "scene_map": {
+    "path": "obs_scene_map.json"
+  },
   "logging": {
     "level": "info"
   }

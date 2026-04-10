@@ -149,6 +149,12 @@ def handle_set_reversed(data):
     # Broadcast to ALL clients so both index.html and ui-jinja.html stay in sync
     socketio.emit('scoreboard_reversed', {'is_reversed': bool(is_reversed)})
 
+@socketio.on('add_team_event')
+def handle_add_team_event(data):
+    team_type = data.get('team_type')
+    event_name = data.get('event_name')
+    socketio.emit('team_event_added', {'team_type': team_type, 'event_name': event_name})
+
 
 # =============================================================================
 # OVERLAY
@@ -509,7 +515,8 @@ def handle_change_game_value(data):
         if hub_client:
             hub_client.broadcast_to_class('game_data_receiver',
                                           'scoreboard_data', payload)
-        emit('scoreboard_data', {'payload': payload})
+        from app.extensions import socketio as _sio
+        _sio.emit('scoreboard_data', {'payload': payload})
 
 
 @socketio.on('broadcast_goal')
@@ -902,3 +909,34 @@ def _resolve_event_id(event_type: str) -> int:
     if not event:
         raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")
     return event.id
+
+
+# =============================================================================
+# REPLAY EXPORT
+# =============================================================================
+
+# socketio_events.py
+
+@socketio.on('replay_export_run')
+def handle_replay_export_run(data):
+    from app.managers import get_replay_export_manager
+    import threading
+
+    game_id  = data.get('game_id')
+    app      = current_app._get_current_object()  # ← prawdziwy obiekt, nie proxy
+
+    def _run():
+        with app.app_context():                    # ← kontekst dla wątku
+            try:
+                mgr    = get_replay_export_manager()
+                result = mgr.export_game(game_id) if game_id else mgr.export_current_game()
+                socketio.emit('replay_export_done', result)
+            except Exception as e:
+                app.logger.error(f'replay_export_run error: {e}')
+                socketio.emit('replay_export_done', {
+                    'game_id': game_id, 'folder': None,
+                    'files_saved': 0, 'errors': [str(e)]
+                })
+
+    threading.Thread(target=_run, daemon=True).start()
+    emit('replay_export_started', {'game_id': game_id})

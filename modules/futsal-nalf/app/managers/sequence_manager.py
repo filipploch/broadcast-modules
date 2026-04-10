@@ -245,6 +245,10 @@ class SequenceManager:
             payload = {**step.get('payload', {})}
             if context:
                 payload['_context'] = context
+
+            # obs_command_by_name: plugin Go rozwiązuje sourceName → sceneItemId
+            # Wysyłamy payload z sceneName + sourceName bez zmian —
+            # resolucja odbywa się w obs-ws-plugin, nie tutaj.
             self.hub_client.send({
                 'from': 'futsal-nalf',
                 'to': step['target'],

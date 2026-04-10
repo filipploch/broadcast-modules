@@ -1,0 +1,33 @@
+{
+  "AUDIO_SOURCES": {
+    "MICROPHONES": 1,
+    "nalf_break": 3,
+    "nalf_start": 2
+  },
+  "CAMERAS": {
+    "Camera1": 1
+  },
+  "EMPTY": {},
+  "END_SCREEN": {
+    "napisyKoncowe": 1,
+    "outro-sociale": 2
+  },
+  "MICROPHONES": {
+    "Mic1": 1,
+    "Mic2": 2
+  },
+  "OUTPUT": {
+    "AUDIO_SOURCES": 1,
+    "Overlay": 3,
+    "Replay": 8,
+    "Tło biały": 4,
+    "VIDEO_SOURCES": 2
+  },
+  "VIDEO_SOURCES": {
+    "CAMERAS": 1
+  },
+  "ZAPROSZENIE": {
+    "Tło_mecz": 4,
+    "Zapowiedz-28": 10
+  }
+}

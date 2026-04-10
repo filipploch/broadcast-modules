@@ -26,19 +26,11 @@ func main() {
 		if err := hub.PluginManager.LoadConfig(); err != nil {
 			log.Fatalf("❌ Failed to load plugin config: %v", err)
 		}
-
-		// Auto-start local plugins
-		configs := hub.PluginManager.GetAllConfigs()
-		for id, config := range configs {
-			if config.Type == "local" && config.AutoStart {
-				go func(pluginID string) {
-					log.Printf("🚀 Auto-starting local plugin: %s", pluginID)
-					if err := hub.PluginManager.StartPlugin(pluginID); err != nil {
-						log.Printf("❌ Failed to auto-start plugin %s: %v", pluginID, err)
-					}
-				}(id)
-			}
-		}
+		// Pluginy NIE są startowane tutaj.
+		// Są startowane dopiero gdy main_module wyśle declare_required_plugins.
+		// AutoStart w plugins.json oznacza tylko że plugin MOŻE być automatycznie
+		// uruchomiony gdy zostanie zadeklarowany — nie że hub startuje go sam z siebie.
+		log.Printf("✅ Plugin configurations loaded — waiting for main_module to declare required plugins")
 	}
 
 	// Start hub event loop

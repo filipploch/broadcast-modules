@@ -784,3 +784,7 @@ socket.on('away_penalty_timer_created', (data) => {
     console.log(`Dodano nowy timer kary z ID: ${timerId}`);
     return timerId;
 });
+
+function exportReplays(){
+    socket.emit('replay_export_run', {game_id: null});
+}

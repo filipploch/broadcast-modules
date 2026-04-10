@@ -134,7 +134,7 @@ function addFieldEvent(_event) {
         'selected_cell_id': selectedCellID
     });
     unselectAllGameFieldCells();
-    setTimeout(showUiMonitorEvents, 100);
+    setTimeout(showUiMonitorEvents, 200);
 }
 
 function addNoReplayEvent(_event) {
@@ -145,6 +145,12 @@ function addNoReplayEvent(_event) {
     });
     unselectAllGameFieldCells();
 }
+
+socket.on('team_event_added', (data) => {
+    let _team = data.team_type;
+    let _event = data.event_name;
+    addTeamEvent(_team, _event);
+})
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 gameFieldGenerator();

@@ -30,6 +30,7 @@ _initialization_lock = threading.Lock()
 _initialized = False
 # w sekcji globals na górze
 _shootout_kick_manager = None
+_replay_export_manager = None
 
 
 
@@ -46,7 +47,8 @@ def initialize_all_managers(app):
     """
     # global _plugin_manager, _hub_client, _current_game_manager, _recorder_manager
     global _hub_client, _current_game_manager, _recorder_manager, _timer_manager, _plugin_manager, \
-        _sequence_manager, _team_scraper_manager, _obs_ws_manager, _game_manager, _initialized
+        _sequence_manager, _team_scraper_manager, _obs_ws_manager, _game_manager, _initialized, \
+        _replay_export_manager
 
     with _initialization_lock:
         if _initialized:
@@ -141,6 +143,23 @@ def get_hub_client():
         _hub_client = HubClient(current_app.config['HUB_HOST'], current_app)
         current_app.logger.info("✅ Timer Manager initialized (lazy)")
     return _hub_client
+
+
+def get_replay_export_manager():
+    """
+    Zwraca singleton ReplayExportManager.
+    Bezpieczne do wywołania w wątkach pobocznych pod warunkiem że
+    wywołujący otworzył app.app_context() przed wywołaniem.
+    """
+    global _replay_export_manager
+    if _replay_export_manager is None:
+        from app.managers.replay_export_manager import ReplayExportManager
+        from pathlib import Path
+        from flask import current_app
+        # current_app działa tutaj jeśli wątek ma aktywny app_context
+        data_dir = Path(current_app.config.get('REPLAY_EXPORT_DIR', 'app/data'))
+        _replay_export_manager = ReplayExportManager(data_dir)
+    return _replay_export_manager
 
 
 def get_timer_manager():
@@ -238,6 +257,7 @@ def shutdown_all_managers():
     # global _plugin_manager, _hub_client, _current_game_manager
     global _hub_client, _current_game_manager, _plugin_manager, _sequence_manager, _team_scraper_manager
     global _recorder_manager, _timer_manager, _initialized, _obs_ws_manager, _game_manager, _shootout_kick_manager
+    global _replay_export_manager
 
     current_app.logger.info("=" * 60)
     current_app.logger.info("SHUTTING DOWN MANAGERS")
@@ -260,6 +280,7 @@ def shutdown_all_managers():
     _sequence_manager = None
     _team_scraper_manager = None
     _shootout_kick_manager = None
+    _replay_export_manager = None
     _obs_ws_manager = None
     _game_manager = None
     _initialized = False

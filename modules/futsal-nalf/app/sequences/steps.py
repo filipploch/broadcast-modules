@@ -121,23 +121,6 @@ def pause_replay(delay_ms: int = 0, input_name="Replay"):
         "delay_ms": delay_ms
     }
 
-def show_source(scene_name:str="OUTPUT", source_id:int=6, is_visible:bool=True, delay_ms: int = 0):
-    _request = {
-        "target": "obs-ws-plugin",
-        "action": "obs_command",
-        "payload": {
-            "requestType": "SetSceneItemEnabled",
-            "requestData": {
-                "sceneName": scene_name,
-                "sceneItemId": source_id,
-                "sceneItemEnabled": is_visible
-            }
-            }
-        ,"delay_ms": delay_ms
-    }
-    print(f'request: {_request}')
-    return _request
-
 def show_transition(delay_ms: int = 0):
     return {
         "target": "stream-overlay",
@@ -146,19 +129,54 @@ def show_transition(delay_ms: int = 0):
         "delay_ms": delay_ms
     }
 
-def move_source(_index, scene_name:str="OUTPUT", source_id:int=7, delay_ms: int = 0):
+
+def show_source(scene_name: str = "OUTPUT", source_name: str = "Replay",
+                is_visible: bool = True, delay_ms: int = 0):
+    """
+    Pokazuje lub ukrywa źródło w scenie OBS.
+
+    Używa nazwy źródła zamiast numerycznego sceneItemId —
+    ID jest rozwiązywane w runtime przez ObsWsManager.get_scene_item_id().
+    Nie wymaga aktualizacji kodu po zmianie struktury scen w OBS.
+    """
     return {
         "target": "obs-ws-plugin",
-        "action": "obs_command",
+        "action": "obs_command_by_name",   # nowy action — plugin rozwiązuje ID
         "payload": {
-            "requestType": "SetSceneItemIndex",
+            "requestType": "SetSceneItemEnabled",
+            "sceneName": scene_name,
+            "sourceName": source_name,
             "requestData": {
                 "sceneName": scene_name,
-                "sceneItemId": source_id,
-                "sceneItemIndex": _index
+                "sceneItemEnabled": is_visible,
+                # sceneItemId zostanie wstrzyknięte przez ObsWsManager przed wysłaniem
             }
-        }
-        ,"delay_ms": delay_ms
+        },
+        "delay_ms": delay_ms
+    }
+
+
+def move_source(index, scene_name: str = "OUTPUT", source_name: str = "Replay",
+                delay_ms: int = 0):
+    """
+    Zmienia kolejność źródła (z-index) w scenie OBS.
+
+    Używa nazwy źródła zamiast numerycznego sceneItemId.
+    """
+    return {
+        "target": "obs-ws-plugin",
+        "action": "obs_command_by_name",
+        "payload": {
+            "requestType": "SetSceneItemIndex",
+            "sceneName": scene_name,
+            "sourceName": source_name,
+            "requestData": {
+                "sceneName": scene_name,
+                "sceneItemIndex": index,
+                # sceneItemId zostanie wstrzyknięte przez ObsWsManager przed wysłaniem
+            }
+        },
+        "delay_ms": delay_ms
     }
 
 def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:

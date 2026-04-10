@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -13,24 +14,134 @@ import (
 	"obs-ws-plugin/internal/obs"
 )
 
-// Config represents the plugin configuration
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Config struct {
 	Plugin struct {
 		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Version string `json:"version"`
 	} `json:"plugin"`
-	OBS     obs.Config `json:"obs"`
+	OBS      obs.Config `json:"obs"`
+	SceneMap struct {
+		// Ścieżka do pliku JSON przechowującego mapę scen między restartami.
+		// Plugin wczytuje ją przy starcie (jeśli istnieje) i nadpisuje
+		// po każdym odświeżeniu z OBS.
+		// Powinna być dostępna dla main_module jeśli chce odczytać mapę z pliku,
+		// ale w tej architekturze to plugin rozwiązuje nazwy — plik służy tylko
+		// jako trwały cache dla pluginu.
+		Path string `json:"path"`
+	} `json:"scene_map"`
 	Logging struct {
 		Level string `json:"level"`
 	} `json:"logging"`
 }
 
-// Plugin represents the OBS WebSocket plugin
+// ─────────────────────────────────────────────────────────────────────────────
+// SceneMap — thread-safe mapa: sceneName → { sourceName → sceneItemId }
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SceneMap struct {
+	mu   sync.RWMutex
+	data map[string]map[string]int // sceneName → sourceName → sceneItemId
+}
+
+func newSceneMap() *SceneMap {
+	return &SceneMap{data: make(map[string]map[string]int)}
+}
+
+// resolve zwraca sceneItemId dla podanej sceny i nazwy źródła.
+func (sm *SceneMap) resolve(sceneName, sourceName string) (int, bool) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	sources, ok := sm.data[sceneName]
+	if !ok {
+		return 0, false
+	}
+	id, ok := sources[sourceName]
+	return id, ok
+}
+
+// set atomowo zastępuje całą mapę i zapisuje do pliku.
+func (sm *SceneMap) set(data map[string]map[string]int, savePath string) {
+	sm.mu.Lock()
+	sm.data = data
+	sm.mu.Unlock()
+
+	if savePath != "" {
+		if err := sm.saveToFile(savePath); err != nil {
+			log.Printf("⚠️  Failed to save scene map to %s: %v", savePath, err)
+		} else {
+			log.Printf("💾 Scene map saved to %s", savePath)
+		}
+	}
+}
+
+// loadFromFile wczytuje mapę z pliku JSON. Błąd = mapa pusta (nie fatal).
+func (sm *SceneMap) loadFromFile(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("⚠️  Failed to read scene map from %s: %v", path, err)
+		}
+		return
+	}
+	var loaded map[string]map[string]int
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		log.Printf("⚠️  Failed to parse scene map from %s: %v", path, err)
+		return
+	}
+	sm.mu.Lock()
+	sm.data = loaded
+	sm.mu.Unlock()
+
+	total := 0
+	for _, sources := range loaded {
+		total += len(sources)
+	}
+	log.Printf("📂 Scene map loaded from %s: %d scene(s), %d source(s)",
+		path, len(loaded), total)
+}
+
+// saveToFile zapisuje aktualną mapę do pliku JSON.
+func (sm *SceneMap) saveToFile(path string) error {
+	sm.mu.RLock()
+	data := sm.data
+	sm.mu.RUnlock()
+
+	raw, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0644)
+}
+
+// toRaw zwraca kopię danych (do wysyłki przez hub).
+func (sm *SceneMap) toRaw() map[string]map[string]int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	cp := make(map[string]map[string]int, len(sm.data))
+	for scene, sources := range sm.data {
+		srcCp := make(map[string]int, len(sources))
+		for src, id := range sources {
+			srcCp[src] = id
+		}
+		cp[scene] = srcCp
+	}
+	return cp
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plugin
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Plugin struct {
 	config    *Config
 	hubClient *hub.HubClient
 	obsClient *obs.Client
+	sceneMap  *SceneMap
 }
 
 func main() {
@@ -41,20 +152,28 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ Failed to load config: %v", err)
 	}
-
 	if pluginID := os.Getenv("PLUGIN_ID"); pluginID != "" {
 		config.Plugin.ID = pluginID
 	}
-
 	hubURL := os.Getenv("HUB_URL")
 	if hubURL == "" {
 		hubURL = "ws://localhost:8080/ws"
+	}
+
+	sceneMap := newSceneMap()
+
+	// Wczytaj mapę z pliku (trwały cache z poprzedniej sesji).
+	// Dzięki temu plugin jest gotowy do rozwiązywania nazw natychmiast po starcie,
+	// nawet jeśli OBS nie zdążył jeszcze odpowiedzieć na GetSceneItemList.
+	if config.SceneMap.Path != "" {
+		sceneMap.loadFromFile(config.SceneMap.Path)
 	}
 
 	plugin := &Plugin{
 		config:    config,
 		hubClient: hub.NewHubClient(hubURL, config.Plugin.ID, config.Plugin.Name),
 		obsClient: obs.NewClient(&config.OBS),
+		sceneMap:  sceneMap,
 	}
 
 	plugin.hubClient.ConnectWithRetry()
@@ -62,6 +181,9 @@ func main() {
 	if err := plugin.obsClient.Connect(); err != nil {
 		log.Printf("⚠️  Failed to connect to OBS: %v", err)
 		log.Printf("    Will retry automatically...")
+	} else {
+		// Pierwsze połączenie — odśwież mapę scen z OBS
+		go plugin.refreshSceneMap()
 	}
 
 	go plugin.routeHubToOBS()
@@ -81,51 +203,121 @@ func loadConfig() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config.json: %w", err)
 	}
-
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config.json: %w", err)
 	}
-
 	return &config, nil
 }
 
-// routeHubToOBS routes obs_command messages from HUB to OBS and sends response back
+// ─────────────────────────────────────────────────────────────────────────────
+// refreshSceneMap — odpytuje OBS i aktualizuje mapę w pamięci + plik
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (p *Plugin) refreshSceneMap() {
+	log.Println("🗺️  Refreshing OBS scene map...")
+
+	scenesResp, err := p.obsClient.SendRequest("GetSceneList", nil)
+	if err != nil {
+		log.Printf("❌ GetSceneList failed: %v", err)
+		return
+	}
+	scenes, ok := scenesResp["scenes"].([]interface{})
+	if !ok {
+		log.Printf("⚠️  GetSceneList: unexpected response format")
+		return
+	}
+
+	newMap := make(map[string]map[string]int)
+
+	for _, s := range scenes {
+		scene, ok := s.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		sceneName, _ := scene["sceneName"].(string)
+		if sceneName == "" {
+			continue
+		}
+
+		itemsResp, err := p.obsClient.SendRequest("GetSceneItemList",
+			map[string]interface{}{"sceneName": sceneName})
+		if err != nil {
+			log.Printf("⚠️  GetSceneItemList(%s) failed: %v", sceneName, err)
+			continue
+		}
+		items, ok := itemsResp["sceneItems"].([]interface{})
+		if !ok {
+			continue
+		}
+
+		sourceMap := make(map[string]int)
+		for _, it := range items {
+			item, ok := it.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			sourceName, _ := item["sourceName"].(string)
+			idF, ok := item["sceneItemId"].(float64)
+			if !ok || sourceName == "" {
+				continue
+			}
+			sourceMap[sourceName] = int(idF)
+		}
+		newMap[sceneName] = sourceMap
+		log.Printf("   ✅ '%s': %d source(s)", sceneName, len(sourceMap))
+	}
+
+	p.sceneMap.set(newMap, p.config.SceneMap.Path)
+
+	total := 0
+	for _, sources := range newMap {
+		total += len(sources)
+	}
+	log.Printf("🗺️  Scene map ready: %d scene(s), %d source(s) total", len(newMap), total)
+
+	// Wyślij mapę do main_module — tylko informacyjnie (np. do UI /api/obs/scene-map)
+	p.hubClient.Send(&hub.Message{
+		From:    p.config.Plugin.ID,
+		To:      "main_module",
+		Type:    "obs_scene_map",
+		Payload: map[string]interface{}{"scene_map": p.sceneMap.toRaw()},
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// routeHubToOBS — obsługuje obs_command i obs_command_by_name
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (p *Plugin) routeHubToOBS() {
 	log.Println("🔀 Starting Hub → OBS routing")
 
 	for msg := range p.hubClient.Messages {
-		if msg.Type != "obs_command" && msg.Type != "recording_command" {
+		if msg.Type != "obs_command" && msg.Type != "obs_command_by_name" &&
+			msg.Type != "recording_command" {
 			continue
 		}
+
 		requestID := msg.Payload["request_id"]
 		log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
 
 		if !p.obsClient.IsConnected() {
 			log.Printf("⚠️  OBS not connected, cannot forward command")
 			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID,
-				To:   msg.From,
-				Type: "obs_error",
+				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
 				Payload: map[string]interface{}{
-					"error":   "OBS not connected",
-					"command": msg.Payload,
+					"error": "OBS not connected", "command": msg.Payload,
 				},
 			})
 			continue
 		}
 
-		// Extract requestType and requestData from payload
 		requestType, ok := msg.Payload["requestType"].(string)
 		if !ok || requestType == "" {
 			log.Printf("⚠️  obs_command missing requestType")
 			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID,
-				To:   msg.From,
-				Type: "obs_error",
-				Payload: map[string]interface{}{
-					"error": "obs_command payload must contain requestType",
-				},
+				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+				Payload: map[string]interface{}{"error": "obs_command payload must contain requestType"},
 			})
 			continue
 		}
@@ -135,29 +327,38 @@ func (p *Plugin) routeHubToOBS() {
 			requestData = rd
 		}
 
-		// Send to OBS and wait for response
+		// obs_command_by_name: wstrzyknij sceneItemId na podstawie sourceName
+		if msg.Type == "obs_command_by_name" {
+			resolved, err := p.resolveSceneItemId(msg.Payload, requestData)
+			if err != nil {
+				log.Printf("❌ Cannot resolve source name: %v", err)
+				p.hubClient.Send(&hub.Message{
+					From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+					Payload: map[string]interface{}{
+						"error":       err.Error(),
+						"requestType": requestType,
+					},
+				})
+				continue
+			}
+			requestData = resolved
+		}
+
 		responseData, err := p.obsClient.SendRequest(requestType, requestData)
 		if err != nil {
 			log.Printf("❌ OBS request failed (%s): %v", requestType, err)
 			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID,
-				To:   msg.From,
-				Type: "obs_error",
+				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
 				Payload: map[string]interface{}{
-					"error":       err.Error(),
-					"requestType": requestType,
+					"error": err.Error(), "requestType": requestType,
 				},
 			})
 			continue
 		}
 
 		log.Printf("✅ OBS response received for %s", requestType)
-
-		// Send response back to requester
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID,
-			To:   msg.From,
-			Type: "obs_response",
+			From: p.config.Plugin.ID, To: msg.From, Type: "obs_response",
 			Payload: map[string]interface{}{
 				"requestType":  requestType,
 				"requestID":    requestID,
@@ -167,13 +368,48 @@ func (p *Plugin) routeHubToOBS() {
 	}
 }
 
-// routeOBSToHub broadcasts OBS events to all HUB subscribers
+// resolveSceneItemId wstrzykuje sceneItemId do requestData na podstawie
+// sceneName + sourceName z payloadu wiadomości.
+func (p *Plugin) resolveSceneItemId(
+	payload map[string]interface{},
+	requestData map[string]interface{},
+) (map[string]interface{}, error) {
+
+	sceneName, _ := payload["sceneName"].(string)
+	sourceName, _ := payload["sourceName"].(string)
+
+	if sceneName == "" || sourceName == "" {
+		return nil, fmt.Errorf(
+			"obs_command_by_name requires 'sceneName' and 'sourceName' in payload, got: sceneName=%q sourceName=%q",
+			sceneName, sourceName)
+	}
+
+	sceneItemId, ok := p.sceneMap.resolve(sceneName, sourceName)
+	if !ok {
+		return nil, fmt.Errorf(
+			"source %q not found in scene %q — scene map may be stale, check OBS structure",
+			sourceName, sceneName)
+	}
+
+	// Zbuduj nowe requestData z wstrzykniętym sceneItemId
+	resolved := make(map[string]interface{}, len(requestData)+1)
+	for k, v := range requestData {
+		resolved[k] = v
+	}
+	resolved["sceneItemId"] = sceneItemId
+
+	log.Printf("🔍 Resolved '%s' in scene '%s' → sceneItemId=%d", sourceName, sceneName, sceneItemId)
+	return resolved, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// routeOBSToHub — przekazuje eventy OBS do huba
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (p *Plugin) routeOBSToHub() {
 	log.Println("🔀 Starting OBS → Hub routing")
-
 	for event := range p.obsClient.Events {
 		log.Printf("📨 OBS → Hub: event received")
-
 		p.hubClient.Send(&hub.Message{
 			From:    p.config.Plugin.ID,
 			To:      "broadcast:obs_messages_receiver",
@@ -183,13 +419,14 @@ func (p *Plugin) routeOBSToHub() {
 	}
 }
 
-// monitorOBSStatus monitors OBS connection status and notifies HUB
+// ─────────────────────────────────────────────────────────────────────────────
+// monitorOBSStatus — przy każdym (re)połączeniu odświeża mapę scen
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (p *Plugin) monitorOBSStatus() {
 	log.Println("📡 Starting OBS status monitor")
-
 	for status := range p.obsClient.StatusChanged {
 		log.Printf("📊 OBS Status changed: %s", status)
-
 		p.hubClient.Send(&hub.Message{
 			From: p.config.Plugin.ID,
 			To:   "main_module",
@@ -200,20 +437,21 @@ func (p *Plugin) monitorOBSStatus() {
 				"timestamp": time.Now().Unix(),
 			},
 		})
+		// Przy każdym (re)połączeniu z OBS odśwież mapę scen —
+		// struktura scen mogła się zmienić podczas rozłączenia.
+		if status == "connected" {
+			go p.refreshSceneMap()
+		}
 	}
 }
 
 func waitForShutdown(plugin *Plugin) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
 	<-sigChan
-
 	log.Println("🛑 Shutdown signal received, cleaning up...")
-
 	plugin.obsClient.Close()
 	plugin.hubClient.Close()
-
 	log.Println("👋 OBS WebSocket Plugin stopped")
 	os.Exit(0)
 }
