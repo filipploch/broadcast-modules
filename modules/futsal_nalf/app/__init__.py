@@ -1,0 +1,84 @@
+"""Application factory — moduł futsal-nalf."""
+import logging
+import threading
+
+from flask import Flask
+
+
+def create_app(config_name='default'):
+    app = Flask(__name__)
+
+    # Konfiguracja
+    from config import config
+    app.config.from_object(config[config_name])
+
+    # Logging
+    logging.basicConfig(
+        level=logging.DEBUG if app.debug else logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Rozszerzenia — używamy instancji z core
+    from core.extensions import db, socketio
+    db.init_app(app)
+    socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
+
+    # Tworzenie tabel — importy modeli muszą być przed db.create_all()
+    with app.app_context():
+        # Modele core (wspólne tabele)
+        from core.models import (
+            Settings, Season, Stadium,
+            Camera, Commentator, Referee,
+            Event, EventCamera,
+            GameEvent, GameCamera, GameCommentator, GameReferee,
+            GamePlayer, GameTimer, Period, League
+        )
+        # Modele futsal-nalf (specyficzne tabele)
+        from app.models import (
+            LeagueTeam, Team, Game, Player,
+            Shootout, ShootoutKick,
+        )
+
+        db.create_all()
+        app.logger.info("✅ Database tables created/verified")
+
+    # Rejestracja tras i zdarzeń SocketIO
+    with app.app_context():
+        # Trasy i eventy z core
+        from core.routes import broadcast as core_broadcast
+        from core.socketio_events import base as core_events
+        core_broadcast.register_routes(app)
+        core_events.register_events(socketio)
+
+        # Trasy i eventy specyficzne dla futsalu
+        from app.routes import futsal as futsal_routes
+        from app.socketio_events import futsal as futsal_events
+        futsal_routes.register_routes(app)
+        futsal_events.register_events(socketio)
+
+        @app.context_processor
+        def inject_global_context():
+            try:
+                from core.models.settings import Settings
+                from core.models.season import Season
+                settings = Settings.get_settings()
+                season = Season.query.get(settings.current_season_id) \
+                         if settings.current_season_id else None
+                return {
+                    'broadcast_game_id': settings.current_game_id,
+                    'season': season,
+                }
+            except Exception:
+                return {'broadcast_game_id': None, 'season': None}
+
+    # Inicjalizacja managerów w tle
+    def init_managers():
+        with app.app_context():
+            from app.managers import initialize_all_managers
+            initialize_all_managers(app)
+
+    threading.Thread(target=init_managers, daemon=True).start()
+
+    app.logger.info("✅ Application initialized")
+    return app

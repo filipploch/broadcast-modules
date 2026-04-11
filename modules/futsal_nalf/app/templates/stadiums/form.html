@@ -1,0 +1,33 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj stadion' if stadium else 'Dodaj stadion' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj stadion' if stadium else 'Nowy stadion' }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Nazwa *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ stadium.name if stadium else '' }}"
+                   required maxlength="100" placeholder="np. Hala Widowiskowo-Sportowa">
+        </div>
+        <div class="form-group">
+            <label for="address">Adres *</label>
+            <input type="text" id="address" name="address"
+                   value="{{ stadium.address if stadium else '' }}"
+                   required maxlength="200" placeholder="np. ul. Sportowa 1">
+        </div>
+        <div class="form-group">
+            <label for="city">Miasto *</label>
+            <input type="text" id="city" name="city"
+                   value="{{ stadium.city if stadium else '' }}"
+                   required maxlength="50" placeholder="np. Warszawa">
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_stadiums') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+.nodisplayed {
+  display: none !important;
+}
+
+.invisible, .hidden {
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.small-button {
+  width: 24px;
+  font-weight: bold;
+  height: 22px;
+}
+
+.header-button {
+    right: 0px;
+    position: absolute;
+    top: 0px;
+    height: 15px;
+    width: 15px;
+    padding: 0;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+.bg_red {
+    background-color: red;
+    color: white;
+}
+
+.bg_green {
+    background-color: rgb(40, 109, 0);
+    color: white;
+}
+
+.bg_blue {
+    background-color: darkblue;
+    color: white;
+}
+
+.important_bg_red {
+    background-color: red !important;
+    color: white !important;
+}
+
+.bg_black {
+    background-color: rgb(0, 0, 0);
+    color: white;
+}
+
+.important_bg_black {
+    background-color: rgb(0, 0, 0) !important;
+    color: white !important;
+}
+
+.important_bg_orange {
+    background-color: rgb(255, 166, 0) !important;
+    color: white !important;
+}
+
+
+.thin-wide-button {
+    text-align: center;
+    font-size: 9px;
+    width: 100%;
+}
+
+.wingdings {
+  font-family: "Wingdings";
+}
+
+.flex1 {
+    flex: 1;
+}
+
+.flex2 {
+    flex: 2;
+}
+
+.flex3 {
+    flex: 3;
+}
+
+.flex4 {
+    flex: 4;
+}
+
+.flex5 {
+    flex: 5;
+}

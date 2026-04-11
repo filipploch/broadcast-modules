@@ -1,0 +1,606 @@
+"""Hub Client - WebSocket communication with Hub - WITH BROADCAST CLASSES"""
+import websocket
+import json
+import threading
+import time
+from datetime import datetime
+
+
+class HubClient:
+    """WebSocket client for Hub communication"""
+
+    def __init__(self, hub_url, app=None):
+        self.hub_url = hub_url
+        self.app = app  # ⭐ Store Flask app instance
+        self.ws = None
+        self.module_id = None
+        self.module_name = None
+        self.connected = False
+        self.message_handlers = []
+        self._lock = threading.Lock()
+        self.subscribe_classes = []
+        self.required_plugins = []
+        self._should_reconnect = True  # Kontrola reconnect
+        self._reconnect_delay = 3  # Sekundy między próbami
+
+    def connect(self):
+        """Connect to Hub"""
+        self._log("info", f"Connecting to Hub: {self.hub_url}")
+        self._should_reconnect = True  # ✅ Włącz reconnect
+
+        try:
+            self.ws = websocket.WebSocketApp(
+                self.hub_url,
+                on_message=self._on_message,
+                on_error=self._on_error,
+                on_close=self._on_close,
+                on_open=self._on_open
+            )
+
+            # Start WebSocket in background thread
+            ws_thread = threading.Thread(target=self._run_forever, daemon=True)
+            ws_thread.start()
+
+            # Wait for connection
+            timeout = 5
+            start_time = time.time()
+            while not self.connected and time.time() - start_time < timeout:
+                time.sleep(0.1)
+
+            if not self.connected:
+                raise Exception("Failed to connect to Hub")
+
+            self._log("info", "Connected to Hub")
+
+        except Exception as e:
+            self._log("error", f"Failed to connect to Hub: {e}")
+            raise
+
+    def _run_forever(self):
+        """Run WebSocket connection with auto-reconnect"""
+        attempt = 0
+        
+        while self._should_reconnect:  # ✅ Zmieniono warunek
+            try:
+                if attempt > 0:
+                    self._log("info", f"Reconnect attempt {attempt}...")
+                
+                self.ws.run_forever()
+                
+            except Exception as e:
+                self._log("error", f"WebSocket error: {e}")
+
+            # If disconnected and should reconnect
+            if not self.connected and self._should_reconnect:
+                attempt += 1
+                self._log("info", f"Reconnecting to Hub in {self._reconnect_delay}s...")
+                time.sleep(self._reconnect_delay)
+                
+                # ✅ Re-create WebSocket
+                self.ws = websocket.WebSocketApp(
+                    self.hub_url,
+                    on_message=self._on_message,
+                    on_error=self._on_error,
+                    on_close=self._on_close,
+                    on_open=self._on_open
+                )
+            else:
+                break
+        
+        self._log("info", "WebSocket thread stopped")
+
+    def register_as_main_module(self, module_id, module_name, required_plugins=None, subscribe_classes=None):
+        """
+        Register as main module
+
+        Args:
+            module_id: Unique module identifier
+            module_name: Human-readable module name
+            required_plugins: List of required plugin IDs (optional)
+            subscribe_classes: List of classes to subscribe to (optional)
+        """
+        self.module_id = module_id
+        self.module_name = module_name
+
+        # ✅ Zapisz parametry dla reconnect
+        if required_plugins:
+            self.required_plugins = required_plugins
+        if subscribe_classes:
+            self.subscribe_classes = subscribe_classes
+
+        self._log("info", f"Registering as main module: {module_id}")
+
+        # Get app_port from app config
+        app_port = self._get_config('APP_PORT', 8081)
+
+        # Resolve absolute DB path from SQLAlchemy URI
+        import os
+        db_path = ''
+        try:
+            db_uri = self._get_config('SQLALCHEMY_DATABASE_URI', '')
+            db_filename = db_uri.replace('sqlite:///', '').replace('sqlite://', '')
+            if self.app:
+                db_path = os.path.join(self.app.instance_path, db_filename)
+            else:
+                db_path = db_filename
+        except Exception:
+            pass
+
+        self.send({
+            'from': module_id,
+            'to': 'hub',
+            'type': 'register',
+            'payload': {
+                'id': module_id,
+                'name': module_name,
+                'component_type': 'main_module',
+                'host': 'localhost',
+                'port': str(app_port),
+                'type': 'local',
+                'database_path': db_path
+            }
+        })
+
+        # ✅ NEW: Subscribe to classes if provided
+        if subscribe_classes:
+            self.subscribe_classes = subscribe_classes
+            # Subscribe will be sent in _on_open after connection confirmed
+
+        # Declare required plugins if provided
+        # if required_plugins:
+        #     # Wait a bit for registration to complete
+        #     time.sleep(0.1)
+        #     self.declare_required_plugins(required_plugins)
+
+    def declare_required_plugins(self, plugins):
+        self.required_plugins = plugins
+        """Declare required plugins to Hub"""
+        self._log("info", f"Declaring {len(plugins)} required plugins")
+
+        self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'declare_required_plugins',
+            'payload': {
+                'owner_id': self.module_id,
+                'plugins': plugins
+            }
+        })
+
+    def send(self, message):
+        """Send message to Hub"""
+        if not self.connected:
+            self._log("warning", "Cannot send - not connected to Hub")
+            return False
+
+        try:
+            if 'timestamp' not in message:
+                message['timestamp'] = datetime.utcnow().isoformat()
+
+            with self._lock:
+                self.ws.send(json.dumps(message))
+
+            return True
+
+        except Exception as e:
+            self._log("error", f"Failed to send message: {e}")
+            return False
+
+    def broadcast(self, msg_type, payload):
+        """Broadcast message to all plugins"""
+        return self.send({
+            'from': self.module_id,
+            'to': 'broadcast',
+            'type': msg_type,
+            'payload': payload
+        })
+
+    # ✅ NEW: Broadcast to specific class
+    def broadcast_to_class(self, class_name, msg_type, payload):
+        """Broadcast message to specific class of modules"""
+        return self.send({
+            'from': self.module_id,
+            'to': f'broadcast:{class_name}',
+            'type': msg_type,
+            'payload': payload
+        })
+
+    def send_to_plugin(self, plugin_id, msg_type, payload):
+        """Send message to specific plugin"""
+        return self.send({
+            'from': self.module_id,
+            'to': plugin_id,
+            'type': msg_type,
+            'payload': payload
+        })
+
+    # ✅ NEW: Subscribe to classes
+    def subscribe_to_classes(self, classes):
+        """
+        Subscribe to broadcast classes
+
+        Args:
+            classes: List of class names to subscribe to
+        """
+        if not isinstance(classes, list):
+            classes = [classes]
+
+        self.subscribe_classes = classes
+
+        self._log("info", f"Subscribing to classes: {', '.join(classes)}")
+
+        return self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'subscribe',
+            'payload': {
+                'class': classes
+            }
+        })
+
+    # ✅ NEW: Unsubscribe from classes
+    def unsubscribe(self, classes):
+        """
+        Unsubscribe from broadcast classes
+
+        Args:
+            classes: List of class names to unsubscribe from
+        """
+        if not isinstance(classes, list):
+            classes = [classes]
+
+        self._log("info", f"Unsubscribing from classes: {', '.join(classes)}")
+
+        return self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'unsubscribe',
+            'payload': {
+                'classes': classes
+            }
+        })
+
+    def add_message_handler(self, handler):
+        """Add message handler callback"""
+        self.message_handlers.append(handler)
+
+    def _on_message(self, ws, message):
+        """Handle incoming message - RUNS IN WEBSOCKET THREAD"""
+        try:
+            msg = json.loads(message)
+            # Log message (with app context)
+            msg_type = msg.get('type', 'unknown')
+            msg_from = msg.get('from', 'unknown')
+            # self._log("debug", f"Received: {msg_type} from {msg_from}")
+
+            # Handle message in app context
+            if self.app:
+                with self.app.app_context():
+                    self._handle_message(msg)
+
+                    # Call registered handlers
+                    for handler in self.message_handlers:
+                        try:
+                            handler(msg)
+                        except Exception as e:
+                            self._log("error", f"Error in message handler: {e}", exc_info=True)
+            else:
+                # No app context available, handle without it
+                self._handle_message(msg)
+
+                for handler in self.message_handlers:
+                    try:
+                        handler(msg)
+                    except Exception as e:
+                        print(f"Error in message handler: {e}")
+
+        except Exception as e:
+            self._log("error", f"Error processing message: {e}", exc_info=True)
+
+    def _handle_message(self, msg):
+        """Handle specific message types"""
+        msg_type = msg.get('type')
+        msg_from = msg.get('from', '')
+        payload = msg.get('payload', {})
+
+        if msg_type == 'registered':
+            self._log("info", "Registered with Hub")
+
+            # ✅ NEW: Auto-subscribe to classes after registration
+            # if self.subscribe_classes:
+            #     self.subscribe_to_classes(self.subscribe_classes)
+
+        # ✅ NEW: Handle subscription confirmation
+        elif msg_type == 'subscribed':
+            classes = payload.get('classes', [])
+            self._log("info", f"✅ Subscribed to classes: {', '.join(classes)}")
+
+        elif msg_type == 'plugin_online':
+            plugin_id = payload.get('plugin_id')
+            plugin_name = payload.get('plugin_name')
+            self._log("info", f"Plugin online: {plugin_name} ({plugin_id})")
+
+            # Update database
+            # self._with_app_context(self._on_plugin_online, plugin_id, payload)
+
+        elif msg_type == 'plugin_offline':
+            plugin_id = payload.get('plugin_id')
+            self._log("warning", f"Plugin offline: {plugin_id}")
+
+            # Update database
+            # self._with_app_context(self._on_plugin_offline, plugin_id)
+
+        elif msg_type == 'health_status':
+            from core.managers import get_plugin_manager
+            plugin_manager = get_plugin_manager()
+            plugin_manager.on_plugins_state_received(msg)
+            # print(f"health_status: {msg}")
+
+        elif msg_from == 'stream-overlay':
+            from core.managers import GameManager
+            game_manager = GameManager()
+            if msg_type == 'request_game_data':
+                game_manager.handle_request_game_data(msg)
+
+        elif msg_from == 'recorder-plugin':
+            print(f'RECORDER MSG: {msg}')
+            from core.managers import get_recorder_manager
+            recorder_manager = get_recorder_manager()
+            if msg_type == 'recording_started':
+                self._log("info", f"Recording started: camera={payload.get('camera_id')} file={payload.get('file_name')}")
+                recorder_manager.on_recording_started(msg)
+            elif msg_type == 'recording_stopped':
+                self._log("info", f"Recording stopped: camera={payload.get('camera_id')}")
+                recorder_manager.on_recording_stopped(msg)
+            elif msg_type == 'recording_status_response':
+                recorder_manager.on_recording_status_received(msg)
+            elif msg_type == 'recording_command_response':
+                recorder_manager.on_recording_command_response(msg)
+
+        if msg_from == 'obs-ws-plugin':
+            from core.managers import get_obs_ws_manager
+            obs_ws_manager = get_obs_ws_manager()
+
+            if msg_type == 'obs_status':
+                print('OBS_STATUS:', msg)
+                obs_ws_manager.on_obs_status(msg)
+            elif msg_type == 'obs_response':
+                obs_ws_manager.on_obs_response(msg)
+            elif msg_type == 'obs_event':
+                print('OBS_EVENT:', msg)
+                obs_ws_manager.on_obs_event(msg)
+            elif msg_type == 'obs_error':
+                print('OBS_ERROR:', msg)
+            else:
+                print('OBS MSG:', msg)
+
+
+
+        # Timer Plugin messages
+        if msg_from == 'timer-plugin':
+            print('msg from timer-plugin', msg)
+            from core.managers import get_timer_manager
+            timer_manager = get_timer_manager()
+
+            if msg_type == 'timer_updated':
+                timer_manager.on_timer_updated(msg)
+            elif msg_type == 'timer_event':
+                timer_manager.on_timer_event(msg)
+            elif msg_type == 'timer_created':
+                timer_manager.on_timer_created(msg)
+            elif msg_type == 'timer_started':
+                timer_manager.on_timer_started(msg)
+            elif msg_type == 'timer_paused':
+                timer_manager.on_timer_paused(msg)
+            elif msg_type == 'timer_reset':
+                timer_manager.on_timer_reset(msg)
+            elif msg_type == 'timer_adjusted':
+                timer_manager.on_timer_adjusted(msg)
+            elif msg_type == 'all_timers':
+                timer_manager.on_all_timers(msg)
+            elif msg_type == 'limit_reached':
+                timer_manager.on_limit_reached(msg)
+
+    # def _on_plugin_online(self, plugin_id, payload):
+    #     """Handle plugin coming online"""
+    #     # Update database
+    #     from core.managers import get_plugin_manager
+    #     plugin_manager = get_plugin_manager()
+    #     if plugin_manager:
+    #         plugin_manager.mark_plugin_online(plugin_id)
+
+        # Emit to UI
+        # self._emit_to_ui('plugin_status', {
+        #     'plugin_id': plugin_id,
+        #     'status': 'online'
+        # })
+
+        # Special handling for specific plugins
+        # if plugin_id == 'recorder':
+        #     from core.managers import get_recorder_manager
+        #     recorder_manager = get_recorder_manager()
+        #     if recorder_manager:
+        #         recorder_manager.on_recorder_online()
+
+    # def _on_plugin_offline(self, plugin_id):
+    #     """Handle plugin going offline"""
+    #     # Update database
+    #     from core.managers import get_plugin_manager
+    #     plugin_manager = get_plugin_manager()
+    #     if plugin_manager:
+    #         plugin_manager.mark_plugin_offline(plugin_id)
+
+        # Emit to UI
+        # self._emit_to_ui('plugin_status', {
+        #     'plugin_id': plugin_id,
+        #     'status': 'offline'
+        # })
+
+    # def _emit_to_ui(self, event, data):
+    #     """Emit event to UI clients via SocketIO"""
+    #     try:
+    #         from core.extensions import socketio
+    #         # socketio.emit(event, data, broadcast=True)
+    #         socketio.emit(event, data)
+    #     except Exception as e:
+    #         self._log("error", f"Failed to emit to UI: {e}")
+
+    def _on_error(self, ws, error):
+        """Handle WebSocket error - RUNS IN WEBSOCKET THREAD"""
+        self._log("error", f"WebSocket error: {error}")
+
+    def _on_open(self, ws):
+        """Handle WebSocket open"""
+        self.connected = True
+        self._log("info", "WebSocket connection opened")
+        
+        # ✅ Re-register after reconnect
+        if self.module_id:
+            self._log("info", f"Re-registering as: {self.module_id}")
+            
+            # 1. Register
+            app_port = self._get_config('APP_PORT', 8081)
+
+            # Resolve absolute DB path from SQLAlchemy URI
+            import os
+            db_path = ''
+            try:
+                db_uri = self._get_config('SQLALCHEMY_DATABASE_URI', '')
+                db_filename = db_uri.replace('sqlite:///', '').replace('sqlite://', '')
+                if self.app:
+                    db_path = os.path.join(self.app.instance_path, db_filename)
+                else:
+                    db_path = db_filename
+            except Exception:
+                pass
+            
+            self.send({
+                'from': self.module_id,
+                'to': 'hub',
+                'type': 'register',
+                'payload': {
+                    'id': self.module_id,
+                    'name': self.module_name or 'FUTSAL NALF',
+                    'component_type': 'main_module',
+                    'host': 'localhost',
+                    'port': str(app_port),
+                    'type': 'local',
+                    'database_path': db_path
+                }
+            })
+            
+            # Wait a bit for registration
+            time.sleep(0.5)
+            
+            # 2. Declare required plugins
+            if self.required_plugins:
+                self._log("info", f"Re-declaring {len(self.required_plugins)} required plugins")
+                self.send({
+                    'from': self.module_id,
+                    'to': 'hub',
+                    'type': 'declare_required_plugins',
+                    'payload': {
+                        'owner_id': self.module_id,
+                        'plugins': self.required_plugins
+                    }
+                })
+                
+                time.sleep(0.5)
+            
+            # 3. Subscribe to classes
+            if self.subscribe_classes:
+                self._log("info", f"Re-subscribing to classes: {', '.join(self.subscribe_classes)}")
+                self.send({
+                    'from': self.module_id,
+                    'to': 'hub',
+                    'type': 'subscribe',
+                    'payload': {
+                        'class': self.subscribe_classes
+                    }
+                })
+
+    def _on_close(self, ws, close_status_code, close_msg):
+        """Handle WebSocket close"""
+        self.connected = False
+        self._log("warning", f"WebSocket closed: {close_msg} (code: {close_status_code})")
+        # ✅ Auto-reconnect wykryje disconnection i spróbuje ponownie
+
+    def disconnect(self):
+        """Disconnect from Hub"""
+        self._log("info", "Disconnecting from Hub...")
+
+        self._should_reconnect = False  # ✅ Wyłącz reconnect
+        self.connected = False
+        if self.ws:
+            self.ws.close()
+
+        self._log("info", "Disconnected from Hub")
+
+    # def _handle_timer_updated(self, message):
+    #     """Forward timer updates to TimerManager"""
+    #     from core.managers import get_timer_manager
+    #     timer_manager = get_timer_manager()
+    #     if timer_manager:
+    #         timer_manager.on_timer_updated(message.get('payload', {}))
+    #
+    # def _handle_timer_event(self, message):
+    #     """Forward timer events to TimerManager"""
+    #     from core.managers import get_timer_manager
+    #     timer_manager = get_timer_manager()
+    #     if timer_manager:
+    #         timer_manager.on_timer_event(message.get('payload', {}))
+    #
+    # def _handle_timer_created(self, message):
+    #     """Forward timer created to TimerManager"""
+    #     from core.managers import get_timer_manager
+    #     timer_manager = get_timer_manager()
+    #     if timer_manager:
+    #         # You can add on_timer_created method to TimerManager if needed
+    #         payload = message.get('payload', {})
+    #         self._log("info", f"Timer created: {payload.get('timer_id')}")
+
+    # ========================================================================
+    # HELPER METHODS - APP CONTEXT MANAGEMENT
+    # ========================================================================
+
+    def _with_app_context(self, func, *args, **kwargs):
+        """Execute function within Flask app context"""
+        if self.app:
+            with self.app.app_context():
+                return func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+
+    def _log(self, level, message, exc_info=False):
+        """Log message with or without app context"""
+        if self.app:
+            try:
+                with self.app.app_context():
+                    from flask import current_app
+                    logger = current_app.logger
+
+                    if level == 'debug':
+                        logger.debug(message, exc_info=exc_info)
+                    elif level == 'info':
+                        logger.info(message, exc_info=exc_info)
+                    elif level == 'warning':
+                        logger.warning(message, exc_info=exc_info)
+                    elif level == 'error':
+                        logger.error(message, exc_info=exc_info)
+            except:
+                # Fallback to print if app context fails
+                print(f"[{level.upper()}] {message}")
+        else:
+            # No app available, use print
+            print(f"[{level.upper()}] {message}")
+
+    def _get_config(self, key, default=None):
+        """Get config value with or without app context"""
+        if self.app:
+            try:
+                with self.app.app_context():
+                    from flask import current_app
+                    return current_app.config.get(key, default)
+            except:
+                return default
+        return default

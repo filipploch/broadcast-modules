@@ -1,2 +1,0 @@
-id,current_season_id,current_game_id,current_period_id,current_timers,is_scoreboard_reversed,obs_record_filepath,created_at,updated_at
-1,1,54,3,"{""main"": {""timer_id"": ""NKSxN\u0141D p:1"", ""timer_type"": ""independent"", ""initial_time"": 0, ""limit"": 1200000, ""pause_at_limit"": true, ""state"": ""paused"", ""metadata"": {""description"": ""1. po\u0142owa"", ""period"": 1, ""timer_class"": ""main""}, ""elapsed_time"": 4000}, ""penalties"": {""home"": [], ""away"": []}}",1,,2026-02-23 20:39:05.092546,2026-03-06 09:48:55.718948

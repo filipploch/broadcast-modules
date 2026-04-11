@@ -1,8 +1,8 @@
 {
   "AUDIO_SOURCES": {
     "MICROPHONES": 1,
-    "nalf_break": 3,
-    "nalf_start": 2
+    "music_break": 3,
+    "music_start": 2
   },
   "CAMERAS": {
     "Camera1": 1
