@@ -10,7 +10,7 @@ from core.managers.game_manager import GameManager
 # from app.managers import get_game_manager
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.league_manager import LeagueManager
-from core.models.team import Team
+from app.models.team import Team
 from app.models.period import Period
 from app.models.settings import Settings
 import logging
@@ -40,8 +40,8 @@ def ui_dashboard():
     """
     from app.models.settings import Settings
     from app.models.period import Period
-    from core.models.game import Game
-    from core.models.team import Team
+    from app.models.game import Game
+    from app.models.team import Team
     
     settings = Settings.get_settings()
     current_period_id = settings.current_period_id
@@ -97,8 +97,8 @@ def index():
     """
     from app.models.settings import Settings
     from app.models.period import Period
-    from core.models.game import Game
-    from core.models.team import Team
+    from app.models.game import Game
+    from app.models.team import Team
 
     settings = Settings.get_settings()
     current_period_id = settings.current_period_id
@@ -132,7 +132,7 @@ def index():
 def game_setup():
     """Game setup page — manage periods, squads, referees, cameras."""
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.models.period import Period
     from app.managers.game_player_manager import GamePlayerManager
     from app.managers.game_referee_manager import GameRefereeManager
@@ -178,7 +178,7 @@ def game_setup():
 def game_period_choice():
     """Period selection page — start, finish, reset periods and shootout."""
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.models.period import Period
 
     settings = Settings.get_settings()
@@ -204,7 +204,7 @@ def start_period(period_id):
     """Start a period and redirect to UI dashboard"""
     from core.managers.period_manager import PeriodManager
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.managers import get_timer_manager
 
     period_manager = PeriodManager()
@@ -271,7 +271,7 @@ def finish_period(period_id):
     """Finish a period and return to broadcast control"""
     from core.managers.period_manager import PeriodManager
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     
     period_manager = PeriodManager()
     period = period_manager.get_period_by_id(period_id)
@@ -341,7 +341,7 @@ def start_shootout(game_id):
     """
     from app.managers.shootout_manager import ShootoutManager
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.models.period import Period
 
     game = Game.query.get(game_id)
@@ -392,7 +392,7 @@ def start_shootout(game_id):
 def reset_shootout(game_id):
     """Reset shootout — delete record and clear current_shootout_id in Settings."""
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.managers.shootout_manager import ShootoutManager
 
     game = Game.query.get(game_id)
@@ -416,7 +416,7 @@ def reset_shootout(game_id):
 def finish_shootout(game_id):
     """Zakończ konkurs rzutów karnych i wróć do panelu."""
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
 
     game = Game.query.get(game_id)
     if not game:
@@ -806,7 +806,7 @@ def api_get_settings():
     """
     from app.models.settings import Settings
     from app.models.period import Period
-    from core.models.game import Game
+    from app.models.game import Game
     
     settings = Settings.get_settings()
     current_timers = settings.get_current_timers()
@@ -893,7 +893,7 @@ def api_assign_data(content_type):
     """Return JSON with assigned and available elements for the assignment modal."""
     from flask import jsonify
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from app.managers.game_player_manager import GamePlayerManager
     from app.managers.player_manager import PlayerManager
     from app.managers.game_referee_manager import GameRefereeManager
@@ -903,7 +903,7 @@ def api_assign_data(content_type):
     from app.managers.game_camera_manager import GameCameraManager
     from app.managers.camera_manager import CameraManager
     from core.models.game_camera import VALID_HDMI_INPUTS, HDMI_DEFAULT_LOCATION
-    from core.models.player import Player
+    from app.models.player import Player
 
     settings = Settings.get_settings()
     if not settings.current_game_id:
@@ -1054,7 +1054,7 @@ def api_assign_save(content_type):
     """Save assignment changes from modal (bulk replace)."""
     from flask import jsonify, request as req
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
 
     settings = Settings.get_settings()
     if not settings.current_game_id:
@@ -1159,7 +1159,7 @@ def api_patch_game_player(pg_id):
     if not pg:
         return jsonify({'error': 'Nie znaleziono rekordu'}), 404
 
-    from core.models.player import Player
+    from app.models.player import Player
     player = Player.query.get(pg.player_id)
 
     data = req.get_json()
@@ -1188,7 +1188,7 @@ def api_patch_game_player(pg_id):
                 for other in others:
                     other.is_captain = False
                 # Clear captain for others in same team (Player)
-                from core.models.player import Player as _P
+                from app.models.player import Player as _P
                 other_players = _P.query.filter(
                     _P.team_id == pg.team_id,
                     _P.id != pg.player_id,
@@ -1206,7 +1206,7 @@ def api_patch_game_player(pg_id):
 def api_patch_player(player_id):
     """Update Player base record (first_name, last_name)."""
     from flask import jsonify, request as req
-    from core.models.player import Player
+    from app.models.player import Player
     from app.extensions import db
 
     player = Player.query.get(player_id)
@@ -1234,7 +1234,7 @@ def api_uniforms_data():
     """Return uniform options for both teams of the current game."""
     import json as _json
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
 
     settings = Settings.get_settings()
     if not settings.current_game_id:
@@ -1312,7 +1312,7 @@ def api_uniforms_save():
     """Save selected uniform colors for both teams into the current game."""
     import json as _json
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
 
     settings = Settings.get_settings()
     if not settings.current_game_id:

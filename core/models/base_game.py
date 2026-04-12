@@ -1,11 +1,11 @@
-"""Game model - Football games"""
+"""BaseGame — abstrakcyjna klasa bazowa dla modeli meczu we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
 
 
-class Game(db.Model):
+class BaseGame(db.Model):
     """Football game/match"""
-    __tablename__ = 'games'
+    __abstract__ = True
 
     # Status constants
     STATUS_NOT_STARTED = 0
@@ -19,32 +19,36 @@ class Game(db.Model):
     foreign_id = db.Column(db.String(500), nullable=True)
 
     # Teams
-    home_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
-    away_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
+    @db.declared_attr
+    def home_team_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
+    @db.declared_attr
+    def away_team_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
 
     # Scores
     home_team_goals = db.Column(db.Integer, nullable=True)
     away_team_goals = db.Column(db.Integer, nullable=True)
-    home_team_fouls = db.Column(db.Integer, nullable=False, default=0)
-    away_team_fouls = db.Column(db.Integer, nullable=False, default=0)
 
     # Uniforms - JSON list of hex colors, default ['#000'] to distinguish from assigned ['#000000']
     home_team_uniform = db.Column(db.String(500), nullable=False, default='["#000"]')
     away_team_uniform = db.Column(db.String(500), nullable=False, default='["#000"]')
 
     # Walkover - nowe pola
-    is_home_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
-    is_away_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
 
     # Status (0 = not started, 1 = pending, 2 = finished)
     status = db.Column(db.Integer, nullable=False, default=STATUS_NOT_STARTED, index=True)
 
     # League and group
-    league_id = db.Column(db.Integer, db.ForeignKey('leagues.id'), nullable=False, index=True)
+    @db.declared_attr
+    def league_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('leagues.id'), nullable=False, index=True)
     group_nr = db.Column(db.Integer, nullable=False, default=1)
 
     # Stadium
-    stadium_id = db.Column(db.Integer, db.ForeignKey('stadiums.id'), nullable=False, default=1)
+    @db.declared_attr
+    def stadium_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('stadiums.id'), nullable=False, default=1)
 
     # Schedule
     date = db.Column(db.DateTime, nullable=True, index=True)
@@ -56,19 +60,37 @@ class Game(db.Model):
 
     # Relationships defined via backref in Team, League, Stadium
     # New relationships
-    periods = db.relationship('Period', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='Period.period_order')
-    game_cameras = db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
-    shootout = db.relationship('Shootout', backref='game', uselist=False, cascade='all, delete-orphan')  # One-to-one
-    game_players = db.relationship('GamePlayer', backref='game', lazy='dynamic', cascade='all, delete-orphan')
-    game_events = db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
-    game_referees = db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
-    game_commentators = db.relationship('GameCommentator', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def periods(cls):
+        return db.relationship('Period', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='Period.period_order')
+    @db.declared_attr
+    def game_cameras(cls):
+        return db.relationship('GameCamera', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def game_players(cls):
+        return db.relationship('GamePlayer', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def game_events(cls):
+        return db.relationship('GameEvent', backref='game', lazy='dynamic', cascade='all, delete-orphan', order_by='GameEvent.game_time')
+    @db.declared_attr
+    def game_referees(cls):
+        return db.relationship('GameReferee', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def game_commentators(cls):
+        return db.relationship('GameCommentator', backref='game', lazy='dynamic', cascade='all, delete-orphan')
+
+    @db.declared_attr
+    def game_timers(cls):
+        return db.relationship('GameTimer', backref='game', lazy='dynamic',
+                               cascade='all, delete-orphan')
 
     # Indexes
-    __table_args__ = (
-        db.Index('ix_game_league_round', 'league_id', 'round'),
-        db.Index('ix_game_date_status', 'date', 'status'),
-    )
+    @db.declared_attr
+    def __table_args__(cls):
+        return (
+            db.Index('ix_game_league_round', 'league_id', 'round'),
+            db.Index('ix_game_date_status', 'date', 'status'),
+        )
 
     def __repr__(self):
         return f'<Game {self.id}: {self.home_team.short_name if self.home_team else "?"} vs {self.away_team.short_name if self.away_team else "?"}>'
@@ -412,17 +434,16 @@ class Game(db.Model):
             [GamePlayer.to_dict(), ...]
         Ordered per team: goalkeepers first, then by number asc (nulls last), then last_name.
         """
-        from core.models.player import Player
+        from core.models.game_player import get_game_player_model
+        GamePlayer = get_game_player_model()
+        Player = GamePlayer.player.mapper.class_
 
-        def _sorted(team_id):
-            from core.models.game_player import GamePlayer
+        def _sorted(t_id):
             return (
                 self.game_players
-                .filter_by(team_id=team_id)
+                .filter_by(team_id=t_id)
                 .join(Player, GamePlayer.player_id == Player.id)
                 .order_by(
-                    GamePlayer.is_goalkeeper.desc(),
-                    GamePlayer.number.asc().nullslast(),
                     Player.last_name.asc(),
                 )
                 .all()
@@ -616,3 +637,16 @@ class Game(db.Model):
             'has_live_games': live_games_count > 0,
             'live_games_count': live_games_count
         }
+
+def get_game_model():
+    """Zwraca konkretną klasę BaseGame zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'games'
+                and issubclass(cls, BaseGame)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy BaseGame w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_game_model()."
+    )

@@ -1,7 +1,6 @@
 """OBS-Websocket Manager - Manages obs websocket plugin communication and state"""
 from flask import current_app
 from datetime import datetime
-from core.models import Settings
 from core.managers.game_event_manager import GameEventManager
 from core.managers import get_timer_manager
 import threading
@@ -85,7 +84,8 @@ class ObsWsManager:
             print(f'OBS_RESPONSE: {msg}')
             request_id = int(request_id.split('get-record-status-')[1])
             try:
-                from core.models.settings import Settings
+                from core.models.settings import get_settings_model
+                Settings = get_settings_model()
                 settings       = Settings.get_settings()
                 video_path     = settings.get_obs_record_filepath()
                 response_data  = payload.get('responseData')

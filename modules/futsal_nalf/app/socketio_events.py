@@ -76,7 +76,7 @@ def handle_get_game_teams():
 def handle_request_initial_data():
     from app.models.settings import Settings
     from app.models.period import Period
-    from core.models.game import Game
+    from app.models.game import Game
 
     settings    = Settings.get_settings()
     is_reversed = bool(settings.is_scoreboard_reversed)
@@ -487,7 +487,7 @@ def handle_penalty_timer_create(data):
 @socketio.on('change_game_value')
 def handle_change_game_value(data):
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from core.managers.period_manager import PeriodManager
 
     period_manager   = PeriodManager()
@@ -522,7 +522,7 @@ def handle_change_game_value(data):
 @socketio.on('broadcast_goal')
 def handle_broadcast_goal(data):
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
 
     settings     = Settings.get_settings()
     game         = Game.query.get(settings.current_game_id)
@@ -537,7 +537,7 @@ def handle_broadcast_goal(data):
 @socketio.on('add_game_event_to_db')
 def handle_add_game_event_to_db(data):
     from app.models.settings import Settings
-    from core.models.game import Game
+    from app.models.game import Game
     from core.managers.period_manager import PeriodManager
     from core.managers.game_event_manager import GameEventManager
 

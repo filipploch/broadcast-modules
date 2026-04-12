@@ -3,8 +3,13 @@ from typing import List, Optional
 from core.extensions import db
 from core.models.game_referee import GameReferee
 from core.models.referee import Referee
-from core.models.game import Game
+from core.models.base_game import BaseGame
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +34,7 @@ class GameRefereeManager:
             ValueError if game/referee not found, invalid type, or referee already assigned
         """
         # Validate game exists
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 

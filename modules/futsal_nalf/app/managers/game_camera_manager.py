@@ -2,7 +2,7 @@
 from typing import List, Optional
 from app.extensions import db
 from core.models.game_camera import GameCamera, HDMI_TO_DEVICE, HDMI_DEFAULT_LOCATION, VALID_HDMI_INPUTS
-from core.models.game import Game
+from app.models.game import Game
 from core.models.camera import Camera
 import logging
 

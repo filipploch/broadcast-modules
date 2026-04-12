@@ -27,16 +27,17 @@ def create_app(config_name='default'):
     # Tworzenie tabel — importy modeli muszą być przed db.create_all()
     with app.app_context():
         # Modele core (wspólne tabele)
+        # Modele core — tabele współdzielone (bez tych które moduł nadpisuje)
         from core.models import (
-            Settings, Season, Stadium,
+            Season, Stadium,
             Camera, Commentator, Referee,
             Event, EventCamera,
             GameEvent, GameCamera, GameCommentator, GameReferee,
-            GamePlayer, GameTimer, Period, League
         )
-        # Modele futsal-nalf (specyficzne tabele)
+        # Modele futsal-nalf — nadpisują lub rozszerzają klasy bazowe core
         from app.models import (
-            LeagueTeam, Team, Game, Player,
+            Settings, Period, GamePlayer, GameTimer,
+            League, LeagueTeam, Team, Game, Player,
             Shootout, ShootoutKick,
         )
 
@@ -60,7 +61,7 @@ def create_app(config_name='default'):
         @app.context_processor
         def inject_global_context():
             try:
-                from core.models.settings import Settings
+                from app.models.settings import Settings
                 from core.models.season import Season
                 settings = Settings.get_settings()
                 season = Season.query.get(settings.current_season_id) \

@@ -2,9 +2,14 @@
 from typing import List, Optional
 from core.extensions import db
 from core.models.game_camera import GameCamera, HDMI_TO_DEVICE, HDMI_DEFAULT_LOCATION, VALID_HDMI_INPUTS
-from core.models.game import Game
+from core.models.base_game import BaseGame
 from core.models.camera import Camera
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +46,7 @@ class GameCameraManager:
             )
 
         # Walidacja istnienia meczu
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 

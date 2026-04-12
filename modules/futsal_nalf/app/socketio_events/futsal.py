@@ -36,7 +36,7 @@ def register_events(socketio):
     def handle_get_shootout_data():
         from app.models.shootout import Shootout
         from app.managers import get_shootout_kick_manager
-        from core.models.settings import Settings
+        from app.models.settings import Settings
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
         current_shootout_id = settings.current_shootout_id
@@ -51,7 +51,7 @@ def register_events(socketio):
         from core.managers.game_player_manager import GamePlayerManager
         from app.managers.game_player_manager import GamePlayer
         from core.managers.game_manager import GameManager
-        from core.models.settings import Settings
+        from app.models.settings import Settings
         import json
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
@@ -79,9 +79,9 @@ def register_events(socketio):
 
     @socketio.on('request_initial_data')
     def handle_request_initial_data():
-        from core.models.settings import Settings
-        from core.models.period import Period
-        from core.models.game import Game
+        from app.models.settings import Settings
+        from app.models.period import Period
+        from app.models.game import Game
 
         settings    = Settings.get_settings()
         is_reversed = bool(settings.is_scoreboard_reversed)
@@ -194,7 +194,7 @@ def register_events(socketio):
         if not tm:
             return
 
-        from core.models.settings import Settings
+        from app.models.settings import Settings
         game_id          = Settings.get_settings().current_game_id
         game_timer_id    = data.get('game_timer_id')
         team             = data.get('team', 'home')
@@ -230,8 +230,8 @@ def register_events(socketio):
 
     @socketio.on('change_game_value')
     def handle_change_game_value(data):
-        from core.models.settings import Settings
-        from core.models.game import Game
+        from app.models.settings import Settings
+        from app.models.game import Game
         from core.managers.period_manager import PeriodManager
 
         period_manager   = PeriodManager()
@@ -264,8 +264,8 @@ def register_events(socketio):
 
     @socketio.on('broadcast_goal')
     def handle_broadcast_goal(data):
-        from core.models.settings import Settings
-        from core.models.game import Game
+        from app.models.settings import Settings
+        from app.models.game import Game
 
         settings     = Settings.get_settings()
         game         = Game.query.get(settings.current_game_id)
@@ -278,8 +278,8 @@ def register_events(socketio):
 
     @socketio.on('add_game_event_to_db')
     def handle_add_game_event_to_db(data):
-        from core.models.settings import Settings
-        from core.models.game import Game
+        from app.models.settings import Settings
+        from app.models.game import Game
         from core.managers.period_manager import PeriodManager
         from core.managers.game_event_manager import GameEventManager
 
@@ -393,7 +393,7 @@ def register_events(socketio):
         if content_type == 'events':
             from app.managers.event_manager import EventManager
             from core.managers.game_event_manager import GameEventManager
-            from core.models.settings import Settings
+            from app.models.settings import Settings
             from core.managers.game_manager import GameManager
 
             settings   = Settings.get_settings()
@@ -418,7 +418,7 @@ def register_events(socketio):
 
         elif content_type == 'edit_event':
             from app.managers.event_manager import EventManager
-            from core.models.settings import Settings
+            from app.models.settings import Settings
 
             payload      = data.get('payload', {})
             game_event_d = _get_game_event_data(payload['game_event_id'])

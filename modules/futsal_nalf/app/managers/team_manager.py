@@ -2,7 +2,7 @@
 from typing import List, Dict, Optional, Callable
 from flask import session, current_app
 from core.extensions import db
-from core.models.team import Team
+from app.models.team import Team
 import threading
 import logging
 import os

@@ -2,7 +2,7 @@
 from typing import List, Optional
 from app.extensions import db
 from app.models.period import Period
-from core.models.game import Game
+from app.models.game import Game
 import logging
 
 logger = logging.getLogger(__name__)

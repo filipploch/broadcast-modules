@@ -25,6 +25,11 @@ from typing import Optional
 
 from flask import current_app
 
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +57,8 @@ class ReplayExportManager:
         Returns:
             dict z polami: game_id, folder, files_saved, errors
         """
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         settings = Settings.get_settings()
         game_id  = settings.current_game_id
 
@@ -73,9 +79,9 @@ class ReplayExportManager:
         Returns:
             dict z polami: game_id, folder, files_saved, errors
         """
-        from core.models.game import Game
+        from core.models.base_game import BaseGame
 
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             msg = f"Mecz id={game_id} nie istnieje"
             logger.error(f"[ReplayExport] {msg}")
@@ -148,11 +154,11 @@ class ReplayExportManager:
         Returns:
             lista słowników: game_id, home_short, away_short, date, event_count
         """
-        from core.models.game import Game
+        from core.models.base_game import BaseGame
         from core.models.game_event import GameEvent
 
         games = (
-            Game.query
+            _get_game()
             .join(Game.game_events)
             .filter(GameEvent.video_path.isnot(None))
             .distinct()

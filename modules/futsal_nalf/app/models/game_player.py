@@ -1,66 +1,31 @@
-"""GamePlayer model - Association between Player and Game"""
-from app.extensions import db
-from datetime import datetime
+"""GamePlayer — moduł futsal-nalf.
+
+Rozszerza BaseGamePlayer o pola specyficzne dla futsalu:
+  - is_goalkeeper, is_captain (snapshot z chwili przypisania)
+"""
+from core.extensions import db
+from core.models.base_game_player import BaseGamePlayer
 
 
-class GamePlayer(db.Model):
-    """
-    Association between Player and Game (player participation in a game)
-    
-    Historical snapshot: is_goalkeeper, is_captain, number are copied from Player
-    at time of assignment to preserve historical data if player changes team/role.
-    """
+class GamePlayer(BaseGamePlayer):
     __tablename__ = 'game_players'
 
-    id = db.Column(db.Integer, primary_key=True)
-    
-    # Foreign keys
-    player_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=False, index=True)
-    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
-    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
-    
-    # Player attributes in this game (copied from Player at time of assignment)
-    # These are snapshots to preserve historical data if player changes team/role
+    # ── Futsal-specific ───────────────────────────────────────────────────────
     is_goalkeeper = db.Column(db.Boolean, default=False, nullable=False)
-    is_captain = db.Column(db.Boolean, default=False, nullable=False)
-    number = db.Column(db.Integer, nullable=True)  # Jersey number
-    
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_captain    = db.Column(db.Boolean, default=False, nullable=False)
 
-    # Unique constraint: player can only be assigned once per game
-    __table_args__ = (
-        db.UniqueConstraint('player_id', 'game_id', name='unique_game_player'),
-    )
-
-    def __repr__(self):
-        return f'<GamePlayer player_id={self.player_id} game_id={self.game_id} team_id={self.team_id}>'
-    
     def to_squad_dict(self):
-        return {
-            'id':            self.player_id,
-            'first_name':    self.player.first_name if self.player else None,
-            'last_name':     self.player.last_name  if self.player else None,
-            'number':        self.number,
+        d = super().to_squad_dict()
+        d.update({
             'is_goalkeeper': self.is_goalkeeper,
             'is_captain':    self.is_captain,
-        }
+        })
+        return d
 
     def to_dict(self):
-        """Convert to dictionary"""
-        return {
-            'id': self.id,
-            'player_id': self.player_id,
-            'player_name': self.player.full_name if self.player else None,
-            'game_id': self.game_id,
-            'team_id': self.team_id,
-            'team_name': self.team.name if self.team else None,
-            'team_name_14': self.team.name_14 if self.team else None,
-            'team_short_name': self.team.short_name if self.team else None,
+        d = super().to_dict()
+        d.update({
             'is_goalkeeper': self.is_goalkeeper,
-            'is_captain': self.is_captain,
-            'number': self.number,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
+            'is_captain':    self.is_captain,
+        })
+        return d

@@ -17,17 +17,17 @@
     #     settings = Settings.query.get(id=1).first()
     #     self.current_game_id = settings.current_game_id
 
-    #     game = Game.query.get(self.current_game_id)
+    #     game = BaseGame.query.get(self.current_game_id)
 
     #     return game
 
     # def start_game(self, game_id=None):
     #     """Start a game"""
     #     if game_id:
-    #         game = Game.query.get(game_id)
+    #         game = BaseGame.query.get(game_id)
     #     else:
     #         # Get next scheduled game
-    #         game = Game.query.filter_by(status='scheduled').first()
+    #         game = BaseGame.query.filter_by(status='scheduled').first()
 
     #     if not game:
     #         return {'error': 'No game to start'}

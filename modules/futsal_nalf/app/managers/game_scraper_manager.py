@@ -2,8 +2,8 @@
 from typing import List, Dict, Optional, Callable
 from flask import session, current_app
 from core.extensions import db
-from core.models.team import Team
-from core.models.game import Game
+from app.models.team import Team
+from app.models.game import Game
 from app.managers.team_manager import TeamManager
 from core.managers.game_manager import GameManager
 # from app.managers import get_game_manager

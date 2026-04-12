@@ -6,7 +6,7 @@ from core.managers.game_manager import GameManager
 from app.managers.camera_manager import CameraManager
 from app.managers.game_camera_manager import GameCameraManager
 from core.models.stadium import Stadium
-from core.models.team import Team
+from app.models.team import Team
 from datetime import datetime
 import logging
 
@@ -488,7 +488,7 @@ def prepare_game_for_broadcast(game_id):
 @current_app.route('/games/<int:game_id>/select-broadcast')
 def select_game_for_broadcast(game_id):
     """Select game as current broadcast game"""
-    from core.models.settings import Settings
+    from app.models.settings import Settings
 
     game = game_manager.get_game_by_id(game_id)
 
@@ -662,7 +662,7 @@ def api_get_game(game_id):
 
 from app.managers.player_manager import PlayerManager
 from app.managers.team_manager import TeamManager as _TeamManager
-from core.models.player import Player
+from app.models.player import Player
 
 _player_manager = PlayerManager()
 _team_manager_crud = _TeamManager()

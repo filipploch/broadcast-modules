@@ -1,8 +1,8 @@
 """Match Manager - CRUD operations for games (games)"""
 from core.extensions import db
-from core.models.game import Game
-from core.models.league import League
-from core.models.team import Team
+from core.models.base_game import BaseGame
+from core.models.base_league import BaseLeague
+from core.models.base_team import BaseTeam
 from core.models.stadium import Stadium
 from core.managers import get_hub_client
 from datetime import datetime
@@ -10,6 +10,19 @@ from sqlalchemy.exc import IntegrityError
 from flask import current_app
 import threading
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+def _get_league():
+    from core.models.base_league import get_league_model
+    return get_league_model()
+
+def _get_team():
+    from core.models.base_team import get_team_model
+    return get_team_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,18 +39,8 @@ class GameManager:
             current_app.logger.error(f"Failed to emit to UI: {e}")
 
     def get_all_games(self, league_id=None, team_id=None, status=None):
-        """
-        Get all games with optional filters
-
-        Args:
-            league_id: Filter by league ID (optional)
-            team_id: Filter by team ID (home or away) (optional)
-            status: Filter by status (optional)
-
-        Returns:
-            List of Game objects
-        """
-        query = Game.query
+        Game = _get_game()  # ← raz pobierz klasę
+        query = Game.query  # ← użyj do zapytania
 
         if league_id:
             query = query.filter_by(league_id=league_id)
@@ -54,10 +57,10 @@ class GameManager:
 
     def get_game_by_id(self, game_id):
         """Get game by ID"""
-        return Game.query.get(game_id)
+        return _get_game().query.get(game_id)
     
     def get_game_by_foreign_id(self, foreign_id):
-        return Game.query.filter_by(foreign_id=foreign_id).first()
+        return _get_game().query.filter_by(foreign_id=foreign_id).first()
 
     def create_game(self, home_team_id, away_team_id, league_id, stadium_id,
                      round_number, group_nr=1, date=None, foreign_id=None):
@@ -80,11 +83,11 @@ class GameManager:
             ValueError if validation fails
         """
         # Validate teams exist and are different
-        home_team = Team.query.get(home_team_id)
+        home_team = _get_team().query.get(home_team_id)
         if not home_team:
             raise ValueError(f"Nie znaleziono gospodarza o ID {home_team_id}")
 
-        away_team = Team.query.get(away_team_id)
+        away_team = _get_team().query.get(away_team_id)
         if not away_team:
             raise ValueError(f"Nie znaleziono gościa o ID {away_team_id}")
 
@@ -92,7 +95,7 @@ class GameManager:
             raise ValueError("Gospodarz i gość nie mogą być tą samą drużyną")
 
         # Validate league exists
-        league = League.query.get(league_id)
+        league = _get_league().query.get(league_id)
         if not league:
             raise ValueError(f"Nie znaleziono ligi o ID {league_id}")
 
@@ -102,7 +105,8 @@ class GameManager:
             raise ValueError(f"Nie znaleziono stadionu o ID {stadium_id}")
 
         try:
-            game = Game(
+            Game = _get_game()
+            game = BaseGame(
                 home_team_id=home_team_id,
                 away_team_id=away_team_id,
                 league_id=league_id,
@@ -157,7 +161,7 @@ class GameManager:
             print(f'is_home_team_lost_by_wo: {is_home_team_lost_by_wo}, type{type(is_home_team_lost_by_wo)}')
             print('-----------------------------------------------')
             if home_team_id is not None and home_team_id != game.home_team_id:
-                home_team = Team.query.get(home_team_id)
+                home_team = _get_team().query.get(home_team_id)
                 if not home_team:
                     raise ValueError(f"Nie znaleziono gospodarza o ID {home_team_id}")
                 if home_team_id == game.away_team_id:
@@ -166,7 +170,7 @@ class GameManager:
 
             # Update away team if provided
             if away_team_id is not None and away_team_id != game.away_team_id:
-                away_team = Team.query.get(away_team_id)
+                away_team = _get_team().query.get(away_team_id)
                 if not away_team:
                     raise ValueError(f"Nie znaleziono gościa o ID {away_team_id}")
                 if away_team_id == game.home_team_id:
@@ -260,6 +264,7 @@ class GameManager:
         Raises:
             ValueError if game not found or invalid status
         """
+        Game = _get_game()
         game = self.get_game_by_id(game_id)
         if not game:
             raise ValueError(f"Nie znaleziono meczu o ID {game_id}")
@@ -362,7 +367,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        query = Game.query.filter_by(status=Game.STATUS_NOT_STARTED)
+        Game = _get_game()
+        query = _get_game().query.filter_by(status=Game.STATUS_NOT_STARTED)
 
         if league_id:
             query = query.filter_by(league_id=league_id)
@@ -379,7 +385,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        query = Game.query.filter_by(status=Game.STATUS_PENDING)
+        Game = _get_game()
+        query = _get_game().query.filter_by(status=Game.STATUS_PENDING)
 
         if league_id:
             query = query.filter_by(league_id=league_id)
@@ -397,7 +404,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        query = Game.query.filter_by(status=Game.STATUS_FINISHED)
+        Game = _get_game()
+        query = _get_game().query.filter_by(status=Game.STATUS_FINISHED)
 
         if league_id:
             query = query.filter_by(league_id=league_id)
@@ -416,7 +424,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        return Game.query.filter_by(
+        Game = _get_game()
+        return _get_game().query.filter_by(
             league_id=league_id,
             round=round_number,
             group_nr=group_nr
@@ -434,7 +443,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        query = Game.query.filter(
+        Game = _get_game()
+        query = _get_game().query.filter(
             (Game.home_team_id == team_id) | (Game.away_team_id == team_id)
         )
 
@@ -458,7 +468,8 @@ class GameManager:
         Returns:
             List of Game objects
         """
-        query = Game.query.filter(
+        Game = _get_game()
+        query = _get_game().query.filter(
             ((Game.home_team_id == team1_id) & (Game.away_team_id == team2_id)) |
             ((Game.home_team_id == team2_id) & (Game.away_team_id == team1_id))
         )
@@ -469,12 +480,13 @@ class GameManager:
         return query.order_by(Game.date.desc()).all()
 
     def handle_request_game_data(self, msg):
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from core.managers import get_timer_manager
 
         settings        = Settings.get_settings()
         current_game_id = settings.current_game_id
-        current_game    = Game.query.get(current_game_id).to_dict()
+        current_game    = _get_game().query.get(current_game_id).to_dict()
         msg_from        = msg.get('from', '')
 
         hub_client = get_hub_client()

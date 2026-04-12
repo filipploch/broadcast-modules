@@ -1,9 +1,9 @@
 """League Manager - CRUD operations for leagues"""
 from core.extensions import db
-from core.models.league import League
+from app.models.league import League
 from core.models.season import Season
 from app.models.league_team import LeagueTeam
-from core.models.team import Team
+from app.models.team import Team
 from sqlalchemy.exc import IntegrityError
 import logging
 
@@ -209,7 +209,7 @@ class LeagueManager:
         if not league:
             return None
 
-        from core.models.game import Game
+        from app.models.game import Game
 
         teams = league.get_teams()
         total_games = league.total_games

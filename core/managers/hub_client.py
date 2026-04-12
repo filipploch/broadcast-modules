@@ -337,7 +337,7 @@ class HubClient:
             # print(f"health_status: {msg}")
 
         elif msg_from == 'stream-overlay':
-            from core.managers import GameManager
+            from core.managers.game_manager import GameManager
             game_manager = GameManager()
             if msg_type == 'request_game_data':
                 game_manager.handle_request_game_data(msg)

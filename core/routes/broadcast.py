@@ -28,7 +28,8 @@ def register_routes(app):
 
     @app.route('/api/scoreboard-state', methods=['GET', 'POST'])
     def get_scoreboard_state():
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from datetime import datetime
         settings = Settings.query.get(1)
         if not settings:
@@ -46,19 +47,22 @@ def register_routes(app):
 
     @app.route('/api/settings/current-timers')
     def api_current_timers():
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         timers = Settings.get_current_timers()
         return jsonify(timers)
 
     @app.route('/api/settings/current-timers/clear', methods=['POST'])
     def api_clear_current_timers():
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         Settings.clear_timers()
         return jsonify({'success': True, 'message': 'Timers cleared'})
 
     # @app.route('/api/settings')
     # def api_get_settings():
-    #     from core.models.settings import Settings
+    #     from core.models.settings import get_settings_model
+    #     Settings = get_settings_model()
     #     from core.models.period import Period
     #     settings = Settings.get_settings()
     #     current_timers = settings.get_current_timers()

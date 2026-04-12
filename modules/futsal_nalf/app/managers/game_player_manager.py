@@ -2,8 +2,8 @@
 from typing import List, Optional
 from app.extensions import db
 from app.models.game_player import GamePlayer
-from core.models.player import Player
-from core.models.game import Game
+from app.models.player import Player
+from app.models.game import Game
 import logging
 
 logger = logging.getLogger(__name__)

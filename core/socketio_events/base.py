@@ -208,7 +208,8 @@ def register_events(socketio):
 
     @socketio.on('reverse_scoreboard')
     def handle_reverse_scoreboard(data):
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from core.extensions import socketio as _sio
         settings = Settings.get_settings()
         settings.is_scoreboard_reversed = not settings.is_scoreboard_reversed
@@ -218,7 +219,8 @@ def register_events(socketio):
 
     @socketio.on('set_reversed')
     def handle_set_reversed(data):
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from core.extensions import socketio as _sio
         settings = Settings.get_settings()
         settings.is_scoreboard_reversed = data.get('is_reversed', False)

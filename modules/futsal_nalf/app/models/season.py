@@ -1,7 +1,7 @@
 """Season model - Football seasons"""
 from app.extensions import db
 from datetime import datetime
-from core.models.league import League
+from app.models.league import League
 from app.models.settings import Settings
 
 
@@ -32,7 +32,7 @@ class Season(db.Model):
     @property
     def total_games(self):
         """Get total number of games in this season"""
-        from core.models.game import Game
+        from app.models.game import Game
         return Game.query.join(League).filter(League.season_id == self.id).count()
     
     @property

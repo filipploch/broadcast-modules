@@ -5,11 +5,28 @@ from typing import List, Optional
 from core.extensions import db
 from core.models.game_event import GameEvent
 from core.models.event import Event
-from core.models.game import Game
-from core.models.period import Period
-from core.models.team import Team
-from core.models.player import Player
+from core.models.base_game import BaseGame
+from core.models.base_team import BaseTeam
+from core.models.base_player import BasePlayer
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+def _get_player():
+    from core.models.base_player import get_player_model
+    return get_player_model()
+
+def _get_team():
+    from core.models.base_team import get_team_model
+    return get_team_model()
+
+
+def _get_period():
+    from core.models.period import get_period_model
+    return get_period_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +155,7 @@ class GameEventManager:
             ValueError if validation fails
         """
         # Validate game exists
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
@@ -155,18 +172,18 @@ class GameEventManager:
             period_id = current_period.id
         else:
             # Validate period exists and belongs to game
-            period = Period.query.get(period_id)
+            period = _get_period().query.get(period_id)
             if not period or period.game_id != game_id:
                 raise ValueError(f"Część o ID {period_id} nie istnieje lub nie należy do meczu {game_id}")
 
         # Validate team for reported events (player_id is optional)
         if event.is_reported and team_id is not None:
-            team = Team.query.get(team_id)
+            team = _get_team().query.get(team_id)
             if not team:
                 raise ValueError(f"Drużyna o ID {team_id} nie istnieje")
 
         if player_id is not None:
-            player = Player.query.get(player_id)
+            player = _get_player().query.get(player_id)
             if not player:
                 raise ValueError(f"Zawodnik o ID {player_id} nie istnieje")
 
@@ -399,7 +416,7 @@ class GameEventManager:
         Raises:
             ValueError: gdy mecz nie istnieje
         """
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 

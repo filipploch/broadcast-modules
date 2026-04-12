@@ -73,7 +73,7 @@ class ReplayExportManager:
         Returns:
             dict z polami: game_id, folder, files_saved, errors
         """
-        from core.models.game import Game
+        from app.models.game import Game
 
         game = Game.query.get(game_id)
         if not game:
@@ -148,7 +148,7 @@ class ReplayExportManager:
         Returns:
             lista słowników: game_id, home_short, away_short, date, event_count
         """
-        from core.models.game import Game
+        from app.models.game import Game
         from app.models.game_event import GameEvent
 
         games = (

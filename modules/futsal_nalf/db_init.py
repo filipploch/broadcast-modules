@@ -1,7 +1,8 @@
 """Database initialization script with seed data"""
 from app import create_app
 from core.extensions import db
-from core.models import Settings, Season, Stadium
+from app.models.settings import Settings
+from core.models import Season, Stadium
 from app.models import League, Team, LeagueTeam, Game
 from datetime import datetime
 

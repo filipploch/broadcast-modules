@@ -1,236 +1,47 @@
-"""Settings model - Application global settings"""
-from core.extensions import db
-from datetime import datetime
-import json
+"""
+core.models.settings — abstrakcyjna klasa Settings.
+
+NIE importuj tej klasy bezpośrednio w kodzie core.
+Zamiast tego użyj helpera get_settings_model() który zwraca
+konkretną klasę zarejestrowaną przez aktywny moduł.
+
+Dlaczego:
+    core nie może definiować konkretnej tabeli 'settings' bo każdy moduł
+    definiuje własną klasę Settings dziedziczącą z BaseSettings.
+    Dwa __tablename__ = 'settings' w tej samej MetaData to błąd SQLAlchemy.
+"""
+from core.models.base_settings import BaseSettings
 
 
-class Settings(db.Model):
-    """Global application settings - singleton table"""
-    __tablename__ = 'settings'
+def get_settings_model():
+    """
+    Zwraca konkretną klasę Settings zarejestrowaną przez aktywny moduł.
 
-    id = db.Column(db.Integer, primary_key=True)
-    current_season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)
-    current_game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
-    current_period_id  = db.Column(db.Integer, db.ForeignKey('periods.id'),  nullable=True)
-    current_shootout_id = db.Column(db.Integer, db.ForeignKey('shootouts.id'), nullable=True)
-    current_timers = db.Column(db.Text, nullable=True)  # JSON: {"main": {...}, "penalties": [{...}]}
-    is_scoreboard_reversed = db.Column(db.Boolean, default=False)
-    obs_record_filepath = db.Column(db.String(500), nullable=True)
+    Używaj tej funkcji w kodzie core zamiast bezpośredniego importu:
 
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        # ŹLE (w core):
+        from core.models.settings import Settings
+        settings = Settings.get_settings()
 
-    # Relationships
-    current_season = db.relationship('Season', foreign_keys=[current_season_id], backref='settings_ref')
-    current_game = db.relationship('Game', foreign_keys=[current_game_id], backref='settings_ref')
-    current_period  = db.relationship('Period',  foreign_keys=[current_period_id],  backref='settings_ref')
-    current_shootout = db.relationship('Shootout', foreign_keys=[current_shootout_id], backref='settings_ref')
+        # DOBRZE (w core):
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
+        settings = Settings.get_settings()
+    """
+    from core.extensions import db
+    # Szukaj w mapperach SQLAlchemy klasy z __tablename__ == 'settings'
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'settings'
+                and issubclass(cls, BaseSettings)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy Settings w rejestrze SQLAlchemy. "
+        "Upewnij się że app.models.settings.Settings jest zaimportowane "
+        "przed pierwszym wywołaniem get_settings_model()."
+    )
 
-    def __repr__(self):
-        return f'<Settings season_id={self.current_season_id} game_id={self.current_game_id} period_id={self.current_period_id}>'
 
-    @classmethod
-    def get_settings(cls):
-        """Get or create singleton settings instance"""
-        settings = cls.query.first()
-        if not settings:
-            settings = cls()
-            db.session.add(settings)
-            db.session.commit()
-        return settings
-    
-    @classmethod
-    def set_obs_record_filepath(cls, filepath):
-        """Set last OBS recording filename"""
-        settings = cls.get_settings()
-        settings.obs_record_filepath = filepath
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def get_obs_record_filepath(cls):
-        """Get last OBS recording filepath"""
-        settings = cls.get_settings()
-        return settings.obs_record_filepath
-    
-    @classmethod
-    def set_scoreboard_order(cls, is_reversed):
-        """Set scoreboard order"""
-        settings = cls.get_settings()
-        settings.is_scoreboard_reversed = is_reversed
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def set_current_season(cls, season_id):
-        """Set current active season"""
-        settings = cls.get_settings()
-        settings.current_season_id = season_id
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def set_current_game(cls, game_id):
-        """Set current active game"""
-        settings = cls.get_settings()
-        settings.current_game_id = game_id
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-    
-    @classmethod
-    def set_current_period(cls, period_id):
-        """Set current active period"""
-        settings = cls.get_settings()
-        settings.current_period_id = period_id
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def set_current_shootout(cls, shootout_id):
-        """Set current active penalty shootout (None = brak aktywnego konkursu)"""
-        settings = cls.get_settings()
-        settings.current_shootout_id = shootout_id
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def get_current_shootout(cls):
-        """Get current active penalty shootout object or None"""
-        settings = cls.get_settings()
-        if settings.current_shootout_id is None:
-            return None
-        from core.models.shootout import Shootout
-        return Shootout.query.get(settings.current_shootout_id)
-    
-    @classmethod
-    def validate_period_for_game(cls):
-        """
-        Validate that current_period_id belongs to current_game_id
-        Returns True if valid or if period_id is None
-        """
-        settings = cls.get_settings()
-        
-        if settings.current_period_id is None:
-            return True
-        
-        if settings.current_game_id is None:
-            return False
-        
-        # Check if period belongs to the game
-        from core.models.period import Period
-        period = Period.query.get(settings.current_period_id)
-        
-        if not period:
-            return False
-        
-        return period.game_id == settings.current_game_id
-    
-    @classmethod
-    def get_current_timers(cls):
-        """
-        Get current_timers as dictionary
-        
-        Returns:
-            dict: {"main": {...}, "penalties": [...]} or default structure if empty
-        """
-        settings = cls.get_settings()
-        if not settings.current_timers:
-            return {"main": None, "penalties": {"home": [], "away": []}}
-        try:
-            return json.loads(settings.current_timers)
-        except (json.JSONDecodeError, TypeError):
-            print('EXCEPT')
-            print('==================================================================')
-            return {"main": None, "penalties": {"home": [], "away": []}}
-    
-    
-    @classmethod
-    def set_current_timers(cls, timers_data):
-        """
-        Set current_timers from dictionary
-        
-        Args:
-            timers_data: dict with structure {"main": {...}, "penalties": [...]}
-        """
-        settings = cls.get_settings()
-        settings.current_timers = json.dumps(timers_data)
-        settings.updated_at = datetime.utcnow()
-        db.session.commit()
-    
-    @classmethod
-    def update_main_timer(cls, timer_data):
-        """
-        Update main timer in current_timers
-        
-        Args:
-            timer_data: dict with timer information
-        """
-        timers = cls.get_current_timers()
-        timers["main"] = timer_data
-        cls.set_current_timers(timers)
-    
-    @classmethod
-    def add_penalty_timer(cls, team, timer_data):
-        """
-        Add penalty timer to current_timers
-        
-        Args:
-            timer_data: dict with penalty timer information
-        """
-        timers = cls.get_current_timers()
-        if "penalties" not in timers:
-            timers["penalties"] = {"home": [], "away": []}
-        timers["penalties"][team].append(timer_data)
-        cls.set_current_timers(timers)
-    
-    @classmethod
-    def update_penalty_timer(cls, timer_id, timer_data):
-        """
-        Update specific penalty timer
-        
-        Args:
-            timer_id: ID of the timer to update
-            timer_data: dict with updated timer information
-        """
-        timers = cls.get_current_timers()
-        if "penalties" not in timers:
-            timers["penalties"] = {"home": [], "away": []}
-        
-        for i, penalty in enumerate(timers["penalties"]["home"]):
-            if penalty.get("timer_id") == timer_id:
-                timers["penalties"]["home"][i] = timer_data
-                break
-
-        for i, penalty in enumerate(timers["penalties"]["away"]):
-            if penalty.get("timer_id") == timer_id:
-                timers["penalties"]["away"][i] = timer_data
-                break
-        
-        cls.set_current_timers(timers)
-    
-    @classmethod
-    def remove_limit_reached_penalties(cls):
-        """
-        Remove all penalty timers with status 'limit_reached'
-        """
-        timers = cls.get_current_timers()
-        if "penalties" not in timers:
-            return
-        
-        timers["penalties"]["home"] = [
-            p for p in timers["penalties"]["home"] 
-            if p.get("state") != "limit_reached"
-        ]
-
-        timers["penalties"]["away"] = [
-            p for p in timers["penalties"]["away"] 
-            if p.get("state") != "limit_reached"
-        ]
-
-        cls.set_current_timers(timers)
-    
-    @classmethod
-    def clear_timers(cls):
-        """Clear all timers"""
-        cls.set_current_timers({"main": None, "penalties": {'home': [], 'away': []}})
+# Alias dla wstecznej kompatybilności — używaj tylko w module, nie w core
+# W plikach core zawsze używaj get_settings_model()
+Settings = None  # celowo None — wymusza użycie get_settings_model()

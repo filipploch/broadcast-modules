@@ -1,7 +1,6 @@
 """Plugin Manager - Manages timer plugin communication and state"""
 from flask import current_app
 from datetime import datetime
-from core.models import Settings
 # from core.managers import get_timer_manager
 import threading
 

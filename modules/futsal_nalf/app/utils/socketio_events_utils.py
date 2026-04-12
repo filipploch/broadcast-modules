@@ -27,7 +27,7 @@ def _get_dict(_structure):
 def generate_show_overlay_data(data):
     from app.models.settings import Settings
     settings = Settings.get_settings()
-    from core.models.game import Game
+    from app.models.game import Game
     current_game_data = Game.query.get(settings.current_game_id).to_dict()
     container_id = data.get('container_id')
     match container_id:

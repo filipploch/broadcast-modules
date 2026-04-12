@@ -1,24 +1,21 @@
-"""League model - Football leagues"""
+"""BaseLeague — abstrakcyjna klasa bazowa dla modeli ligi we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
 
 
-class League(db.Model):
+class BaseLeague(db.Model):
     """Football league (e.g., Dywizja A, Dywizja B, Puchar Ligi)"""
-    __tablename__ = 'leagues'
+    __abstract__ = True
     
 
     id = db.Column(db.Integer, primary_key=True)
-    season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=False, index=True)
+    @db.declared_attr
+    def season_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=False, index=True)
     name = db.Column(db.String(50), nullable=False)
     foreign_id = db.Column(db.String(500), nullable=True)
 
     # URLs to external resources
-    games_url = db.Column(db.String(500), nullable=False)
-    table_url = db.Column(db.String(500), nullable=True)
-    scorers_url = db.Column(db.String(500), nullable=False)
-    assists_url = db.Column(db.String(500), nullable=False)
-    canadian_url = db.Column(db.String(500), nullable=False)
 
     # True  = liga grupowa (remis kończy mecz, brak rzutów karnych)
     # False = rozgrywki pucharowe (remis → konkurs rzutów karnych)
@@ -30,13 +27,19 @@ class League(db.Model):
 
     # Relationships
     # season relationship defined in Season model (backref)
-    teams = db.relationship('LeagueTeam', backref='league', lazy='dynamic', cascade='all, delete-orphan')
-    games = db.relationship('Game', backref='league', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def teams(cls):
+        return db.relationship('LeagueTeam', backref='league', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def games(cls):
+        return db.relationship('Game', backref='league', lazy='dynamic', cascade='all, delete-orphan')
 
     # Composite unique constraint: season + name must be unique
-    __table_args__ = (
-        db.UniqueConstraint('season_id', 'name', name='uix_season_league'),
-    )
+    @db.declared_attr
+    def __table_args__(cls):
+        return (
+            db.UniqueConstraint('season_id', 'name', name='uix_season_league'),
+        )
 
     def __repr__(self):
         return f'<League {self.name} (Season {self.season_id})>'
@@ -77,3 +80,16 @@ class League(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+def get_league_model():
+    """Zwraca konkretną klasę BaseLeague zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'leagues'
+                and issubclass(cls, BaseLeague)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy BaseLeague w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_league_model()."
+    )

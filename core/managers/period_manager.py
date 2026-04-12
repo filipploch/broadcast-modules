@@ -1,9 +1,18 @@
 """Period Manager - handles CRUD operations for Period model"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.period import Period
-from core.models.game import Game
+from core.models.base_game import BaseGame
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+
+def _get_period():
+    from core.models.period import get_period_model
+    return get_period_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +22,7 @@ class PeriodManager:
 
     def create_period(self, game_id: int, period_order: int, description: str,
                      limit: int = 1200000, pause_at_limit: bool = True,
-                     auto_calculate_initial_time: bool = True) -> Optional[Period]:
+                     auto_calculate_initial_time: bool = True):
         """
         Create new period for a game
 
@@ -32,12 +41,12 @@ class PeriodManager:
             ValueError if game not found or period_order already exists
         """
         # Validate game exists
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
         # Check if period_order already exists for this game
-        existing = Period.query.filter_by(game_id=game_id, period_order=period_order).first()
+        existing = _get_period().query.filter_by(game_id=game_id, period_order=period_order).first()
         if existing:
             raise ValueError(f"Część {period_order} już istnieje dla tego meczu")
 
@@ -45,18 +54,20 @@ class PeriodManager:
             # initial_time = suma limitów wszystkich poprzednich części
             # limit        = czas trwania tej części (timer-plugin liczy od 0)
             if auto_calculate_initial_time:
-                initial_time = Period.calculate_initial_time_for_period(game_id, period_order)
+                PeriodCls = _get_period()
+                initial_time = PeriodCls.calculate_initial_time_for_period(
+                PeriodCls, game_id, period_order)
             else:
                 initial_time = 0
 
-            period = Period(
+            period = _get_period()(
                 game_id=game_id,
                 period_order=period_order,
                 description=description,
                 initial_time=initial_time,
                 limit=limit,          # czas trwania tej części, NIE suma kumulatywna
                 pause_at_limit=pause_at_limit,
-                status=Period.STATUS_NOT_STARTED
+                status=_get_period().STATUS_NOT_STARTED
             )
             db.session.add(period)
             db.session.commit()
@@ -69,7 +80,7 @@ class PeriodManager:
             logger.error(f"Error creating period: {e}")
             raise
 
-    def create_default_periods(self, game_id: int) -> List[Period]:
+    def create_default_periods(self, game_id: int):
         """
         Create default 2 periods (halves) for a game
         
@@ -108,17 +119,18 @@ class PeriodManager:
         logger.info(f"Created default 2 periods for game {game_id}")
         return periods
 
-    def get_periods_by_game(self, game_id: int) -> List[Period]:
+    def get_periods_by_game(self, game_id: int):
         """Get all periods for a game, ordered by period_order"""
-        return Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
+        Period = _get_period()
+        return _get_period().query.filter_by(game_id=game_id).order_by(Period.period_order).all()
 
-    def get_period_by_id(self, period_id: int) -> Optional[Period]:
+    def get_period_by_id(self, period_id: int):
         """Get period by ID"""
-        return Period.query.get(period_id)
+        return _get_period().query.get(period_id)
 
     def update_period(self, period_id: int, description: str = None, 
                      limit: int = None, pause_at_limit: bool = None,
-                     status: int = None) -> Optional[Period]:
+                     status: int = None):
         """
         Update period
 
@@ -156,7 +168,7 @@ class PeriodManager:
             logger.error(f"Error updating period: {e}")
             return None
 
-    def set_period_status(self, period_id: int, status: int) -> Optional[Period]:
+    def set_period_status(self, period_id: int, status: int):
         """
         Set period status
         
@@ -169,7 +181,7 @@ class PeriodManager:
         """
         return self.update_period(period_id, status=status)
 
-    def start_period(self, period_id: int) -> Optional[Period]:
+    def start_period(self, period_id: int):
         """
         Start a period (set status to PENDING) and setup timers
         
@@ -179,10 +191,11 @@ class PeriodManager:
         3. Restores penalty timers if they exist (for periods > 1)
         4. Removes penalty timers with limit_reached status
         """
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from core.managers import get_timer_manager
         
-        period = self.set_period_status(period_id, Period.STATUS_PENDING)
+        period = self.set_period_status(period_id, _get_period().STATUS_PENDING)
         if not period:
             return None
         
@@ -276,7 +289,7 @@ class PeriodManager:
         
         return period
 
-    def finish_period(self, period_id: int) -> Optional[Period]:
+    def finish_period(self, period_id: int):
         """
         Finish a period (set status to FINISHED)
         
@@ -285,7 +298,8 @@ class PeriodManager:
         2. Updates timer states in Settings with current elapsed times
         3. Sets period status to FINISHED
         """
-        from core.models.settings import Settings
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         from core.managers import get_timer_manager
         
         period = self.get_period_by_id(period_id)
@@ -325,7 +339,7 @@ class PeriodManager:
                     Settings.update_penalty_timer(timer_id, penalty)
         
         # Set period status to FINISHED
-        return self.set_period_status(period_id, Period.STATUS_FINISHED)
+        return self.set_period_status(period_id, _get_period().STATUS_FINISHED)
 
     def delete_period(self, period_id: int) -> bool:
         """
@@ -354,25 +368,25 @@ class PeriodManager:
             return False
         
     #   ORYGINAŁ:
-    # def get_current_period(self, game_id: int) -> Optional[Period]:
+    # def get_current_period(self, game_id: int):
     #     """Get currently active period for a game"""
-    #     return Period.query.filter_by(
+    #     return _get_period().query.filter_by(
     #         game_id=game_id,
-    #         status=Period.STATUS_PENDING
+    #         status=_get_period().STATUS_PENDING
     #     ).first()
 
-    def get_current_period(self, game_id: int) -> Optional[Period]:
+    def get_current_period(self, game_id: int):
         """Get currently active period for a game"""
-        return Period.query.filter_by(game_id=game_id, status=Period.STATUS_PENDING).first()
+        return _get_period().query.filter_by(game_id=game_id, status=_get_period().STATUS_PENDING).first()
     
-    def get_all_game_periods(self, game_id: int) -> Optional[Period]:
+    def get_all_game_periods(self, game_id: int):
         """Get currently active period for a game"""
-        return Period.query.filter_by(
+        return _get_period().query.filter_by(
             game_id=game_id
         ).all()
 
     def update_period_score(self, period_id: int, home_goals: int, away_goals: int,
-                           auto_sync: bool = True) -> Optional[Period]:
+                           auto_sync: bool = True):
         """
         Update period score
         
@@ -406,7 +420,7 @@ class PeriodManager:
             return None
 
     def update_period_fouls(self, period_id: int, home_fouls: int, away_fouls: int,
-                           auto_sync: bool = True) -> Optional[Period]:
+                           auto_sync: bool = True):
         """
         Update period fouls
         
@@ -439,7 +453,7 @@ class PeriodManager:
             logger.error(f"Error updating period fouls: {e}")
             return None
 
-    def increment_period_goal(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True) -> Optional[Period]:
+    def increment_period_goal(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True):
         """
         Increment goal for a team in a period
         
@@ -477,7 +491,7 @@ class PeriodManager:
             logger.error(f"Error incrementing goal: {e}")
             return None
 
-    def increment_period_foul(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True) -> Optional[Period]:
+    def increment_period_foul(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True):
         """
         Increment foul for a team in a period
         
@@ -530,6 +544,7 @@ class PeriodManager:
             True if synced successfully, False otherwise
         """
         try:
+            Period = _get_period()
             Period.sync_all_periods_to_game(game_id)
             logger.info(f"Synced all periods to game {game_id}")
             return True

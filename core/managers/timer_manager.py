@@ -5,7 +5,11 @@ from datetime import datetime
 from flask import current_app
 
 from core.extensions import db
-from core.models.game_timer import GameTimer
+
+def _get_gametimer():
+    from core.models.game_timer import get_game_timer_model
+    return get_game_timer_model()
+
 
 
 class TimerManager:
@@ -224,10 +228,11 @@ class TimerManager:
 
     @staticmethod
     def get_db_timer(plugin_timer_id: str):
-        return GameTimer.query.filter_by(plugin_timer_id=plugin_timer_id).first()
+        return _get_gametimer().query.filter_by(plugin_timer_id=plugin_timer_id).first()
 
     @staticmethod
     def get_active_main_timer(period_id: int):
+        GameTimer = _get_gametimer()
         return GameTimer.query.filter(
             GameTimer.period_id == period_id,
             GameTimer.timer_type == GameTimer.TYPE_MAIN,
@@ -240,6 +245,7 @@ class TimerManager:
 
     @staticmethod
     def get_active_penalties(period_id: int):
+        GameTimer = _get_gametimer()
         return GameTimer.query.filter(
             GameTimer.period_id == period_id,
             GameTimer.timer_type == GameTimer.TYPE_PENALTY,
@@ -252,6 +258,7 @@ class TimerManager:
 
     @staticmethod
     def get_active_penalties_by_team(game_id: int, team: str):
+        GameTimer = _get_gametimer()
         return GameTimer.query.filter(
             GameTimer.game_id == game_id,
             GameTimer.timer_type == GameTimer.TYPE_PENALTY,
@@ -390,6 +397,8 @@ class TimerManager:
         Potwierdzenie utworzenia timera z pluginu.
         Zapisuje rekord GameTimer w DB i powiadamia UI.
         """
+        from core.models.game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
         payload      = msg.get('payload', {})
         timer_id     = payload.get('timer_id')
         initial_time = payload.get('initial_time', 0) or 0
@@ -416,15 +425,18 @@ class TimerManager:
 
     def _handle_main_timer_created(self, timer_id, initial_time, limit,
                                    state, metadata):
-        from core.models.settings import Settings
+        from core.models.game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
         period_id = settings.current_period_id
 
         # Zapisz/zaktualizuj rekord w game_timers
-        gt = GameTimer.query.filter_by(plugin_timer_id=timer_id).first()
+        gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
         if gt is None:
-            gt = GameTimer(
+            gt = _get_gametimer()(
                 game_id=game_id, period_id=period_id,
                 timer_type=GameTimer.TYPE_MAIN,
                 plugin_timer_id=timer_id,
@@ -464,7 +476,10 @@ class TimerManager:
         })
 
     def _handle_penalty_timer_created(self, timer_id, limit, state, metadata):
-        from core.models.settings import Settings
+        from core.models.game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        from core.models.settings import get_settings_model
+        Settings = get_settings_model()
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
         period_id = settings.current_period_id
@@ -480,7 +495,7 @@ class TimerManager:
             else main_state
         )
 
-        gt = GameTimer(
+        gt = _get_gametimer()(
             game_id=game_id, period_id=period_id,
             timer_type=GameTimer.TYPE_PENALTY,
             team=team, plugin_timer_id=timer_id,
@@ -498,6 +513,8 @@ class TimerManager:
         self._broadcast_penalty_state(game_id)
 
     def on_limit_reached(self, msg):
+        from core.models.game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
         payload        = msg.get('payload', {})
         timer_id       = payload.get('timer_id')
         elapsed_time   = payload.get('elapsed_time', 0)
@@ -562,7 +579,7 @@ class TimerManager:
     def _sync_db_timer(self, plugin_timer_id: str,
                        elapsed_time_ms: int, state: str):
         try:
-            gt = GameTimer.query.filter_by(
+            gt = _get_gametimer().query.filter_by(
                 plugin_timer_id=plugin_timer_id
             ).first()
             if gt is None:
@@ -577,7 +594,10 @@ class TimerManager:
 
     @staticmethod
     def _get_penalties_dict(game_id: int) -> dict:
-        penalties = GameTimer.query.filter(
+        from core.models.game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        
+        penalties = _get_gametimer().query.filter(
             GameTimer.game_id == game_id,
             GameTimer.timer_type == GameTimer.TYPE_PENALTY,
             GameTimer.state.in_([

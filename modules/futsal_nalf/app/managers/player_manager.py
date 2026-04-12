@@ -1,8 +1,8 @@
 """Player Manager - handles CRUD operations for Player model"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.player import Player
-from core.models.team import Team
+from app.models.player import Player
+from app.models.team import Team
 import logging
 
 logger = logging.getLogger(__name__)

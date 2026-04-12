@@ -1,8 +1,8 @@
 """Season Manager - CRUD operations for seasons"""
 from core.extensions import db
 from core.models.season import Season
-from core.models.league import League
-from core.models.game import Game
+from app.models.league import League
+from app.models.game import Game
 from sqlalchemy.exc import IntegrityError
 import logging
 

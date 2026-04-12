@@ -29,7 +29,7 @@
             
             let image = document.createElement('img');
             // Dodaj timestamp, żeby uniknąć cache
-            const baseUrl = 'http://localhost:8081/static/video/transitions/nalf_transition.gif';
+            const baseUrl = 'http://localhost:8081/static/video/transitions/league_transition.gif';
             image.src = `${baseUrl}?t=${Date.now()}`;
             
             transitionElement.appendChild(image);
@@ -276,13 +276,13 @@
         addClassName(infoHead, 'rotate-show-element0');
         addClassName(infoHead, 'animated-element');
         addClassName(infoHead, 'info-head');
-        let nalfTitleElement = document.createElement('div');
-        addClassName(nalfTitleElement, 'start-container-nalf-title');
-        nalfTitleElement.innerText = 'Nowohucka Amatorska Liga Futsalu';
+        let leagueTitleElement = document.createElement('div');
+        addClassName(leagueTitleElement, 'start-container-league-title');
+        leagueTitleElement.innerText = 'Nowohucka Amatorska Liga Futsalu';
         let roundTitleElement = document.createElement('div');
         addClassName(roundTitleElement, 'start-container-round-title');
         roundTitleElement.innerText = `${data.round_name}`;
-        infoHead.appendChild(nalfTitleElement);
+        infoHead.appendChild(leagueTitleElement);
         infoHead.appendChild(roundTitleElement);
         startContainer.appendChild(infoHead);
 
@@ -304,12 +304,12 @@
         let homeTeamLogoImg = document.createElement('img');
         homeTeamLogoImg.src = rootApp+`${data.home_team_logo}`;
         homeTeamLogoContainer.appendChild(homeTeamLogoImg);
-        let nalfLogoContainer = document.createElement('div');
-        nalfLogoContainer.id = 'start-nalf-logo';
-        nalfLogoContainer.style.display = 'flex';
-        let nalfLogoImg = document.createElement('img');
-        nalfLogoImg.src = rootApp+'/static/images/nalf/logoNALF.png';
-        nalfLogoContainer.appendChild(nalfLogoImg);
+        let leagueLogoContainer = document.createElement('div');
+        leagueLogoContainer.id = 'start-league-logo';
+        leagueLogoContainer.style.display = 'flex';
+        let leagueLogoImg = document.createElement('img');
+        leagueLogoImg.src = rootApp+'/static/images/nalf/logoNALF.png';
+        leagueLogoContainer.appendChild(leagueLogoImg);
         let awayTeamLogoContainer = document.createElement('div');
         awayTeamLogoContainer.style.display = 'flex';
         awayTeamLogoContainer.id = 'start-away-team-logo';
@@ -319,7 +319,7 @@
         awayTeamLogoContainer.appendChild(awayTeamLogoImg);
 
         startBodyLogosContainer.appendChild(homeTeamLogoContainer);
-        startBodyLogosContainer.appendChild(nalfLogoContainer);
+        startBodyLogosContainer.appendChild(leagueLogoContainer);
         startBodyLogosContainer.appendChild(awayTeamLogoContainer);
 
         startBody.appendChild(startBodyLogosContainer);
@@ -327,8 +327,8 @@
         if(_break === true){
             startBodyLogosContainer.style.height = '200px';
             startBodyLogosContainer.style.paddingTop = '20px';
-            nalfLogoImg.remove();
-            nalfLogoContainer.innerText = _gameData.result;
+            leagueLogoImg.remove();
+            leagueLogoContainer.innerText = _gameData.result;
             let scorersContainer = document.createElement('div');
             scorersContainer.id = 'scorers-container';
             scorersContainer.style.display = 'none';

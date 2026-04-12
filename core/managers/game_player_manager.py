@@ -1,10 +1,24 @@
 """GamePlayer Manager - handles player assignments to games"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.game_player import GamePlayer
-from core.models.player import Player
-from core.models.game import Game
+from core.models.base_player import BasePlayer
+from core.models.base_game import BaseGame
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+def _get_player():
+    from core.models.base_player import get_player_model
+    return get_player_model()
+
+
+def _get_gameplayer():
+    from core.models.game_player import get_game_player_model
+    return get_game_player_model()
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +30,7 @@ class GamePlayerManager:
                               override_team_id: int = None,
                               override_is_goalkeeper: bool = None,
                               override_is_captain: bool = None,
-                              override_number: int = None) -> Optional[GamePlayer]:
+                              override_number: int = None):
         """
         Assign player to game (creates historical snapshot)
         
@@ -38,23 +52,23 @@ class GamePlayerManager:
             ValueError if player/game not found or player already assigned
         """
         # Validate player exists
-        player = Player.query.get(player_id)
+        player = _get_player().query.get(player_id)
         if not player:
             raise ValueError(f"Zawodnik o ID {player_id} nie istnieje")
 
         # Validate game exists
-        game = Game.query.get(game_id)
+        game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
         # Check if player already assigned
-        existing = GamePlayer.query.filter_by(player_id=player_id, game_id=game_id).first()
+        existing = _get_gameplayer().query.filter_by(player_id=player_id, game_id=game_id).first()
         if existing:
             raise ValueError(f"Zawodnik {player.full_name} jest już przypisany do meczu {game_id}")
 
         try:
             # Create snapshot (use overrides if provided, else copy from player)
-            game_player = GamePlayer(
+            game_player = _get_gameplayer()(
                 player_id=player_id,
                 game_id=game_id,
                 team_id=override_team_id if override_team_id is not None else player.team_id,
@@ -73,7 +87,7 @@ class GamePlayerManager:
             logger.error(f"Error assigning player to game: {e}")
             raise
 
-    def assign_team_to_game(self, team_id: int, game_id: int) -> List[GamePlayer]:
+    def assign_team_to_game(self, team_id: int, game_id: int):
         """
         Assign all players from a team to a game
         
@@ -86,7 +100,7 @@ class GamePlayerManager:
         Returns:
             List of created GamePlayer objects
         """
-        players = Player.query.filter_by(team_id=team_id).all()
+        players = _get_player().query.filter_by(team_id=team_id).all()
         
         assigned = []
         for player in players:
@@ -100,7 +114,7 @@ class GamePlayerManager:
         logger.info(f"Assigned {len(assigned)} players from team {team_id} to game {game_id}")
         return assigned
 
-    def get_players_for_game(self, game_id: int, team_id: int = None) -> List[GamePlayer]:
+    def get_players_for_game(self, game_id: int, team_id: int = None):
         """
         Get all players assigned to a game
         
@@ -111,7 +125,9 @@ class GamePlayerManager:
         Returns:
             List of GamePlayer objects
         """
-        query = GamePlayer.query.filter_by(game_id=game_id)
+        Player = _get_player()
+        GamePlayer = _get_gameplayer()
+        query = _get_gameplayer().query.filter_by(game_id=game_id)
         if team_id:
             query = query.filter_by(team_id=team_id)
         return query.join(Player, GamePlayer.player_id == Player.id).order_by(
@@ -120,19 +136,19 @@ class GamePlayerManager:
             Player.last_name.asc(),              # nazwisko alfabetycznie
         ).all()
 
-    def get_game_player_by_id(self, game_player_id: int) -> Optional[GamePlayer]:
+    def get_game_player_by_id(self, game_player_id: int):
         """Get GamePlayer by ID"""
-        return GamePlayer.query.get(game_player_id)
+        return _get_gameplayer().query.get(game_player_id)
     
-    def get_game_player_by_player_id(self, player_id: int) -> Optional[GamePlayer]:
+    def get_game_player_by_player_id(self, player_id: int):
         """Get GamePlayer by ID"""
-        return GamePlayer.query.filter_by(player_id=player_id).first()
+        return _get_gameplayer().query.filter_by(player_id=player_id).first()
 
     def update_game_player(self, game_player_id: int,
                           team_id: int = None,
                           is_goalkeeper: bool = None,
                           is_captain: bool = None,
-                          number: int = None) -> Optional[GamePlayer]:
+                          number: int = None):
         """
         Update player game assignment
         
@@ -198,6 +214,6 @@ class GamePlayerManager:
             logger.error(f"Error removing player from game: {e}")
             return False
 
-    def get_games_for_player(self, player_id: int) -> List[GamePlayer]:
+    def get_games_for_player(self, player_id: int):
         """Get all games where player participated"""
-        return GamePlayer.query.filter_by(player_id=player_id).all()
+        return _get_gameplayer().query.filter_by(player_id=player_id).all()

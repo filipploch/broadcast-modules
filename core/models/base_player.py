@@ -1,11 +1,11 @@
-"""Player model - Football players"""
+"""BasePlayer — abstrakcyjna klasa bazowa dla modeli zawodnika we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
 
 
-class Player(db.Model):
+class BasePlayer(db.Model):
     """Football player"""
-    __tablename__ = 'players'
+    __abstract__ = True
 
     id = db.Column(db.Integer, primary_key=True)
     foreign_id = db.Column(db.String(500), nullable=True)
@@ -16,19 +16,27 @@ class Player(db.Model):
     number = db.Column(db.Integer, nullable=True)  # Jersey number
     
     # Team relationship
-    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
+    @db.declared_attr
+    def team_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
     
     # Player attributes
-    is_goalkeeper = db.Column(db.Boolean, default=False, nullable=False)
-    is_captain = db.Column(db.Boolean, default=False, nullable=False)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    game_players = db.relationship('GamePlayer', backref='player', lazy='dynamic', cascade='all, delete-orphan')
-    game_events = db.relationship('GameEvent', backref='player', lazy='dynamic')
+    @db.declared_attr
+    def game_players(cls):
+        return db.relationship('GamePlayer', backref='player', lazy='dynamic', cascade='all, delete-orphan')
+    @db.declared_attr
+    def game_events(cls):
+        return db.relationship('GameEvent', backref='player', lazy='dynamic')
+
+    @db.declared_attr
+    def penalty_timers(cls):
+        return db.relationship('GameTimer', backref='player', lazy='dynamic')
 
     def __repr__(self):
         return f'<Player {self.first_name} {self.last_name} (Team: {self.team_id})>'
@@ -77,3 +85,17 @@ class Player(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+def get_player_model():
+    """Zwraca konkretną klasę BasePlayer zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'players'
+                and issubclass(cls, BasePlayer)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy BasePlayer w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_player_model()."
+    )

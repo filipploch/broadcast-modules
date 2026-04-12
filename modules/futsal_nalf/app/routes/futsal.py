@@ -18,8 +18,8 @@ from app.managers import (
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.team_scraper_manager import TeamScraperManager
 from app.managers.player_scraper_manager import PlayerScraperManager
-from core.models.period import Period
-from core.models.settings import Settings
+from app.models.period import Period
+from app.models.settings import Settings
 import logging
 import os
 
@@ -50,7 +50,7 @@ def register_routes(app):
     # from app.managers import get_game_manager
 
 
-    from core.models.team import Team
+    from app.models.team import Team
 
 
     import logging
@@ -80,8 +80,8 @@ def register_routes(app):
         """
     
     
-        from core.models.game import Game
-        from core.models.team import Team
+        from app.models.game import Game
+        from app.models.team import Team
     
         settings = Settings.get_settings()
         current_period_id = settings.current_period_id
@@ -137,8 +137,8 @@ def register_routes(app):
         """
     
     
-        from core.models.game import Game
-        from core.models.team import Team
+        from app.models.game import Game
+        from app.models.team import Team
 
         settings = Settings.get_settings()
         current_period_id = settings.current_period_id
@@ -172,7 +172,7 @@ def register_routes(app):
     def game_setup():
         """Game setup page — manage periods, squads, referees, cameras."""
     
-        from core.models.game import Game
+        from app.models.game import Game
     
         from core.managers.game_player_manager import GamePlayerManager
         from core.managers.game_referee_manager import GameRefereeManager
@@ -218,7 +218,7 @@ def register_routes(app):
     def game_period_choice():
         """Period selection page — start, finish, reset periods and shootout."""
     
-        from core.models.game import Game
+        from app.models.game import Game
     
 
         settings = Settings.get_settings()
@@ -244,7 +244,7 @@ def register_routes(app):
         """Start a period and redirect to UI dashboard"""
         from core.managers.period_manager import PeriodManager
     
-        from core.models.game import Game
+        from app.models.game import Game
         from core.managers import get_timer_manager
 
         period_manager = PeriodManager()
@@ -311,7 +311,7 @@ def register_routes(app):
         """Finish a period and return to broadcast control"""
         from core.managers.period_manager import PeriodManager
     
-        from core.models.game import Game
+        from app.models.game import Game
     
         period_manager = PeriodManager()
         period = period_manager.get_period_by_id(period_id)
@@ -381,7 +381,7 @@ def register_routes(app):
         """
         from app.managers.shootout_manager import ShootoutManager
     
-        from core.models.game import Game
+        from app.models.game import Game
     
 
         game = Game.query.get(game_id)
@@ -432,7 +432,7 @@ def register_routes(app):
     def reset_shootout(game_id):
         """Reset shootout — delete record and clear current_shootout_id in Settings."""
     
-        from core.models.game import Game
+        from app.models.game import Game
         from app.managers.shootout_manager import ShootoutManager
 
         game = Game.query.get(game_id)
@@ -456,7 +456,7 @@ def register_routes(app):
     def finish_shootout(game_id):
         """Zakończ konkurs rzutów karnych i wróć do panelu."""
     
-        from core.models.game import Game
+        from app.models.game import Game
 
         game = Game.query.get(game_id)
         if not game:
@@ -846,7 +846,7 @@ def register_routes(app):
         """
     
     
-        from core.models.game import Game
+        from app.models.game import Game
     
         settings = Settings.get_settings()
         current_timers = settings.get_current_timers()
@@ -933,7 +933,7 @@ def register_routes(app):
         """Return JSON with assigned and available elements for the assignment modal."""
         from flask import jsonify
     
-        from core.models.game import Game
+        from app.models.game import Game
         from core.managers.game_player_manager import GamePlayerManager
         from app.managers.player_manager import PlayerManager
         from core.managers.game_referee_manager import GameRefereeManager
@@ -943,7 +943,7 @@ def register_routes(app):
         from core.managers.game_camera_manager import GameCameraManager
         from core.managers.camera_manager import CameraManager
         from core.models.game_camera import VALID_HDMI_INPUTS, HDMI_DEFAULT_LOCATION
-        from core.models.player import Player
+        from app.models.player import Player
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -1094,7 +1094,7 @@ def register_routes(app):
         """Save assignment changes from modal (bulk replace)."""
         from flask import jsonify, request as req
     
-        from core.models.game import Game
+        from app.models.game import Game
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -1111,7 +1111,7 @@ def register_routes(app):
             # ── home_squad / away_squad ──────────────────────────────────────────
             if content_type in ('home-squad', 'away-squad'):
                 from core.managers.game_player_manager import GamePlayerManager
-                from core.models.game_player import GamePlayer
+                from app.models.game_player import GamePlayer
                 team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
 
                 pg_mgr = GamePlayerManager()
@@ -1192,14 +1192,14 @@ def register_routes(app):
         """Update GamePlayer snapshot fields (number, is_goalkeeper, is_captain).
         If is_captain=True, clears is_captain for all other GamePlayer rows of same team in same game."""
         from flask import jsonify, request as req
-        from core.models.game_player import GamePlayer
+        from app.models.game_player import GamePlayer
     
 
         pg = GamePlayer.query.get(pg_id)
         if not pg:
             return jsonify({'error': 'Nie znaleziono rekordu'}), 404
 
-        from core.models.player import Player
+        from app.models.player import Player
         player = Player.query.get(pg.player_id)
 
         data = req.get_json()
@@ -1228,7 +1228,7 @@ def register_routes(app):
                     for other in others:
                         other.is_captain = False
                     # Clear captain for others in same team (Player)
-                    from core.models.player import Player as _P
+                    from app.models.player import Player as _P
                     other_players = _P.query.filter(
                         _P.team_id == pg.team_id,
                         _P.id != pg.player_id,
@@ -1246,7 +1246,7 @@ def register_routes(app):
     def api_patch_player(player_id):
         """Update Player base record (first_name, last_name)."""
         from flask import jsonify, request as req
-        from core.models.player import Player
+        from app.models.player import Player
     
 
         player = Player.query.get(player_id)
@@ -1274,7 +1274,7 @@ def register_routes(app):
         """Return uniform options for both teams of the current game."""
         import json as _json
     
-        from core.models.game import Game
+        from app.models.game import Game
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -1352,7 +1352,7 @@ def register_routes(app):
         """Save selected uniform colors for both teams into the current game."""
         import json as _json
     
-        from core.models.game import Game
+        from app.models.game import Game
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -1385,7 +1385,7 @@ def register_routes(app):
     from core.managers.camera_manager import CameraManager
     from core.managers.game_camera_manager import GameCameraManager
     from core.models.stadium import Stadium
-    from core.models.team import Team
+    from app.models.team import Team
     from datetime import datetime
     import logging
 
@@ -2041,7 +2041,7 @@ def register_routes(app):
 
     from app.managers.player_manager import PlayerManager
     from app.managers.team_manager import TeamManager as _TeamManager
-    from core.models.player import Player
+    from app.models.player import Player
 
     _player_manager = PlayerManager()
     _team_manager_crud = _TeamManager()

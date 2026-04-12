@@ -1,3 +1,8 @@
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
 def _round_nr_to_round_name(_round_nr, _league_name):
     if not _round_nr or _round_nr == 0:
         return ''
@@ -25,10 +30,11 @@ def _get_dict(_structure):
     return asdict(_structure)
 
 def generate_show_overlay_data(data):
-    from core.models.settings import Settings
+    from core.models.settings import get_settings_model
+    Settings = get_settings_model()
     settings = Settings.get_settings()
-    from core.models.game import Game
-    current_game_data = Game.query.get(settings.current_game_id).to_dict()
+    from core.models.base_game import BaseGame
+    current_game_data = _get_game().query.get(settings.current_game_id).to_dict()
     container_id = data.get('container_id')
     match container_id:
         case 'game-container':

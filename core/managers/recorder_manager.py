@@ -1,6 +1,6 @@
 """Recorder Manager - Manages camera recording"""
 from flask import current_app
-from core.models import Camera
+from core.models.camera import Camera
 
 class RecorderManager:
     """Manages recorder plugin and camera recording"""

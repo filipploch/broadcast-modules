@@ -1,9 +1,18 @@
 """Penalty Manager - handles penalty shootout operations"""
 from typing import Optional
 from core.extensions import db
-from app.models.shootout import Shootout
-from app.models.game import Game
+from core.models.shootout import get_shootout_model
+from core.models.base_game import get_game_model
 import logging
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+
+def _get_shootout():
+    from core.models.shootout import get_shootout_model
+    return get_shootout_model()
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +21,7 @@ class ShootoutManager:
     """Manager for Shootout (penalty shootout) operations"""
 
     def create_shootout(self, game_id: int, home_shootouts: int = 0, 
-                                away_shootouts: int = 0) -> Optional[Shootout]:
+                                away_shootouts: int = 0):
         """
         Create penalty shootout for a game
         
@@ -27,6 +36,8 @@ class ShootoutManager:
         Raises:
             ValueError if game not found or penalty shootout already exists
         """
+        Game = _get_game()
+        Shootout = _get_shootout()
         # Validate game exists
         game = Game.query.get(game_id)
         if not game:
@@ -54,16 +65,18 @@ class ShootoutManager:
             logger.error(f"Error creating penalty shootout: {e}")
             raise
 
-    def get_shootout_by_game(self, game_id: int) -> Optional[Shootout]:
+    def get_shootout_by_game(self, game_id: int):
         """Get penalty shootout for a game"""
+        Shootout = _get_shootout()
         return Shootout.query.filter_by(game_id=game_id).first()
 
-    def get_shootout_by_id(self, shootout_id: int) -> Optional[Shootout]:
+    def get_shootout_by_id(self, shootout_id: int):
         """Get penalty shootout by ID"""
+        Shootout = _get_shootout()
         return Shootout.query.get(shootout_id)
 
     def update_shootout_score(self, shootout_id: int, home_shootouts: int, 
-                            away_shootouts: int) -> Optional[Shootout]:
+                            away_shootouts: int):
         """
         Update penalty shootout score
         
@@ -92,7 +105,7 @@ class ShootoutManager:
             logger.error(f"Error updating shootout score: {e}")
             return None
 
-    def increment_shootout_goal(self, shootout_id: int, team: str) -> Optional[Shootout]:
+    def increment_shootout_goal(self, shootout_id: int, team: str):
         """
         Increment shootout goal for a team
         
@@ -155,4 +168,5 @@ class ShootoutManager:
 
     def has_shootout(self, game_id: int) -> bool:
         """Check if game has penalty shootout"""
+        Shootout = _get_shootout()
         return Shootout.query.filter_by(game_id=game_id).first() is not None
