@@ -3,10 +3,17 @@ import logging
 import threading
 
 from flask import Flask
+from pathlib import Path
 
 
 def create_app(config_name='default'):
-    app = Flask(__name__)
+
+    template_dir = Path(__file__).resolve().parent.parent.parent/'templates'
+    static_dir = Path(__file__).resolve().parent.parent.parent/'static'
+
+    app = Flask(__name__, 
+            template_folder=str(template_dir),
+            static_folder=str(static_dir))
 
     # Konfiguracja
     from config import config

@@ -1,0 +1,65 @@
+{% extends "base/base.html" %}
+{% block title %}Status scrapowania{% endblock %}
+
+{% block content %}
+<div class="card" id="status-card">
+    <div class="card-header">
+        <span id="status-title">⏳ Scrapowanie w toku...</span>
+    </div>
+    <div style="padding: 1.5rem;">
+        <p id="status-message">Pobieranie danych z serwisu NALF, proszę czekać...</p>
+        <div id="status-details" style="display:none; margin-top: 1rem;">
+            <table>
+                <tbody>
+                    <tr><td><strong>Pobrano ze strony:</strong></td><td id="stat-total">-</td></tr>
+                    <tr><td><strong>Zaktualizowano w bazie:</strong></td><td id="stat-updated">-</td></tr>
+                    <tr><td><strong>Nowych spotkań:</strong></td><td id="stat-new">-</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top: 1.5rem;">
+                <a href="{{ url_for('league_games', league_id=league.id) }}" class="btn btn-primary">← Wróć do listy meczów</a>
+            </div>
+        </div>
+        <div id="status-error" style="display:none; color: #e74c3c; margin-top: 1rem;"></div>
+    </div>
+</div>
+
+<script>
+    const POLL_INTERVAL_MS = 1000;
+    const backUrl = "{{ url_for('league_games', league_id=league.id) }}";
+
+    function poll() {
+        fetch('/api/games/scrape/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'in_progress') {
+                    setTimeout(poll, POLL_INTERVAL_MS);
+
+                } else if (data.status === 'completed') {
+                    document.getElementById('status-title').textContent = '✅ Scrapowanie zakończone';
+                    document.getElementById('status-message').textContent = 'Dane zostały pomyślnie zaktualizowane.';
+                    document.getElementById('stat-total').textContent = data.total_scraped;
+                    document.getElementById('stat-updated').textContent = data.updated;
+                    document.getElementById('stat-new').textContent = data.new_pending;
+                    document.getElementById('status-details').style.display = 'block';
+
+                } else if (data.status === 'error') {
+                    document.getElementById('status-title').textContent = '❌ Błąd scrapowania';
+                    document.getElementById('status-message').textContent = 'Wystąpił błąd podczas pobierania danych.';
+                    document.getElementById('status-error').textContent = data.error;
+                    document.getElementById('status-error').style.display = 'block';
+                    document.getElementById('status-details').innerHTML =
+                        '<a href="' + backUrl + '" class="btn btn-secondary">← Wróć do listy meczów</a>';
+                    document.getElementById('status-details').style.display = 'block';
+
+                } else {
+                    // idle — scraping hasn't started yet, wait a moment
+                    setTimeout(poll, POLL_INTERVAL_MS);
+                }
+            })
+            .catch(() => setTimeout(poll, POLL_INTERVAL_MS));
+    }
+
+    poll();
+</script>
+{% endblock %}

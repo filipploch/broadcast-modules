@@ -67,7 +67,7 @@ func (rm *RecorderManager) notifyRecordingStarted(meta RecordingMeta) {
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   "futsal-nalf",
+		To:   "main-module",
 		Type: "recording_started",
 		Payload: map[string]interface{}{
 			"camera_id":   meta.CameraID,
@@ -92,7 +92,7 @@ func (rm *RecorderManager) notifyRecordingStopped(cameraID string) {
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   "futsal-nalf",
+		To:   "main-module",
 		Type: "recording_stopped",
 		Payload: map[string]interface{}{
 			"camera_id": cameraID,
@@ -113,7 +113,7 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 
 	if hc != nil {
 		_ = hc.Send(&Message{
-			To:   "futsal-nalf",
+			To:   "main-module",
 			Type: "recording_stopped",
 			Payload: map[string]interface{}{
 				"camera_id": cameraID,
@@ -143,7 +143,7 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 			rm.mu.RUnlock()
 			if hc2 != nil {
 				_ = hc2.Send(&Message{
-					To:   "futsal-nalf",
+					To:   "main-module",
 					Type: "recording_restarted",
 					Payload: map[string]interface{}{
 						"camera_id":  cameraID,
@@ -159,7 +159,7 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 		log.Printf("🛑 [%s] Auto-restart gave up after %d attempts", cameraID, autoRestartMaxTries)
 		if hc != nil {
 			_ = hc.Send(&Message{
-				To:   "futsal-nalf",
+				To:   "main-module",
 				Type: "recording_restart_failed",
 				Payload: map[string]interface{}{
 					"camera_id": cameraID,

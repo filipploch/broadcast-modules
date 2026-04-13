@@ -26,7 +26,9 @@ class TeamManager:
     # =========================
 
     def get_all_logos(self):
-        logos_dir = os.path.join(current_app.static_folder, 'images', 'logos')
+        with current_app.app_context():
+            module_name = current_app.config['MODULE_NAME']
+        logos_dir = os.path.join(current_app.static_folder, 'images', 'logos', module_name)
         logos = []
 
         if os.path.exists(logos_dir):
@@ -35,7 +37,7 @@ class TeamManager:
                 if any(file.lower().endswith(ext) for ext in allowed_extensions):
                     logos.append({
                         'filename': file,
-                        'path': f'/static/images/logos/{file}'
+                        'path': f'/static/images/logos/{module_name}/{file}'
                     })
         return logos
     

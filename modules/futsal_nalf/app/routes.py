@@ -481,8 +481,11 @@ def view_team(team_id):
     if not team:
         flash('Nie znaleziono zespołu', 'error')
         return redirect(url_for('list_teams'))
-
     logos_dir = 'static/images/logos'
+    with current_app.app_context():
+        module_name = current_app.config['MODULE_NAME']
+        logos_dir = f'static/images/logos/{module_name}'
+
     logos = []
 
     if os.path.exists(logos_dir):
@@ -491,7 +494,7 @@ def view_team(team_id):
             if any(file.lower().endswith(ext) for ext in allowed_extensions):
                 logos.append({
                     'filename': file,
-                    'path': f'/static/images/logos/{file}'
+                    'path': f'/static/images/logos/{module_name}/{file}'
                 })
 
     return render_template('teams/view.html', team=team)

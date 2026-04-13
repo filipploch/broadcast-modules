@@ -1,0 +1,48 @@
+"""Application entry point — futsal-nalf module."""
+import sys
+import signal
+from pathlib import Path
+
+
+# Dodaj katalog główny (broadcast-modules/) do sys.path
+# dzięki temu 'import core' działa bez instalowania paczki
+sys.path.insert(0, str(Path(__file__).parents[2]))
+
+import sys
+import signal
+from app import create_app
+from app.extensions import socketio
+
+# app = create_app('development')
+app = create_app('production')
+
+
+def shutdown_handler(signum=None, frame=None):
+    print("\n Shutting down...")
+    with app.app_context():
+        from app.managers import shutdown_all_managers
+        shutdown_all_managers()
+    print(" Shutdown complete")
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
+    print("=" * 60)
+    print(f" {app.config['MODULE_NAME']}")
+    print(f" http://{app.config['APP_HOST']}:{app.config['APP_PORT']}")
+    print("=" * 60)
+
+    try:
+        socketio.run(
+            app,
+            host=app.config['APP_HOST'],
+            port=app.config['APP_PORT'],
+            debug=app.config['DEBUG'],
+            use_reloader=False,
+            allow_unsafe_werkzeug=True
+        )
+    except KeyboardInterrupt:
+        shutdown_handler()

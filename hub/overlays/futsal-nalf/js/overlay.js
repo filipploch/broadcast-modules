@@ -183,17 +183,21 @@
 
     function expandStartBottomSpecificContainer(_headerText, _arr) {
         let html = '';
-        let header = `
-            <div class="start-bottom-header">${_headerText}</div>
-        `;
-        html += header;
-        _body = '';
-        _arr.forEach(el => {
-            let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
-            _body += _bodyElement;
-        });
-        html += _body;
-        return html;
+        if (_arr.length === 0) {
+            return html;
+        } else {
+            let header = `
+                <div class="start-bottom-header specific-colors">${_headerText}</div>
+            `;
+            html += header;
+            _body = '';
+            _arr.forEach(el => {
+                let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
+                _body += _bodyElement;
+            });
+            html += _body;
+            return html;
+        }
     } 
     
     function expandStartBottomInfoContainer(_gameData) {
@@ -216,9 +220,11 @@
         commentatorsContainer.innerHTML = expandStartBottomSpecificContainer('Komentarz', commentators);
         let address1Element = document.createElement('div');
         addClassName(address1Element, 'start-bottom-header');
+        addClassName(address1Element, 'specific-colors');
         address1Element.innerText = stadium.name;
         let address2Element = document.createElement('div');
         addClassName(address2Element, 'start-bottom-header');
+        addClassName(address2Element, 'specific-colors');
         address2Element.innerText = stadium.address;
         let currentDateElement = document.createElement('div');
         addClassName(currentDateElement, 'start-bottom-body');
@@ -239,6 +245,7 @@
         _scorers.forEach((scorer, index)=> {
             let _row = document.createElement('div');
             addClassName(_row, 'break-scorer-element');
+            addClassName(_row, 'specific-colors');
             addClassName(_row, `rotate-show-element${index}`);
             let firstName = document.createElement('span');
             addClassName(firstName, 'break-scorer-first-name');
@@ -276,9 +283,10 @@
         addClassName(infoHead, 'rotate-show-element0');
         addClassName(infoHead, 'animated-element');
         addClassName(infoHead, 'info-head');
+        addClassName(infoHead, 'specific-colors');
         let leagueTitleElement = document.createElement('div');
         addClassName(leagueTitleElement, 'start-container-league-title');
-        leagueTitleElement.innerText = 'Nowohucka Amatorska Liga Futsalu';
+        leagueTitleElement.innerText = setLeagueName();
         let roundTitleElement = document.createElement('div');
         addClassName(roundTitleElement, 'start-container-round-title');
         roundTitleElement.innerText = `${data.round_name}`;
@@ -303,12 +311,14 @@
         addClassName(homeTeamLogoContainer, 'start-logo');
         let homeTeamLogoImg = document.createElement('img');
         homeTeamLogoImg.src = rootApp+`${data.home_team_logo}`;
+        addClassName(homeTeamLogoImg, 'drop-shadow');
         homeTeamLogoContainer.appendChild(homeTeamLogoImg);
         let leagueLogoContainer = document.createElement('div');
         leagueLogoContainer.id = 'start-league-logo';
         leagueLogoContainer.style.display = 'flex';
         let leagueLogoImg = document.createElement('img');
-        leagueLogoImg.src = rootApp+'/static/images/nalf/logoNALF.png';
+        leagueLogoImg.src = rootApp+setLeagueLogo();
+        addClassName(leagueLogoImg, 'drop-shadow');
         leagueLogoContainer.appendChild(leagueLogoImg);
         let awayTeamLogoContainer = document.createElement('div');
         awayTeamLogoContainer.style.display = 'flex';
@@ -316,6 +326,7 @@
         addClassName(awayTeamLogoContainer, 'start-logo');
         let awayTeamLogoImg = document.createElement('img');
         awayTeamLogoImg.src = rootApp+`${data.away_team_logo}`;
+        addClassName(awayTeamLogoImg, 'drop-shadow');
         awayTeamLogoContainer.appendChild(awayTeamLogoImg);
 
         startBodyLogosContainer.appendChild(homeTeamLogoContainer);
@@ -359,15 +370,17 @@
             addClassName(startBodyTeamsContainer, 'start-content');
             startBodyTeamsContainer.id = 'start-teams-container';
             let startBodyTeamsInternalElement = document.createElement('div');
-            startBodyTeamsInternalElement.style.width = '800px';
+            startBodyTeamsInternalElement.style.width = '950px';
             startBodyTeamsInternalElement.style.textAlign = 'center';
 
             let homeTeamNameElement = document.createElement('div');
             addClassName(homeTeamNameElement, 'start-team');
+            addClassName(homeTeamNameElement, 'specific-colors');
             addClassName(homeTeamNameElement, 'rotate-show-element1');
             homeTeamNameElement.innerText = data.home_team_name;
             let awayTeamNameElement = document.createElement('div');
             addClassName(awayTeamNameElement, 'start-team');
+            addClassName(awayTeamNameElement, 'specific-colors');
             addClassName(awayTeamNameElement, 'rotate-show-element1');
             awayTeamNameElement.innerText = data.away_team_name;
             startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
@@ -394,6 +407,7 @@
         addClassName(infoHead, 'rotate-show-element0');
         addClassName(infoHead, 'animated-element');
         addClassName(infoHead, 'info-head');
+        addClassName(infoHead, 'specific-colors');
         infoHead.dataset.animationOrder = '1';
         let spanTeamName = document.createElement('span');
         spanTeamName.innerHTML = _teamName;
@@ -446,6 +460,7 @@
             }
             var squadPlayerRow = document.createElement('div');
             addClassName(squadPlayerRow, 'squad-player-row');
+            addClassName(squadPlayerRow, 'specific-colors');
             addClassName(squadPlayerRow, 'rotate-show-element');
             addClassName(squadPlayerRow, `rotate-show-element${index}`);
             addClassName(squadPlayerRow, 'animated-element');
@@ -566,7 +581,7 @@
             ws.send(JSON.stringify({
                 type: 'request_game_data',
                 from: overlayId,
-                to: 'futsal-nalf'
+                to: 'main-module'
             }));
         }
         

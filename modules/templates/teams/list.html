@@ -1,0 +1,99 @@
+{% extends "base/base.html" %}
+
+{% block title %}Lista Zespołów{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ stats.total_teams }}</h3>
+        <p>Zespołów w bazie</p>
+    </div>
+
+    {% if stats.pending_teams > 0 %}
+    <a href="{{ url_for('pending_teams') }}" {% if request.endpoint == 'pending_teams' %}class="active"{% endif %}>
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <h3>{{ stats.pending_teams }}</h3>
+            <p>Do uzupełnienia</p>
+        </div>
+    </a>
+    
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>Wszystkie Zespoły</span>
+        <div class="actions">
+            <button class="btn btn-success" onclick="startTeamScraping()">
+                🔍 Scrapuj nowe zespoły
+            </button>
+            <a href="{{ url_for('create_team') }}" class="btn btn-primary">
+                ➕ Dodaj ręcznie
+            </a>
+        </div>
+    </div>
+    
+    {% if teams %}
+    <table>
+        <thead>
+            <tr>
+                <th>Skrót</th>
+                <th>Nazwa</th>
+                <th>Nazwa 14</th>
+                <th>URL</th>
+                <th>Logo</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in teams %}
+            <tr>
+                <td><strong>{{ team.short_name }}</strong></td>
+                <td>{{ team.name }}</td>
+                <td>{{ team.name_14 }}</td>
+                <td>
+                    <a href="{{ team.team_url }}" target="_blank" style="color: #3498db; text-decoration: none;">
+                        Strona →
+                    </a>
+                </td>
+                <td>
+                    <img src="{{ url_for('static', filename=team.logo_path.replace('static/', '')) }}"
+                         alt="{{ team.name }}"
+                         style="height: 30px; max-width: 100px; object-fit: contain;">
+                </td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_team', team_id=team.id) }}" class="btn btn-primary btn-small">
+                            Widok
+                        </a>
+                        <a href="{{ url_for('edit_team', team_id=team.id) }}" class="btn btn-secondary btn-small">
+                            Edytuj
+                        </a>
+                        <form action="{{ url_for('delete_team', team_id=team.id) }}"
+                              method="POST" 
+                              style="display: inline;"
+                              onsubmit="return confirm('Czy na pewno chcesz usunąć zespół {{ name }}?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak zespołów w bazie danych. 
+        <a href="{{ url_for('scrape_teams') }}" style="color: #3498db;">Rozpocznij scrapowanie</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function startTeamScraping() {
+    fetch('/teams/scrape')
+        .catch(err => console.error('Team scraping request failed:', err));
+}
+</script>
+{% endblock %}

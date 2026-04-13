@@ -1,0 +1,67 @@
+#events-controllers-container {
+    position: absolute;
+    bottom: 0;
+}
+
+
+.side-events-controllers-container{
+    width: 31px;
+    height: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.event-controller{
+    width: 31px;
+    height: 31px;
+    background-size: contain;
+}
+
+.save-controller{
+    background-color: #8e44ad;
+}
+
+.goal-controller{
+    background-color: #69ffa7;
+}
+
+.miss-controller{
+    background-color: #37d3ce;
+}
+
+#reversible-events-controllers-container{
+    height: 100px;
+    width: 222px;
+    display: flex;
+}
+
+#bottom-events-controllers-container {
+    margin-top: 3px;
+    display: flex;
+    background-color: sienna;
+}
+
+#hidded-events-controllers-container{
+    display: flex;
+    /* align-self: center; */
+    place-content: center;
+    width: 160px !important;
+    justify-content: space-evenly;    
+}
+
+#hahaha-controller{
+    background-color: yellow;
+}
+
+#var-controller{
+    background-color: #5454e2;
+}
+
+#foul-controller{
+    background-color: #f77e1a;
+}
+
+#bum-controller{
+    background-color: red;
+}

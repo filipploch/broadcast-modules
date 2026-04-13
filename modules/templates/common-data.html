@@ -1,0 +1,18 @@
+{% extends "base/base.html" %}
+{% block title %}Dane{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Dane</span>
+    </div>
+    <div class="actions"><a href="{{ url_for('list_commentators') }}" class="btn btn-primary">KOMENTATORZY</a></div>
+    <div class="actions"><a href="{{ url_for('list_referees') }}" class="btn btn-primary">SĘDZIOWIE</a></div>
+    <div class="actions"><a href="{{ url_for('list_stadiums') }}" class="btn btn-primary">STADIONY</a></div>
+    <div class="actions"><a href="{{ url_for('list_events') }}" class="btn btn-primary">ZDARZENIA</a></div>
+    <div class="actions"><a href="{{ url_for('list_cameras') }}" class="btn btn-primary">KAMERY</a></div>
+    <div class="actions"><a href="{{ url_for('list_teams') }}" class="btn btn-primary">DRUŻYNY</a></div>
+    <div class="actions"><a href="{{ url_for('list_leagues') }}" class="btn btn-primary">LIGI</a></div>
+    <div class="actions"><a href="{{ url_for('list_seasons') }}" class="btn btn-primary">SEZONY</a></div>
+</div>
+{% endblock %}
+

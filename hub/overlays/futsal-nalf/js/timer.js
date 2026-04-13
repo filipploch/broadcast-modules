@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const wsClient = new wsClient({
         // overlayId: auto-generated unique ID
         overlayName: 'Timer Overlay',
-        moduleOwner: 'futsal-nalf',
+        moduleOwner: 'main-module',
         subscribeClasses: ['timer', 'timer_update_receiver', 'timer_state_receiver'],
         debug: true
     });

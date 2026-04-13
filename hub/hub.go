@@ -137,7 +137,7 @@ func (h *Hub) handleUnregister(module *Module) {
 
 		// Notify main module
 		if h.MainModule != nil && h.MainModule.IsActive {
-			notification := NewMessage("hub", "futsal-nalf", "plugin_status", map[string]interface{}{
+			notification := NewMessage("hub", "main-module", "plugin_status", map[string]interface{}{
 				"plugin_id": module.ID,
 				"status":    "disconnected",
 			})
@@ -294,7 +294,7 @@ func (h *Hub) registerPlugin(module *Module) {
 
 // notifyPluginOnline notifies main module that a plugin is online
 func (h *Hub) notifyPluginOnline(plugin *Module) {
-	notification := NewMessage("hub", "futsal-nalf", "plugin_status", map[string]interface{}{
+	notification := NewMessage("hub", "main-module", "plugin_status", map[string]interface{}{
 		"plugin_id": plugin.ID,
 		"status":    "connected",
 	})
