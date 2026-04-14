@@ -1,6 +1,6 @@
 """Camera Manager - handles CRUD operations for Camera model"""
 from typing import List, Optional
-from core.extensions import db
+from app.extensions import db
 from core.models.camera import Camera
 import logging
 

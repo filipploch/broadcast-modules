@@ -10,10 +10,33 @@ Każdy moduł rejestruje te trasy przez:
 """
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
+from core.managers.season_manager import SeasonManager
+from core.managers.league_manager import LeagueManager
+from core.managers.game_manager import GameManager
+from core.managers.camera_manager import CameraManager
+from core.managers.game_camera_manager import GameCameraManager
+from core.models.stadium import Stadium
 from core.extensions import db
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+season_manager = SeasonManager()
+league_manager = LeagueManager()
+game_manager = GameManager()
+
+def _get_team():
+    from core.models.base_team import get_team_model
+    return get_team_model()
+
+def _get_player():
+    from core.models.base_player import get_player_model
+    return get_player_model()
+
+def _get_settings():
+    from core.models.settings import get_settings_model
+    return get_settings_model()
 
 
 def register_routes(app):
@@ -82,3 +105,4 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"api_replay_export_run({game_id}): {e}")
             return jsonify({'game_id': game_id, 'error': str(e)}), 500
+        

@@ -1,6 +1,6 @@
 """Stadium Manager - handles CRUD operations for Stadium model"""
 from typing import List, Optional
-from core.extensions import db
+from app.extensions import db
 from core.models.stadium import Stadium
 import logging
 

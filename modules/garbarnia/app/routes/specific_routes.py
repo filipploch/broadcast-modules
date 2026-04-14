@@ -58,7 +58,7 @@ def register_routes(app):
     import os
 
     # Import CRUD routes for Season, League, Game
-    from app import routes_crud  # noqa: F401
+    from core.routes import routes_crud  # noqa: F401
 
 
     logger = logging.getLogger(__name__)

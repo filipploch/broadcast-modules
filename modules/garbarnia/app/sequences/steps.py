@@ -238,7 +238,7 @@ def stop_stream(delay_ms: int=0) -> dict:
     }
 
 def show_overlay_container(_data, delay_ms: int=0) -> dict:
-    from app.utils.socketio_events_utils import generate_show_overlay_data
+    from core.utils.socketio_events_utils import generate_show_overlay_data
     data = generate_show_overlay_data(_data)
     return {
         "target": "stream-overlay",

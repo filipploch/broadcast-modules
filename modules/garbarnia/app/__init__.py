@@ -55,15 +55,17 @@ def create_app(config_name='default'):
     with app.app_context():
         # Trasy i eventy z core
         from core.routes import broadcast as core_broadcast
+        from core.routes import routes_crud as routes_crud
         from core.socketio_events import base as core_events
         core_broadcast.register_routes(app)
+        routes_crud.register_routes(app)
         core_events.register_events(socketio)
 
-        # Trasy i eventy specyficzne dla futsalu
-        from app.routes import futsal as futsal_routes
-        from app.socketio_events import futsal as futsal_events
-        futsal_routes.register_routes(app)
-        futsal_events.register_events(socketio)
+        # Trasy i eventy specyficzne dla modułu
+        from app.routes import specific_routes as specific_routes
+        from app.socketio_events import specific_socketio_events as specific_events
+        specific_routes.register_routes(app)
+        specific_events.register_events(socketio)
 
         @app.context_processor
         def inject_global_context():
