@@ -1,11 +1,13 @@
-"""BaseGame — abstrakcyjna klasa bazowa dla modeli meczu we wszystkich modułach."""
+"""BaseGameMixin — abstrakcyjna klasa bazowa dla modeli meczu we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
 
+def _get_game_player():
+    from core.models.base_game_player import get_game_player_model
+    return get_game_player_model()
 
-class BaseGame(db.Model):
+class BaseGameMixin:
     """Football game/match"""
-    __abstract__ = True
 
     # Status constants
     STATUS_NOT_STARTED = 0
@@ -45,7 +47,7 @@ class BaseGame(db.Model):
         return db.Column(db.Integer, db.ForeignKey('leagues.id'), nullable=False, index=True)
     group_nr = db.Column(db.Integer, nullable=False, default=1)
 
-    # Stadium
+    # BaseStadiumMixin
     @db.declared_attr
     def stadium_id(cls):
         return db.Column(db.Integer, db.ForeignKey('stadiums.id'), nullable=False, default=1)
@@ -58,7 +60,7 @@ class BaseGame(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships defined via backref in Team, League, Stadium
+    # Relationships defined via backref in Team, League, BaseStadiumMixin
     # New relationships
     @db.declared_attr
     def periods(cls):
@@ -245,7 +247,8 @@ class BaseGame(db.Model):
 
     def get_current_period(self):
         """Get currently active period (status=PENDING)"""
-        from core.models.period import Period
+        from core.models.base_period import get_period_model
+        Period = get_period_model()
         return self.periods.filter_by(status=Period.STATUS_PENDING).first()
 
     def get_shootout_winner_id(self):
@@ -278,7 +281,7 @@ class BaseGame(db.Model):
             event_id: Optional filter by event type
         
         Returns:
-            List of GameEvent objects ordered by time
+            List of BaseGameEventMixin objects ordered by time
         """
         query = self.game_events
         if period_id:
@@ -295,7 +298,7 @@ class BaseGame(db.Model):
             referee_type: Optional filter by type ("Główny", "Asystent")
         
         Returns:
-            List of GameReferee objects
+            List of BaseGameRefereeMixin objects
         """
         query = self.game_referees
         if referee_type:
@@ -310,7 +313,7 @@ class BaseGame(db.Model):
             commentators_type: Optional filter by type ("Główny", "Asystent")
         
         Returns:
-            List of GameCommentator objects
+            List of BaseGameCommentatorMixin objects
         """
         query = self.game_commentators
         if commentators_type:
@@ -438,8 +441,8 @@ class BaseGame(db.Model):
             [GamePlayer.to_dict(), ...]
         Ordered per team: goalkeepers first, then by number asc (nulls last), then last_name.
         """
-        from core.models.game_player import get_game_player_model
-        GamePlayer = get_game_player_model()
+        
+        GamePlayer = _get_game_player()
         Player = GamePlayer.player.mapper.class_
 
         def _sorted(t_id):
@@ -467,20 +470,20 @@ class BaseGame(db.Model):
             'home_team_short_name': self.home_team.short_name if self.home_team else None,
             'home_team_logo': self.home_team.logo_path if self.home_team else None,
             'home_team_goals': self.home_team_goals,
-            'home_team_fouls': self.home_team_fouls,
+            # 'home_team_fouls': self.home_team_fouls,
             'away_team_id': self.away_team_id,
             'away_team_name': self.away_team.name if self.away_team else None,
             'away_team_name_14': self.away_team.name_14 if self.away_team else None,
             'away_team_short_name': self.away_team.short_name if self.away_team else None,
             'away_team_logo': self.away_team.logo_path if self.away_team else None,
             'away_team_goals': self.away_team_goals,
-            'away_team_fouls': self.away_team_fouls,
+            # 'away_team_fouls': self.away_team_fouls,
             'home_team_uniform': self.home_team_uniform,
             'away_team_uniform': self.away_team_uniform,
-            'is_home_team_lost_by_wo': self.is_home_team_lost_by_wo,
-            'is_away_team_lost_by_wo': self.is_away_team_lost_by_wo,
-            'is_walkover': self.is_walkover,
-            'is_double_walkover': self.is_double_walkover,
+            # 'is_home_team_lost_by_wo': self.is_home_team_lost_by_wo,
+            # 'is_away_team_lost_by_wo': self.is_away_team_lost_by_wo,
+            # 'is_walkover': self.is_walkover,
+            # 'is_double_walkover': self.is_double_walkover,
             'status': self.status,
             'status_text': self.get_status_text(),
             'league_id': self.league_id,
@@ -499,11 +502,11 @@ class BaseGame(db.Model):
             'winner_id': self.winner_id,
             'total_periods': self.total_periods,
             'total_cameras': self.total_cameras,
-            'has_shootout': self.has_shootout,
-            'full_score_string': self.full_score_string,
+            # 'has_shootout': self.has_shootout,
+            # 'full_score_string': self.full_score_string,
             'periods': [p.to_dict() for p in self.get_periods_list()],
             'cameras': [gc.to_dict() for gc in self.get_cameras_list()],
-            'shootout': self.shootout.to_dict() if self.shootout else None,
+            # 'shootout': self.shootout.to_dict() if self.shootout else None,
             'total_players': self.total_players,
             'total_events': self.total_events,
             'total_referees': self.total_referees,
@@ -643,14 +646,14 @@ class BaseGame(db.Model):
         }
 
 def get_game_model():
-    """Zwraca konkretną klasę BaseGame zarejestrowaną przez aktywny moduł."""
+    """Zwraca konkretną klasę BaseGameMixin zarejestrowaną przez aktywny moduł."""
     from core.extensions import db
     for mapper in db.Model.registry.mappers:
         cls = mapper.class_
         if (getattr(cls, '__tablename__', None) == 'games'
-                and issubclass(cls, BaseGame)):
+                and issubclass(cls, BaseGameMixin)):
             return cls
     raise RuntimeError(
-        "Nie znaleziono klasy BaseGame w rejestrze SQLAlchemy. "
+        "Nie znaleziono klasy BaseGameMixin w rejestrze SQLAlchemy. "
         "Upewnij się że model jest zaimportowany przed wywołaniem get_game_model()."
     )

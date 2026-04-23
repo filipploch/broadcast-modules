@@ -1,10 +1,23 @@
 """Season Manager - CRUD operations for seasons"""
 from core.extensions import db
-from core.models.season import Season
-from app.models.league import League
-from app.models.game import Game
 from sqlalchemy.exc import IntegrityError
 import logging
+
+def _get_season():
+    from core.models.base_season import get_season_model
+    return get_season_model()
+
+def _get_league():
+    from core.models.base_league import get_league_model
+    return get_league_model()
+
+def _get_league_team():
+    from core.models.base_league_team import get_league_team_model
+    return get_league_team_model()
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
 
 logger = logging.getLogger(__name__)
 
@@ -14,14 +27,17 @@ class SeasonManager:
 
     def get_all_seasons(self):
         """Get all seasons ordered by number (newest first)"""
+        Season = _get_season()
         return Season.query.order_by(Season.number.desc()).all()
 
     def get_season_by_id(self, season_id):
         """Get season by ID"""
+        Season = _get_season()
         return Season.query.get(season_id)
 
     def get_season_by_number(self, number):
         """Get season by number"""
+        Season = _get_season()
         return Season.query.filter_by(number=number).first()
 
     def create_season(self, number, name, foreign_id=None):
@@ -39,6 +55,7 @@ class SeasonManager:
         Raises:
             ValueError if season with this number or name already exists
         """
+        Season = _get_season()
         # Check if season with this number already exists
         existing_number = self.get_season_by_number(number)
         if existing_number:
@@ -87,6 +104,7 @@ class SeasonManager:
         Raises:
             ValueError if season not found or duplicate data
         """
+        Season = _get_season()
         season = self.get_season_by_id(season_id)
         if not season:
             raise ValueError(f"Nie znaleziono sezonu o ID {season_id}")
@@ -176,6 +194,10 @@ class SeasonManager:
         Returns:
             Dictionary with season statistics or None if season not found
         """
+        League = _get_league()
+        Game = _get_game()
+        LeagueTeam = _get_league_team()
+
         season = self.get_season_by_id(season_id)
         if not season:
             return None
@@ -196,7 +218,7 @@ class SeasonManager:
         ).count()
 
         # Get unique teams playing in this season
-        from app.models.league_team import LeagueTeam
+        
         teams_count = db.session.query(LeagueTeam.team_id).join(League).filter(
             League.season_id == season_id
         ).distinct().count()
@@ -219,6 +241,7 @@ class SeasonManager:
         Returns:
             Season object or None if no seasons exist
         """
+        Season = _get_season()
         print(f'season: {Season.query.order_by(Season.number.desc()).first().name}')
         return Season.query.order_by(Season.number.desc()).first()
 

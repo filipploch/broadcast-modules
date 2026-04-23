@@ -4,7 +4,7 @@ from flask import current_app
 from core.extensions import db
 from app.models.player import Player
 from app.models.team import Team
-from app.managers.player_manager import PlayerManager
+from core.managers.player_manager import PlayerManager
 import threading
 import logging
 
@@ -88,6 +88,7 @@ class PlayerScraperManager:
                 scraper = PlayerScraper()
                 scraped_players = scraper.scrape_players(team.team_url)
                 stats = self._process_scraped_players(scraped_players, team)
+                
 
                 self._status = {
                     'status': 'completed',

@@ -1,14 +1,20 @@
 """GameCamera Manager - handles camera assignments for games"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.game_camera import GameCamera, HDMI_TO_DEVICE, HDMI_DEFAULT_LOCATION, VALID_HDMI_INPUTS
-from core.models.base_game import BaseGame
-from core.models.camera import Camera
+from core.models.base_game_camera import HDMI_TO_DEVICE, HDMI_DEFAULT_LOCATION, VALID_HDMI_INPUTS
 import logging
 
 def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
+
+def _get_game_camera_model():
+    from core.models.base_game_camera import get_game_camera_model
+    return get_game_camera_model()
+
+def _get_camera():
+    from core.models.base_camera import get_camera_model
+    return get_camera_model()
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +24,7 @@ class GameCameraManager:
     """Manager for GameCamera CRUD operations"""
 
     def assign_camera_to_game(self, game_id: int, camera_id: int, hdmi_input: int,
-                              location: str = None, is_motorized: bool = False) -> GameCamera:
+                              location: str = None, is_motorized: bool = False):
         """
         Przypisz kamerę do meczu.
 
@@ -38,6 +44,8 @@ class GameCameraManager:
         Raises:
             ValueError: mecz/kamera nie istnieje, naruszenie unikalności, zły numer slotu
         """
+        GameCamera = _get_game_camera_model()
+        Camera = _get_camera()
         # Walidacja zakresu slotu HDMI
         if hdmi_input not in VALID_HDMI_INPUTS:
             raise ValueError(
@@ -97,24 +105,27 @@ class GameCameraManager:
             logger.error(f"Błąd przypisania kamery do meczu: {e}")
             raise
 
-    def get_cameras_for_game(self, game_id: int) -> List[GameCamera]:
+    def get_cameras_for_game(self, game_id: int):
         """Zwróć wszystkie kamery przypisane do meczu, posortowane po numerze slotu HDMI."""
+        GameCamera = _get_game_camera_model()
         return (GameCamera.query
                 .filter_by(game_id=game_id)
                 .order_by(GameCamera.hdmi_input)
                 .all())
 
-    def get_main_camera(self, game_id: int) -> Optional[GameCamera]:
+    def get_main_camera(self, game_id: int):
         """Zwróć kamerę główną meczu (slot HDMI 1), lub None jeśli nie przypisana."""
+        GameCamera = _get_game_camera_model()
         return GameCamera.query.filter_by(game_id=game_id, hdmi_input=1).first()
 
-    def get_game_camera_by_id(self, game_camera_id: int) -> Optional[GameCamera]:
+    def get_game_camera_by_id(self, game_camera_id: int):
         """Zwróć GameCamera po ID."""
+        GameCamera = _get_game_camera_model()
         return GameCamera.query.get(game_camera_id)
 
     def update_game_camera(self, game_camera_id: int, location: str = None,
                            hdmi_input: int = None,
-                           is_motorized: bool = None) -> GameCamera:
+                           is_motorized: bool = None):
         """
         Zaktualizuj przypisanie kamery.
 
@@ -144,6 +155,7 @@ class GameCameraManager:
                         f"Nieprawidłowy numer wejścia HDMI: {hdmi_input}. "
                         f"Dozwolone wartości: {list(VALID_HDMI_INPUTS)}"
                     )
+                GameCamera = _get_game_camera_model()
                 existing = GameCamera.query.filter_by(
                     game_id=game_camera.game_id,
                     hdmi_input=hdmi_input,
@@ -197,6 +209,7 @@ class GameCameraManager:
         Returns:
             Lista numerów slotów HDMI (1–4) które nie są jeszcze zajęte.
         """
+        GameCamera = _get_game_camera_model()
         taken = {
             gc.hdmi_input
             for gc in GameCamera.query.filter_by(game_id=game_id).all()

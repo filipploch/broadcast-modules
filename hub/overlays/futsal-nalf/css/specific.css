@@ -1,5 +1,18 @@
 .specific-colors {
   color: white;
-  background-color: #480f0f;
-  background-image: linear-gradient(to bottom, rgb(94, 35, 35), #331010);
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
+}
+
+.squad-body-right {
+  flex: 1;                 /* ← równa szerokość */
+  display: flex;           /* ← centrowanie obrazka */
+  justify-content: center;
+  align-items: center;
+}
+
+.squad-body-right img {
+  width: 500px;
+  height: 500px;
+  object-fit: cover;       /* opcjonalnie – zachowuje proporcje w razie potrzeby */
 }

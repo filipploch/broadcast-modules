@@ -2,7 +2,7 @@
 from typing import List, Optional
 from core.extensions import db
 from app.models.player import Player
-from app.models.team import Team
+from core.models.base_team import get_team_model
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,0 +1,61 @@
+"""Commentator model - Game commentators"""
+from core.extensions import db
+from datetime import datetime
+from sqlalchemy.orm import declared_attr
+
+
+class BaseCommentatorMixin:
+    """Football commentator"""
+
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Commentator info
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    @declared_attr
+    def game_commentators(cls):
+        return db.relationship('GameCommentator', backref='commentator', lazy='dynamic', cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<Commentator {self.first_name} {self.last_name}>'
+
+    @property
+    def full_name(self):
+        """Get full name"""
+        return f"{self.first_name} {self.last_name}"
+
+    @property
+    def short_name(self):
+        """Get short name (first letter of first name + last name)"""
+        return f"{self.first_name[0]}. {self.last_name}" if self.first_name else self.last_name
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'full_name': self.full_name,
+            'short_name': self.short_name,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+def get_commentator_model():
+    """Zwraca klasę Commentator zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'commentators'
+                and issubclass(cls, BaseCommentatorMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy Commentator w rejestrze SQLAlchemy. "
+        "Upewnij się że model modułu jest zaimportowany przed wywołaniem."
+    )

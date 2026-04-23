@@ -30,6 +30,8 @@ class Config:
     SPECIFIC_JS_FILE = f'modules/{MODULE_NAME}/static/specific.js'
     SPECIFIC_CSS_FILE = f'modules/{MODULE_NAME}/static/specific.css'
 
+    MEDIA_CURSOR = None
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

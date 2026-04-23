@@ -2,7 +2,7 @@
 from app import create_app
 from core.extensions import db
 from app.models.settings import Settings
-from core.models import Season, Stadium
+from app.models import Season, Stadium
 from app.models import League, Team, LeagueTeam, Game
 from datetime import datetime
 

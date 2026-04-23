@@ -1,7 +1,9 @@
 function setLeagueName(){
-    return 'Texom Małopolska 4. Liga';
+    return 'Nowohucka Amatorska Liga Futsalu';
 };
 
+'/static/images/nalf/logoNALF.png'
+
 function setLeagueLogo(){
-    return '/static/images/TM4L/logoTM4L.png';
+    return '/static/images/nalf/logoNALF.png';
 }

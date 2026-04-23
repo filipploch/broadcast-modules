@@ -1,4 +1,4 @@
-"""BaseGamePlayer — abstrakcyjna klasa bazowa dla przypisania zawodnika do meczu.
+"""BaseGamePlayerMixin — abstrakcyjna klasa bazowa dla przypisania zawodnika do meczu.
 
 Przechowuje snapshot atrybutów zawodnika z chwili przypisania
 (numer, pozycja itp.) — chroni dane historyczne gdy zawodnik zmieni drużynę.
@@ -14,8 +14,7 @@ from core.extensions import db
 from datetime import datetime
 
 
-class BaseGamePlayer(db.Model):
-    __abstract__ = True
+class BaseGamePlayerMixin:
 
     id     = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.Integer, nullable=True)
@@ -74,3 +73,16 @@ class BaseGamePlayer(db.Model):
             'created_at':      self.created_at.isoformat() if self.created_at else None,
             'updated_at':      self.updated_at.isoformat() if self.updated_at else None,
         }
+
+def get_game_player_model():
+    """Zwraca klasę GamePlayer zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'game_players'
+                and issubclass(cls, BaseGamePlayerMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy GamePlayer w rejestrze SQLAlchemy. "
+        "Upewnij się że model modułu jest zaimportowany przed wywołaniem."
+    )

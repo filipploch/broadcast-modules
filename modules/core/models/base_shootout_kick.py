@@ -1,9 +1,9 @@
-"""BaseShootoutKick — abstrakcyjna klasa bazowa dla rzutów karnych w konkursie."""
+"""BaseShootoutKickMixin — abstrakcyjna klasa bazowa dla rzutów karnych w konkursie."""
 from core.extensions import db
 from datetime import datetime
 
 
-class BaseShootoutKick(db.Model):
+class BaseShootoutKickMixin:
     """
     Pojedynczy rzut karny w konkursie rzutów karnych.
 
@@ -14,9 +14,8 @@ class BaseShootoutKick(db.Model):
         Backrefy definiowane po stronie "parent":
           - 'kicks'          → przez Shootout.kicks
           - 'shootout_kicks' → przez Game i Player i Team
-        BaseShootoutKick definiuje tylko swoją stronę relacji (bez backref).
+        BaseShootoutKickMixin definiuje tylko swoją stronę relacji (bez backref).
     """
-    __abstract__ = True
 
     # Stała do nadpisania w module — domyślna wartość dla większości dyscyplin
     MIN_ROUNDS = 5  # piłka nożna: 5 kolejek; futsal nadpisze na 3
@@ -118,3 +117,16 @@ class BaseShootoutKick(db.Model):
             'created_at':   self.created_at.isoformat() if self.created_at else None,
             'updated_at':   self.updated_at.isoformat() if self.updated_at else None,
         }
+
+def get_shootout_kick_model():
+    """Zwraca konkretną klasę ShootoutKick zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'shootout_kicks'
+                and issubclass(cls, BaseShootoutKickMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy ShootoutKick w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_shootout_kick_model()."
+    )

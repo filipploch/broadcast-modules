@@ -216,7 +216,9 @@
         let commentatorsContainer = document.createElement('div');
         addClassName(commentatorsContainer, 'start-bottom-info-element');
         commentatorsContainer.style.animationDelay = '16000ms';
-        refereesContainer.innerHTML = expandStartBottomSpecificContainer('Arbiter', referees);
+        let redereesContainerHeadText = 'Arbiter';
+        if(referees.length > 1) redereesContainerHeadText = 'Sędziowie';
+        refereesContainer.innerHTML = expandStartBottomSpecificContainer(redereesContainerHeadText, referees);
         commentatorsContainer.innerHTML = expandStartBottomSpecificContainer('Komentarz', commentators);
         let address1Element = document.createElement('div');
         addClassName(address1Element, 'start-bottom-header');
@@ -258,10 +260,12 @@
             goalTimeContainer.innerText = '';
             let goals = scorer.goals;
             goals.forEach(goal => {
+				let displayedMinute = goal.minute;
+				if(goal.added_time>0) displayedMinute += `+${goal.added_time}`
                 if(goal.is_own_goal === true){
-                    goalTimeContainer.innerText += `(s)${goal.minute}' `;
+                    goalTimeContainer.innerText += `(s)${displayedMinute}' `;
                 }else{
-                    goalTimeContainer.innerText += `${goal.minute}' `;
+                    goalTimeContainer.innerText += `${displayedMinute}' `;
                 }
             });
             _row.appendChild(firstName);
@@ -432,6 +436,7 @@
         let teamLogo = document.createElement('img');
         addClassName(teamLogo,'squad-content');
         addClassName(teamLogo,'squad-team-logo');
+        addClassName(teamLogo,'drop-shadow');
         addClassName(teamLogo, 'animated-element');
         teamLogo.dataset.animationOrder = '3';
         teamLogo.src = rootApp + _logo;
@@ -723,6 +728,10 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
                 
                 
             }
+
+            if (msg.type === 'show_substitution') {
+                showSubstitutionOverlay(msg.payload);
+            }
             
         if (msg.type === 'show_info') {
             let data = msg.payload;
@@ -739,10 +748,9 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             actionImgElement.src = '';
             actionImgElement.src = `${rootApp}${data.event_image_path}`;
             actionTimeElement.textContent = '';
-            actionTimeElement.textContent = FutsalFormatters.formatElapsedTime(data.game_time, 0, {
-                'format': 'min',
-                'unit': 's'
-            });
+            actionTimeElement.textContent = (data.period_limit_s !== undefined)
+            ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
+            : FutsalFormatters.formatElapsedTime(data.game_time, 0, {'format': 'min', 'unit': 's'});
             actionPlayerInfoElement.textContent = '';
             actionPlayerInfoElement.textContent = `${data.player_number} ${data.player_name}`;
             actionPlayerTeamShortNameElement.textContent = ''; 

@@ -3,11 +3,7 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Optional
 from core.extensions import db
-from core.models.game_event import GameEvent
-from core.models.event import Event
-from core.models.base_game import BaseGame
-from core.models.base_team import BaseTeam
-from core.models.base_player import BasePlayer
+
 import logging
 
 def _get_game():
@@ -24,8 +20,16 @@ def _get_team():
 
 
 def _get_period():
-    from core.models.period import get_period_model
+    from core.models.base_period import get_period_model
     return get_period_model()
+
+def _get_event():
+    from core.models.base_event import get_event_model
+    return get_event_model()
+
+def _get_game_event():
+    from core.models.base_game_event import get_game_event_model
+    return get_game_event_model()
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +134,7 @@ class GameEventManager:
                     period_id: int = None, team_id: int = None,
                     player_id: int = None, event_place: str = None,
                     replay_end_time: int = None, video_path: str = None,
-                    color: str = '#000000', comment: str = None) -> Optional[GameEvent]:
+                    color: str = '#000000', comment: str = None):
         """
         Record event in a game
 
@@ -156,6 +160,8 @@ class GameEventManager:
         """
         # Validate game exists
         game = _get_game().query.get(game_id)
+        Event = _get_event()
+        GameEvent = _get_game_event()
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
@@ -220,7 +226,7 @@ class GameEventManager:
                         replay_end_time: int, video_path: str,
                         team_id: int = None, player_id: int = None,
                         event_place: str = None,
-                        get_game_time_func=None) -> Optional[GameEvent]:
+                        get_game_time_func=None):
         """
         Record event with current game time from timer plugin
 
@@ -261,7 +267,7 @@ class GameEventManager:
         )
 
     def get_events_for_game(self, game_id: int, period_id: int = None,
-                           event_id: int = None, team_id: int = None) -> List[GameEvent]:
+                           event_id: int = None, team_id: int = None):
         """
         Get events for a game with optional filters
         
@@ -274,6 +280,7 @@ class GameEventManager:
         Returns:
             List of GameEvent objects ordered by time
         """
+        GameEvent = _get_game_event()
         query = GameEvent.query.filter_by(game_id=game_id)
         
         if period_id:
@@ -285,14 +292,15 @@ class GameEventManager:
 
         return query.order_by(GameEvent.game_time).all()
 
-    def get_game_event_by_id(self, game_event_id: int) -> Optional[GameEvent]:
+    def get_game_event_by_id(self, game_event_id: int):
         """Get GameEvent by ID"""
+        GameEvent = _get_game_event()
         return GameEvent.query.get(game_event_id)
 
     def update_game_event(self, game_event_id: int, event_id: int = None, game_time: int = None,
                         replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
                         event_place: str = None, team_id: int = None, player_id: int = None,
-                        home_team_goals: int = None, away_team_goals: int = None) -> Optional[GameEvent]:
+                        home_team_goals: int = None, away_team_goals: int = None):
         """
         Update game event
 
@@ -317,6 +325,8 @@ class GameEventManager:
             return None
 
         try:
+            GameEvent = _get_game_event()
+            Event = _get_event()
             if event_id is not None:
                 event = Event.query.get(event_id)
                 if not event:
@@ -376,7 +386,7 @@ class GameEventManager:
             logger.error(f"Error deleting game event: {e}")
             return False
 
-    def get_timeline(self, game_id: int) -> List[GameEvent]:
+    def get_timeline(self, game_id: int):
         """
         Get complete timeline of events for a game
         
@@ -388,6 +398,7 @@ class GameEventManager:
         Returns:
             List of GameEvent objects with all relationships loaded
         """
+        GameEvent = _get_game_event()
         return GameEvent.query.filter_by(game_id=game_id).order_by(GameEvent.game_time).all()
 
     # -----------------------------------------------------------------------
@@ -416,6 +427,8 @@ class GameEventManager:
         Raises:
             ValueError: gdy mecz nie istnieje
         """
+        GameEvent = _get_game_event()
+        Event = _get_event()
         game = _get_game().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
@@ -423,9 +436,9 @@ class GameEventManager:
         # Pobieramy wszystkie zdarzenia będące bramkami dla tego meczu.
         # Bramki identyfikujemy przez filter_class = 'goal' (obejmuje
         # zarówno zwykłe bramki, jak i samobójcze).
-        goal_events: List[GameEvent] = (
+        goal_events = (
             GameEvent.query
-            .join(GameEvent.event)
+            .join(Event, GameEvent.event_id == Event.id)
             .filter(
                 GameEvent.game_id == game_id,
                 Event.filter_class == 'goal',
@@ -486,7 +499,7 @@ class GameEventManager:
     # -----------------------------------------------------------------------
 
     @staticmethod
-    def _build_goal_entry(ge: GameEvent) -> Optional[GoalEntry]:
+    def _build_goal_entry(ge):
         """
         Buduje obiekt GoalEntry na podstawie rekordu GameEvent.
 
@@ -503,7 +516,7 @@ class GameEventManager:
             logger.warning(f"GameEvent id={ge.id} nie ma game_time, pomijam")
             return None
 
-        period: Optional[Period] = ge.period
+        period = ge.period
         if period is None:
             logger.warning(f"GameEvent id={ge.id} nie ma przypisanej części meczu, pomijam")
             return None

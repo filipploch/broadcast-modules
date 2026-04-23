@@ -1,17 +1,19 @@
 """Stadium Manager - handles CRUD operations for Stadium model"""
-from typing import List, Optional
-from app.extensions import db
-from core.models.stadium import Stadium
+from core.extensions import db
 import logging
 
 logger = logging.getLogger(__name__)
 
+def _get_stadium():
+    from core.models.base_stadium import get_stadium_model
+    return get_stadium_model()
 
 class StadiumManager:
     """Manager for Stadium CRUD operations"""
 
-    def create_stadium(self, name: str, address: str, city: str) -> Optional[Stadium]:
+    def create_stadium(self, name: str, address: str, city: str):
         try:
+            Stadium = _get_stadium()
             stadium = Stadium(name=name, address=address, city=city)
             db.session.add(stadium)
             db.session.commit()
@@ -22,14 +24,16 @@ class StadiumManager:
             logger.error(f"Error creating stadium: {e}")
             raise
 
-    def get_all_stadiums(self) -> List[Stadium]:
+    def get_all_stadiums(self):
+        Stadium = _get_stadium()
         return Stadium.query.order_by(Stadium.city, Stadium.name).all()
 
-    def get_stadium_by_id(self, stadium_id: int) -> Optional[Stadium]:
+    def get_stadium_by_id(self, stadium_id: int):
+        Stadium = _get_stadium()
         return Stadium.query.get(stadium_id)
 
     def update_stadium(self, stadium_id: int, name: str = None,
-                       address: str = None, city: str = None) -> Optional[Stadium]:
+                       address: str = None, city: str = None):
         stadium = self.get_stadium_by_id(stadium_id)
         if not stadium:
             logger.warning(f"Stadium with ID {stadium_id} not found")

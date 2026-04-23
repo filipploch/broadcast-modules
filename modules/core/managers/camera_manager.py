@@ -1,16 +1,18 @@
 """Camera Manager - handles CRUD operations for Camera model"""
 from typing import List, Optional
-from app.extensions import db
-from core.models.camera import Camera
+from core.extensions import db
 import logging
 
 logger = logging.getLogger(__name__)
 
+def _get_camera():
+    from core.models.base_camera import get_camera_model
+    return get_camera_model()
 
 class CameraManager:
     """Manager for Camera CRUD operations"""
 
-    def create_camera(self, name: str, brand: str, model: str) -> Optional[Camera]:
+    def create_camera(self, name: str, brand: str, model: str):
         """
         Create new camera
 
@@ -23,6 +25,7 @@ class CameraManager:
             Camera object or None if error
         """
         try:
+            Camera = _get_camera()
             camera = Camera(
                 name=name,
                 brand=brand,
@@ -39,16 +42,18 @@ class CameraManager:
             logger.error(f"Error creating camera: {e}")
             return None
 
-    def get_all_cameras(self) -> List[Camera]:
+    def get_all_cameras(self):
         """Get all cameras"""
+        Camera = _get_camera()
         return Camera.query.order_by(Camera.name).all()
 
-    def get_camera_by_id(self, camera_id: int) -> Optional[Camera]:
+    def get_camera_by_id(self, camera_id: int):
         """Get camera by ID"""
+        Camera = _get_camera()
         return Camera.query.get(camera_id)
 
     def update_camera(self, camera_id: int, name: str = None, brand: str = None, 
-                     model: str = None) -> Optional[Camera]:
+                     model: str = None):
         """
         Update camera
 

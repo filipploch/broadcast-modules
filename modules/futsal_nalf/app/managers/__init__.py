@@ -21,11 +21,13 @@ from flask import current_app
 import threading
 
 # ── Singletony specyficzne dla futsalu ───────────────────────────────────────
-_shootout_kick_manager = None
 _game_manager          = None
 
 
 def initialize_all_managers(app):
+    import core.managers as _core_mgrs
+    from app.managers.timer_manager import TimerManager
+    _core_mgrs._timer_manager_class = TimerManager
     """
     Inicjalizuje wszystkie managery: najpierw core, potem futsal-specifyczne.
     Wywoływana z app/__init__.py w wątku tła.
@@ -36,29 +38,22 @@ def initialize_all_managers(app):
 
 def shutdown_all_managers():
     """Zatrzymuje wszystkie managery (core + futsal-specific)."""
-    global _shootout_kick_manager, _game_manager
+    global _game_manager
     shutdown_core_managers()
-    _shootout_kick_manager = None
     _game_manager          = None
 
 
 # ── Lazy getters futsal-specific ─────────────────────────────────────────────
 
-def get_shootout_kick_manager():
-    global _shootout_kick_manager
-    if _shootout_kick_manager is None:
-        from app.managers.shootout_kick_manager import ShootoutKickManager
-        _shootout_kick_manager = ShootoutKickManager()
-    return _shootout_kick_manager
 
 
 # ── Direct imports — managery bez zależności od huba ─────────────────────────
 from core.managers.game_manager import GameManager
-from app.managers.league_manager import LeagueManager
-from app.managers.team_manager import TeamManager
-from app.managers.season_manager import SeasonManager
-from app.managers.player_manager import PlayerManager
-from app.managers.shootout_manager import ShootoutManager
+from core.managers.league_manager import LeagueManager
+from core.managers.team_manager import TeamManager
+from core.managers.season_manager import SeasonManager
+from core.managers.player_manager import PlayerManager
+from core.managers.shootout_manager import ShootoutManager
 from core.managers.game_event_manager import GameEventManager
 from app.managers.team_scraper_manager import TeamScraperManager
 from app.managers.player_scraper_manager import PlayerScraperManager
@@ -69,7 +64,7 @@ from core.managers.camera_manager import CameraManager
 from core.managers.commentator_manager import CommentatorManager
 from core.managers.referee_manager import RefereeManager
 from core.managers.stadium_manager import StadiumManager
-from core.managers.period_manager import PeriodManager
+from app.managers.period_manager import PeriodManager
 from core.managers.event_manager import EventManager
 from core.managers.game_camera_manager import GameCameraManager
 from core.managers.game_commentator_manager import GameCommentatorManager

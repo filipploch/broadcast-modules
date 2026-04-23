@@ -19,3 +19,5 @@
 *.mp4
 *.mkv
 **/app/data/
+*.env
+**/temp/**

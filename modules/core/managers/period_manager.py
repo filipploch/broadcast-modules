@@ -1,7 +1,6 @@
 """Period Manager - handles CRUD operations for Period model"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.base_game import BaseGame
 import logging
 
 def _get_game():
@@ -10,7 +9,7 @@ def _get_game():
 
 
 def _get_period():
-    from core.models.period import get_period_model
+    from core.models.base_period import get_period_model
     return get_period_model()
 
 
@@ -191,7 +190,7 @@ class PeriodManager:
         3. Restores penalty timers if they exist (for periods > 1)
         4. Removes penalty timers with limit_reached status
         """
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         from core.managers import get_timer_manager
         
@@ -298,7 +297,7 @@ class PeriodManager:
         2. Updates timer states in Settings with current elapsed times
         3. Sets period status to FINISHED
         """
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         from core.managers import get_timer_manager
         
@@ -419,39 +418,39 @@ class PeriodManager:
             logger.error(f"Error updating period score: {e}")
             return None
 
-    def update_period_fouls(self, period_id: int, home_fouls: int, away_fouls: int,
-                           auto_sync: bool = True):
-        """
-        Update period fouls
+    # def update_period_fouls(self, period_id: int, home_fouls: int, away_fouls: int,
+    #                        auto_sync: bool = True):
+    #     """
+    #     Update period fouls
         
-        Args:
-            period_id: Period ID
-            home_fouls: Home team fouls in this period
-            away_fouls: Away team fouls in this period
-            auto_sync: Automatically sync to Game (default: True)
+    #     Args:
+    #         period_id: Period ID
+    #         home_fouls: Home team fouls in this period
+    #         away_fouls: Away team fouls in this period
+    #         auto_sync: Automatically sync to Game (default: True)
         
-        Returns:
-            Updated Period object or None if error
-        """
-        period = self.get_period_by_id(period_id)
-        if not period:
-            logger.warning(f"Period with ID {period_id} not found")
-            return None
+    #     Returns:
+    #         Updated Period object or None if error
+    #     """
+    #     period = self.get_period_by_id(period_id)
+    #     if not period:
+    #         logger.warning(f"Period with ID {period_id} not found")
+    #         return None
 
-        try:
-            period.update_fouls(home_fouls, away_fouls)
-            db.session.commit()
+    #     try:
+    #         period.update_fouls(home_fouls, away_fouls)
+    #         db.session.commit()
             
-            if auto_sync:
-                period.sync_to_game()
+    #         if auto_sync:
+    #             period.sync_to_game()
             
-            logger.info(f"Updated period {period_id} fouls: {home_fouls}:{away_fouls}")
-            return period
+    #         logger.info(f"Updated period {period_id} fouls: {home_fouls}:{away_fouls}")
+    #         return period
 
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error updating period fouls: {e}")
-            return None
+    #     except Exception as e:
+    #         db.session.rollback()
+    #         logger.error(f"Error updating period fouls: {e}")
+    #         return None
 
     def increment_period_goal(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True):
         """
@@ -491,43 +490,43 @@ class PeriodManager:
             logger.error(f"Error incrementing goal: {e}")
             return None
 
-    def increment_period_foul(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True):
-        """
-        Increment foul for a team in a period
+    # def increment_period_foul(self, period_id: int, team: str, value: int = 1, auto_sync: bool = True):
+    #     """
+    #     Increment foul for a team in a period
         
-        Args:
-            period_id: Period ID
-            team: 'home' or 'away'
-            auto_sync: Automatically sync to Game (default: True)
+    #     Args:
+    #         period_id: Period ID
+    #         team: 'home' or 'away'
+    #         auto_sync: Automatically sync to Game (default: True)
         
-        Returns:
-            Updated Period object or None if error
-        """
-        period = self.get_period_by_id(period_id)
-        if not period:
-            logger.warning(f"Period with ID {period_id} not found")
-            return None
+    #     Returns:
+    #         Updated Period object or None if error
+    #     """
+    #     period = self.get_period_by_id(period_id)
+    #     if not period:
+    #         logger.warning(f"Period with ID {period_id} not found")
+    #         return None
 
-        try:
-            if team.lower() == 'home':
-                period.increment_home_fouls(value)
-            elif team.lower() == 'away':
-                period.increment_away_fouls(value)
-            else:
-                raise ValueError(f"Invalid team: {team}. Must be 'home' or 'away'")
+    #     try:
+    #         if team.lower() == 'home':
+    #             period.increment_home_fouls(value)
+    #         elif team.lower() == 'away':
+    #             period.increment_away_fouls(value)
+    #         else:
+    #             raise ValueError(f"Invalid team: {team}. Must be 'home' or 'away'")
             
-            db.session.commit()
+    #         db.session.commit()
             
-            if auto_sync:
-                period.sync_to_game()
+    #         if auto_sync:
+    #             period.sync_to_game()
             
-            logger.info(f"Incremented {team} foul in period {period_id}")
-            return period
+    #         logger.info(f"Incremented {team} foul in period {period_id}")
+    #         return period
 
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error incrementing foul: {e}")
-            return None
+    #     except Exception as e:
+    #         db.session.rollback()
+    #         logger.error(f"Error incrementing foul: {e}")
+    #         return None
 
     def sync_periods_to_game(self, game_id: int) -> bool:
         """

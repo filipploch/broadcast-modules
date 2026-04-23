@@ -1,10 +1,13 @@
 """Event Manager - handles CRUD operations for Event model"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.event import Event
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _get_event():
+    from core.models.base_event import get_event_model
+    return get_event_model()
 
 
 class EventManager:
@@ -15,7 +18,7 @@ class EventManager:
                     color: str = '#FFFFFF',
                     filter_class: str = None,
                     player_from_opponent: bool = False,
-                    image_path: str = None) -> Optional[Event]:
+                    image_path: str = None):
         """
         Create new event type
 
@@ -29,6 +32,7 @@ class EventManager:
             Event object or None if error
         """
         try:
+            Event = _get_event()
             event = Event(
                 name=name,
                 short_name=short_name,
@@ -49,31 +53,36 @@ class EventManager:
             logger.error(f"Error creating event: {e}")
             return None
 
-    def get_all_events(self) -> List[Event]:
+    def get_all_events(self):
         """Get all event types"""
+        Event = _get_event()
         return Event.query.order_by(Event.id).all()
 
-    def get_reported_events(self) -> List[Event]:
+    def get_reported_events(self):
         """Get events that require team/player assignment"""
+        Event = _get_event()
         return Event.query.filter_by(is_reported=True).order_by(Event.name).all()
 
-    def get_system_events(self) -> List[Event]:
+    def get_system_events(self):
         """Get system events (no team/player assignment)"""
+        Event = _get_event()
         return Event.query.filter_by(is_reported=False).order_by(Event.name).all()
 
-    def get_event_by_id(self, event_id: int) -> Optional[Event]:
+    def get_event_by_id(self, event_id: int):
         """Get event by ID"""
+        Event = _get_event()
         return Event.query.get(event_id)
 
-    def get_event_by_short_name(self, short_name: str) -> Optional[Event]:
+    def get_event_by_short_name(self, short_name: str):
         """Get event by short name"""
+        Event = _get_event()
         return Event.query.filter_by(short_name=short_name).first()
 
     def update_event(self, event_id: int, name: str = None,
                     short_name: str = None, is_reported: bool = None,
                     color: str = None, filter_class: str = None,
                     player_from_opponent: bool = None,
-                    image_path: str = None) -> Optional[Event]:
+                    image_path: str = None):
         """
         Update event type
 
@@ -146,7 +155,7 @@ class EventManager:
             logger.error(f"Error deleting event: {e}")
             return False
 
-    def create_default_events(self) -> List[Event]:
+    def create_default_events(self):
         """
         Create default event types for futsal
         

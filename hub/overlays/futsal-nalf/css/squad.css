@@ -74,6 +74,10 @@ body {
   text-shadow: rgb(83, 83, 83) 0px 0px 10px;
 }
 
+#start-league-logo>img{
+  height: 60%;
+}
+
 /* #start-teams-container {
   padding-top: 80px;
 } */
@@ -116,6 +120,19 @@ body {
   animation: expandHeight 1000ms ease-out 1000ms both;
 }
 
+.substitutes {
+  position: absolute;
+  right: 130px;
+  z-index: 999;
+  bottom: 70px;
+}
+
+.coach {
+  bottom: 0;
+  position: relative;
+  padding-top: 52px;
+}
+
 .start-body {
   display: flex;
   flex-direction: column;
@@ -155,18 +172,9 @@ body {
   padding-left: 130px;
 }
 
-.squad-body-right {
-  flex: 1;                 /* ← równa szerokość */
-  display: flex;           /* ← centrowanie obrazka */
-  justify-content: center;
-  align-items: center;
-}
 
-.squad-body-right img {
-  width: 500px;
-  height: 500px;
-  object-fit: cover;       /* opcjonalnie – zachowuje proporcje w razie potrzeby */
-}
+
+
 
 .squad-team-squad-table {
   border-collapse: collapse;
@@ -174,8 +182,8 @@ body {
 
 .squad-player-row {
 	display: flex;
-	font-size: 45px;
-  width: 800px;
+	font-size: 35px;
+  width: 700px;
   padding: 5px 0;
 }
 
@@ -184,15 +192,22 @@ body {
 	padding-top: 5px;
 }
 
-.squad-player-number{
-    text-align: right;
-    padding-left: 23px;
+.squad-player-number {
+  text-align: right;
+  padding-left: 20px;
+  width: 45px;
 }
 
 .squad-player-name{
     font-weight: 700;
     padding-left: 20px;
     padding-right: 20px;
+}
+
+.squad-coach-name{
+    font-weight: 700;
+    padding-left: 70px;
+    padding-right: 20px;  
 }
 
 .squad-player-func{

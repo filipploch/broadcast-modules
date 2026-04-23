@@ -20,6 +20,8 @@ _game_event_manager   = None
 _replay_export_manager = None
 _initialization_lock  = threading.Lock()
 _initialized          = False
+_timer_manager_class = None  # moduł może ustawić przed initialize_core_managers
+
 
 
 def initialize_core_managers(app):
@@ -91,12 +93,16 @@ def get_hub_client():
     return _hub_client
 
 
+
 def get_timer_manager():
     global _timer_manager
     if _timer_manager is None:
-        from core.managers.timer_manager import TimerManager
-        _timer_manager = TimerManager(get_hub_client())
-        current_app.logger.info("✅ Timer Manager initialized (lazy)")
+        if _timer_manager_class is not None:
+            cls = _timer_manager_class
+        else:
+            from core.managers.timer_manager import TimerManager
+            cls = TimerManager
+        _timer_manager = cls(get_hub_client())
     return _timer_manager
 
 
@@ -124,7 +130,8 @@ def get_sequence_manager():
         from core.managers.sequence_manager import SequenceManager
         _sequence_manager = SequenceManager(
             get_hub_client(),
-            current_app.config['SEQUENCES_PATH']
+            current_app.config['SEQUENCES_PATH'],
+            app=current_app._get_current_object()
         )
         current_app.logger.info("✅ Sequence Manager initialized (lazy)")
     return _sequence_manager

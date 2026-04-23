@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 import sys
 import signal
 from app import create_app
-from app.extensions import socketio
+from core.extensions import socketio
 
 # app = create_app('development')
 app = create_app('production')

@@ -1,4 +1,4 @@
-# from app.extensions import db
+# from core.extensions import db
 # import json
 # from datetime import datetime
 #

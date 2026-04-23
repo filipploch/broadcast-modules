@@ -7,13 +7,15 @@ import logging
 from flask import current_app
 from core.managers import (get_hub_client, get_timer_manager,
                            get_sequence_manager, get_recorder_manager)
-from app.managers import GameManager, GameEventManager
+from core.managers.game_event_manager import GameEventManager
+from core.managers.game_manager import GameManager
 
 logger = logging.getLogger(__name__)
 
 
+
 def _resolve_event_id(event_type: str) -> int:
-    from core.models.event import Event
+    from app.models.event import Event
     event = Event.query.filter(Event.name.ilike(event_type)).first()
     if not event:
         raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")
@@ -35,21 +37,22 @@ def register_events(socketio):
     @socketio.on('get_shootouts')
     def handle_get_shootout_data():
         from app.models.shootout import Shootout
-        from app.managers import get_shootout_kick_manager
+        from core.managers.shootout_kick_manager import ShootoutKickManager
         from app.models.settings import Settings
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
         current_shootout_id = settings.current_shootout_id
         if current_shootout_id:
             shootout = Shootout.query.get(current_shootout_id).to_dict()
-            sh_kick_manager = get_shootout_kick_manager()
+            sh_kick_manager = ShootoutKickManager()
             kicks = sh_kick_manager.get_kicks_by_game(current_game_id)
             socketio.emit('response_get_shootouts', {'shootout': shootout, 'kicks': kicks})
 
     @socketio.on('get_game_teams')
     def handle_get_game_teams():
-        from core.managers.game_player_manager import GamePlayerManager
-        from app.managers.game_player_manager import GamePlayer
+        # from core.managers.game_player_manager import GamePlayerManager
+        from app.managers.game_player_manager import GamePlayerManager
+        from app.models.game_player import GamePlayer
         from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         import json
@@ -232,7 +235,7 @@ def register_events(socketio):
     def handle_change_game_value(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from core.managers.period_manager import PeriodManager
+        from app.managers.period_manager import PeriodManager
 
         period_manager   = PeriodManager()
         current_game_id  = Settings.get_settings().current_game_id
@@ -251,9 +254,9 @@ def register_events(socketio):
             game = Game.query.get(period.game_id)
             payload = {
                 'home_team_goals': game.home_team_goals,
-                'home_team_fouls': game.home_team_fouls,
+                'home_team_fouls': period.home_team_fouls,
                 'away_team_goals': game.away_team_goals,
-                'away_team_fouls': game.away_team_fouls,
+                'away_team_fouls': period.away_team_fouls,
             }
             hub_client = get_hub_client()
             if hub_client:
@@ -280,7 +283,7 @@ def register_events(socketio):
     def handle_add_game_event_to_db(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from core.managers.period_manager import PeriodManager
+        from app.managers.period_manager import PeriodManager
         from core.managers.game_event_manager import GameEventManager
 
         settings  = Settings.get_settings()
@@ -375,6 +378,7 @@ def register_events(socketio):
                 'player_name':         ged['player_name'],
                 'player_team_short_name': gpd['team_short_name'],
                 'game_time':           ged['game_time'],
+                'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
             })
 
 
@@ -391,7 +395,7 @@ def register_events(socketio):
             return
 
         if content_type == 'events':
-            from app.managers.event_manager import EventManager
+            from core.managers.event_manager import EventManager
             from core.managers.game_event_manager import GameEventManager
             from app.models.settings import Settings
             from core.managers.game_manager import GameManager
@@ -417,7 +421,7 @@ def register_events(socketio):
             })
 
         elif content_type == 'edit_event':
-            from app.managers.event_manager import EventManager
+            from core.managers.event_manager import EventManager
             from app.models.settings import Settings
 
             payload      = data.get('payload', {})
@@ -609,7 +613,7 @@ def register_events(socketio):
     # =============================================================================
 
     def _resolve_event_id(event_type: str) -> int:
-        from core.models.event import Event
+        from app.models.event import Event
         event = Event.query.filter(Event.name.ilike(event_type)).first()
         if not event:
             raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")

@@ -30,10 +30,9 @@ def _get_dict(_structure):
     return asdict(_structure)
 
 def generate_show_overlay_data(data):
-    from core.models.settings import get_settings_model
+    from core.models.base_settings import get_settings_model
     Settings = get_settings_model()
     settings = Settings.get_settings()
-    from core.models.base_game import BaseGame
     current_game_data = _get_game().query.get(settings.current_game_id).to_dict()
     container_id = data.get('container_id')
     match container_id:

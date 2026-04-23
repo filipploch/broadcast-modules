@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 from flask import session, current_app
 from core.extensions import db
 from app.models.team import Team
-from app.managers.team_manager import TeamManager
+from core.managers.team_manager import TeamManager
 import threading
 import logging
 

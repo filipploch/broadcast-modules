@@ -1,9 +1,14 @@
 """ShootoutKick Manager - operacje na rzutach karnych w konkursie"""
-from typing import Optional, List
 from core.extensions import db
-from core.models.shootout_kick import ShootoutKick
-from core.models.shootout import Shootout
 import logging
+
+def _get_shootout():
+    from core.models.base_shootout import get_shootout_model
+    return get_shootout_model()
+
+def _get_shootout_kick():
+    from core.models.base_shootout_kick import get_shootout_kick_model
+    return get_shootout_kick_model()
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,8 @@ class ShootoutKickManager:
         Raises:
             ValueError przy nieprawidłowych danych lub duplikacie pozycji
         """
+        ShootoutKick = _get_shootout_kick()
+        Shootout = _get_shootout()
         if team not in ShootoutKick.VALID_TEAMS:
             raise ValueError(
                 f"Nieprawidłowa drużyna: '{team}'. "
@@ -85,7 +92,7 @@ class ShootoutKickManager:
     # REJESTRACJA WYNIKU
     # =========================================================================
 
-    def set_kick_result(self, kick_id: int, scored: bool) -> Optional[ShootoutKick]:
+    def set_kick_result(self, kick_id: int, scored: bool):
         """
         Ustaw wynik rzutu i zsynchronizuj licznik bramek w Shootout.
 
@@ -96,6 +103,7 @@ class ShootoutKickManager:
         Returns:
             Zaktualizowany ShootoutKick lub None jeśli nie znaleziono
         """
+        ShootoutKick = _get_shootout_kick()
         kick = ShootoutKick.query.get(kick_id)
         if not kick:
             logger.warning(f"ShootoutKick id={kick_id} nie istnieje")
@@ -113,32 +121,36 @@ class ShootoutKickManager:
     # ODCZYT
     # =========================================================================
 
-    def get_kicks_for_shootout(self, shootout_id: int) -> List[ShootoutKick]:
+    def get_kicks_for_shootout(self, shootout_id: int):
         """Wszystkie rzuty dla danego konkursu, posortowane po kolejce i pozycji."""
+        ShootoutKick = _get_shootout_kick()
         return (ShootoutKick.query
                 .filter_by(shootout_id=shootout_id)
                 .order_by(ShootoutKick.round_number, ShootoutKick.kick_order)
                 .all())
 
     def get_kicks_by_round(self, shootout_id: int,
-                           round_number: int) -> List[ShootoutKick]:
+                           round_number: int):
         """Rzuty z konkretnej kolejki."""
+        ShootoutKick = _get_shootout_kick()
         return (ShootoutKick.query
                 .filter_by(shootout_id=shootout_id, round_number=round_number)
                 .order_by(ShootoutKick.kick_order)
                 .all())
 
     def get_kicks_by_team(self, shootout_id: int,
-                          team: str) -> List[ShootoutKick]:
+                          team: str):
         """Wszystkie rzuty jednej drużyny."""
+        ShootoutKick = _get_shootout_kick()
         return (ShootoutKick.query
                 .filter_by(shootout_id=shootout_id, team=team)
                 .order_by(ShootoutKick.round_number, ShootoutKick.kick_order)
                 .all())
 
 
-    def get_kicks_by_game(self, game_id: int) -> List[ShootoutKick]:
+    def get_kicks_by_game(self, game_id: int):
         """Wszystkie rzuty dla danego meczu (bez potrzeby JOIN przez Shootout)."""
+        ShootoutKick = _get_shootout_kick()
         return (ShootoutKick.query
                 .filter_by(game_id=game_id)
                 .order_by(ShootoutKick.round_number, ShootoutKick.kick_order)
@@ -214,6 +226,7 @@ class ShootoutKickManager:
 
     def remove_kick(self, kick_id: int) -> bool:
         """Usuń rzut i przelicz wynik w Shootout. Zwraca True jeśli usunięto."""
+        ShootoutKick = _get_shootout_kick()
         kick = ShootoutKick.query.get(kick_id)
         if not kick:
             logger.warning(f"ShootoutKick id={kick_id} nie istnieje")
@@ -236,6 +249,8 @@ class ShootoutKickManager:
         Przelicz sumaryczny wynik i zapisz w tabeli Shootout.
         Nie commituje — wywołujący zarządza transakcją.
         """
+        ShootoutKick = _get_shootout_kick()
+        Shootout = _get_shootout()
         shootout = Shootout.query.get(shootout_id)
         if not shootout:
             return

@@ -7,7 +7,7 @@ from flask import current_app
 from core.extensions import db
 
 def _get_gametimer():
-    from core.models.game_timer import get_game_timer_model
+    from core.models.base_game_timer import get_game_timer_model
     return get_game_timer_model()
 
 
@@ -170,7 +170,7 @@ class TimerManager:
     # HIGH-LEVEL BUSINESS LOGIC
     # =========================================================================
 
-    def create_game_timer(self, game_id, duration_minutes=40):
+    def create_game_timer(self, game_id, duration_minutes=40, pause_at_limit=False):
         timer_id = f'match-{game_id}'
         self.create_timer(
             timer_id=timer_id,
@@ -179,7 +179,8 @@ class TimerManager:
             pause_at_limit=False,
             update_interval_ms=100,
             metadata={'game_id': game_id, 'type': 'match',
-                      'duration_minutes': duration_minutes},
+                      'duration_minutes': duration_minutes,
+                      'pause_at_limit': pause_at_limit},
         )
         return timer_id
 
@@ -397,7 +398,7 @@ class TimerManager:
         Potwierdzenie utworzenia timera z pluginu.
         Zapisuje rekord GameTimer w DB i powiadamia UI.
         """
-        from core.models.game_timer import get_game_timer_model
+        from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
         payload      = msg.get('payload', {})
         timer_id     = payload.get('timer_id')
@@ -425,9 +426,9 @@ class TimerManager:
 
     def _handle_main_timer_created(self, timer_id, initial_time, limit,
                                    state, metadata):
-        from core.models.game_timer import get_game_timer_model
+        from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
@@ -476,9 +477,9 @@ class TimerManager:
         })
 
     def _handle_penalty_timer_created(self, timer_id, limit, state, metadata):
-        from core.models.game_timer import get_game_timer_model
+        from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
@@ -513,7 +514,7 @@ class TimerManager:
         self._broadcast_penalty_state(game_id)
 
     def on_limit_reached(self, msg):
-        from core.models.game_timer import get_game_timer_model
+        from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
         payload        = msg.get('payload', {})
         timer_id       = payload.get('timer_id')
@@ -594,7 +595,7 @@ class TimerManager:
 
     @staticmethod
     def _get_penalties_dict(game_id: int) -> dict:
-        from core.models.game_timer import get_game_timer_model
+        from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
         
         penalties = _get_gametimer().query.filter(

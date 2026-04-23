@@ -1,4 +1,4 @@
-"""BaseGameTimer — abstrakcyjna klasa bazowa dla timerów meczowych.
+"""BaseGameTimerMixin — abstrakcyjna klasa bazowa dla timerów meczowych.
 
 Zawiera wspólne pola i logikę dla wszystkich dyscyplin:
   - identyfikacja (game_id, period_id, timer_type, team, plugin_timer_id)
@@ -12,8 +12,7 @@ from core.extensions import db
 from datetime import datetime
 
 
-class BaseGameTimer(db.Model):
-    __abstract__ = True
+class BaseGameTimerMixin:
 
     # ── Stałe ────────────────────────────────────────────────────────────────
     TYPE_MAIN    = 'main'
@@ -118,3 +117,16 @@ class BaseGameTimer(db.Model):
             'created_at':     self.created_at.isoformat() if self.created_at else None,
             'updated_at':     self.updated_at.isoformat() if self.updated_at else None,
         }
+
+def get_game_timer_model():
+    """Zwraca klasę GameTimer zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'game_timers'
+                and issubclass(cls, BaseGameTimerMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy GameTimer w rejestrze SQLAlchemy. "
+        "Upewnij się że model modułu jest zaimportowany przed wywołaniem."
+    )

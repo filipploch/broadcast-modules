@@ -1,4 +1,4 @@
-"""BasePeriod — abstrakcyjna klasa bazowa dla modeli okresu gry.
+"""BasePeriodMixin — abstrakcyjna klasa bazowa dla modeli okresu gry.
 
 Zawiera wspólne pola i logikę dla wszystkich dyscyplin:
   - konfiguracja timera (initial_time, limit, pause_at_limit)
@@ -12,8 +12,7 @@ from core.extensions import db
 from datetime import datetime
 
 
-class BasePeriod(db.Model):
-    __abstract__ = True
+class BasePeriodMixin:
 
     STATUS_NOT_STARTED = 0
     STATUS_PENDING     = 1
@@ -143,3 +142,16 @@ class BasePeriod(db.Model):
             'created_at':       self.created_at.isoformat() if self.created_at else None,
             'updated_at':       self.updated_at.isoformat() if self.updated_at else None,
         }
+
+def get_period_model():
+    """Zwraca konkretną klasę BasePeriodMixin zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'periods'
+                and issubclass(cls, BasePeriodMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy BasePeriodMixin w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_period_model()."
+    )

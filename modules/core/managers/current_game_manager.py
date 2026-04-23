@@ -145,11 +145,11 @@
 
     #     return {'status': 'second_half_started', 'half': 2}
 
-    def get_game_data(self):
-        """Get current game data for UI"""
-        game = self.get_current_game()
-        if not game:
-            return None
+    # def get_game_data(self):
+    #     """Get current game data for UI"""
+    #     game = self.get_current_game()
+    #     if not game:
+    #         return None
 
-        from core.schemas import game_schema
-        return game_schema.dump(game)
+    #     from core.schemas import game_schema
+    #     return game_schema.dump(game)

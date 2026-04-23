@@ -1,10 +1,9 @@
-"""BaseShootout — abstrakcyjna klasa bazowa dla konkursów rzutów karnych."""
+"""BaseShootoutMixin — abstrakcyjna klasa bazowa dla konkursów rzutów karnych."""
 from core.extensions import db
 from datetime import datetime
 
 
-class BaseShootout(db.Model):
-    __abstract__ = True
+class BaseShootoutMixin:
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -22,7 +21,7 @@ class BaseShootout(db.Model):
         return db.Column(db.Integer, db.ForeignKey('games.id'),
                          nullable=False, unique=True, index=True)
 
-    # Relacja — backref 'shootout' definiowany w BaseGame.shootout (po stronie Game)
+    # Relacja — backref 'shootout' definiowany w BaseGameMixin.shootout (po stronie Game)
     # @db.declared_attr
     # def game(cls):
     #     return db.relationship('Game', lazy='select')
@@ -67,3 +66,16 @@ class BaseShootout(db.Model):
             'created_at':           self.created_at.isoformat() if self.created_at else None,
             'updated_at':           self.updated_at.isoformat() if self.updated_at else None,
         }
+
+def get_shootout_model():
+    """Zwraca konkretną klasę Shootout zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'shootouts'
+                and issubclass(cls, BaseShootoutMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy Shootout w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_shootout_model()."
+    )

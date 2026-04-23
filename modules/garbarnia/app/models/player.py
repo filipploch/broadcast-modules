@@ -1,17 +1,17 @@
-"""Player — moduł football (laczynaspilka.pl).
+"""Player — moduł garbarnia.
 
-Rozszerza BasePlayer o pola specyficzne dla piłki nożnej PZPN:
-  - is_youth: czy zawodnik jest młodzieżowcem (U21 w rozumieniu ekstraklasy,
-              lub inny próg zdefiniowany przez ligę)
+Rozszerza BasePlayerMixin o pola specyficzne dla piłki nożnej PZPN:
+  - is_goalkeeper
+  - is_captain
+  - is_youth (U21 lub inny próg zdefiniowany przez ligę)
 """
 from core.extensions import db
-from core.models.base_player import BasePlayer
+from core.models.base_player import BasePlayerMixin
 
 
-class Player(BasePlayer):
+class Player(BasePlayerMixin, db.Model):
     __tablename__ = 'players'
 
-    # ── Football-specific ─────────────────────────────────────────────────────
     is_goalkeeper = db.Column(db.Boolean, default=False, nullable=False)
     is_captain    = db.Column(db.Boolean, default=False, nullable=False)
     is_youth      = db.Column(db.Boolean, default=False, nullable=False)
@@ -32,9 +32,7 @@ class Player(BasePlayer):
 
     def to_dict(self):
         d = super().to_dict()
-        d.update({
-            'is_goalkeeper': self.is_goalkeeper,
-            'is_captain':    self.is_captain,
-            'is_youth':      self.is_youth,
-        })
+        d['is_goalkeeper'] = self.is_goalkeeper
+        d['is_captain']    = self.is_captain
+        d['is_youth']      = self.is_youth
         return d

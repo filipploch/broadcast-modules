@@ -1,15 +1,15 @@
-"""BaseLeague — abstrakcyjna klasa bazowa dla modeli ligi we wszystkich modułach."""
+"""BaseLeagueMixin — abstrakcyjna klasa bazowa dla modeli ligi we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
+from sqlalchemy.orm import declared_attr
 
 
-class BaseLeague(db.Model):
+class BaseLeagueMixin:
     """Football league (e.g., Dywizja A, Dywizja B, Puchar Ligi)"""
-    __abstract__ = True
     
 
     id = db.Column(db.Integer, primary_key=True)
-    @db.declared_attr
+    @declared_attr
     def season_id(cls):
         return db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=False, index=True)
     name = db.Column(db.String(50), nullable=False)
@@ -26,7 +26,7 @@ class BaseLeague(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    # season relationship defined in Season model (backref)
+    # season relationship defined in BaseSeasonMixin model (backref)
     @db.declared_attr
     def teams(cls):
         return db.relationship('LeagueTeam', backref='league', lazy='dynamic', cascade='all, delete-orphan')
@@ -42,7 +42,7 @@ class BaseLeague(db.Model):
         )
 
     def __repr__(self):
-        return f'<League {self.name} (Season {self.season_id})>'
+        return f'<League {self.name} (BaseSeasonMixin {self.season_id})>'
 
     @property
     def total_teams(self):
@@ -82,14 +82,14 @@ class BaseLeague(db.Model):
         }
 
 def get_league_model():
-    """Zwraca konkretną klasę BaseLeague zarejestrowaną przez aktywny moduł."""
+    """Zwraca konkretną klasę BaseLeagueMixin zarejestrowaną przez aktywny moduł."""
     from core.extensions import db
     for mapper in db.Model.registry.mappers:
         cls = mapper.class_
         if (getattr(cls, '__tablename__', None) == 'leagues'
-                and issubclass(cls, BaseLeague)):
+                and issubclass(cls, BaseLeagueMixin)):
             return cls
     raise RuntimeError(
-        "Nie znaleziono klasy BaseLeague w rejestrze SQLAlchemy. "
+        "Nie znaleziono klasy BaseLeagueMixin w rejestrze SQLAlchemy. "
         "Upewnij się że model jest zaimportowany przed wywołaniem get_league_model()."
     )

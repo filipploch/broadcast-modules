@@ -1,16 +1,18 @@
 """Commentator Manager - handles CRUD operations for Commentator model"""
-from typing import List, Optional
 from core.extensions import db
-from core.models.commentator import Commentator
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _get_commentator():
+    from core.models.base_commentator import get_commentator_model
+    return get_commentator_model()
 
 
 class CommentatorManager:
     """Manager for Commentator CRUD operations"""
 
-    def create_commentator(self, first_name: str, last_name: str) -> Optional[Commentator]:
+    def create_commentator(self, first_name: str, last_name: str):
         """
         Create new commentator
 
@@ -21,6 +23,7 @@ class CommentatorManager:
         Returns:
             Commentator object or None if error
         """
+        Commentator = _get_commentator()
         try:
             commentator = Commentator(
                 first_name=first_name,
@@ -37,16 +40,18 @@ class CommentatorManager:
             logger.error(f"Error creating commentator: {e}")
             return None
 
-    def get_all_commentators(self) -> List[Commentator]:
+    def get_all_commentators(self):
         """Get all commentators"""
+        Commentator = _get_commentator()
         return Commentator.query.order_by(Commentator.last_name, Commentator.first_name).all()
 
-    def get_commentator_by_id(self, commentator_id: int) -> Optional[Commentator]:
+    def get_commentator_by_id(self, commentator_id: int):
         """Get commentator by ID"""
+        Commentator = _get_commentator()
         return Commentator.query.get(commentator_id)
 
     def update_commentator(self, commentator_id: int, first_name: str = None,
-                      last_name: str = None) -> Optional[Commentator]:
+                      last_name: str = None):
         """
         Update commentator
 

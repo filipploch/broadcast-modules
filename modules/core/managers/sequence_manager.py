@@ -18,21 +18,11 @@ class SequenceManager:
 
     2. wait_for_obs_event  — krok wykonywany po nadejściu eventu OBS.
 
-       Listener jest rejestrowany natychmiast przy starcie sekwencji,
-       ale zapamiętuje swój czas rejestracji (registered_at). Eventy
-       które nadeszły PRZED tym czasem są odrzucane — rozwiązuje to
-       problem fałszywych eventów emitowanych przez OBS przy ładowaniu
-       pliku (np. MediaInputPlaybackStarted przy SetInputSettings),
-       które mogą przyjść zanim właściwy PLAY zostanie wysłany.
-
-       Opcjonalne timeout_ms — jeśli event nie nadejdzie w zadanym czasie
-       od rejestracji listenera, krok jest pomijany z ostrzeżeniem.
-
-    Przykład:
-        start_replay(delay_ms=800),
-        set_replay_start_time(t,
-            wait_for_obs_event='MediaInputPlaybackStarted',
-            timeout_ms=5000)
+    3. action == 'watch_media_cursor'  — krok złożony wykonywany w osobnym wątku:
+         a) co poll_interval_ms pyta OBS o GetMediaInputStatus
+         b) gdy mediaCursor >= min_cursor_ms — pokazuje źródło
+         c) po visible_duration_ms ukrywa źródło
+         d) jeśli timeout_ms minie bez sukcesu — przerywa cicho
 
     Notyfikowanie o eventach OBS
     ----------------------------
@@ -40,9 +30,10 @@ class SequenceManager:
         sequence_manager.notify_obs_event(event_type, event_data)
     """
 
-    def __init__(self, hub_client, sequences_module_path: str):
+    def __init__(self, hub_client, sequences_module_path: str, app=None):
         self.hub_client = hub_client
         self.sequences_module_path = sequences_module_path
+        self.app = app
         self.sequences = {}
         self.dynamic_sequences = {}
 
@@ -99,18 +90,19 @@ class SequenceManager:
         with self._lock:
             self._running[sequence_id] = []
 
-        timer_steps = []
-        event_steps = []
+        timer_steps   = []
+        event_steps   = []
+        special_steps = []
 
         for step in steps:
-            if step.get('wait_for_obs_event'):
+            if step.get('action') == 'watch_media_cursor':
+                special_steps.append(step)
+            elif step.get('wait_for_obs_event'):
                 event_steps.append(step)
             else:
                 timer_steps.append(step)
 
-        # Listenery eventowe rejestrujemy NA POCZĄTKU sekwencji —
-        # zapamiętują swój registered_at i odrzucają starsze eventy.
-        # Muszą być gotowe zanim jakikolwiek krok czasowy zostanie wysłany.
+        # Listenery eventowe rejestrujemy NA POCZĄTKU sekwencji
         listeners = []
         for step in event_steps:
             listener = _EventListener(
@@ -118,11 +110,8 @@ class SequenceManager:
                 timeout_ms=step.get('timeout_ms', 5000),
             )
             with self._obs_lock:
-                if listener.event_type not in self._obs_event_listeners:
-                    self._obs_event_listeners[listener.event_type] = []
-                self._obs_event_listeners[listener.event_type].append(listener)
+                self._obs_event_listeners.setdefault(listener.event_type, []).append(listener)
             listeners.append((step, listener))
-
             logger.debug(
                 f"[SequenceManager] Listener '{listener.event_type}' zarejestrowany "
                 f"na starcie sekwencji (registered_at={listener.registered_at:.4f})"
@@ -146,11 +135,21 @@ class SequenceManager:
                 timers.append(t)
                 t.start()
 
-        # --- Kroki eventowe: każdy czeka na swój listener ---
+        # --- Kroki eventowe ---
         for step, listener in listeners:
             t = threading.Thread(
                 target=self._run_event_step,
                 args=[step, listener, context, sequence_id],
+                daemon=True
+            )
+            timers.append(t)
+            t.start()
+
+        # --- Kroki specjalne: watch_media_cursor ---
+        for step in special_steps:
+            t = threading.Thread(
+                target=self._watch_media_cursor,
+                args=[step['payload'], sequence_id],
                 daemon=True
             )
             timers.append(t)
@@ -162,12 +161,8 @@ class SequenceManager:
 
     def _run_event_step(self, step: dict, listener: '_EventListener',
                         context: dict, sequence_id: str):
-        """
-        Czeka aż listener otrzyma event OBS (nowszy niż czas rejestracji listenera).
-        """
         triggered = listener.wait()
 
-        # Usuń listener niezależnie od wyniku
         with self._obs_lock:
             bucket = self._obs_event_listeners.get(listener.event_type, [])
             if listener in bucket:
@@ -184,15 +179,102 @@ class SequenceManager:
         self._execute_steps([step], context, sequence_id)
 
     # =========================================================================
+    # WATCH MEDIA CURSOR
+    # =========================================================================
+
+    def _watch_media_cursor(self, payload: dict, sequence_id: str):
+        """
+        Polluje GetMediaInputStatus co poll_interval_ms.
+        Gdy mediaCursor >= min_cursor_ms — pokazuje źródło source_name w scenie scene_name,
+        a po visible_duration_ms ukrywa je.
+        Jeśli timeout_ms minie — przerywa cicho.
+        """
+        scene_name          = payload.get('scene_name',          'OUTPUT')
+        source_name         = payload.get('source_name',         'Replay')
+        poll_interval_ms    = payload.get('poll_interval_ms',    250)
+        min_cursor_ms       = payload.get('min_cursor_ms',       2000)
+        visible_duration_ms = payload.get('visible_duration_ms', 10000)
+        timeout_ms          = payload.get('timeout_ms',          30000)
+
+        deadline = time.monotonic() + timeout_ms / 1000
+        logger.debug(
+            f"[watch_media_cursor] Start — czekam aż cursor >= {min_cursor_ms}ms "
+            f"(timeout={timeout_ms}ms, poll={poll_interval_ms}ms)"
+        )
+
+        while time.monotonic() < deadline:
+            cursor = self._get_media_cursor(source_name)
+            logger.debug(f"[watch_media_cursor] cursor={cursor}")
+
+            if cursor is not None and cursor >= min_cursor_ms:
+                logger.debug(
+                    f"[watch_media_cursor] cursor={cursor}ms >= {min_cursor_ms}ms "
+                    f"— pokazuję {source_name}"
+                )
+                self._send_show_source(scene_name, source_name, visible=True)
+
+                # Ukryj po visible_duration_ms
+                t = threading.Timer(
+                    visible_duration_ms / 1000,
+                    self._send_show_source,
+                    args=[scene_name, source_name, False]
+                )
+                t.start()
+                return
+
+            time.sleep(poll_interval_ms / 1000)
+
+        logger.warning(
+            f"[watch_media_cursor] Timeout {timeout_ms}ms — "
+            f"cursor nigdy nie osiągnął {min_cursor_ms}ms"
+        )
+
+    def _get_media_cursor(self, input_name: str):
+        """
+        Pyta OBS o aktualną pozycję kursora źródła media.
+        Używa send_obs_request_sync z ObsWsManager.
+        Zwraca int (ms) lub None.
+        """
+        with self.app.app_context():
+            try:
+                from core.managers import get_obs_ws_manager
+                
+                obs_mgr  = get_obs_ws_manager()
+                obs_mgr.send_obs_request_sync(
+                    'GetMediaInputStatus',
+                    {'inputName': input_name},
+                    timeout=2.0
+                )
+                cursor = self.app.config['MEDIA_CURSOR']
+                return int(cursor) if cursor is not None else None
+            except Exception as e:
+                logger.warning(f"[watch_media_cursor] Błąd GetMediaInputStatus: {e}")
+                return None
+
+    def _send_show_source(self, scene_name: str, source_name: str, visible: bool):
+        self.hub_client.send({
+            'from':    'main-module',
+            'to':      'obs-ws-plugin',
+            'type':    'obs_command_by_name',
+            'payload': {
+                'requestType': 'SetSceneItemEnabled',
+                'sceneName':   scene_name,
+                'sourceName':  source_name,
+                'requestData': {
+                    'sceneName':        scene_name,
+                    'sceneItemEnabled': visible,
+                }
+            }
+        })
+        logger.debug(
+            f"[watch_media_cursor] show_source({source_name}, visible={visible})"
+        )
+
+    # =========================================================================
     # NOTYFIKACJE O EVENTACH OBS
     # =========================================================================
 
     def notify_obs_event(self, event_type: str, event_data: dict = None):
-        """
-        Wywoływane przez ObsWsManager gdy nadejdzie obs_event z pluginu.
-        Przekazuje event do listenerów — każdy samodzielnie decyduje czy
-        event jest wystarczająco nowy (arrived_at > registered_at).
-        """
         arrived_at = time.monotonic()
 
         with self._obs_lock:
@@ -246,13 +328,10 @@ class SequenceManager:
             if context:
                 payload['_context'] = context
 
-            # obs_command_by_name: plugin Go rozwiązuje sourceName → sceneItemId
-            # Wysyłamy payload z sceneName + sourceName bez zmian —
-            # resolucja odbywa się w obs-ws-plugin, nie tutaj.
             self.hub_client.send({
-                'from': 'main-module',
-                'to': step['target'],
-                'type': step['action'],
+                'from':    'main-module',
+                'to':      step['target'],
+                'type':    step['action'],
                 'payload': payload
             })
 
@@ -260,24 +339,16 @@ class SequenceManager:
 class _EventListener:
     """
     Listener czekający na jeden konkretny event OBS.
-
-    registered_at (time.monotonic()) jest zapamiętywany w momencie
-    tworzenia obiektu. notify() akceptuje event tylko jeśli arrived_at
-    jest późniejszy niż registered_at — odrzuca eventy "sprzed rejestracji"
-    które OBS emituje przy ładowaniu pliku lub resecie źródła.
+    registered_at odrzuca eventy sprzed rejestracji.
     """
 
     def __init__(self, event_type: str, timeout_ms: int = 5000):
-        self.event_type   = event_type
-        self.timeout_ms   = timeout_ms
+        self.event_type    = event_type
+        self.timeout_ms    = timeout_ms
         self.registered_at = time.monotonic()
-        self._event       = threading.Event()
+        self._event        = threading.Event()
 
     def notify(self, arrived_at: float) -> bool:
-        """
-        Przyjmuje event jeśli arrived_at > registered_at.
-        Zwraca True jeśli event został zaakceptowany, False jeśli odrzucony.
-        """
         if arrived_at <= self.registered_at:
             logger.debug(
                 f"[_EventListener] '{self.event_type}' odrzucony — "
@@ -285,10 +356,8 @@ class _EventListener:
                 f"(różnica: {(arrived_at - self.registered_at)*1000:.1f}ms)"
             )
             return False
-
         self._event.set()
         return True
 
     def wait(self) -> bool:
-        """Czeka na event. Zwraca True jeśli nadszedł, False jeśli timeout."""
         return self._event.wait(timeout=self.timeout_ms / 1000)

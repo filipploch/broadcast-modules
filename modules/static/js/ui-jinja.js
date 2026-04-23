@@ -763,6 +763,464 @@ function updateGameEvent(_contentType = '') {
     );
 }
 
+function renderSubstitutionElement(element) {
+    var div = document.createElement('div');
+    div.className = 'substitution-element';
+    div.setAttribute('ondblclick',
+        "showUiMonitorContent('substitution-edit', {substitution_id: " + element.id + "})"
+    );
+    div.innerHTML =
+        '<div class="player-in">' +
+            '<span class="subst-player-number">' + (element.player_in_number  || '') + '</span>' +
+            '<span class="subst-player-name">'   + (element.player_in_name    || '') + '</span>' +
+        '</div>' +
+        '<div class="player-out">' +
+            '<span class="subst-player-number">' + (element.player_out_number || '') + '</span>' +
+            '<span class="subst-player-name">'   + (element.player_out_name   || '') + '</span>' +
+        '</div>';
+    return div.outerHTML;
+}
+
+function showSubstitution(periodId, teamId, substitutionGroup) {
+    socket.emit('show_substitution', {
+        period_id:          periodId,
+        team_id:            teamId,
+        substitution_group: substitutionGroup,
+    });
+}
+
+function _buildSubstGroupHtml(sGroup, groupHtml, periodId, teamId) {
+    var svgIcon =
+        '<svg height="13" viewBox="0 -960 481.49437 361.12079" width="11" fill="#ffffff" ' +
+            'version="1.1" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="m 90.28019,-689.1594 h 210.65379 v -45.1401 H 90.28019 Z m 255.79389,' +
+            '0 h 45.14009 v -45.1401 H 346.07408 Z M 90.28019,-779.4396 h 45.1401 v -45.1401 ' +
+            'h -45.1401 z m 90.2802,0 h 210.65378 v -45.1401 H 180.56039 Z M 45.1401,-598.87921 ' +
+            'q -18.62029,0 -31.8802,-13.26617 Q 9.9999998e-7,-625.41156 9.9999998e-7,-644.04439 ' +
+            'v -270.99104 q 0,-18.63283 13.25989900000002,-31.79869 13.25991,-13.16587 ' +
+            '31.8802,-13.16587 h 391.21417 q 18.62029,0 31.88019,13.26618 13.25991,13.26617 ' +
+            '13.25991,31.899 v 270.99105 q 0,18.63283 -13.25991,31.79869 -13.2599,13.16586 ' +
+            '-31.88019,13.16586 z m 0,-45.1401 H 436.35427 V -914.85989 H 45.1401 Z m 0,0 ' +
+            'v -270.84058 z" style="stroke-width:1"></path></svg>';
+
+    var btn =
+        '<button type="button" class="event-btn subst-overlay-btn" ' +
+            'style="background-color:green;padding:1px 3.6px;" ' +
+            'onclick="showSubstitution(' + periodId + ',' + teamId + ',' + sGroup + ')">' +
+            svgIcon +
+        '</button>';
+
+    return '<div class="substitution-group" id="sg' + sGroup + '" ' +
+        'style="position:relative;display:flex;align-items:center;gap:.3rem;">' +
+        '<div style="flex:1;">' + groupHtml + '</div>' +
+        '<div style="display:flex;align-items:center;align-self:stretch;">' + btn + '</div>' +
+        '</div>';
+}
+
+function renderSubstitutions(substitutions, periodId, teamId) {
+    if (!substitutions || substitutions.length === 0) {
+        return '<div class="subst-empty">Brak zmian</div>';
+    }
+
+    var html      = '';
+    var sGroup    = null;
+    var groupHtml = '';
+
+    substitutions.forEach(function (sub) {
+        if (sub.substitution_group !== sGroup) {
+            if (sGroup !== null) {
+                html += _buildSubstGroupHtml(sGroup, groupHtml, periodId, teamId);
+            }
+            sGroup    = sub.substitution_group;
+            groupHtml = renderSubstitutionElement(sub);
+        } else {
+            groupHtml += renderSubstitutionElement(sub);
+        }
+    });
+
+    if (sGroup !== null) {
+        html += _buildSubstGroupHtml(sGroup, groupHtml, periodId, teamId);
+    }
+
+    return html;
+}
+
+
+
+function _buildSubstitutionsView(data, uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+    uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+
+    var homeTeamSubs = data.home_team_substitutions;
+    var awayTeamSubs = data.away_team_substitutions;
+    var reversed     = data.is_scoreboard_reversed;
+
+    // Ciało — dwa panele drużyn
+    var body = document.createElement('div');
+    body.id = 'substitutions-container';
+    addClassName(body, 'reversible');
+    body.style.cssText = 'display:flex;flex:1;overflow:hidden;';
+
+    var homeContainer = document.createElement('div');
+    homeContainer.id = 'home-team-subst-container';
+    homeContainer.dataset.reverseAnchor = '';
+    homeContainer.style.cssText = 'flex:1;display:flex;flex-direction:column;border-right:1px solid #333;';
+
+    var homeHeader = document.createElement('div');
+    homeHeader.id = 'home-team-subst-container-header';
+    homeHeader.className = 'subst-team-header';
+    homeHeader.innerHTML =
+        '<button type="button" class="subst-add-btn" ' +
+            'onclick="showUiMonitorContent(\'addSubstitution\', {teamType: \'' +
+            'home' + '\'})">' +
+            (data.home_team_short_name || 'Gospodarz') + ' +' +
+        '</button>';
+    var homeBody = document.createElement('div');
+    homeBody.id = 'home-team-subst-container-body';
+    homeBody.className = 'subst-container-body';
+    homeBody.innerHTML = renderSubstitutions(homeTeamSubs, data.period_id, data.home_team_id);
+
+
+    homeContainer.appendChild(homeHeader);
+    homeContainer.appendChild(homeBody);
+
+    var awayContainer = document.createElement('div');
+    awayContainer.id = 'away-team-subst-container';
+    awayContainer.style.cssText = 'flex:1;display:flex;flex-direction:column;';
+
+    var awayHeader = document.createElement('div');
+    awayHeader.id = 'away-team-subst-container-header';
+    awayHeader.className = 'subst-team-header';
+    awayHeader.innerHTML =
+        '<button type="button" class="subst-add-btn" ' +
+            'onclick="showUiMonitorContent(\'addSubstitution\', {teamType: \'' +
+            'away' + '\'})">' +
+            (data.away_team_short_name || 'Gość') + ' +' +
+        '</button>';
+
+    var awayBody = document.createElement('div');
+    awayBody.id = 'away-team-subst-container-body';
+    awayBody.className = 'subst-container-body';
+    awayBody.innerHTML = renderSubstitutions(awayTeamSubs, data.period_id, data.away_team_id);
+
+    awayContainer.appendChild(awayHeader);
+    awayContainer.appendChild(awayBody);
+
+    body.appendChild(homeContainer);
+    body.appendChild(awayContainer);
+    uiMonitorContent.appendChild(body);
+    applyReversedState(reversed);
+}
+
+
+// ── Blok `addSubstitution` — stan modułu ────────────────────────────────────
+
+var _substState = {
+    teamType:    null,
+    teamId:      null,
+    starters:    [],   // zawodnicy na boisku
+    substitutes: [],   // zawodnicy na ławce
+    midStarters: [],   // ze środka — wychodzący z boiska (max 5)
+    midSubs:     [],   // ze środka — wchodzący z ławki (max 5)
+};
+var MAX_MID = 5;
+
+function _buildAddSubstitutionView(data, uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+    uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+
+    _substState.teamType      = data.team_type;
+    _substState.teamShortName = data.team_short_name;
+    _substState.teamId        = data.team_id;
+    _substState.gameTimeS        = data.game_time_s;
+    _substState.starters      = data.starters    || [];
+    _substState.substitutes   = data.substitutes || [];
+    _substState.midStarters   = [];
+    _substState.midSubs       = [];
+
+    _renderSubstEditor(uiMonitorContent);
+}
+
+function _renderSubstEditor(uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+
+    // ── Nagłówek ─────────────────────────────────────────────────────────────
+    var header = document.createElement('div');
+    header.className = 'subst-editor-header';
+
+    var titleEl = document.createElement('span');
+    titleEl.className = 'subst-editor-title';
+    titleEl.textContent = _substState.teamShortName;
+    header.appendChild(titleEl);
+    let _timeMm = Math.ceil(_substState.gameTimeS/60);
+     var timerEl = document.createElement('span');
+    timerEl.className = 'subst-editor-title';
+    timerEl.innerHTML =
+        '<label></label>' +
+        '<input id="subst-time-input" type="text" placeholder="np. 45:00" ' +
+            'class="subst-time-input" value="' + _timeMm + '">';
+    header.appendChild(timerEl);
+
+    var confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'subst-confirm-btn';
+    confirmBtn.textContent = '✅ Zatwierdź';
+    confirmBtn.onclick = _confirmSubstitution;
+    header.appendChild(confirmBtn);
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'subst-cancel-btn';
+    cancelBtn.textContent = '✕ Anuluj';
+    cancelBtn.onclick = function () { showUiMonitorContent('substitutions'); };
+    header.appendChild(cancelBtn);
+
+    uiMonitorContent.appendChild(header);
+
+    // ── Trzy kolumny ─────────────────────────────────────────────────────────
+    var cols = document.createElement('div');
+    cols.className = 'subst-editor-cols';
+
+    cols.appendChild(_buildSubstCol(
+        'boisko',
+        'BOISKO (' + _substState.starters.length + ')',
+        _substState.starters,
+        'starter',
+        'mid-starters'
+    ));
+    cols.appendChild(_buildSubstMidCol());
+    cols.appendChild(_buildSubstCol(
+        'ławka',
+        'ŁAWKA (' + _substState.substitutes.length + ')',
+        _substState.substitutes,
+        'substitute',
+        'mid-subs'
+    ));
+
+    uiMonitorContent.appendChild(cols);
+}
+
+// Kolumna boisko / ławka
+function _buildSubstCol(colKey, title, players, fromRole, targetMid) {
+    var col = document.createElement('div');
+    col.className = 'subst-col';
+    col.dataset.col = colKey;
+    col.ondragover = function (e) { e.preventDefault(); };
+    col.ondrop     = function (e) { _onSubstDrop(e, fromRole); };
+
+    var list = document.createElement('div');
+    list.className = 'subst-col-body';
+
+    players.forEach(function (p, idx) {
+        list.appendChild(_buildSubstPlayerCard(p, fromRole, idx));
+    });
+
+    col.appendChild(list);
+    return col;
+}
+
+// Środkowa kolumna — pary
+function _buildSubstMidCol() {
+    var col = document.createElement('div');
+    col.className = 'subst-col subst-col--mid';
+
+    var body = document.createElement('div');
+    body.className = 'subst-col-body subst-mid-body';
+
+    // Interleave: 1.boisko, 1.ławka, 2.boisko, 2.ławka ...
+    var maxLen = Math.max(_substState.midStarters.length, _substState.midSubs.length);
+    for (var i = 0; i < maxLen; i++) {
+        var pairRow = document.createElement('div');
+        pairRow.className = 'subst-pair-row';
+
+        if (_substState.midStarters[i]) {
+            pairRow.appendChild(_buildSubstMidCard(_substState.midStarters[i], 'midStarter', i));
+        } else {
+            pairRow.appendChild(_buildSubstMidPlaceholder('⬆ z boiska'));
+        }
+        if (_substState.midSubs[i]) {
+            pairRow.appendChild(_buildSubstMidCard(_substState.midSubs[i], 'midSub', i));
+        } else {
+            pairRow.appendChild(_buildSubstMidPlaceholder('⬇ z ławki'));
+        }
+
+        body.appendChild(pairRow);
+    }
+
+    // Puste sloty (do MAX_MID) jako strefy drop
+    for (var j = maxLen; j < MAX_MID; j++) {
+        var emptyRow = document.createElement('div');
+        emptyRow.className = 'subst-pair-row subst-pair-row--empty';
+        emptyRow.innerHTML =
+            '<div class="subst-mid-placeholder">⬆ z boiska</div>' +
+            '<div class="subst-mid-placeholder">⬇ z ławki</div>';
+        body.appendChild(emptyRow);
+    }
+
+    col.appendChild(body);
+    return col;
+}
+
+function _buildSubstPlayerCard(player, role, idx) {
+    var card = document.createElement('div');
+    card.className = 'player-container subst-player-card';
+    card.draggable = true;
+    card.dataset.playerId  = player.player_id;
+    card.dataset.playerRole = role;
+    card.dataset.idx       = idx;
+    card.ondragstart = function (e) { _onSubstDragStart(e, role, idx); };
+
+    var num = player.number != null ? '#' + player.number : '';
+    card.innerHTML =
+        '<span style="color:#adb5bd;flex-shrink:0;">&#8291;</span>' +
+        '<div style="flex:1;min-width:0;font-size:.68rem;">' +
+            '<span style="font-weight:600;">' + (player.player_name || '') + '</span>' +
+            (num ? '<span style="color:#6c757d;font-size:.68rem;"> ' + num + '</span>' : '') +
+        '</div>' +
+        '<span class="move-item-btn" style="color:#28a745;" ' +
+            'onclick="_moveToMid(\'' + role + '\',' + idx + ')" title="Do środka">&#8594;</span>';
+    return card;
+}
+
+function _buildSubstMidCard(player, midRole, idx) {
+    var card = document.createElement('div');
+    card.className = 'player-container subst-player-card subst-player-card--mid';
+    card.draggable = true;
+    card.ondragstart = function (e) { _onSubstDragStart(e, midRole, idx); };
+
+    var isStarter = (midRole === 'midStarter');
+    var num = player.number != null ? '#' + player.number : '';
+    card.innerHTML =
+        '<span style="color:#adb5bd;flex-shrink:0;">&#8291;</span>' +
+        '<div style="flex:1;min-width:0;font-size:.68rem;">' +
+            '<span style="font-weight:600;">' + (player.player_name || '') + '</span>' +
+            (num ? '<span style="color:#6c757d;font-size:.68rem;"> ' + num + '</span>' : '') +
+        '</div>' +
+        '<span class="move-item-btn" style="color:#dc3545;" ' +
+            'onclick="_moveFromMid(\'' + midRole + '\',' + idx + ')" title="Cofnij">&#8592;</span>';
+    return card;
+}
+
+function _buildSubstMidPlaceholder(label) {
+    var ph = document.createElement('div');
+    ph.className = 'subst-mid-placeholder';
+    ph.textContent = label;
+    return ph;
+}
+
+// ── Logika przenoszenia ───────────────────────────────────────────────────────
+
+var _substDragging = null;
+
+function _onSubstDragStart(e, role, idx) {
+    _substDragging = { role: role, idx: idx };
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function _onSubstDrop(e, targetRole) {
+    e.preventDefault();
+    if (!_substDragging) return;
+    var from = _substDragging;
+    _substDragging = null;
+
+    if (from.role === 'midStarter' && targetRole === 'starter') {
+        _moveFromMid('midStarter', from.idx);
+    } else if (from.role === 'midSub' && targetRole === 'substitute') {
+        _moveFromMid('midSub', from.idx);
+    } else if (from.role === 'starter' && targetRole === 'starter') {
+        // drop na tę samą kolumnę — ignoruj
+    } else if (from.role === 'substitute' && targetRole === 'substitute') {
+        // drop na tę samą kolumnę — ignoruj
+    } else if (from.role === 'starter') {
+        _moveToMid('starter', from.idx);
+    } else if (from.role === 'substitute') {
+        _moveToMid('substitute', from.idx);
+    }
+}
+
+function _moveToMid(fromRole, idx) {
+    if (fromRole === 'starter') {
+        if (_substState.midStarters.length >= MAX_MID) return;
+        var player = _substState.starters.splice(idx, 1)[0];
+        _substState.midStarters.push(player);
+    } else {
+        if (_substState.midSubs.length >= MAX_MID) return;
+        var player = _substState.substitutes.splice(idx, 1)[0];
+        _substState.midSubs.push(player);
+    }
+    _renderSubstEditor(document.getElementById('ui-monitor-content'));
+}
+
+function _moveFromMid(midRole, idx) {
+    if (midRole === 'midStarter') {
+        var player = _substState.midStarters.splice(idx, 1)[0];
+        _substState.starters.push(player);
+    } else {
+        var player = _substState.midSubs.splice(idx, 1)[0];
+        _substState.substitutes.push(player);
+    }
+    _renderSubstEditor(document.getElementById('ui-monitor-content'));
+}
+
+// ── Czas zmiany ───────────────────────────────────────────────────────────────
+
+function _substCurrentTimeStr() {
+    // Spróbuj odczytać aktualny czas głównego timera z appState
+    try {
+        var ms = appState && appState.mainTimer && appState.mainTimer.elapsed_time
+            ? appState.mainTimer.elapsed_time : 0;
+        var totalSec = Math.floor(ms / 1000);
+        var mm = Math.floor(totalSec / 60);
+        var ss = totalSec % 60;
+        return (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
+    } catch (e) {
+        return '00:00';
+    }
+}
+
+function _parseTimeToMs(str) {
+    var parts = (str || '').split(':');
+    if (parts.length !== 2) return 0;
+    var mm = parseInt(parts[0], 10) || 0;
+    var ss = parseInt(parts[1], 10) || 0;
+    return (mm * 60 + ss) * 1000;
+}
+
+// ── Zatwierdzenie ─────────────────────────────────────────────────────────────
+
+function _confirmSubstitution() {
+    // Zbuduj kompletne pary (min. długość obu tablic środkowych)
+    var len = Math.min(_substState.midStarters.length, _substState.midSubs.length);
+    if (len === 0) {
+        alert('Brak kompletnych par do zmiany.');
+        return;
+    }
+
+    var pairs = [];
+    for (var i = 0; i < len; i++) {
+        pairs.push({
+            player_in_id:  _substState.midSubs[i].player_id,
+            player_out_id: _substState.midStarters[i].player_id,
+        });
+    }
+
+    // var timeStr      = (document.getElementById('subst-time-input') || {}).value || '00:00';
+    var timeStr      = (document.getElementById('subst-time-input')).value;
+    var game_time_ms = timeStr * 60000;
+
+    socket.emit('request_ui_monitor_content', {
+        type: 'confirmSubstitution',
+        payload: {
+            team_id:      _substState.teamId,
+            game_time_ms: game_time_ms,
+            pairs:        pairs,
+        },
+    });
+}
+
+
+
+
 socket.on('show_ui_monitor_content', data => {
     console.log('data', data);
     let uiMonitorContent = document.getElementById('ui-monitor-content');
@@ -912,8 +1370,18 @@ socket.on('show_ui_monitor_content', data => {
             teamSelect = eventEditTeamsSquadSelectGenerator(gameEvent, teamSquad);
             eventEditRightColumn.append(teamSelect);
         }
+    } else if (data.content_type === 'substitutions') {
+       _buildSubstitutionsView(data, uiMonitorContent);
+    } else if (data.content_type === 'addSubstitution') {
+       _buildAddSubstitutionView(data, uiMonitorContent);
+    } else if (data.content_type === 'substitution-edit') {
+       _buildSubstitutionEditView(data, uiMonitorContent);
     }
 });
+
+socket.on('substitution_error', function (data) {
+       alert('Błąd zmiany: ' + data.message);
+   });
 
 socket.on('game_event_updated', data => {
     let gameEventId = data.game_event_id;
@@ -924,6 +1392,197 @@ socket.on('game_event_updated', data => {
         openGameEventEditForm(gameEventId);
     }
 });
+
+function _buildSubstitutionEditView(data, uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+    uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+ 
+    var sub      = data.substitution;        // to_dict() pojedynczej zmiany
+    var starters = data.starters;            // zawodnicy na boisku (ROLE_STARTER)
+    var subs     = data.substitutes;         // zawodnicy na ławce (ROLE_SUBSTITUTE)
+    // Dla list selectów dołączamy też aktualnych uczestników zmiany —
+    // player_in był na ławce, player_out był na boisku — serwer zwraca ich
+    // w osobnych listach (available_in, available_out) już z nimi włącznie.
+    var availIn  = data.available_in;        // do selektu "kto wchodzi"
+    var availOut = data.available_out;       // do selektu "kto wychodzi"
+ 
+    // ── Nagłówek ──────────────────────────────────────────────────────────────
+    var header = document.createElement('div');
+    header.className = 'subst-editor-header';
+ 
+    var title = document.createElement('span');
+    title.className = 'subst-editor-title';
+    title.textContent = 'Edycja zmiany #' + sub.id;
+    header.appendChild(title);
+ 
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'subst-confirm-btn';
+    saveBtn.textContent = '💾 Zapisz';
+    saveBtn.onclick = function () { _saveSubstitutionEdit(sub.id); };
+    header.appendChild(saveBtn);
+ 
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'subst-delete-btn';
+    deleteBtn.textContent = '🗑 Usuń';
+    deleteBtn.onclick = function () { _deleteSubstitution(sub.id); };
+    header.appendChild(deleteBtn);
+ 
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'subst-cancel-btn';
+    cancelBtn.textContent = '✕ Anuluj';
+    cancelBtn.onclick = function () { showUiMonitorContent('substitutions'); };
+    header.appendChild(cancelBtn);
+ 
+    uiMonitorContent.appendChild(header);
+ 
+    // ── Czas zmiany ───────────────────────────────────────────────────────────
+    var currentMs  = sub.game_time_ms || 0;
+    var currentStr = _msToTimeStr(currentMs);
+ 
+    var timerRow = document.createElement('div');
+    timerRow.className = 'subst-timer-row';
+    timerRow.innerHTML =
+        '<label>Czas zmiany (mm:ss):</label>' +
+        '<input id="subst-edit-time-input" type="text" ' +
+            'class="subst-time-input" value="' + currentStr + '">' +
+        '<span class="subst-edit-time-note">zmiana wpłynie na całą grupę (' +
+            data.group_size + ' zmian)</span>';
+    uiMonitorContent.appendChild(timerRow);
+ 
+    // ── Formularz zawodników ──────────────────────────────────────────────────
+    var form = document.createElement('div');
+    form.className = 'subst-edit-form';
+ 
+    // Kto wychodzi (player_out — był na boisku)
+    form.appendChild(_buildSubstEditSelect(
+        'subst-edit-out',
+        '⬇ Schodzi z boiska',
+        availOut,
+        sub.player_out_id,
+        'player_out_id',
+        '#e57373'
+    ));
+ 
+    var arrow = document.createElement('div');
+    arrow.className = 'subst-edit-arrow';
+    arrow.textContent = '⇅';
+    form.appendChild(arrow);
+ 
+    // Kto wchodzi (player_in — był na ławce)
+    form.appendChild(_buildSubstEditSelect(
+        'subst-edit-in',
+        '⬆ Wchodzi na boisko',
+        availIn,
+        sub.player_in_id,
+        'player_in_id',
+        '#4caf50'
+    ));
+ 
+    uiMonitorContent.appendChild(form);
+}
+ 
+function _buildSubstEditSelect(id, label, players, selectedPlayerId, fieldName, color) {
+    var wrap = document.createElement('div');
+    wrap.className = 'subst-edit-select-wrap';
+ 
+    var lbl = document.createElement('div');
+    lbl.className = 'subst-edit-select-label';
+    lbl.style.color = color;
+    lbl.textContent = label;
+    wrap.appendChild(lbl);
+ 
+    var select = document.createElement('select');
+    select.id = id;
+    select.className = 'subst-edit-select';
+    select.dataset.field = fieldName;
+ 
+    players.forEach(function (p) {
+        var opt = document.createElement('option');
+        opt.value = p.player_id;
+        opt.textContent = (p.number != null ? '#' + p.number + ' ' : '') + (p.player_name || '');
+        if (p.player_id === selectedPlayerId) opt.selected = true;
+        select.appendChild(opt);
+    });
+ 
+    wrap.appendChild(select);
+    return wrap;
+}
+ 
+function _msToTimeStr(ms) {
+    var totalSec = Math.floor((ms || 0) / 1000);
+    var mm = Math.floor(totalSec / 60);
+    var ss = totalSec % 60;
+    return (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
+}
+ 
+function _saveSubstitutionEdit(subId) {
+    var timeStr      = (document.getElementById('subst-edit-time-input') || {}).value || '00:00';
+    // var game_time_ms = _parseTimeToMs(timeStr);
+    var outSel       = document.getElementById('subst-edit-out');
+    var inSel        = document.getElementById('subst-edit-in');
+    var player_out_id = outSel ? parseInt(outSel.value, 10) : null;
+    var player_in_id  = inSel  ? parseInt(inSel.value,  10) : null;
+ 
+    socket.emit('request_ui_monitor_content', {
+        type: 'saveSubstitutionEdit',
+        payload: {
+            substitution_id: subId,
+            game_time_ms:    game_time_ms,
+            player_in_id:    player_in_id,
+            player_out_id:   player_out_id,
+        },
+    });
+}
+
+function _saveSubstitutionEdit(subId) {
+    var timeStr      = (document.getElementById('subst-edit-time-input') || {}).value || '00:00';
+    // var game_time_ms = _parseTimeToMs(timeStr);
+    var game_time_ms = timeStr * 1000;
+    var outSel       = document.getElementById('subst-edit-out');
+    var inSel        = document.getElementById('subst-edit-in');
+    var player_out_id = outSel ? parseInt(outSel.value, 10) : null;
+    var player_in_id  = inSel  ? parseInt(inSel.value,  10) : null;
+ 
+    socket.emit('request_ui_monitor_content', {
+        type: 'saveSubstitutionEdit',
+        payload: {
+            substitution_id: subId,
+            game_time_ms:    game_time_ms,
+            player_in_id:    player_in_id,
+            player_out_id:   player_out_id,
+        },
+    });
+
+}
+function _saveSubstitutionEdit(subId) {
+    var timeStr      = (document.getElementById('subst-edit-time-input') || {}).value || '00:00';
+    // var game_time_ms = _parseTimeToMs(timeStr);
+    var outSel       = document.getElementById('subst-edit-out');
+    var inSel        = document.getElementById('subst-edit-in');
+    var player_out_id = outSel ? parseInt(outSel.value, 10) : null;
+    var player_in_id  = inSel  ? parseInt(inSel.value,  10) : null;
+ 
+    socket.emit('request_ui_monitor_content', {
+        type: 'saveSubstitutionEdit',
+        payload: {
+            substitution_id: subId,
+            game_time_ms:    game_time_ms,
+            player_in_id:    player_in_id,
+            player_out_id:   player_out_id,
+        },
+    });
+}
+ 
+function _deleteSubstitution(subId) {
+    if (!confirm('Usunąć tę zmianę? Role zawodników zostaną cofnięte.')) return;
+    socket.emit('request_ui_monitor_content', {
+        type: 'deleteSubstitution',
+        payload: { substitution_id: subId },
+    });
+}
 
 
 // ============================================================================

@@ -1,11 +1,31 @@
 """League Manager - CRUD operations for leagues"""
 from core.extensions import db
-from app.models.league import League
-from core.models.season import Season
-from app.models.league_team import LeagueTeam
-from app.models.team import Team
+
+# from core.models.base_season import Season
+# from core.models.base_league_team import LeagueTeam
+
 from sqlalchemy.exc import IntegrityError
 import logging
+
+def _get_league():
+    from core.models.base_league import get_league_model
+    return get_league_model()
+
+def _get_season():
+    from core.models.base_season import get_season_model
+    return get_season_model()
+
+def _get_league_team():
+    from core.models.base_league_team import get_league_team_model
+    return get_league_team_model()
+
+def _get_team():
+    from core.models.base_team import get_team_model
+    return get_team_model()
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +43,7 @@ class LeagueManager:
         Returns:
             List of League objects
         """
+        League = _get_league()
         query = League.query
         if season_id:
             query = query.filter_by(season_id=season_id)
@@ -30,6 +51,7 @@ class LeagueManager:
 
     def get_league_by_id(self, league_id):
         """Get league by ID"""
+        League = _get_league()
         return League.query.get(league_id)
 
     def create_league(self, season_id, name, games_url, scorers_url, assists_url,
@@ -55,6 +77,8 @@ class LeagueManager:
         Raises:
             ValueError if validation fails
         """
+        League = _get_league()
+        Season = _get_season()
         # Validate season exists
         season = Season.query.get(season_id)
         if not season:
@@ -114,6 +138,7 @@ class LeagueManager:
         Raises:
             ValueError if league not found or validation fails
         """
+        League = _get_league()
         league = self.get_league_by_id(league_id)
         if not league:
             raise ValueError(f"Nie znaleziono ligi o ID {league_id}")
@@ -205,11 +230,13 @@ class LeagueManager:
         Returns:
             Dictionary with league statistics or None if league not found
         """
+        Game = _get_game()
+        LeagueTeam = _get_league_team()
         league = self.get_league_by_id(league_id)
         if not league:
             return None
 
-        from app.models.game import Game
+        from core.models.base_game import get_game_model
 
         teams = league.get_teams()
         total_games = league.total_games
@@ -250,6 +277,8 @@ class LeagueManager:
         Raises:
             ValueError if league or team not found, or team already in league
         """
+        Team = _get_team()
+        LeagueTeam = _get_league_team()
         league = self.get_league_by_id(league_id)
         if not league:
             raise ValueError(f"Nie znaleziono ligi o ID {league_id}")
@@ -297,6 +326,7 @@ class LeagueManager:
         Raises:
             ValueError if association not found
         """
+        LeagueTeam = _get_league_team()
         league_team = LeagueTeam.query.filter_by(
             league_id=league_id,
             team_id=team_id
@@ -332,6 +362,7 @@ class LeagueManager:
         Raises:
             ValueError if association not found
         """
+        LeagueTeam = _get_league_team()
         league_team = LeagueTeam.query.filter_by(
             league_id=league_id,
             team_id=team_id
@@ -379,6 +410,8 @@ class LeagueManager:
         Returns:
             List of Team objects not in this league
         """
+        LeagueTeam = _get_league_team()
+        Team = _get_team()
         # Get IDs of teams already in this league
         assigned_team_ids = db.session.query(LeagueTeam.team_id).filter_by(
             league_id=league_id

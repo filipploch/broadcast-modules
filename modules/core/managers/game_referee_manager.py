@@ -1,15 +1,19 @@
 """GameReferee Manager - handles referee assignments to games"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.game_referee import GameReferee
-from core.models.referee import Referee
-from core.models.base_game import BaseGame
 import logging
 
 def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
 
+def _get_referee():
+    from core.models.base_referee import get_referee_model
+    return get_referee_model()
+
+def _get_game_referee():
+    from core.models.base_game_referee import get_game_referee_model
+    return get_game_referee_model()
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +22,7 @@ class GameRefereeManager:
     """Manager for GameReferee operations"""
 
     def assign_referee_to_game(self, game_id: int, referee_id: int,
-                               referee_type: str) -> Optional[GameReferee]:
+                               referee_type: str):
         """
         Assign referee to game
 
@@ -39,11 +43,13 @@ class GameRefereeManager:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
         # Validate referee exists
+        Referee = _get_referee()
         referee = Referee.query.get(referee_id)
         if not referee:
             raise ValueError(f"Sędzia o ID {referee_id} nie istnieje")
 
         # Validate referee type
+        GameReferee = _get_game_referee()
         if not GameReferee.is_valid_type(referee_type):
             valid_types = ', '.join(GameReferee.REFEREE_TYPES)
             raise ValueError(f"Nieprawidłowy typ sędziego: {referee_type}. Dozwolone: {valid_types}")
@@ -70,7 +76,7 @@ class GameRefereeManager:
             logger.error(f"Error assigning referee to game: {e}")
             raise
 
-    def get_referees_for_game(self, game_id: int, referee_type: str = None) -> List[GameReferee]:
+    def get_referees_for_game(self, game_id: int, referee_type: str = None):
         """
         Get all referees assigned to a game
         
@@ -81,31 +87,35 @@ class GameRefereeManager:
         Returns:
             List of GameReferee objects
         """
+        GameReferee = _get_game_referee()
         query = GameReferee.query.filter_by(game_id=game_id)
         if referee_type:
             query = query.filter_by(type=referee_type)
         return query.all()
 
-    def get_main_referee(self, game_id: int) -> Optional[GameReferee]:
+    def get_main_referee(self, game_id: int):
         """Get main referee for a game"""
+        GameReferee = _get_game_referee()
         return GameReferee.query.filter_by(
             game_id=game_id,
             type=GameReferee.TYPE_MAIN
         ).first()
 
-    def get_assistant_referees(self, game_id: int) -> List[GameReferee]:
+    def get_assistant_referees(self, game_id: int):
         """Get assistant referees for a game"""
+        GameReferee = _get_game_referee()
         return GameReferee.query.filter_by(
             game_id=game_id,
             type=GameReferee.TYPE_ASSISTANT
         ).all()
 
-    def get_game_referee_by_id(self, game_referee_id: int) -> Optional[GameReferee]:
+    def get_game_referee_by_id(self, game_referee_id: int):
         """Get GameReferee by ID"""
+        GameReferee = _get_game_referee()
         return GameReferee.query.get(game_referee_id)
 
     def update_game_referee(self, game_referee_id: int,
-                           referee_type: str = None) -> Optional[GameReferee]:
+                           referee_type: str = None):
         """
         Update game referee assignment
         
@@ -125,6 +135,7 @@ class GameRefereeManager:
             return None
 
         try:
+            GameReferee = _get_game_referee()
             if referee_type is not None:
                 if not GameReferee.is_valid_type(referee_type):
                     valid_types = ', '.join(GameReferee.REFEREE_TYPES)
@@ -166,6 +177,7 @@ class GameRefereeManager:
             logger.error(f"Error removing referee from game: {e}")
             return False
 
-    def get_games_for_referee(self, referee_id: int) -> List[GameReferee]:
+    def get_games_for_referee(self, referee_id: int):
         """Get all games where referee officiated"""
+        GameReferee = _get_game_referee()
         return GameReferee.query.filter_by(referee_id=referee_id).all()

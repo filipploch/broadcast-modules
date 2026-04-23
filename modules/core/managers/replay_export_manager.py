@@ -29,6 +29,13 @@ def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
 
+def _get_game_event():
+    from core.models.base_game_event import get_game_event_model
+    return get_game_event_model()
+
+def _get_event_camera():
+    from core.models.base_event_camera import get_event_camera_model
+    return get_event_camera_model()
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +64,7 @@ class ReplayExportManager:
         Returns:
             dict z polami: game_id, folder, files_saved, errors
         """
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         settings = Settings.get_settings()
         game_id  = settings.current_game_id
@@ -79,9 +86,9 @@ class ReplayExportManager:
         Returns:
             dict z polami: game_id, folder, files_saved, errors
         """
-        from core.models.base_game import BaseGame
+        Game = _get_game()
 
-        game = _get_game().query.get(game_id)
+        game = Game.query.get(game_id)
         if not game:
             msg = f"Mecz id={game_id} nie istnieje"
             logger.error(f"[ReplayExport] {msg}")
@@ -154,11 +161,11 @@ class ReplayExportManager:
         Returns:
             lista słowników: game_id, home_short, away_short, date, event_count
         """
-        from core.models.base_game import BaseGame
-        from core.models.game_event import GameEvent
+        Game = _get_game()
+        GameEvent = _get_game_event()
 
         games = (
-            _get_game()
+            Game
             .join(Game.game_events)
             .filter(GameEvent.video_path.isnot(None))
             .distinct()
@@ -189,8 +196,7 @@ class ReplayExportManager:
 
     def _get_game_event_rows(self, game_id: int) -> list:
         """game_events z wypełnionym video_path i czasami powtórki."""
-        from core.models.game_event import GameEvent
-        from core.models.event import Event
+        GameEvent = _get_game_event()
 
         rows = (
             GameEvent.query
@@ -216,9 +222,8 @@ class ReplayExportManager:
 
     def _get_event_camera_rows(self, game_id: int) -> list:
         """event_cameras dla danego meczu z wypełnionym video_path."""
-        from core.models.event_camera import EventCamera
-        from core.models.game_event import GameEvent
-        from core.models.event import Event
+        EventCamera = _get_event_camera()
+        GameEvent = _get_game_event()
 
         rows = (
             EventCamera.query

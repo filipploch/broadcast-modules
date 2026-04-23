@@ -4,7 +4,7 @@ from flask import current_app
 from core.extensions import db
 from app.models.player import Player
 from app.models.team import Team
-from app.managers.player_manager import PlayerManager
+from core.managers.player_manager import PlayerManager
 import threading
 import logging
 import sys
@@ -90,6 +90,10 @@ class PlayerScraperManager:
                 scraper = PlayerScraper()
                 scraped_players = scraper.scrape_players(temp_dir, team.foreign_id)
                 stats = self._process_scraped_players(scraped_players, team)
+                html_path = scraper.find_html_file_for_team(temp_dir, team.foreign_id)
+                if html_path and html_path.exists():
+                    html_path.unlink()
+                    logger.info(f"Usunięto plik HTML po scrapowaniu: {html_path.name}")
 
                 self._status = {
                     'status': 'completed',

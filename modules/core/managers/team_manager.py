@@ -1,14 +1,15 @@
 """Team Manager - handles CRUD operations and scraping workflow with threading"""
-from typing import List, Dict, Optional, Callable
 from flask import session, current_app
 from core.extensions import db
-from app.models.team import Team
 import threading
 import logging
 import os
 
 logger = logging.getLogger(__name__)
 
+def _get_team():
+    from core.models.base_team import get_team_model
+    return get_team_model()
 
 class TeamManager:
     """Manager for Team CRUD operations and scraping workflow"""
@@ -41,25 +42,29 @@ class TeamManager:
                     })
         return logos
     
-    def get_all_teams(self) -> List[Team]:
+    def get_all_teams(self):
         """Get all teams from database"""
+        Team = _get_team()
         return Team.query.order_by(Team.name).all()
     
-    def get_team_by_id(self, team_id: int) -> Optional[Team]:
+    def get_team_by_id(self, team_id: int):
         """Get team by ID"""
+        Team = _get_team()
         return Team.query.get(team_id)
     
-    def get_team_by_url(self, team_url: str) -> Optional[Team]:
+    def get_team_by_url(self, team_url: str):
         """Get team by team_url (unique identifier)"""
+        Team = _get_team()
         return Team.query.filter_by(team_url=team_url).first()
     
-    def get_team_by_name(self, name: str) -> Optional[Team]:
+    def get_team_by_name(self, name: str):
         """Get team by team_url (unique identifier)"""
+        Team = _get_team()
         return Team.query.filter_by(name=name).first()
     
     def create_team(self, name: str, name_14: str, short_name: str, 
                    team_url: str, logo_path: str = 'static/images/logos/default.png',
-                   foreign_id: str = None, uniform: dict = None) -> Team:
+                   foreign_id: str = None, coach: str = None, uniform: dict = None):
         """
         Create new team
         
@@ -75,6 +80,7 @@ class TeamManager:
             Created Team object
         """
         import json
+        Team = _get_team()
         team = Team(
             name=name,
             name_14=name_14,
@@ -91,7 +97,7 @@ class TeamManager:
         logger.info(f"Created team: {team.name} ({team.short_name})")
         return team
     
-    def update_team(self, team_id: int, **kwargs) -> Optional[Team]:
+    def update_team(self, team_id: int, **kwargs):
         """
         Update team
         
@@ -106,7 +112,7 @@ class TeamManager:
         if not team:
             return None
         
-        allowed_fields = ['name', 'name_14', 'short_name', 'team_url', 'logo_path', 'uniform']
+        allowed_fields = ['name', 'coach', 'name_14', 'short_name', 'team_url', 'logo_path', 'uniform']
         
         import json
         for field, value in kwargs.items():

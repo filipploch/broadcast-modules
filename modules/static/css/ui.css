@@ -191,3 +191,295 @@ button.top-bar-element {
 .redCard {
     background-color: rgb(255, 0, 0) !important;
 }
+
+/* ============================================================================
+   SUBSTITUTIONS — style do wklejenia/dołączenia do ui-jinja.css
+   ============================================================================ */
+
+/* ── Lista zmian ─────────────────────────────────────────────────────────── */
+
+.subst-header {
+    display: flex;
+    gap: .5rem;
+    padding: .4rem .6rem;
+    background: #111;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.subst-add-btn {
+    flex: 1;
+    padding: .2rem .5rem;
+    background: #1a3a1a;
+    color: #4caf50;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .65rem;
+}
+.subst-add-btn:hover { background: #2a5a2a; }
+
+.subst-team-header {
+    padding: .3rem .6rem;
+    background: #1a1a2e;
+    color: #adb5bd;
+    font-size: .78rem;
+    font-weight: 600;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.subst-container-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 .4rem;
+}
+
+.substitution-group {
+    border: 1px solid #2a2a4a;
+    border-radius: 5px;
+    /* margin-bottom: .4rem; */
+    /* padding: .3rem; */
+    background: #0d0d1a;
+}
+
+.substitution-element {
+    display: flex;
+    flex-direction: column;
+    /* gap: .1rem; */
+    padding: .15rem 0;
+    border-bottom: 1px dashed #1e1e3a;
+    font-size: 0.8rem;
+    color: #ccc;
+}
+
+.substitution-element:last-child { border-bottom: none; }
+
+.player-in  { color: #4caf50; }
+.player-out { color: #e57373; }
+
+.subst-player-number {
+    display: inline-block;
+    min-width: 1.8rem;
+    font-weight: 600;
+    color: #adb5bd;
+    margin-right: .3rem;
+}
+.subst-player-name { }
+
+.subst-empty {
+    padding: 1rem;
+    text-align: center;
+    color: #555;
+    font-size: .85rem;
+}
+
+/* ── Edytor zmian ────────────────────────────────────────────────────────── */
+
+.subst-editor-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    /* padding: .4rem .6rem; */
+    background: #111;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.subst-editor-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: .9rem;
+    color: #ddd;
+}
+
+.subst-confirm-btn {
+    /* padding: .3rem .7rem; */
+    background: #1a3a1a;
+    color: #4caf50;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .82rem;
+}
+.subst-confirm-btn:hover { background: #2a5a2a; }
+
+.subst-cancel-btn {
+    /* padding: .3rem .7rem; */
+    background: #3a1a1a;
+    color: #e57373;
+    border: 1px solid #e57373;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .82rem;
+}
+.subst-cancel-btn:hover { background: #5a2a2a; }
+
+.subst-timer-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem .6rem;
+    background: #0a0a0a;
+    border-bottom: 1px solid #222;
+    font-size: .82rem;
+    color: #adb5bd;
+    flex-shrink: 0;
+}
+
+.subst-time-input {
+    width: 5rem;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #eee;
+    padding: .2rem .4rem;
+    font-size: .82rem;
+    font-family: monospace;
+}
+
+.subst-editor-cols {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.subst-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid #222;
+    height: 220px;
+    font-size: 0px;
+}
+.subst-col:last-child { border-right: none; }
+
+.subst-col--mid { flex: 1.2; }
+
+.subst-col-header {
+    padding: .25rem .5rem;
+    background: #1a1a1a;
+    border-bottom: 1px solid #333;
+    font-size: .75rem;
+    font-weight: 600;
+    color: #888;
+    flex-shrink: 0;
+}
+
+.subst-col-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: .3rem;
+    min-height: 0;
+}
+
+.subst-player-card {
+    /* padding: .2rem .3rem; */
+    margin-bottom: .4rem;
+    background: #111;
+    border-color: #333;
+}
+.subst-player-card--mid {
+    border-color: #2a5a2a;
+    background: #0d1a0d;
+}
+
+.subst-mid-body {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.subst-pair-row {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    padding: .3rem .3rem;
+    border: 1px dashed #2a2a2a;
+    border-radius: 4px;
+    background: #0a0a12;
+}
+.subst-pair-row--empty {
+    opacity: .4;
+}
+
+.subst-mid-placeholder {
+    font-size: .75rem;
+    color: #a5a5a5;
+    padding: .2rem .3rem;
+    text-align: center;
+}
+
+#ui-monitor-container{
+    color: white;
+}
+
+.subst-delete-btn {
+    /* padding: .3rem .7rem; */
+    background: #3a1a1a;
+    color: #ff5252;
+    border: 1px solid #ff5252;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .82rem;
+}
+.subst-delete-btn:hover { background: #5a2020; }
+ 
+.subst-edit-time-note {
+    font-size: .75rem;
+    color: #555;
+    margin-left: .5rem;
+}
+ 
+.subst-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+    padding: .8rem .6rem;
+    flex: 1;
+    overflow-y: auto;
+}
+ 
+.subst-edit-select-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+ 
+.subst-edit-select-label {
+    font-size: .78rem;
+    font-weight: 600;
+}
+ 
+.subst-edit-select {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #eee;
+    padding: .3rem .5rem;
+    font-size: .85rem;
+    width: 100%;
+}
+.subst-edit-select:focus { outline: none; border-color: #666; }
+ 
+.subst-edit-arrow {
+    text-align: center;
+    font-size: 1.4rem;
+    color: #555;
+    line-height: 1;
+}
+ 
+.substitution-element {
+    cursor: pointer;
+}
+.substitution-element:hover {
+    background: #111122;
+}
+.substitution-element[title]::after {
+    content: ' ✎';
+    font-size: .7rem;
+    color: #444;
+}

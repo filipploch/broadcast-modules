@@ -115,22 +115,22 @@ function formatTime(milliseconds) {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function updateTimerDisplay(timerData) {
-    if (!timerData) return;
-    const timerId   = timerData.timer_id;
-    const elapsed   = timerData.elapsed_time ?? 0;
-    const minEl     = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
-    const secEl     = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
-    const dsEl      = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
+// function updateTimerDisplay(timerData) {
+//     if (!timerData) return;
+//     const timerId   = timerData.timer_id;
+//     const elapsed   = timerData.elapsed_time ?? 0;
+//     const minEl     = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
+//     const secEl     = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
+//     const dsEl      = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
 
-    const totalSec  = Math.floor(elapsed / 1000);
-    const ds        = Math.floor((elapsed % 1000) / 100);
-    if (minEl) minEl.textContent = String(Math.floor(totalSec / 60)).padStart(2, '0');
-    if (secEl) secEl.textContent = String(totalSec % 60).padStart(2, '0');
-    if (dsEl)  dsEl.textContent  = ds;
+//     const totalSec  = Math.floor(elapsed / 1000);
+//     const ds        = Math.floor((elapsed % 1000) / 100);
+//     if (minEl) minEl.textContent = String(Math.floor(totalSec / 60)).padStart(2, '0');
+//     if (secEl) secEl.textContent = String(totalSec % 60).padStart(2, '0');
+//     if (dsEl)  dsEl.textContent  = ds;
 
-    updateTimerState(timerId, timerData.state);
-}
+//     updateTimerState(timerId, timerData.state);
+// }
 
 function updateTimerState(timerId, state) {
     const buttons = document.querySelectorAll(`[data-timer-id="${timerId}"]`);
@@ -179,16 +179,7 @@ function updateTimerDisplay(timerData) {
 
     let displayTime;
 
-    // if (timerLimit > 0) {
-    //     displayTime = Math.max(0, timerLimit - elapsed - 1);
-    //     if(timerState === 'idle'){
-    //         displayTime = timerLimit - elapsed;
-    //     }
-    // } else {
-    //     displayTime = elapsed;
-    // }
-
-    if (timerLimit > 0) {
+    if (TIMER_DESC) {
         // Count down: show remaining = limit - (initialTime + elapsed)
         // Subtract 1ms so display changes exactly on the second boundary
         const shown = elapsed;

@@ -151,12 +151,9 @@ class GameScraperManager:
 
         Dla nowych meczów tworzy też 2 okresy (1. i 2. połowa).
         """
-        from core.models.base_game   import get_game_model
-        from core.models.period import get_period_model
+        from app.models.game   import Game
+        from app.models.period import Period
         from app.models.league       import League
-
-        Game   = get_game_model()
-        Period = get_period_model()
 
         # Buduj słownik drużyn z aktualnej ligi/sezonu raz dla całego batcha
         team_lookup = self._build_team_lookup()
@@ -283,7 +280,7 @@ class GameScraperManager:
             {
                 'period_order':  1,
                 'description':   '1. połowa',
-                'main_timer_name': f'{game.home_team_short_name}x{game.away_team_short_name} p:1',
+                'main_timer_name': f'{game.home_team.short_name}x{game.away_team.short_name} p:1',
                 'limit':         2700000,    # 45 min w ms
                 'initial_time':  0,
                 'home_goals':    home_ht if is_finished else 0,
@@ -293,7 +290,7 @@ class GameScraperManager:
             {
                 'period_order':  2,
                 'description':   '2. połowa',
-                'main_timer_name': f'{game.home_team_short_name}x{game.away_team_short_name} p:2',
+                'main_timer_name': f'{game.home_team.short_name}x{game.away_team.short_name} p:2',
                 'limit':         2700000,
                 'initial_time':  2700000,    # offset 45:00 dla overlay
                 'home_goals':    home_2h,
@@ -336,12 +333,9 @@ class GameScraperManager:
         Zbuduj słownik {normalized_name → Team} z drużyn bieżącej ligi/sezonu.
         Filtrowanie przez LeagueTeam → tylko drużyny z aktualnej ligi.
         """
-        from core.models.settings import get_settings_model
-        from core.models.base_team import get_team_model
+        from app.models.settings import Settings
+        from app.models.team import Team
         from app.models.league_team import LeagueTeam
-
-        Settings = get_settings_model()
-        Team     = get_team_model()
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -349,8 +343,7 @@ class GameScraperManager:
             teams = Team.query.all()
         else:
             # Pobierz drużyny z ligi bieżącego meczu
-            from core.models.base_game import get_game_model
-            Game = get_game_model()
+            from app.models.game import Game
             game = Game.query.get(settings.current_game_id)
             if game:
                 team_ids = (
@@ -369,11 +362,8 @@ class GameScraperManager:
     @staticmethod
     def _get_current_league_id() -> Optional[int]:
         """Pobierz league_id z aktualnych ustawień lub pierwszej ligi w bazie."""
-        from core.models.settings import get_settings_model
-        from core.models.base_game  import get_game_model
-
-        Settings = get_settings_model()
-        Game     = get_game_model()
+        from app.models.settings import Settings
+        from app.models.game  import Game
 
         settings = Settings.get_settings()
         if settings.current_game_id:

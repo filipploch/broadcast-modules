@@ -1,14 +1,19 @@
 """GameCommentator Manager - handles commentator assignments to games"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.game_commentator import GameCommentator
-from core.models.commentator import Commentator
-from core.models.base_game import BaseGame
 import logging
 
 def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
+
+def _get_game_commentator():
+    from core.models.base_game_commentator import get_game_commentator_model
+    return get_game_commentator_model()
+
+def _get_commentator():
+    from core.models.base_commentator import get_commentator_model
+    return get_commentator_model()
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +23,7 @@ class GameCommentatorManager:
     """Manager for GameCommentator operations"""
 
     def assign_commentator_to_game(self, game_id: int, commentator_id: int,
-                               commentator_type: str) -> Optional[GameCommentator]:
+                               commentator_type: str):
         """
         Assign commentator to game
 
@@ -35,10 +40,13 @@ class GameCommentatorManager:
         """
         # Validate game exists
         game = _get_game().query.get(game_id)
+        Commentator = _get_commentator()
+        GameCommentator = _get_game_commentator()
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
         # Validate commentator exists
+        
         commentator = Commentator.query.get(commentator_id)
         if not commentator:
             raise ValueError(f"Sędzia o ID {commentator_id} nie istnieje")
@@ -70,7 +78,7 @@ class GameCommentatorManager:
             logger.error(f"Error assigning commentator to game: {e}")
             raise
 
-    def get_commentators_for_game(self, game_id: int, commentator_type: str = None) -> List[GameCommentator]:
+    def get_commentators_for_game(self, game_id: int, commentator_type: str = None):
         """
         Get all commentators assigned to a game
         
@@ -81,31 +89,35 @@ class GameCommentatorManager:
         Returns:
             List of GameCommentator objects
         """
+        GameCommentator = _get_game_commentator()
         query = GameCommentator.query.filter_by(game_id=game_id)
         if commentator_type:
             query = query.filter_by(type=commentator_type)
         return query.all()
 
-    def get_main_commentator(self, game_id: int) -> Optional[GameCommentator]:
+    def get_main_commentator(self, game_id: int):
         """Get main commentator for a game"""
+        GameCommentator = _get_game_commentator()
         return GameCommentator.query.filter_by(
             game_id=game_id,
             type=GameCommentator.TYPE_MAIN
         ).first()
 
-    def get_assistant_commentators(self, game_id: int) -> List[GameCommentator]:
+    def get_assistant_commentators(self, game_id: int):
         """Get assistant commentators for a game"""
+        GameCommentator = _get_game_commentator()
         return GameCommentator.query.filter_by(
             game_id=game_id,
             type=GameCommentator.TYPE_ASSISTANT
         ).all()
 
-    def get_game_commentator_by_id(self, game_commentator_id: int) -> Optional[GameCommentator]:
+    def get_game_commentator_by_id(self, game_commentator_id: int):
         """Get GameCommentator by ID"""
+        GameCommentator = _get_game_commentator()
         return GameCommentator.query.get(game_commentator_id)
 
     def update_game_commentator(self, game_commentator_id: int,
-                           commentator_type: str = None) -> Optional[GameCommentator]:
+                           commentator_type: str = None):
         """
         Update game commentator assignment
         
@@ -119,6 +131,7 @@ class GameCommentatorManager:
         Raises:
             ValueError if invalid commentator type
         """
+        GameCommentator = _get_game_commentator()
         game_commentator = self.get_game_commentator_by_id(game_commentator_id)
         if not game_commentator:
             logger.warning(f"GameCommentator with ID {game_commentator_id} not found")
@@ -166,6 +179,7 @@ class GameCommentatorManager:
             logger.error(f"Error removing commentator from game: {e}")
             return False
 
-    def get_games_for_commentator(self, commentator_id: int) -> List[GameCommentator]:
+    def get_games_for_commentator(self, commentator_id: int):
         """Get all games where commentator officiated"""
+        GameCommentator = _get_game_commentator()
         return GameCommentator.query.filter_by(commentator_id=commentator_id).all()

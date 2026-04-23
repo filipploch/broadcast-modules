@@ -67,3 +67,12 @@ function getCurrentDate() {
 
     return `${day}-${month}-${year}`;
 }
+
+function formatGameTimeDisplay(gameTimeS, periodEndS) {
+    if (periodEndS > 0 && gameTimeS > periodEndS) {
+        var baseMin  = Math.floor(periodEndS / 60);
+        var extraMin = Math.ceil((gameTimeS - periodEndS) / 60);
+        return baseMin + "+" + extraMin + "'";
+    }
+    return Math.ceil(gameTimeS / 60) + "'";
+}

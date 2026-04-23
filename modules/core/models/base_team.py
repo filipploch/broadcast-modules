@@ -1,4 +1,4 @@
-"""BaseTeam — abstrakcyjna klasa bazowa dla modeli drużyny we wszystkich modułach."""
+"""BaseTeamMixin — abstrakcyjna klasa bazowa dla modeli drużyny we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
 import json
@@ -7,11 +7,13 @@ def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
 
+def _get_league():
+    from core.models.base_league import get_league_model
+    return get_league_model()
 
 
-class BaseTeam(db.Model):
+class BaseTeamMixin:
     """Football team"""
-    __abstract__ = True
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False, index=True)
@@ -64,15 +66,17 @@ class BaseTeam(db.Model):
 
     def get_leagues(self, season_id=None):
         """Get leagues this team participates in"""
+        League = _get_league()
         query = self.league_participations
         if season_id:
-            from core.models.base_league import BaseLeague
+            from core.models.base_league import BaseLeagueMixin
             query = query.join(League).filter(League.season_id == season_id)
         return query.all()
 
     def get_games(self, league_id=None):
         """Get all games for this team (home and away)"""
-        from core.models.base_game import BaseGame
+        from core.models.base_game import BaseGameMixin
+        Game = _get_game()
 
         home_query = _get_game().query.filter(_get_game().home_team_id == self.id)
         away_query = _get_game().query.filter(_get_game().away_team_id == self.id)
@@ -99,14 +103,14 @@ class BaseTeam(db.Model):
         }
 
 def get_team_model():
-    """Zwraca konkretną klasę BaseTeam zarejestrowaną przez aktywny moduł."""
+    """Zwraca konkretną klasę BaseTeamMixin zarejestrowaną przez aktywny moduł."""
     from core.extensions import db
     for mapper in db.Model.registry.mappers:
         cls = mapper.class_
         if (getattr(cls, '__tablename__', None) == 'teams'
-                and issubclass(cls, BaseTeam)):
+                and issubclass(cls, BaseTeamMixin)):
             return cls
     raise RuntimeError(
-        "Nie znaleziono klasy BaseTeam w rejestrze SQLAlchemy. "
+        "Nie znaleziono klasy BaseTeamMixin w rejestrze SQLAlchemy. "
         "Upewnij się że model jest zaimportowany przed wywołaniem get_team_model()."
     )

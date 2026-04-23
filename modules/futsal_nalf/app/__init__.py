@@ -35,7 +35,7 @@ def create_app(config_name='default'):
     with app.app_context():
         # Modele core (wspólne tabele)
         # Modele core — tabele współdzielone (bez tych które moduł nadpisuje)
-        from core.models import (
+        from app.models import (
             Season, Stadium,
             Camera, Commentator, Referee,
             Event, EventCamera,
@@ -58,7 +58,9 @@ def create_app(config_name='default'):
         from core.routes import routes_crud as routes_crud
         from core.socketio_events import base as core_events
         core_broadcast.register_routes(app)
-        routes_crud.register_routes(app)
+        routes_crud.register_routes(app, exclude={
+            '/game-setup'
+            })
         core_events.register_events(socketio)
 
         # Trasy i eventy specyficzne dla modułu
@@ -66,18 +68,20 @@ def create_app(config_name='default'):
         from app.socketio_events import specific_socketio_events as specific_events
         specific_routes.register_routes(app)
         specific_events.register_events(socketio)
+        print("REGISTERED ROUTES:", [r.endpoint for r in app.url_map.iter_rules()])
 
         @app.context_processor
         def inject_global_context():
             try:
                 from app.models.settings import Settings
-                from core.models.season import Season
+                from app.models.season import Season
                 settings = Settings.get_settings()
                 season = Season.query.get(settings.current_season_id) \
                          if settings.current_season_id else None
                 return {
                     'broadcast_game_id': settings.current_game_id,
                     'season': season,
+                    'timer_desc':        app.config.get('TIMER_DESC', True),
                 }
             except Exception:
                 return {'broadcast_game_id': None, 'season': None}

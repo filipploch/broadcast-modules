@@ -31,6 +31,15 @@ class Config:
     SPECIFIC_CSS_FILE = f'modules/{MODULE_NAME}/static/specific.css'
     TEMP_DIR = f'/data/temp/'
 
+    # Czy zawodnik schodzący z boiska może wrócić do gry?
+    #   False — dostaje ROLE_RETIRED  (nie może wrócić)
+    #   True  — dostaje ROLE_SUBSTITUTE (może wejść ponownie)
+    RETURN_CHANGES = False
+
+    TIMER_DESC = False
+
+    MEDIA_CURSOR = None
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

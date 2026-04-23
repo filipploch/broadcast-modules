@@ -18,6 +18,13 @@ class ObsWsManager:
         # Wypełniana przez on_obs_scene_map() po każdym połączeniu pluginu z OBS.
         self._scene_map: dict = {}
 
+        # Pending synchronous requests: { request_id: threading.Event }
+        # Odpowiedź trafia do _pending_responses: { request_id: dict }
+        self._pending_requests:  dict = {}
+        self._pending_responses: dict = {}
+        self._pending_lock = threading.Lock()
+
+
         current_app.logger.info("ObsWsManager initialized")
 
     # =========================================================================
@@ -84,7 +91,7 @@ class ObsWsManager:
             print(f'OBS_RESPONSE: {msg}')
             request_id = int(request_id.split('get-record-status-')[1])
             try:
-                from core.models.settings import get_settings_model
+                from core.models.base_settings import get_settings_model
                 Settings = get_settings_model()
                 settings       = Settings.get_settings()
                 video_path     = settings.get_obs_record_filepath()
@@ -100,6 +107,16 @@ class ObsWsManager:
                 current_app.logger.error(f'❌ Failed to save game event: {e}')
                 self._emit_to_ui('error', {'message': str(e)})
                 return
+        elif request_id.startswith('sync-request-'):
+            self._handle_sync_request(payload=payload)
+        else:
+            print(f'OBS_X_RESPONSE: {msg}')
+
+    def _handle_sync_request(self, payload):
+        response_data = payload.get('responseData', None)
+        media_cursor = response_data.get('mediaCursor', None) if response_data is not None else None
+        if response_data and media_cursor:
+            current_app.config['MEDIA_CURSOR'] = media_cursor
 
     def on_obs_event(self, msg):
         payload    = msg.get('payload')
@@ -116,6 +133,8 @@ class ObsWsManager:
             current_app.logger.error(f"notify_obs_event failed: {e}")
 
         if event_type == 'RecordStateChanged':
+            from core.models.base_settings import get_settings_model
+            Settings = get_settings_model()
             output_state = event_data.get('outputState')
             match output_state:
                 case 'OBS_WEBSOCKET_OUTPUT_STARTING' | 'OBS_WEBSOCKET_OUTPUT_STOPPING':
@@ -128,3 +147,66 @@ class ObsWsManager:
                     obs_record_filepath = ''
                     Settings.set_obs_record_filepath(obs_record_filepath)
                     self._emit_to_ui('obs_record_state', {'state': 'disabled'})
+
+    def send_obs_request_sync(self, request_type: str, request_data: dict,
+                              timeout: float = 2.0) -> dict | None:
+        """
+        Wysyła komendę OBS i synchronicznie czeka na odpowiedź.
+        Zwraca payload odpowiedzi lub None przy timeout.
+        """
+        import datetime
+        request_id = f'sync-request-{str(datetime.datetime.now()).replace(' ', '_')}'
+        event = threading.Event()
+
+        with self._pending_lock:
+            self._pending_requests[request_id] = event
+
+        self.hub_client.send({
+            'from':    'main-module',
+            'to':      'obs-ws-plugin',
+            'type':    'obs_command',
+            'payload': {
+                'requestType': request_type,
+                'requestData': request_data,
+                'request_id':   request_id,
+            }
+        })
+
+        if not event.wait(timeout=timeout):
+            with self._pending_lock:
+                self._pending_requests.pop(request_id, None)
+            return None
+
+        with self._pending_lock:
+            return self._pending_responses.pop(request_id, None)
+
+        def on_obs_event(self, msg):
+            payload    = msg.get('payload')
+            event_type = payload.get('eventType')
+            event_data = payload.get('eventData')
+
+        # Powiadom SequenceManager o każdym evencie OBS
+        try:
+            from core.managers import get_sequence_manager
+            seq_mgr = get_sequence_manager()
+            if seq_mgr:
+                seq_mgr.notify_obs_event(event_type, event_data)
+        except Exception as e:
+            current_app.logger.error(f"notify_obs_event failed: {e}")
+
+        if event_type == 'RecordStateChanged':
+            from core.models.base_settings import get_settings_model
+            Settings = get_settings_model()
+            output_state = event_data.get('outputState')
+            match output_state:
+                case 'OBS_WEBSOCKET_OUTPUT_STARTING' | 'OBS_WEBSOCKET_OUTPUT_STOPPING':
+                    self._emit_to_ui('obs_record_state', {'state': 'changing'})
+                case 'OBS_WEBSOCKET_OUTPUT_STARTED':
+                    obs_record_filepath = event_data.get('outputPath')
+                    Settings.set_obs_record_filepath(obs_record_filepath)
+                    self._emit_to_ui('obs_record_state', {'state': 'active'})
+                case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
+                    obs_record_filepath = ''
+                    Settings.set_obs_record_filepath(obs_record_filepath)
+                    self._emit_to_ui('obs_record_state', {'state': 'disabled'})
+

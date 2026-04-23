@@ -1,8 +1,6 @@
 """GamePlayer Manager - handles player assignments to games"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.base_player import BasePlayer
-from core.models.base_game import BaseGame
 import logging
 
 def _get_game():
@@ -15,7 +13,7 @@ def _get_player():
 
 
 def _get_gameplayer():
-    from core.models.game_player import get_game_player_model
+    from core.models.base_game_player import get_game_player_model
     return get_game_player_model()
 
 

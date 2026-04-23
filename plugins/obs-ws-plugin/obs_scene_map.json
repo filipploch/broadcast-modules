@@ -19,7 +19,7 @@
   "OUTPUT": {
     "AUDIO_SOURCES": 1,
     "Overlay": 3,
-    "Replay": 8,
+    "Replay": 12,
     "Tło biały": 4,
     "VIDEO_SOURCES": 2
   },

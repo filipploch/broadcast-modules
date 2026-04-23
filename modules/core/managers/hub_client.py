@@ -360,7 +360,7 @@ class HubClient:
         if msg_from == 'obs-ws-plugin':
             from core.managers import get_obs_ws_manager
             obs_ws_manager = get_obs_ws_manager()
-
+            print(f'OBS RAW MSG: {msg}')
             if msg_type == 'obs_status':
                 print('OBS_STATUS:', msg)
                 obs_ws_manager.on_obs_status(msg)

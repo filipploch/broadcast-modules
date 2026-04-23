@@ -1,16 +1,19 @@
 """Referee Manager - handles CRUD operations for Referee model"""
 from typing import List, Optional
 from core.extensions import db
-from core.models.referee import Referee
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _get_referee():
+    from core.models.base_referee import get_referee_model
+    return get_referee_model()
 
 
 class RefereeManager:
     """Manager for Referee CRUD operations"""
 
-    def create_referee(self, first_name: str, last_name: str) -> Optional[Referee]:
+    def create_referee(self, first_name: str, last_name: str):
         """
         Create new referee
 
@@ -22,6 +25,7 @@ class RefereeManager:
             Referee object or None if error
         """
         try:
+            Referee = _get_referee()
             referee = Referee(
                 first_name=first_name,
                 last_name=last_name
@@ -37,16 +41,18 @@ class RefereeManager:
             logger.error(f"Error creating referee: {e}")
             return None
 
-    def get_all_referees(self) -> List[Referee]:
+    def get_all_referees(self):
         """Get all referees"""
+        Referee = _get_referee()
         return Referee.query.order_by(Referee.last_name, Referee.first_name).all()
 
-    def get_referee_by_id(self, referee_id: int) -> Optional[Referee]:
+    def get_referee_by_id(self, referee_id: int):
         """Get referee by ID"""
+        Referee = _get_referee()
         return Referee.query.get(referee_id)
 
     def update_referee(self, referee_id: int, first_name: str = None,
-                      last_name: str = None) -> Optional[Referee]:
+                      last_name: str = None):
         """
         Update referee
 

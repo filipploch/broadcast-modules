@@ -54,14 +54,14 @@ const FutsalFormatters = {
         switch (format) {
             case 'm:ss':
                 // Standard format: 12:34
-                const m = padZeros ? String(minutes) : minutes;
+                const m = padZeros ? String(hours*60 + minutes) : hours*60 + minutes;
                 const s = padZeros ? String(seconds).padStart(2, '0') : seconds;
                 formatted = `${m}${separator}${s}`;
                 break;
                 
             case 'mm:ss':
                 // Standard format: 12:34
-                const mq = padZeros ? String(minutes).padStart(2, '0') : minutes;
+                const mq = padZeros ? String(hours*60 + minutes).padStart(2, '0') : hours*60 + minutes;
                 const sq = padZeros ? String(seconds).padStart(2, '0') : seconds;
                 formatted = `${mq}${separator}${sq}`;
                 break;

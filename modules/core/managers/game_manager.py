@@ -1,9 +1,5 @@
 """Match Manager - CRUD operations for games (games)"""
 from core.extensions import db
-from core.models.base_game import BaseGame
-from core.models.base_league import BaseLeague
-from core.models.base_team import BaseTeam
-from core.models.stadium import Stadium
 from core.managers import get_hub_client
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +18,10 @@ def _get_league():
 def _get_team():
     from core.models.base_team import get_team_model
     return get_team_model()
+
+def _get_stadium():
+    from core.models.base_stadium import get_stadium_model
+    return get_stadium_model()
 
 
 logger = logging.getLogger(__name__)
@@ -100,13 +100,13 @@ class GameManager:
             raise ValueError(f"Nie znaleziono ligi o ID {league_id}")
 
         # Validate stadium exists
-        stadium = Stadium.query.get(stadium_id)
+        stadium = _get_stadium().query.get(stadium_id)
         if not stadium:
             raise ValueError(f"Nie znaleziono stadionu o ID {stadium_id}")
 
         try:
             Game = _get_game()
-            game = BaseGame(
+            game = Game(
                 home_team_id=home_team_id,
                 away_team_id=away_team_id,
                 league_id=league_id,
@@ -189,7 +189,7 @@ class GameManager:
 
             # Update stadium if provided
             if stadium_id is not None and stadium_id != game.stadium_id:
-                stadium = Stadium.query.get(stadium_id)
+                stadium = _get_stadium().query.get(stadium_id)
                 if not stadium:
                     raise ValueError(f"Nie znaleziono stadionu o ID {stadium_id}")
                 game.stadium_id = stadium_id
@@ -480,7 +480,7 @@ class GameManager:
         return query.order_by(Game.date.desc()).all()
 
     def handle_request_game_data(self, msg):
-        from core.models.settings import get_settings_model
+        from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         from core.managers import get_timer_manager
 

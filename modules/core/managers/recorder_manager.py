@@ -1,6 +1,14 @@
 """Recorder Manager - Manages camera recording"""
 from flask import current_app
-from core.models.camera import Camera
+
+
+def _get_camera():
+    from core.models.base_camera import get_camera_model
+    return get_camera_model()
+
+def _get_event_camera():
+    from core.models.base_event_camera import get_event_camera_model
+    return get_event_camera_model()
 
 class RecorderManager:
     """Manages recorder plugin and camera recording"""
@@ -59,7 +67,7 @@ class RecorderManager:
 
     def _on_record_status(self, payload):
 
-        from core.models.event_camera import EventCamera
+        
         from core.extensions import db
 
         cameras = payload.get('cameras')
@@ -72,6 +80,7 @@ class RecorderManager:
 
         for camera in cameras:
             try:
+                EventCamera = _get_event_camera()
                 _camera = cameras.get(camera)
                 file_name    = _camera.get('file_name')
                 video_path = 'R:/recorder/' + file_name
@@ -172,6 +181,7 @@ class RecorderManager:
     
     def _get_enabled_cameras(self):
         """Get list of enabled camera IDs"""
+        Camera = _get_camera()
         cameras = Camera.query.filter_by(is_enabled=True).order_by(Camera.priority).all()
         return [cam.recorder_camera_id for cam in cameras if cam.recorder_camera_id]
     

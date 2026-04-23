@@ -173,6 +173,7 @@
 	<script>
 		var period = {{ period.to_dict() | tojson if period else 'null' }};
 		var game   = {{ game.to_dict()   | tojson if game   else 'null' }};
+		const TIMER_DESC  = {{ 'true' if timer_desc else 'false' }};
 	</script>
 
 	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>

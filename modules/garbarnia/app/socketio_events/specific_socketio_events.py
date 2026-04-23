@@ -7,13 +7,14 @@ import logging
 from flask import current_app
 from core.managers import (get_hub_client, get_timer_manager,
                            get_sequence_manager, get_recorder_manager)
-from app.managers import GameManager, GameEventManager
+from core.managers.game_manager import GameManager
+from core.managers.game_event_manager import GameEventManager
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_event_id(event_type: str) -> int:
-    from core.models.event import Event
+    from app.models.event import Event
     event = Event.query.filter(Event.name.ilike(event_type)).first()
     if not event:
         raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")
@@ -35,21 +36,22 @@ def register_events(socketio):
     @socketio.on('get_shootouts')
     def handle_get_shootout_data():
         from app.models.shootout import Shootout
-        from app.managers import get_shootout_kick_manager
+        from core.managers.shootout_kick_manager import ShootoutKickManager
         from app.models.settings import Settings
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
         current_shootout_id = settings.current_shootout_id
         if current_shootout_id:
             shootout = Shootout.query.get(current_shootout_id).to_dict()
-            sh_kick_manager = get_shootout_kick_manager()
+            sh_kick_manager = ShootoutKickManager()
             kicks = sh_kick_manager.get_kicks_by_game(current_game_id)
             socketio.emit('response_get_shootouts', {'shootout': shootout, 'kicks': kicks})
 
     @socketio.on('get_game_teams')
     def handle_get_game_teams():
-        from core.managers.game_player_manager import GamePlayerManager
-        from app.managers.game_player_manager import GamePlayer
+        # from core.managers.game_player_manager import GamePlayerManager
+        from app.managers.game_player_manager import GamePlayerManager
+        from app.models.game_player import GamePlayer
         from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         import json
@@ -295,27 +297,29 @@ def register_events(socketio):
         # z fallbackiem na DB (ostatni zsynchronizowany stan).
         # WAŻNE: cache jest indeksowany przez plugin_timer_id (np. "main-p2"),
         # nie przez DB id — stąd używamy main_timer.plugin_timer_id jako klucza.
-        tm = get_timer_manager()
-        main_timer    = tm.get_active_main_timer(period_id)
-        plugin_timer_id = main_timer.plugin_timer_id if main_timer else None
-        timer_state   = tm.get_timer_state(plugin_timer_id) if plugin_timer_id else None
+        # tm = get_timer_manager()
+        # main_timer    = tm.get_active_main_timer(period_id)
+        # plugin_timer_id = main_timer.plugin_timer_id if main_timer else None
+        # timer_state   = tm.get_timer_state(plugin_timer_id) if plugin_timer_id else None
 
-        if timer_state is not None:
-            # Cache aktualny — używaj go (najbardziej aktualny elapsed_ms z ticków)
-            elapsed_ms = timer_state.get('elapsed_time', 0)
-        elif main_timer is not None:
-            # Cache zimny (np. po restarcie serwera) — fallback na DB
-            elapsed_ms = main_timer.elapsed_time_ms
-        else:
-            elapsed_ms = 0
+        # if timer_state is not None:
+        #     # Cache aktualny — używaj go (najbardziej aktualny elapsed_ms z ticków)
+        #     elapsed_ms = timer_state.get('elapsed_time', 0)
+        # elif main_timer is not None:
+        #     # Cache zimny (np. po restarcie serwera) — fallback na DB
+        #     elapsed_ms = main_timer.elapsed_time_ms
+        # else:
+        #     elapsed_ms = 0
+        # period_manager = PeriodManager()
+        # period         = period_manager.get_period_by_id(period_id)
+        # # game_time zapisujemy w sekundach (spójnie z game_time_formatted i _build_goal_entry)
+        # # initial_time okresu to suma limitów poprzednich części w ms → dzielimy przez 1000
+        # initial_s = period.initial_time // 1000
+        # elapsed_s = elapsed_ms // 1000
+        # game_time = elapsed_s + initial_s
 
-        period_manager = PeriodManager()
-        period         = period_manager.get_period_by_id(period_id)
-        # game_time zapisujemy w sekundach (spójnie z game_time_formatted i _build_goal_entry)
-        # initial_time okresu to suma limitów poprzednich części w ms → dzielimy przez 1000
-        initial_s = period.initial_time // 1000
-        elapsed_s = elapsed_ms // 1000
-        game_time = elapsed_s + initial_s
+        from core.utils.timer_utils import get_current_time_in_seconds
+        game_time = get_current_time_in_seconds(period_id=period_id)
 
         # Drużyna
         team_id   = None
@@ -375,6 +379,7 @@ def register_events(socketio):
                 'player_name':         ged['player_name'],
                 'player_team_short_name': gpd['team_short_name'],
                 'game_time':           ged['game_time'],
+                'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
             })
 
 
@@ -384,20 +389,21 @@ def register_events(socketio):
 
     @socketio.on('request_ui_monitor_content')
     def handle_request_ui_monitor_content(data):
+        from app.models.settings import Settings
+        from core.managers.game_manager import GameManager
         content_type = data.get('type')
+        settings = Settings.get_settings()
+        game = GameManager().get_game_by_id(settings.current_game_id)
 
         if content_type is None:
             socketio.emit('show_ui_monitor_content', {'content_type': None})
             return
 
         if content_type == 'events':
-            from app.managers.event_manager import EventManager
+            from core.managers.event_manager import EventManager
             from core.managers.game_event_manager import GameEventManager
-            from app.models.settings import Settings
-            from core.managers.game_manager import GameManager
 
-            settings   = Settings.get_settings()
-            game       = GameManager().get_game_by_id(settings.current_game_id)
+            
             gem        = GameEventManager()
             event_mgr  = EventManager()
 
@@ -417,7 +423,7 @@ def register_events(socketio):
             })
 
         elif content_type == 'edit_event':
-            from app.managers.event_manager import EventManager
+            from core.managers.event_manager import EventManager
             from app.models.settings import Settings
 
             payload      = data.get('payload', {})
@@ -444,6 +450,260 @@ def register_events(socketio):
                 'game_event':   game_event_d['game_event'],
                 'team_squad':   game_event_d['team_squad'],
             })
+
+        elif content_type == 'substitutions':
+            from app.managers.substitution_manager import SubstitutionManager
+            from core.managers.game_manager import GameManager
+            from app.models.settings import Settings
+
+            settings  = Settings.get_settings()
+            game      = GameManager().get_game_by_id(settings.current_game_id)
+            if not game:
+                socketio.emit('show_ui_monitor_content', {'content_type': None})
+                return
+
+            subst_mgr = SubstitutionManager()
+            home_subs = [s.to_dict() for s in subst_mgr.get_substitutions_for_game(
+                game_id=game.id, team_id=game.home_team_id
+            )]
+            away_subs = [s.to_dict() for s in subst_mgr.get_substitutions_for_game(
+                game_id=game.id, team_id=game.away_team_id
+            )]
+
+            # Pobierz current_period_id — przyciski w UI potrzebują period_id
+            # żeby showSubstitution() mogło wysłać odpowiednie dane do overlay
+            from app.models.period import Period as _Period
+            # if settings.current_period_id else None
+            current_period = _Period.query.get(settings.current_period_id)
+            
+
+            socketio.emit('show_ui_monitor_content', {
+                'content_type':              'substitutions',
+                'home_team_substitutions':   home_subs,
+                'away_team_substitutions':   away_subs,
+                'home_team_id':              game.home_team_id,
+                'away_team_id':              game.away_team_id,
+                'home_team_short_name':      game.home_team.short_name if game.home_team else '',
+                'away_team_short_name':      game.away_team.short_name if game.away_team else '',
+                'is_scoreboard_reversed':    bool(settings.is_scoreboard_reversed),
+                'period_id':                 current_period.id if current_period else None,
+            })
+
+        elif content_type == 'addSubstitution':
+            from app.managers.game_player_manager import GamePlayerManager
+            from core.managers.game_manager import GameManager
+            from app.models.settings import Settings
+            from app.models.game_player import ROLE_STARTER, ROLE_SUBSTITUTE
+
+            settings  = Settings.get_settings()
+            game      = GameManager().get_game_by_id(settings.current_game_id)
+            if not game:
+                socketio.emit('show_ui_monitor_content', {'content_type': None})
+                return
+
+            payload   = data.get('payload', {})
+            team_type = payload.get('teamType')  # 'home' | 'away'
+            team_id   = game.home_team_id if team_type == 'home' else game.away_team_id
+            team      = game.home_team    if team_type == 'home' else game.away_team
+
+            pg_mgr    = GamePlayerManager()
+            starters  = [gp.to_dict() for gp in pg_mgr.get_players_for_game(
+                game_id=game.id, team_id=team_id, role=ROLE_STARTER
+            )]
+            subs      = [gp.to_dict() for gp in pg_mgr.get_players_for_game(
+                game_id=game.id, team_id=team_id, role=ROLE_SUBSTITUTE
+            )]
+
+            from core.utils.timer_utils import get_current_time_in_seconds
+            subst_time = get_current_time_in_seconds(settings.current_period_id)
+
+            socketio.emit('show_ui_monitor_content', {
+                'content_type':   'addSubstitution',
+                'team_type':      team_type,
+                'team_id':        team_id,
+                'team_name':      team.name       if team else '',
+                'team_short_name': team.short_name if team else '',
+                'starters':       starters,
+                'substitutes':    subs,
+                'game_time_s':    subst_time,
+            })
+
+        elif content_type == 'confirmSubstitution':
+            # Zatwierdź grupę zmian przygotowaną w UI.
+            # payload: { team_id, game_time_ms, pairs: [{player_in_id, player_out_id}, ...] }
+            from app.managers.substitution_manager import SubstitutionManager, SubstitutionItem
+            from core.managers.game_manager import GameManager
+            from app.models.settings import Settings
+
+            settings  = Settings.get_settings()
+            game      = GameManager().get_game_by_id(settings.current_game_id)
+            payload   = data.get('payload', {})
+            team_id   = payload.get('team_id')
+            game_time_ms = payload.get('game_time_ms', 0)
+            pairs     = payload.get('pairs', [])
+            if not game or not team_id or not pairs:
+                socketio.emit('show_ui_monitor_content', {'content_type': None})
+                return
+
+            try:
+                items = [
+                    SubstitutionItem(
+                        player_in_id=p['player_in_id'],
+                        player_out_id=p['player_out_id'],
+                    )
+                    for p in pairs
+                ]
+                SubstitutionManager().make_substitution_group(
+                    game_id=game.id,
+                    team_id=team_id,
+                    items=items,
+                    game_time_ms=game_time_ms,
+                )
+                # Po zatwierdzeniu wróć do widoku listy zmian
+                socketio.emit('show_ui_monitor_content', {'content_type': 'substitutions'})
+                # showUiMonitorContent(socketio, data, settings, game, 'substitutions')
+            except ValueError as e:
+                socketio.emit('substitution_error', {'message': str(e)})
+                return
+        elif content_type == 'substitution-edit':
+            from app.managers.substitution_manager import SubstitutionManager
+            from app.managers.game_player_manager import GamePlayerManager
+            from core.managers.game_manager import GameManager
+            from app.models.settings import Settings
+            from app.models.game_player import ROLE_STARTER, ROLE_SUBSTITUTE
+
+            payload        = data.get('payload', {})
+            substitution_id = payload.get('substitution_id')
+            if not substitution_id:
+                socketio.emit('show_ui_monitor_content', {'content_type': None})
+                return
+
+            sub = SubstitutionManager().get_substitution_by_id(substitution_id)
+            if not sub:
+                socketio.emit('substitution_error', {'message': 'Zmiana nie istnieje'})
+                return
+
+            settings = Settings.get_settings()
+            game     = GameManager().get_game_by_id(settings.current_game_id)
+            pg_mgr   = GamePlayerManager()
+
+            # Lista dostępnych zawodników do selektów:
+            # available_out = aktualnie na boisku + aktualny player_out (już nie jest STARTER po zmianie)
+            # available_in  = aktualnie na ławce  + aktualny player_in (już nie jest SUBSTITUTE po zmianie)
+            starters   = pg_mgr.get_players_for_game(game.id, team_id=sub.team_id, role=ROLE_STARTER)
+            substitutes = pg_mgr.get_players_for_game(game.id, team_id=sub.team_id, role=ROLE_SUBSTITUTE)
+
+            # Dodaj uczestników bieżącej zmiany do odpowiednich list (mogą mieć już inną rolę)
+            from app.models.game_player import GamePlayer
+            current_pg_out = GamePlayer.query.filter_by(
+                game_id=sub.game_id, team_id=sub.team_id, player_id=sub.player_out_id
+            ).first()
+            current_pg_in = GamePlayer.query.filter_by(
+                game_id=sub.game_id, team_id=sub.team_id, player_id=sub.player_in_id
+            ).first()
+
+            avail_out = [gp.to_dict() for gp in starters]
+            if current_pg_out and current_pg_out not in starters:
+                avail_out.append(current_pg_out.to_dict())
+
+            avail_in = [gp.to_dict() for gp in substitutes]
+            if current_pg_in and current_pg_in not in substitutes:
+                avail_in.append(current_pg_in.to_dict())
+
+            # Rozmiar grupy — do informacji o propagacji czasu
+            group_size = len(SubstitutionManager().get_group(
+                sub.game_id, sub.team_id, sub.substitution_group
+            ))
+
+            socketio.emit('show_ui_monitor_content', {
+                'content_type':  'substitution-edit',
+                'substitution':  sub.to_dict(),
+                'available_out': avail_out,
+                'available_in':  avail_in,
+                'group_size':    group_size,
+            })
+
+        elif content_type == 'saveSubstitutionEdit':
+            from app.managers.substitution_manager import SubstitutionManager
+            from app.models.settings import Settings
+            from core.managers.game_manager import GameManager
+
+            payload         = data.get('payload', {})
+            substitution_id = payload.get('substitution_id')
+            game_time_ms    = payload.get('game_time_ms')
+            player_in_id    = payload.get('player_in_id')
+            player_out_id   = payload.get('player_out_id')
+
+            mgr = SubstitutionManager()
+            sub = mgr.get_substitution_by_id(substitution_id)
+            if not sub:
+                socketio.emit('substitution_error', {'message': 'Zmiana nie istnieje'})
+                return
+
+            try:
+                # Aktualizuj zawodników jeśli zmieniono
+                if player_in_id != sub.player_in_id or player_out_id != sub.player_out_id:
+                    mgr.edit_substitution_players(
+                        sub_id=substitution_id,
+                        player_in_id=player_in_id   if player_in_id  != sub.player_in_id  else None,
+                        player_out_id=player_out_id if player_out_id != sub.player_out_id else None,
+                    )
+                # Aktualizuj czas jeśli zmieniono (propaguje na całą grupę)
+                if game_time_ms is not None and game_time_ms != sub.game_time_ms:
+                    mgr.edit_substitution_time(substitution_id, game_time_ms)
+            except ValueError as e:
+                socketio.emit('substitution_error', {'message': str(e)})
+                return
+
+            # Wróć do listy zmian
+            settings = Settings.get_settings()
+            game     = GameManager().get_game_by_id(settings.current_game_id)
+            subst_mgr = SubstitutionManager()
+            socketio.emit('show_ui_monitor_content', {
+                'content_type':              'substitutions',
+                'home_team_substitutions':   [s.to_dict() for s in subst_mgr.get_substitutions_for_game(game.id, team_id=game.home_team_id)],
+                'away_team_substitutions':   [s.to_dict() for s in subst_mgr.get_substitutions_for_game(game.id, team_id=game.away_team_id)],
+                'home_team_id':              game.home_team_id,
+                'away_team_id':              game.away_team_id,
+                'home_team_short_name':      game.home_team.short_name if game.home_team else '',
+                'away_team_short_name':      game.away_team.short_name if game.away_team else '',
+                'is_scoreboard_reversed':    bool(settings.is_scoreboard_reversed),
+            })
+
+        elif content_type == 'deleteSubstitution':
+            from app.managers.substitution_manager import SubstitutionManager
+            from app.models.settings import Settings
+            from core.managers.game_manager import GameManager
+
+            payload         = data.get('payload', {})
+            substitution_id = payload.get('substitution_id')
+
+            sub = SubstitutionManager().get_substitution_by_id(substitution_id)
+            if not sub:
+                socketio.emit('substitution_error', {'message': 'Zmiana nie istnieje'})
+                return
+
+            ok = SubstitutionManager().delete_substitution(substitution_id)
+            if not ok:
+                socketio.emit('substitution_error', {'message': 'Nie udało się usunąć zmiany'})
+                return
+
+            settings = Settings.get_settings()
+            game     = GameManager().get_game_by_id(settings.current_game_id)
+            subst_mgr = SubstitutionManager()
+            socketio.emit('show_ui_monitor_content', {
+                'content_type':              'substitutions',
+                'home_team_substitutions':   [s.to_dict() for s in subst_mgr.get_substitutions_for_game(game.id, team_id=game.home_team_id)],
+                'away_team_substitutions':   [s.to_dict() for s in subst_mgr.get_substitutions_for_game(game.id, team_id=game.away_team_id)],
+                'home_team_id':              game.home_team_id,
+                'away_team_id':              game.away_team_id,
+                'home_team_short_name':      game.home_team.short_name if game.home_team else '',
+                'away_team_short_name':      game.away_team.short_name if game.away_team else '',
+                'is_scoreboard_reversed':    bool(settings.is_scoreboard_reversed),
+            })
+
+
+            
 
 
     def _get_game_event_data(game_event_id, new_event_type_id=None):
@@ -481,6 +741,55 @@ def register_events(socketio):
             'team_squad': game_data.to_dict()[team_squad] if team_squad else None,
             'game_event': game_event.to_dict(),
         }
+    
+    @socketio.on('show_substitution')
+    def handle_show_substitution(data):
+        from app.managers.substitution_manager import SubstitutionManager
+        from core.managers.game_manager import GameManager
+        from app.models.period import Period
+
+        period_id          = data.get('period_id')
+        team_id            = data.get('team_id')
+        substitution_group = data.get('substitution_group')
+
+        if not all([period_id, team_id, substitution_group is not None]):
+            return
+
+        period = Period.query.get(period_id)
+        if not period:
+            return
+
+        game  = GameManager().get_game_by_id(period.game_id)
+        team  = game.home_team if game and game.home_team_id == team_id else (
+                game.away_team if game else None)
+
+        subs = SubstitutionManager().get_group(period.game_id, team_id, substitution_group)
+        if not subs:
+            return
+
+        game_time_ms = subs[0].game_time_ms
+
+        # Koniec regulaminowego czasu tego okresu w sekundach
+        # (initial_time + limit — jak w show_info)
+        period_end_s = (period.initial_time + period.limit) // 1000
+
+        substitutions_payload = [{
+            'player_in_id':      s.player_in_id,
+            'player_in_name':    s.player_in.full_name  if s.player_in  else '',
+            'player_in_number':  s.player_in.number     if s.player_in  else None,
+            'player_out_id':     s.player_out_id,
+            'player_out_name':   s.player_out.full_name if s.player_out else '',
+            'player_out_number': s.player_out.number   if s.player_out else None,
+        } for s in subs]
+
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send_to_plugin('stream-overlay', 'show_substitution', {
+                'game_time_ms':    game_time_ms,
+                'period_end_s':    period_end_s,   # do formatowania czasu doliczonego
+                'team_short_name': team.short_name if team else '',
+                'substitutions':   substitutions_payload,
+            })
 
     @socketio.on('update_game_event')
     def handle_update_game_event(data):
@@ -609,7 +918,7 @@ def register_events(socketio):
     # =============================================================================
 
     def _resolve_event_id(event_type: str) -> int:
-        from core.models.event import Event
+        from app.models.event import Event
         event = Event.query.filter(Event.name.ilike(event_type)).first()
         if not event:
             raise ValueError(f"Nieznany typ zdarzenia: '{event_type}'")

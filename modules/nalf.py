@@ -14,7 +14,7 @@ MODULE_DIR = ROOT / 'modules' / 'futsal_nalf'
 sys.path.insert(0, str(MODULE_DIR))
 
 from app import create_app
-from app.extensions import socketio
+from core.extensions import socketio
 
 app = create_app('development')
 

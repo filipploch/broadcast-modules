@@ -3,10 +3,11 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 from core.managers.season_manager import SeasonManager
 from core.managers.league_manager import LeagueManager
 from core.managers.game_manager import GameManager
+from core.managers.team_manager import TeamManager
 from core.managers.camera_manager import CameraManager
 from core.managers.game_camera_manager import GameCameraManager
-from core.models.stadium import Stadium
-# from app.models.team import Team
+# from core.models.base_team import get_team_model
+from core.extensions import db
 from datetime import datetime
 import logging
 
@@ -15,23 +16,38 @@ logger = logging.getLogger(__name__)
 season_manager = SeasonManager()
 league_manager = LeagueManager()
 game_manager = GameManager()
+team_manager = TeamManager()
 
 def _get_team():
     from core.models.base_team import get_team_model
     return get_team_model()
+
+def _get_game():
+    from core.models.base_game import get_game_model
+    return get_game_model()
+
+def _get_period():
+    from core.models.base_period import get_period_model
+    return get_period_model()
+
+def _get_stadium():
+    from core.models.base_stadium import get_stadium_model
+    return get_stadium_model()
 
 def _get_player():
     from core.models.base_player import get_player_model
     return get_player_model()
 
 def _get_settings():
-    from core.models.settings import get_settings_model
+    from core.models.base_settings import get_settings_model
     return get_settings_model()
 
 # =========================
 # SEASON ROUTES
 # =========================
-def register_routes(app):
+def register_routes(app, exclude=None):
+    exclude = exclude or set()
+
     """Rejestruje wspólne trasy w instancji Flask aplikacji."""
     @app.route('/seasons/')
     def list_seasons():
@@ -360,6 +376,7 @@ def register_routes(app):
         Team = _get_team()
         leagues = league_manager.get_all_leagues()
         teams = Team.query.order_by(Team.name).all()
+        Stadium = _get_stadium()
         stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
         
         if request.method == 'POST':
@@ -412,6 +429,7 @@ def register_routes(app):
         Team = _get_team()
         
         teams = Team.query.order_by(Team.name).all()
+        Stadium = _get_stadium()
         stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
         shootout_manager = ShootoutManager()
         
@@ -1044,11 +1062,604 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
 
 
-    @app.route('/api/games/scrape/status')
-    def api_games_scrape_status():
-        """API: Get current game scraping status"""
-        from core.managers.game_scraper_manager import GameScraperManager
-        from flask import jsonify
-        game_scraper_manager = GameScraperManager()
-        status = game_scraper_manager.get_scraping_status()
-        return jsonify(status)
+    # @app.route('/api/games/scrape/status')
+    # def api_games_scrape_status():
+    #     """API: Get current game scraping status"""
+    #     from core.managers.game_scraper_manager import GameScraperManager
+    #     from flask import jsonify
+    #     game_scraper_manager = GameScraperManager()
+    #     status = game_scraper_manager.get_scraping_status()
+    #     return jsonify(status)
+
+
+    # ── Common view routes (shared between all modules) ─────────────────────
+
+    @app.route('/')
+    def index():
+        """
+        Period-control page — timer + scoreboard only.
+        Standalone UI for the operator running the clock during a match.
+        Mirrors the ui_dashboard data-loading logic but renders index.html.
+        """
+
+        Settings = _get_settings()
+        settings = Settings.get_settings()
+        current_period_id = settings.current_period_id
+        Period = _get_period()
+        Game = _get_game()
+        Team = _get_team()
+
+        period = None
+        game   = None
+        teams  = {'home': None, 'away': None}
+        main_timer = None
+
+        if current_period_id:
+            period = Period.query.filter_by(id=current_period_id).first()
+            if period:
+                game = Game.query.get(period.game_id)
+                if game:
+                    teams = {
+                        'home': Team.query.get(game.home_team_id),
+                        'away': Team.query.get(game.away_team_id),
+                    }
+
+            current_timers = settings.get_current_timers()
+            main_timer = current_timers.get('main')
+
+        return render_template('index.html',
+                               period=period,
+                               game=game,
+                               main_timer=main_timer,
+                               teams=teams)
+
+
+
+    @app.route('/api/assign/uniforms/data')
+    def api_uniforms_data():
+        """Return uniform options for both teams of the current game."""
+        import json as _json
+
+        Settings = _get_settings()
+        Game = _get_game()
+        settings = Settings.get_settings()
+        if not settings.current_game_id:
+            return jsonify({'error': 'Brak wybranego meczu'}), 400
+
+        game = Game.query.get(settings.current_game_id)
+        if not game:
+            return jsonify({'error': 'Nie znaleziono meczu'}), 404
+
+        DEFAULT_EXTRA = '#9eff00'
+        DEFAULT_GAME  = '#000'   # sentinel – means "not assigned"
+
+        def _parse(raw, fallback):
+            """Parse JSON string, return list; on error return fallback."""
+            if not raw:
+                return fallback
+            try:
+                v = _json.loads(raw)
+                return v if isinstance(v, list) else fallback
+            except Exception:
+                return fallback
+
+        def _team_options(team, game_uniform_raw):
+            """
+            Build option list for one team side.
+
+            Returns dict:
+              options: [{'colors': [...], 'source': 'home'|'away'|'extra'}]
+              selected_colors: list currently saved in game (or None)
+              extra_colors: colors to pre-fill in the editable extra option
+            """
+            team_uniform = team.get_uniform()   # {'home': [...], 'away': [...]}
+            home_colors  = team_uniform.get('home') or []
+            away_colors  = team_uniform.get('away') or []
+            game_colors  = _parse(game_uniform_raw, None)
+
+            options = []
+            if home_colors:
+                options.append({'colors': home_colors, 'source': 'home'})
+            if away_colors:
+                options.append({'colors': away_colors, 'source': 'away'})
+
+            # Determine default for the editable extra option.
+            # If the game already has colors saved and they don't match home/away,
+            # use those saved colors as the extra default.
+            is_default_game = (game_colors is None or game_colors == [DEFAULT_GAME])
+            known_sets = [home_colors, away_colors]
+            if is_default_game or game_colors in known_sets:
+                extra_colors = [DEFAULT_EXTRA]
+            else:
+                extra_colors = game_colors  # previously saved custom value
+
+            options.append({'colors': extra_colors, 'source': 'extra'})
+
+            return {
+                'options': options,
+                'selected_colors': game_colors,
+            }
+
+        home_data = _team_options(game.home_team, game.home_team_uniform)
+        away_data = _team_options(game.away_team, game.away_team_uniform)
+
+        return jsonify({
+            'home_team_id':   game.home_team_id,
+            'home_team_name': game.home_team.name,
+            'home':           home_data,
+            'away_team_id':   game.away_team_id,
+            'away_team_name': game.away_team.name,
+            'away':           away_data,
+        })
+
+
+
+    @app.route('/api/teams')
+    def api_list_teams():
+        """API: List all teams"""
+        team_manager = TeamManager()
+        teams = team_manager.get_all_teams()
+        return jsonify({
+            'teams': [team.to_dict() for team in teams]
+        })
+
+
+
+    @app.route('/api/teams/<int:team_id>')
+    def api_get_team(team_id):
+        """API: Get single team"""
+        team_manager = TeamManager()
+        team = team_manager.get_team_by_id(team_id)
+
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+
+        return jsonify(team.to_dict())
+
+
+
+
+
+
+
+    @app.route('/common-data/')
+    def common_data():
+ 
+        return render_template('common-data.html')
+
+
+    @app.route('/game-period-choice')
+    def game_period_choice():
+        """Period selection page — start, finish, reset periods and shootout."""
+    
+        Settings = _get_settings()
+        Game = _get_game()
+        Period = _get_period()
+        settings = Settings.get_settings()
+
+        game     = None
+        periods  = []
+        penalty  = None
+
+        if settings.current_game_id:
+            game = Game.query.get(settings.current_game_id)
+            if game:
+                periods = Period.query.filter_by(game_id=game.id).all()
+                penalty = game.shootout
+
+        return render_template('game-period-choice.html',
+                               game=game,
+                               periods=periods,
+                               penalty=penalty,
+                               settings=settings)
+
+    if '/game-setup' not in exclude:
+        @app.route('/game-setup')
+        def game_setup():
+            """Game setup page — manage periods, squads, referees, cameras."""
+        
+            from core.managers.game_player_manager import GamePlayerManager
+            from core.managers.game_referee_manager import GameRefereeManager
+            from core.managers.game_commentator_manager import GameCommentatorManager
+            from core.managers.game_camera_manager import GameCameraManager
+
+            Settings = _get_settings()
+            settings = Settings.get_settings()
+
+            game     = None
+            periods  = []
+            shootout = None
+            assigned = {
+                'home_squad':   [],
+                'away_squad':   [],
+                'referees':     [],
+                'commentators': [],
+                'cameras':      [],
+            }
+
+            if settings.current_game_id:
+                Game = _get_game()
+                Period = _get_period()
+                game = Game.query.get(settings.current_game_id)
+                if game:
+                    periods  = Period.query.filter_by(game_id=game.id).all()
+                    shootout = game.shootout
+
+                    pg_mgr = GamePlayerManager()
+                    assigned['home_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
+                    assigned['away_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
+                    assigned['referees']     = GameRefereeManager().get_referees_for_game(game.id)
+                    assigned['commentators'] = GameCommentatorManager().get_commentators_for_game(game.id)
+                    assigned['cameras']      = GameCameraManager().get_cameras_for_game(game.id)
+
+            return render_template('game-setup.html',
+                                game=game,
+                                periods=periods,
+                                shootout=shootout,
+                                settings=settings,
+                                assigned=assigned)
+
+
+
+
+    @app.route('/game/<int:game_id>/shootout/reset')
+    def reset_shootout(game_id):
+        """Reset shootout — delete record and clear current_shootout_id in Settings."""
+    
+        from core.managers.shootout_manager import ShootoutManager
+        Game = _get_game()
+        Settings = _get_settings()
+        game = Game.query.get(game_id)
+        if not game:
+            flash('Nie znaleziono meczu', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        try:
+            shootout_manager = ShootoutManager()
+            if game.shootout:
+                shootout_manager.delete_shootout(game.shootout.id)
+            Settings.set_current_shootout(None)
+            flash('Zresetowano konkurs rzutów karnych', 'success')
+        except Exception as e:
+            logger.error(f"Error resetting shootout: {e}")
+            flash(f'Błąd podczas resetowania konkursu: {str(e)}', 'error')
+
+        return redirect(url_for('game_period_choice'))
+
+
+    @app.route('/game/<int:game_id>/shootout/start')
+    def start_shootout(game_id):
+        """
+        Rozpocznij konkurs rzutów karnych:
+        1. Utwórz rekord Shootout (jeśli nie istnieje).
+        2. Ustaw current_shootout_id w Settings.
+        3. Przekieruj do UI dashboard.
+        """
+        from core.managers.shootout_manager import ShootoutManager
+        Game = _get_game()
+        Period = _get_period()
+        game = Game.query.get(game_id)
+        if not game:
+            flash('Nie znaleziono meczu', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        # Walidacja: liga musi nie dopuszczać remisu
+        if game.league and game.league.allows_draw:
+            flash('Ta liga dopuszcza remis — konkurs rzutów karnych niedostępny.', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        # Walidacja: wszystkie okresy muszą być zakończone
+        periods = game.get_periods_list()
+        if not periods or not all(p.status == Period.STATUS_FINISHED for p in periods):
+            flash('Wszystkie okresy meczu muszą być zakończone przed konkursem rzutów karnych.', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        # Walidacja: wynik musi być remisowy
+        if game.home_team_goals != game.away_team_goals:
+            flash('Konkurs rzutów karnych jest dostępny tylko przy remisie po regulaminowym czasie gry.', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        shootout_manager = ShootoutManager()
+        Settings = _get_settings()
+
+        try:
+            # Utwórz rekord Shootout jeśli jeszcze nie istnieje
+            if not game.shootout:
+                shootout_manager.create_shootout(game_id=game_id)
+                # Odśwież obiekt żeby załadować nową relację
+                db.session.refresh(game)
+
+            # Ustaw jako aktywny konkurs w Settings
+            Settings.set_current_shootout(game.shootout.id)
+
+            flash('Rozpoczęto konkurs rzutów karnych.', 'success')
+            from core.extensions import socketio
+            socketio.emit('reload_ui_dashboard')
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            logger.error(f"Error starting penalty shootout: {e}")
+            flash(f'Błąd podczas rozpoczynania konkursu: {str(e)}', 'error')
+            return redirect(url_for('game_period_choice'))
+
+
+
+
+
+    @app.route('/period/<int:period_id>/finish')
+    def finish_period(period_id):
+        """Finish a period and return to broadcast control"""
+        from core.managers.period_manager import PeriodManager
+    
+        period_manager = PeriodManager()
+        period = period_manager.get_period_by_id(period_id)
+        Settings = _get_settings()
+        Game = _get_game()
+        Period = _get_period()
+    
+        if not period:
+            flash('Nie znaleziono okresu', 'error')
+            return redirect(url_for('game_period_choice'))
+    
+        try:
+            # Finish the period
+            period_manager.finish_period(period_id)
+        
+            # Clear actual period in settings
+            Settings.set_current_period(None)
+        
+            # Check if this was the last period
+            game = Game.query.get(period.game_id)
+            if game:
+                all_periods = game.get_periods_list()
+                all_finished = all(p.status == Period.STATUS_FINISHED for p in all_periods)
+            
+                if all_finished:
+                    # All periods finished - finish the game
+                    game.set_finished()
+                    db.session.commit()
+                    flash(f'Zakończono {period.description}. Mecz zakończony!', 'success')
+                else:
+                    flash(f'Zakończono {period.description}', 'success')
+        
+            return redirect(url_for('game_period_choice'))
+        
+        except Exception as e:
+            logger.error(f"Error finishing period: {e}")
+            flash(f'Błąd podczas kończenia okresu: {str(e)}', 'error')
+            return redirect(url_for('game_period_choice'))
+
+
+
+    @app.route('/period/<int:period_id>/reset-status')
+    def reset_period_status(period_id):
+        """Reset period status to NOT_STARTED (for error correction)"""
+        from core.managers.period_manager import PeriodManager
+    
+        period_manager = PeriodManager()
+        period = period_manager.get_period_by_id(period_id)
+        Period = _get_period()
+    
+        if not period:
+            flash('Nie znaleziono okresu', 'error')
+            return redirect(url_for('game_period_choice'))
+    
+        try:
+            period_manager.set_period_status(period_id, Period.STATUS_NOT_STARTED)
+            flash(f'Zresetowano status okresu: {period.description}', 'success')
+        except Exception as e:
+            logger.error(f"Error resetting period status: {e}")
+            flash(f'Błąd podczas resetowania statusu: {str(e)}', 'error')
+    
+        return redirect(url_for('game_period_choice'))
+
+
+
+    @app.route('/period/<int:period_id>/start')
+    def start_period(period_id):
+        """Start a period and redirect to UI dashboard"""
+        from core.managers.period_manager import PeriodManager
+    
+        from core.managers import get_timer_manager
+
+        Game = _get_game()
+        Period = _get_period()
+        Settings = _get_settings()
+        period_manager = PeriodManager()
+        period = period_manager.get_period_by_id(period_id)
+
+        if not period:
+            flash('Nie znaleziono okresu', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        # Check if this period can be started
+        game = Game.query.get(period.game_id)
+        if not game:
+            flash('Nie znaleziono meczu', 'error')
+            return redirect(url_for('game_period_choice'))
+
+        # Check if previous period is finished (if not first period)
+        if period.period_order > 1:
+            previous_periods = Period.query.filter_by(
+                game_id=period.game_id
+            ).filter(
+                Period.period_order < period.period_order
+            ).all()
+
+            for prev_period in previous_periods:
+                if prev_period.status != Period.STATUS_FINISHED:
+                    flash(f'Nie można rozpocząć {period.description}. Poprzedni okres nie został zakończony.', 'error')
+                    return redirect(url_for('game_period_choice'))
+
+        try:
+            # WAŻNA KOLEJNOŚĆ:
+            # 1. Najpierw usuń poprzedni timer (jeśli istnieje)
+            timer_manager = get_timer_manager()
+            current_timers = Settings.get_current_timers()
+            previous_main = current_timers.get('main')
+            if previous_main and previous_main.get('timer_id'):
+                timer_manager.remove_timer(previous_main['timer_id'])
+
+            # 2. Ustaw current_period_id w Settings PRZED start_period,
+            #    żeby on_timer_created() mógł odczytać prawidłowy period_id
+            #    przy potwierdzeniu z pluginu (unikamy race condition: period_id=None).
+            Settings.set_current_period(period_id)
+
+            # 3. Teraz uruchom okres — create_timer wysyła wiadomość do pluginu
+            period_manager.start_period(period_id)
+
+            # 4. Jeśli to pierwsza część, ustaw mecz jako trwający
+            if period.period_order == 1:
+                game.set_live()
+                db.session.commit()
+
+            flash(f'Rozpoczęto {period.description}', 'success')
+            from core.extensions import socketio
+            socketio.emit('reload_ui_dashboard')
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            logger.error(f"Error starting period: {e}")
+            flash(f'Błąd podczas rozpoczynania okresu: {str(e)}', 'error')
+            return redirect(url_for('game_period_choice'))
+
+
+
+
+
+    @app.route('/ui')
+    def ui_dashboard():
+        """
+        Main UI dashboard with Jinja2 rendering
+    
+        Renders timers server-side from Settings.current_timers
+        JavaScript only handles WebSocket updates, not timer creation
+        """
+        Settings = _get_settings()
+        Game = _get_game()
+        Team = _get_team()
+        Period = _get_period()
+    
+        settings = Settings.get_settings()
+        current_period_id = settings.current_period_id
+    
+        # Get current period
+        period = None
+        game = None
+        if current_period_id:
+            period = Period.query.filter_by(id=current_period_id).first()
+            if period:
+                game = Game.query.get(period.game_id)
+                teams = {
+                    'home': Team.query.get(game.home_team_id),
+                    'away': Team.query.get(game.away_team_id)
+                }
+    
+            # Get current timers from Settings
+            current_timers = settings.get_current_timers()
+            main_timer = current_timers.get('main')
+            home_penalties = current_timers.get('penalties')['home']
+            away_penalties = current_timers.get('penalties')['away']
+            penalties = home_penalties + away_penalties
+        
+            # Log for debugging
+            current_app.logger.info(f"UI Dashboard - Period: {period.id if period else None}")
+            current_app.logger.info(f"Main timer: {main_timer.get('timer_id') if main_timer else None}")
+            current_app.logger.info(f"Penalties: {len(penalties)}")
+        
+            return render_template('ui-jinja.html',
+                                period=period,
+                                game=game,
+                                main_timer=main_timer,
+                                teams=teams,
+                                penalties=penalties)
+        else:
+            current_game_id = settings.current_game_id
+        
+            game = Game.query.get(current_game_id)
+            teams = {
+                'home': Team.query.get(game.home_team_id),
+                'away': Team.query.get(game.away_team_id)
+            }
+
+            return render_template('ui-shootout.html')
+        
+    @app.route('/teams/create', methods=['GET', 'POST'])
+    def create_team():
+        """Create new team manually (without scraping)"""
+        if request.method == 'POST':
+            try:
+                uniform_home = request.form.getlist('uniform_home[]')
+                uniform_away = request.form.getlist('uniform_away[]')
+                team = team_manager.create_team(
+                    name=request.form['name'],
+                    name_14=request.form['name_14'],
+                    short_name=request.form['short_name'],
+                    team_url=request.form['team_url'],
+                    logo_path=request.form.get('logo_path', 'static/images/logos/default.png'),
+                    uniform={'home': uniform_home, 'away': uniform_away}
+                )
+
+                flash(f'Dodano zespół: {name}', 'success')
+                return redirect(url_for('view_team', team_id=team.id))
+
+            except Exception as e:
+                logger.error(f"Error creating team: {e}")
+                flash(f'Błąd podczas tworzenia zespołu: {str(e)}', 'error')
+
+        return render_template('teams/create.html')
+
+
+    @app.route('/teams/<int:team_id>/edit', methods=['GET', 'POST'])
+    def edit_team(team_id):
+        """Edit existing team"""
+        team = team_manager.get_team_by_id(team_id)
+        logos = team_manager.get_all_logos()
+
+        if not team:
+            flash('Nie znaleziono zespołu', 'error')
+            return redirect(url_for('list_teams'))
+
+        if request.method == 'POST':
+            try:
+                uniform_home = request.form.getlist('uniform_home[]')
+                uniform_away = request.form.getlist('uniform_away[]')
+                team_manager.update_team(
+                    team_id=team_id,
+                    name=request.form.get('name'),
+                    name_14=request.form.get('name_14'),
+                    short_name=request.form.get('short_name'),
+                    team_url=request.form.get('team_url'),
+                    logo_path=request.form.get('logo_path'),
+                    uniform={'home': uniform_home, 'away': uniform_away}
+                )
+
+                flash(f'Zaktualizowano zespół: {team.name}', 'success')
+                return redirect(url_for('view_team', team_id=team.id))
+
+            except Exception as e:
+                logger.error(f"Error updating team: {e}")
+                flash(f'Błąd podczas aktualizacji zespołu: {str(e)}', 'error')
+
+        return render_template('teams/edit.html', team=team, logos=logos)
+
+
+    @app.route('/teams/<int:team_id>/delete', methods=['POST'])
+    def delete_team(team_id):
+        """Delete team"""
+        team = team_manager.get_team_by_id(team_id)
+
+        if not team:
+            flash('Nie znaleziono zespołu', 'error')
+            return redirect(url_for('list_teams'))
+
+        team_name = team.name
+
+        if team_manager.delete_team(team_id):
+            flash(f'Usunięto zespół: {team_name}', 'success')
+        else:
+            flash('Błąd podczas usuwania zespołu', 'error')
+
+        return redirect(url_for('list_teams'))
+
+

@@ -1,4 +1,4 @@
-"""BaseSettings — abstrakcyjna klasa bazowa dla ustawień aplikacji.
+"""BaseSettingsMixin — abstrakcyjna klasa bazowa dla ustawień aplikacji.
 
 Singleton (zawsze jeden wiersz, id=1). Zawiera wspólne pola
 dla wszystkich modułów: bieżący sezon, mecz, okres, timery,
@@ -12,13 +12,20 @@ from datetime import datetime
 import json
 
 
-class BaseSettings(db.Model):
-    __abstract__ = True
+class BaseSettingsMixin:
 
     id                     = db.Column(db.Integer, primary_key=True)
-    current_season_id      = db.Column(db.Integer, nullable=True)
-    current_game_id        = db.Column(db.Integer, nullable=True)
-    current_period_id      = db.Column(db.Integer, nullable=True)
+    @db.declared_attr
+    def current_season_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)
+
+    @db.declared_attr
+    def current_game_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
+
+    @db.declared_attr
+    def current_period_id(cls):
+        return db.Column(db.Integer, db.ForeignKey('periods.id'), nullable=True)
     current_timers         = db.Column(db.Text,    nullable=True)
     is_scoreboard_reversed = db.Column(db.Boolean, default=False)
     obs_record_filepath    = db.Column(db.String(500), nullable=True)
@@ -39,7 +46,7 @@ class BaseSettings(db.Model):
         """Get or create singleton settings instance.
         
         UWAGA: Tę metodę wywołuj tylko na konkretnej klasie (np. app.models.Settings),
-        nie na BaseSettings. BaseSettings jest abstrakcyjna i nie ma tabeli.
+        nie na BaseSettingsMixin. BaseSettingsMixin jest abstrakcyjna i nie ma tabeli.
         """
         settings = cls.query.first()
         if not settings:
@@ -48,7 +55,7 @@ class BaseSettings(db.Model):
             db.session.commit()
         return settings
 
-    # ── Season / Game / Period ─────────────────────────────────────────────────
+    # ── BaseSeasonMixin / Game / Period ─────────────────────────────────────────────────
     @classmethod
     def set_current_season(cls, season_id):
         s = cls.get_settings()
@@ -152,8 +159,22 @@ class BaseSettings(db.Model):
             return True
         if s.current_game_id is None:
             return False
-        from core.models.period import Period
+        from core.models.base_period import get_period_model
+        Period = get_period_model()
         period = Period.query.get(s.current_period_id)
         if not period:
             return False
         return period.game_id == s.current_game_id
+
+def get_settings_model():
+    """Zwraca konkretną klasę BaseLeagueMixin zarejestrowaną przez aktywny moduł."""
+    from core.extensions import db
+    for mapper in db.Model.registry.mappers:
+        cls = mapper.class_
+        if (getattr(cls, '__tablename__', None) == 'settings'
+                and issubclass(cls, BaseSettingsMixin)):
+            return cls
+    raise RuntimeError(
+        "Nie znaleziono klasy BaseSettingsMixin w rejestrze SQLAlchemy. "
+        "Upewnij się że model jest zaimportowany przed wywołaniem get_settings_model()."
+    )

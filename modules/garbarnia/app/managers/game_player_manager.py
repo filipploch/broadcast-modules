@@ -1,203 +1,122 @@
-"""GamePlayer Manager - handles player assignments to games"""
+"""GamePlayerManager — moduł garbarnia.
+
+Nadpisuje assign_player_to_game (dodaje: role, is_youth)
+i dodaje get_starters / get_substitutes.
+"""
 from typing import List, Optional
-from app.extensions import db
+from core.managers.game_player_manager import GamePlayerManager as _CoreGPM
 from app.models.game_player import GamePlayer
 from app.models.player import Player
-from app.models.game import Game
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class GamePlayerManager:
-    """Manager for GamePlayer operations"""
+class GamePlayerManager(_CoreGPM):
+    """GamePlayerManager dla garbarni — obsługuje role zawodników."""
 
-    def assign_player_to_game(self, player_id: int, game_id: int,
-                              override_team_id: int = None,
-                              override_is_goalkeeper: bool = None,
-                              override_is_captain: bool = None,
-                              override_number: int = None) -> Optional[GamePlayer]:
-        """
-        Assign player to game (creates historical snapshot)
-        
-        By default, copies current player data (team_id, is_goalkeeper, is_captain, number).
-        Use override parameters to set different values for this specific game.
+    def assign_player_to_game(
+        self,
+        player_id: int,
+        game_id: int,
+        role: str = 'starter',
+        override_team_id: int = None,
+        override_is_goalkeeper: bool = None,
+        override_is_captain: bool = None,
+        override_is_youth: bool = None,
+        override_number: int = None,
+    ):
+        """Nadpisuje metodę core — dodaje parametr role i is_youth."""
+        from app.models.game_player import ROLE_STARTER, VALID_ROLES
+        from core.extensions import db
 
-        Args:
-            player_id: Player ID
-            game_id: Game ID
-            override_team_id: Override team_id (default: use Player.team_id)
-            override_is_goalkeeper: Override is_goalkeeper (default: use Player.is_goalkeeper)
-            override_is_captain: Override is_captain (default: use Player.is_captain)
-            override_number: Override number (default: use Player.number)
 
-        Returns:
-            GamePlayer object or None if error
-
-        Raises:
-            ValueError if player/game not found or player already assigned
-        """
-        # Validate player exists
         player = Player.query.get(player_id)
         if not player:
             raise ValueError(f"Zawodnik o ID {player_id} nie istnieje")
 
-        # Validate game exists
-        game = Game.query.get(game_id)
+        from core.models.base_game import get_game_model
+        game = get_game_model().query.get(game_id)
         if not game:
             raise ValueError(f"Mecz o ID {game_id} nie istnieje")
 
-        # Check if player already assigned
-        existing = GamePlayer.query.filter_by(player_id=player_id, game_id=game_id).first()
+        existing = GamePlayer.query.filter_by(
+            player_id=player_id, game_id=game_id
+        ).first()
         if existing:
-            raise ValueError(f"Zawodnik {player.full_name} jest już przypisany do meczu {game_id}")
+            raise ValueError(
+                f"Zawodnik {player.full_name} jest już przypisany do meczu {game_id}"
+            )
+
+        if role not in VALID_ROLES:
+            raise ValueError(f"Nieprawidłowa rola: {role}. Dozwolone: {VALID_ROLES}")
 
         try:
-            # Create snapshot (use overrides if provided, else copy from player)
             game_player = GamePlayer(
                 player_id=player_id,
                 game_id=game_id,
                 team_id=override_team_id if override_team_id is not None else player.team_id,
-                is_goalkeeper=override_is_goalkeeper if override_is_goalkeeper is not None else player.is_goalkeeper,
-                is_captain=override_is_captain if override_is_captain is not None else player.is_captain,
-                number=override_number if override_number is not None else player.number
+                is_goalkeeper=override_is_goalkeeper if override_is_goalkeeper is not None
+                              else player.is_goalkeeper,
+                is_captain=override_is_captain if override_is_captain is not None
+                           else player.is_captain,
+                is_youth=override_is_youth if override_is_youth is not None
+                         else getattr(player, 'is_youth', False),
+                number=override_number if override_number is not None else player.number,
+                role=role,
             )
             db.session.add(game_player)
             db.session.commit()
-
-            logger.info(f"Assigned player {player.full_name} to game {game_id}")
+            logger.info(f"Przypisano {player.full_name} do meczu {game_id} (rola: {role})")
             return game_player
-
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error assigning player to game: {e}")
+            logger.error(f"Błąd przypisania zawodnika: {e}")
             raise
 
-    def assign_team_to_game(self, team_id: int, game_id: int) -> List[GamePlayer]:
-        """
-        Assign all players from a team to a game
-        
-        Creates snapshots for all players in the team.
+    def get_players_for_game(self, game_id: int, team_id: int = None,
+                              role: str = None):
+        """Nadpisuje metodę core — dodaje filtr role."""
 
-        Args:
-            team_id: Team ID
-            game_id: Game ID
-
-        Returns:
-            List of created GamePlayer objects
-        """
-        players = Player.query.filter_by(team_id=team_id).all()
-        
-        assigned = []
-        for player in players:
-            try:
-                pg = self.assign_player_to_game(player.id, game_id)
-                assigned.append(pg)
-            except ValueError as e:
-                logger.warning(f"Skipping player {player.id}: {e}")
-                continue
-
-        logger.info(f"Assigned {len(assigned)} players from team {team_id} to game {game_id}")
-        return assigned
-
-    def get_players_for_game(self, game_id: int, team_id: int = None) -> List[GamePlayer]:
-        """
-        Get all players assigned to a game
-        
-        Args:
-            game_id: Game ID
-            team_id: Optional filter by team
-
-        Returns:
-            List of GamePlayer objects
-        """
         query = GamePlayer.query.filter_by(game_id=game_id)
         if team_id:
             query = query.filter_by(team_id=team_id)
+        if role:
+            query = query.filter_by(role=role)
         return query.join(Player, GamePlayer.player_id == Player.id).order_by(
-            GamePlayer.is_goalkeeper.desc(),     # bramkarze pierwsi
-            GamePlayer.number.asc().nullslast(), # numer rosnąco, None na końcu
-            Player.last_name.asc(),              # nazwisko alfabetycznie
+            GamePlayer.is_goalkeeper.desc(),
+            GamePlayer.number.asc().nullslast(),
+            Player.last_name.asc(),
         ).all()
 
-    def get_game_player_by_id(self, game_player_id: int) -> Optional[GamePlayer]:
-        """Get GamePlayer by ID"""
-        return GamePlayer.query.get(game_player_id)
-    
-    def get_game_player_by_player_id(self, player_id: int) -> Optional[GamePlayer]:
-        """Get GamePlayer by ID"""
-        return GamePlayer.query.filter_by(player_id=player_id).first()
+    def get_starters(self, game_id: int, team_id: int = None):
+        return self.get_players_for_game(game_id, team_id=team_id, role='starter')
 
-    def update_game_player(self, game_player_id: int,
-                          team_id: int = None,
-                          is_goalkeeper: bool = None,
-                          is_captain: bool = None,
-                          number: int = None) -> Optional[GamePlayer]:
-        """
-        Update player game assignment
-        
-        Note: This updates the historical snapshot for this specific game.
+    def get_substitutes(self, game_id: int, team_id: int = None):
+        return self.get_players_for_game(game_id, team_id=team_id, role='substitute')
 
-        Args:
-            game_player_id: GamePlayer ID
-            team_id: New team ID (optional)
-            is_goalkeeper: New goalkeeper status (optional)
-            is_captain: New captain status (optional)
-            number: New jersey number (optional)
+    def update_game_player(self, game_player_id: int, team_id: int = None,
+                            is_goalkeeper: bool = None, is_captain: bool = None,
+                            is_youth: bool = None, number: int = None,
+                            role: str = None):
+        """Nadpisuje metodę core — dodaje is_youth i role."""
+        from app.models.game_player import VALID_ROLES
+        from core.extensions import db
 
-        Returns:
-            Updated GamePlayer object or None if error
-        """
         game_player = self.get_game_player_by_id(game_player_id)
         if not game_player:
-            logger.warning(f"GamePlayer with ID {game_player_id} not found")
             return None
-
+        if role is not None and role not in VALID_ROLES:
+            raise ValueError(f"Nieprawidłowa rola: {role}")
         try:
-            if team_id is not None:
-                game_player.team_id = team_id
-            if is_goalkeeper is not None:
-                game_player.is_goalkeeper = is_goalkeeper
-            if is_captain is not None:
-                game_player.is_captain = is_captain
-            if number is not None:
-                game_player.number = number
-
+            if team_id       is not None: game_player.team_id       = team_id
+            if is_goalkeeper is not None: game_player.is_goalkeeper = is_goalkeeper
+            if is_captain    is not None: game_player.is_captain    = is_captain
+            if is_youth      is not None: game_player.is_youth      = is_youth
+            if number        is not None: game_player.number        = number
+            if role          is not None: game_player.role          = role
             db.session.commit()
-            logger.info(f"Updated GamePlayer ID {game_player_id}")
             return game_player
-
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error updating player game: {e}")
-            return None
-
-    def remove_player_from_game(self, game_player_id: int) -> bool:
-        """
-        Remove player from game
-
-        Args:
-            game_player_id: GamePlayer ID
-
-        Returns:
-            True if removed, False if error
-        """
-        game_player = self.get_game_player_by_id(game_player_id)
-        if not game_player:
-            logger.warning(f"GamePlayer with ID {game_player_id} not found")
-            return False
-
-        try:
-            db.session.delete(game_player)
-            db.session.commit()
-            logger.info(f"Removed player from game (GamePlayer ID: {game_player_id})")
-            return True
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error removing player from game: {e}")
-            return False
-
-    def get_games_for_player(self, player_id: int) -> List[GamePlayer]:
-        """Get all games where player participated"""
-        return GamePlayer.query.filter_by(player_id=player_id).all()
+            raise
