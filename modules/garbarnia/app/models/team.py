@@ -11,3 +11,8 @@ class Team(BaseTeamMixin, db.Model):
     __tablename__ = 'teams'
 
     coach = db.Column(db.String(100), nullable=True)
+
+    def to_dict(self):
+        d = super().to_dict()
+        d['coach'] = self.coach
+        return d

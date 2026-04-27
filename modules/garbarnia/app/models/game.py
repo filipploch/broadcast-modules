@@ -32,4 +32,6 @@ class Game(BaseGameMixin, db.Model):
         d['has_shootout']            = self.has_shootout
         d['full_score_string']       = self.full_score_string
         d['shootout']                = self.shootout.to_dict() if self.shootout else None
+        d['home_team_coach']         = self.home_team.coach if self.home_team else None,
+        d['away_team_coach']         = self.away_team.coach if self.away_team else None,
         return d

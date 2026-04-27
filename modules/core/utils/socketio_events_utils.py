@@ -35,6 +35,12 @@ def generate_show_overlay_data(data):
     settings = Settings.get_settings()
     current_game_data = _get_game().query.get(settings.current_game_id).to_dict()
     container_id = data.get('container_id')
+    home_team_coach = None
+    away_team_coach = None
+    if 'home_team_coach' in current_game_data:
+        home_team_coach = current_game_data['home_team_coach']
+    if 'away_team_coach' in current_game_data:
+        away_team_coach = current_game_data['away_team_coach']
     match container_id:
         case 'game-container':
             pass
@@ -43,6 +49,7 @@ def generate_show_overlay_data(data):
                 'team_name': current_game_data['home_team_name'],
                 'team_short_name': current_game_data['home_team_short_name'],
                 'team_squad': current_game_data['home_team_squad'],
+                'coach' : home_team_coach,
                 'logo': current_game_data['home_team_logo']
                 })
         case 'away-team-squad-container':
@@ -50,6 +57,7 @@ def generate_show_overlay_data(data):
                 'team_name': current_game_data['away_team_name'],
                 'team_short_name': current_game_data['away_team_short_name'],
                 'team_squad': current_game_data['away_team_squad'],
+                'coach' : away_team_coach,
                 'logo': current_game_data['away_team_logo']
                 })
         case 'start-container':

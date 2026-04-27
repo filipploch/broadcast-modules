@@ -210,3 +210,11 @@ class ObsWsManager:
                     Settings.set_obs_record_filepath(obs_record_filepath)
                     self._emit_to_ui('obs_record_state', {'state': 'disabled'})
 
+    def enable_source_filter(self, source_name, filter_name, filter_state=True):
+        _request_type = 'SetSourceFilterEnabled'
+        _request_data = {
+            'sourceName': source_name,
+            'filterName': filter_name,
+            'filterEnabled': filter_state,
+            }
+        self.send_obs_request_sync(_request_type, _request_data)

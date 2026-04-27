@@ -3,6 +3,7 @@
 var FIELD_COLS = 15;
 var FIELD_ROWS = 9;
 
+
 /**
  * UI-JINJA.JS - Simplified timer UI with Jinja2 rendering
  * 

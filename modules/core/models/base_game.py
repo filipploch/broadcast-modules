@@ -445,12 +445,14 @@ class BaseGameMixin:
         GamePlayer = _get_game_player()
         Player = GamePlayer.player.mapper.class_
 
-        def _sorted(t_id):
+        def _sorted(team_id):
             return (
                 self.game_players
-                .filter_by(team_id=t_id)
+                .filter_by(team_id=team_id)
                 .join(Player, GamePlayer.player_id == Player.id)
                 .order_by(
+                    GamePlayer.is_goalkeeper.desc(),
+                    GamePlayer.number.asc().nullslast(),
                     Player.last_name.asc(),
                 )
                 .all()

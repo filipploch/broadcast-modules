@@ -81,7 +81,9 @@
             let teamShortName = _data.team_short_name;
             let teamSquad = _data.team_squad;
             let teamLogo = _data.logo;
-            expandSquadContainer(containerId, teamName, teamShortName, teamSquad, teamLogo);
+			let teamCoach;
+			if(_data.coach !== 'undefined') {teamCoach = _data.coach;} else {teamCoach = null;}
+            expandSquadContainer(containerId, teamName, teamShortName, teamSquad, teamLogo, teamCoach);
             let addedDelayTime = prepareToOpenContainer(openContainer, targetContainer);
             delayTime += addedDelayTime;
             activateElementsAfterTime('squad-content', delayTime);
@@ -404,7 +406,7 @@
         _startContainer.appendChild(startContainer);
     }
 
-    function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo) {
+    function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo, _coach) {
         let squadContainer = document.getElementById(_containerId);
         squadContainer.innerHTML = '';
         let infoHead = document.createElement('div');
@@ -430,7 +432,7 @@
         addClassName(squadBodyLeft, 'squad-body-left');
         let squadBodyRight = document.createElement('div');
         addClassName(squadBodyRight, 'squad-body-right');
-        let teamSquadContent = createTeamSquad(_arr, _logo);
+        let teamSquadContent = createTeamSquad(_arr, _logo, _coach);
         teamSquadContent.style.display = 'none';
         addClassName(teamSquadContent,'squad-content');
         let teamLogo = document.createElement('img');

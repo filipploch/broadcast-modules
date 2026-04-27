@@ -25,10 +25,11 @@ def _get_dict(_structure):
     return asdict(_structure)
 
 def generate_show_overlay_data(data):
-    from app.models.settings import Settings
-    settings = Settings.get_settings()
+    from core.models.base_settings import get_settings_model
+    Settings = get_settings_model()
     from app.models.game import Game
-    current_game_data = Game.query.get(settings.current_game_id).to_dict()
+    settings = Settings.get_settings()
+    current_game_data = Game().query.get(settings.current_game_id).to_dict()
     container_id = data.get('container_id')
     match container_id:
         case 'game-container':
@@ -38,6 +39,7 @@ def generate_show_overlay_data(data):
                 'team_name': current_game_data['home_team_name'],
                 'team_short_name': current_game_data['home_team_short_name'],
                 'team_squad': current_game_data['home_team_squad'],
+                'coach' : current_game_data['home_team_coach'],
                 'logo': current_game_data['home_team_logo']
                 })
         case 'away-team-squad-container':
@@ -45,6 +47,7 @@ def generate_show_overlay_data(data):
                 'team_name': current_game_data['away_team_name'],
                 'team_short_name': current_game_data['away_team_short_name'],
                 'team_squad': current_game_data['away_team_squad'],
+                'coach' : current_game_data['away_team_coach'],
                 'logo': current_game_data['away_team_logo']
                 })
         case 'start-container':
@@ -76,7 +79,7 @@ def generate_show_overlay_data(data):
                 'away_team_scorers': scorers['away']
             })
         case 'shootout-container':
-            from app.managers.shootout_manager import ShootoutManager
+            from core.managers.shootout_manager import ShootoutManager
             shootout_manager = ShootoutManager()
             shootout = shootout_manager.get_shootout_by_game(current_game_data['id'])
             shootout_data = shootout.to_dict()

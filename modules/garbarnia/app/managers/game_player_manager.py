@@ -3,7 +3,6 @@
 Nadpisuje assign_player_to_game (dodaje: role, is_youth)
 i dodaje get_starters / get_substitutes.
 """
-from typing import List, Optional
 from core.managers.game_player_manager import GamePlayerManager as _CoreGPM
 from app.models.game_player import GamePlayer
 from app.models.player import Player

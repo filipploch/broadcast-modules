@@ -58,7 +58,7 @@ def start_live_sequence(context) -> list:
         start_stream(delay_ms=300),
         start_recording(delay_ms=500),
         show_source('AUDIO_SOURCES', source_name='music_start', is_visible=True, delay_ms=550),
-        obs_switch_scene('OUTPUT', delay_ms=600),
+        obs_switch_scene('STREAM', delay_ms=600),
         show_source('OUTPUT', source_name='Overlay', is_visible=True, delay_ms=650),
         show_overlay_container({'container_id': 'start-container'}, delay_ms=1000),
         obs_mute('Mic1', muted=False, delay_ms=2000),
@@ -84,7 +84,7 @@ def show_game_scene(context) -> list:
     return [
         show_source('AUDIO_SOURCES', source_name='music_start', is_visible=False, delay_ms=100),
         show_source('AUDIO_SOURCES', source_name='music_break', is_visible=False, delay_ms=150),
-        obs_switch_scene('OUTPUT', delay_ms=200),
+        obs_switch_scene('STREAM', delay_ms=200),
         show_source('OUTPUT', source_name='Overlay', is_visible=True, delay_ms=250),
         show_overlay_container({'container_id': 'game-container'}, delay_ms=500),
     ]
@@ -94,7 +94,7 @@ def show_break_scene(context) -> list:
     return [
         show_source('AUDIO_SOURCES', source_name='music_start', is_visible=False, delay_ms=100),
         show_source('AUDIO_SOURCES', source_name='music_break', is_visible=True, delay_ms=150),
-        obs_switch_scene('OUTPUT', delay_ms=200),
+        obs_switch_scene('STREAM', delay_ms=200),
         show_source('OUTPUT', source_name='Overlay', is_visible=True, delay_ms=250),
         show_overlay_container({'container_id': 'break-container'}, delay_ms=500),
     ]

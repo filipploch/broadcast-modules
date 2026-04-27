@@ -160,3 +160,20 @@ function changeGameValue(valueType, teamType, value) {
    socket.emit('change_game_value', {value_type: valueType, team_type: teamType, value: value});
 }
 
+function scaleScreen(){
+    if(SCALE_DOWN){
+        SCALE_DOWN = false;
+        socket.emit('enable_scene_filter', {
+          'source_name': 'STREAM',
+          'filter_name': 'OutputScaleDown',
+          'filter_state': true,
+        });
+    } else {
+      SCALE_DOWN = true;
+        socket.emit('enable_scene_filter', {
+          'source_name': 'STREAM',
+          'filter_name': 'OutputScaleUp',
+          'filter_state': true,
+        });
+    }
+}

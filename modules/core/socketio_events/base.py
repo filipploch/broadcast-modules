@@ -17,6 +17,42 @@ def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
 
+def _get_game_event_data(game_event_id, new_event_type_id=None):
+    from core.managers.game_event_manager import GameEventManager
+    from core.managers.game_manager import GameManager
+
+    gem        = GameEventManager()
+    game_event = gem.get_game_event_by_id(game_event_id)
+    game_data  = GameManager().get_game_by_id(game_event.game_id)
+
+    if new_event_type_id == 3 and game_event.event_id in [1, 2, 4, 5, 6, 7]:
+        game_event.team_id  = (game_data.away_team_id
+                                if game_event.team_id == game_data.home_team_id
+                                else game_data.home_team_id)
+        game_event.event_id = new_event_type_id
+    elif new_event_type_id in [1, 2, 4, 5, 6, 7] and game_event.event_id == 3:
+        game_event.team_id  = (game_data.away_team_id
+                                if game_event.team_id == game_data.home_team_id
+                                else game_data.home_team_id)
+        game_event.event_id = new_event_type_id
+    elif new_event_type_id:
+        game_event.event_id = new_event_type_id
+
+    team_squad = None
+    if game_event.event_id in [1, 4, 5, 6, 7]:
+        team_squad = ('home_team_squad'
+                        if game_event.team_id == game_data.home_team_id
+                        else 'away_team_squad')
+    elif game_event.event_id in [2, 3]:
+        team_squad = ('away_team_squad'
+                        if game_event.team_id == game_data.home_team_id
+                        else 'home_team_squad')
+
+    return {
+        'team_squad': game_data.to_dict()[team_squad] if team_squad else None,
+        'game_event': game_event.to_dict(),
+    }
+
 def register_events(socketio):
     """Rejestruje wspólne handlery SocketIO."""
 
@@ -156,6 +192,17 @@ def register_events(socketio):
                 'request_id': 'get-websocket-connection'
             })
 
+    # ── Filters ───────────────────────────────────────────────────────────────
+
+    @socketio.on('enable_scene_filter')
+    def handle_enable_scene_filter(data):
+        from core.managers import get_obs_ws_manager
+        obs_ws_manager = get_obs_ws_manager()
+        source_name = data.get('source_name')
+        filter_name = data.get('filter_name')
+        filter_state = data.get('filter_state')
+        obs_ws_manager.enable_source_filter(source_name, filter_name, filter_state)
+
     # ── Sequences ─────────────────────────────────────────────────────────────
 
     @socketio.on('trigger_sequence')
@@ -193,7 +240,7 @@ def register_events(socketio):
                 try:
                     from core.managers import get_replay_export_manager
                     mgr    = get_replay_export_manager()
-                    result = mgr.export_game(game_id) if game_id                              else mgr.export_current_game()
+                    result = mgr.export_game(game_id) if game_id else mgr.export_current_game()
                     from core.extensions import socketio as _sio
                     _sio.emit('replay_export_done', result)
                 except Exception as e:
@@ -244,3 +291,88 @@ def register_events(socketio):
                 'type': step['action'],
                 'payload': step['payload']
             })
+
+
+def handle_ui_monitor_content(data, extra_handler=None):
+    """
+    Wspólna logika request_ui_monitor_content.
+    extra_handler — opcjonalna funkcja z modułu obsługująca content_type
+    specyficzne dla modułu. Zwraca dict lub None.
+    """
+    content_type = data.get('type')
+    print(f'data: {data}')
+    # Wspólne content_type obsługiwane przez core
+    result = _handle_core_content(content_type, data)
+    print(f'result: {result}')
+
+    # Jeśli core nie obsłużył — przekaż do modułu
+    if result is None and extra_handler:
+        result = extra_handler(content_type, data)
+
+    if result is None:
+        result = {'error': f'Unknown content_type: {content_type}'}
+
+    from core.extensions import socketio
+    socketio.emit('show_ui_monitor_content', result)
+
+
+def _handle_core_content(content_type, data):
+    """Obsługuje content_type wspólne dla wszystkich modułów."""
+    if content_type is None:
+        return {'content_type': None}
+
+    if content_type == 'events':
+        from core.managers.event_manager import EventManager
+        from core.managers.game_event_manager import GameEventManager
+        from core.managers.game_manager import GameManager
+        Settings = _get_settings()
+        settings = Settings.get_settings()
+        game = GameManager().get_game_by_id(settings.current_game_id)
+        
+        gem        = GameEventManager()
+        event_mgr  = EventManager()
+
+        events_types = [e.to_dict() for e in event_mgr.get_all_events()]
+        game_events  = []
+        for period in game.get_periods_list():
+            period_events = gem.get_events_for_game(settings.current_game_id,
+                                                    period_id=period.id)
+            if period_events:
+                game_events.extend(e.to_dict() for e in period_events)
+                game_events.append(period.description)
+
+        return {
+            'content_type': 'events',
+            'events_types': events_types,
+            'game_events':  game_events,
+        }
+
+    elif content_type == 'edit_event':
+        from core.managers.event_manager import EventManager
+        Settings = _get_settings()
+
+        payload      = data.get('payload', {})
+        game_event_d = _get_game_event_data(payload['game_event_id'])
+        events_types = [
+            e.to_dict() for e in EventManager().get_all_events()
+            if e.filter_class
+        ]
+        return {
+            'content_type':          'edit_event',
+            'events_types':          events_types,
+            'is_scoreboard_reversed': bool(Settings.get_settings().is_scoreboard_reversed),
+            'team_squad':            game_event_d['team_squad'],
+            'game_event':            game_event_d['game_event'],
+        }
+
+    elif content_type == 'get_event_squad':
+        payload      = data.get('payload', {})
+        game_event_d = _get_game_event_data(
+            payload['game_event_id'], payload.get('new_event_type_id')
+        )
+        return {
+            'content_type': 'get_event_squad',
+            'game_event':   game_event_d['game_event'],
+            'team_squad':   game_event_d['team_squad'],
+        }
+    return None  # nieznany — przekaż do modułu

@@ -16,3 +16,5 @@ console.log('appState: ', appState);
 
 var cellID;
 var clickTimer;
+
+var SCALE_DOWN = true;

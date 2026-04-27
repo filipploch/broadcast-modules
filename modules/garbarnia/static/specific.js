@@ -20,7 +20,7 @@ window.addEventListener('load', function () {
     // Zachowaj oryginał jako fallback
     var _originalCreateTeamSquad = createTeamSquad;
 
-    createTeamSquad = function (_arr, _logo) {
+    createTeamSquad = function (_arr, _logo, _coach) {
         // Jeśli żaden element nie ma pola `role` — użyj oryginału (kompatybilność)
         if (!Array.isArray(_arr) || _arr.length === 0 || _arr[0].role === undefined) {
             return _originalCreateTeamSquad(_arr, _logo);
@@ -28,6 +28,7 @@ window.addEventListener('load', function () {
 
         var starters    = _arr.filter(function (p) { return p.role === 'starter'; });
         var substitutes = _arr.filter(function (p) { return p.role === 'substitute'; });
+        var coach = _coach;
 
         var squadContent = document.createElement('div');
         squadContent.classList.add('team-squad-content', 'squad-content');
@@ -67,20 +68,19 @@ window.addEventListener('load', function () {
             addClassName(section, className);
         }
 
-        function buildCoachRow(element, playerLength) {
+        function buildCoachRow(element, rotateElementNr) {
             var row = document.createElement('div');
-            var coachName  = element.coach;
-            if(coachName === null) return row; 
+            if(coach === null) return row; 
             row.classList.add(
                 'squad-player-row',
                 'specific-colors',
                 'rotate-show-element',
-                'rotate-show-element' + playerLength,
+                'rotate-show-element' + rotateElementNr,
                 'animated-element'
             );
             row.dataset.animationOrder = '3';
             row.innerHTML = '<span class="squad-player-number"> trener </span>' +
-                '<span class="squad-coach-name">' + coachName + '</span>';
+                '<span class="squad-coach-name">' + coach + '</span>';
             return row;
         }
 
@@ -89,9 +89,9 @@ window.addEventListener('load', function () {
             var section = document.createElement('div');
             section.classList.add('squad-section');
 
-            let element = players.at(-1);
-            console.log('element-1:', element);
-            section.appendChild(buildCoachRow(element, players.length));
+            let rotateElNr = players.length + 1;
+
+            section.appendChild(buildCoachRow(coach, rotateElNr));
 
             addClassName(section, 'coach');
             squadContent.appendChild(section);
