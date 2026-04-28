@@ -117,8 +117,8 @@ class BaseGameMixin:
         return self.status == self.STATUS_FINISHED
 
     @property
-    def is_live(self):
-        """Check if game is currently live"""
+    def is_pending(self):
+        """Check if game is currently pending (in progress)"""
         return self.status == self.STATUS_PENDING
 
     @property
@@ -335,25 +335,25 @@ class BaseGameMixin:
         """Get total number of referees for this game"""
         return self.game_referees.count()
 
-    def get_team_stats(self, team_id, include_live=False):
+    def get_team_stats(self, team_id, include_pending=False):
         """
         Calculate statistics for a specific team from this game.
         Returns dict with: games, points, wins, draws, loses, goals_scored, goals_lost
 
         Args:
             team_id: ID of the team to calculate stats for
-            include_live: If True, include live games with current score (default: False)
+            include_pending: If True, include pending games with current score (default: False)
 
         Returns None if:
         - team is not in this game
-        - game is not finished and include_live=False
+        - game is not finished and include_pending=False
         - game is not finished/live
         """
         # Check if game is eligible for stats
-        if not include_live and not self.is_finished:
+        if not include_pending and not self.is_finished:
             return None
 
-        if include_live and not (self.is_finished or self.is_live):
+        if include_pending and not (self.is_finished or self.is_pending):
             return None
 
         if team_id not in [self.home_team_id, self.away_team_id]:
@@ -415,23 +415,23 @@ class BaseGameMixin:
 
         return stats
 
-    def get_home_team_stats(self, include_live=False):
+    def get_home_team_stats(self, include_pending=False):
         """
         Get statistics for home team from this game
 
         Args:
-            include_live: If True, include live games with current score
+            include_pending: If True, include pending games with current score
         """
-        return self.get_team_stats(self.home_team_id, include_live=include_live)
+        return self.get_team_stats(self.home_team_id, include_pending=include_pending)
 
-    def get_away_team_stats(self, include_live=False):
+    def get_away_team_stats(self, include_pending=False):
         """
         Get statistics for away team from this game
 
         Args:
-            include_live: If True, include live games with current score
+            include_pending: If True, include pending games with current score
         """
-        return self.get_team_stats(self.away_team_id, include_live=include_live)
+        return self.get_team_stats(self.away_team_id, include_pending=include_pending)
     
     def get_squad(self, team_id):
         """
@@ -532,14 +532,14 @@ class BaseGameMixin:
         return "Unknown"
 
     @classmethod
-    def calculate_league_table(cls, league_id, group_nr=1, include_live=False):
+    def calculate_league_table(cls, league_id, group_nr=1, include_pending=False):
         """
         Calculate league table for given league and group.
 
         Args:
             league_id: League ID to calculate table for
             group_nr: Group number (default: 1)
-            include_live: If True, include live games with current score (default: False)
+            include_pending: If True, include pending games with current score (default: False)
 
         Returns:
             List of dicts with team statistics, sorted by:
@@ -557,7 +557,7 @@ class BaseGameMixin:
         # Build query for games
         query = cls.query.filter_by(league_id=league_id, group_nr=group_nr)
 
-        if include_live:
+        if include_pending:
             # Include finished and live games
             query = query.filter(cls.status.in_([cls.STATUS_FINISHED, cls.STATUS_PENDING]))
         else:
@@ -583,8 +583,8 @@ class BaseGameMixin:
 
         # Aggregate statistics from each game
         for game in games:
-            home_stats = game.get_home_team_stats(include_live=include_live)
-            away_stats = game.get_away_team_stats(include_live=include_live)
+            home_stats = game.get_home_team_stats(include_pending=include_pending)
+            away_stats = game.get_away_team_stats(include_pending=include_pending)
 
             if home_stats:
                 for key in home_stats:
@@ -630,8 +630,8 @@ class BaseGameMixin:
             - 'projected': Table with finished + live games (current scores)
             - 'has_live_games': Boolean indicating if there are live games
         """
-        current_table = cls.calculate_league_table(league_id, group_nr, include_live=False)
-        projected_table = cls.calculate_league_table(league_id, group_nr, include_live=True)
+        current_table = cls.calculate_league_table(league_id, group_nr, include_pending=False)
+        projected_table = cls.calculate_league_table(league_id, group_nr, include_pending=True)
 
         # Check if there are any live games
         live_games_count = cls.query.filter_by(

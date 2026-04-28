@@ -24,7 +24,7 @@ def _resolve_event_id(event_type: str) -> int:
 
 def _get_timer_manager_or_error():
     from flask_socketio import emit
-    tm = TimerManager()
+    tm = get_timer_manager()
     if not tm:
         emit('error', {'message': 'Timer manager not available'})
         return None
@@ -92,7 +92,7 @@ def register_events(socketio):
         game_obj    = Game.query.get(period.game_id) if period else None
         game        = game_obj.to_dict() if game_obj else None
 
-        timer_manager = TimerManager()
+        timer_manager = get_timer_manager()
         main_gt = (
             timer_manager.get_active_main_timer(settings.current_period_id)
             if (timer_manager and period) else None
@@ -298,7 +298,7 @@ def register_events(socketio):
         # z fallbackiem na DB (ostatni zsynchronizowany stan).
         # WAŻNE: cache jest indeksowany przez plugin_timer_id (np. "main-p2"),
         # nie przez DB id — stąd używamy main_timer.plugin_timer_id jako klucza.
-        tm = TimerManager()
+        tm = get_timer_manager()
         main_timer    = tm.get_active_main_timer(period_id)
         plugin_timer_id = main_timer.plugin_timer_id if main_timer else None
         timer_state   = tm.get_timer_state(plugin_timer_id) if plugin_timer_id else None

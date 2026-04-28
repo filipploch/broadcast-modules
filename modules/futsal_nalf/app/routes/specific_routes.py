@@ -309,6 +309,33 @@ def register_routes(app):
         """API: Get team statistics"""
         return jsonify(team_scraper_manager.get_statistics())
 
+    @app.route('/api/leagues/<int:league_id>/standings')
+    @app.route('/api/leagues/<int:league_id>/standings/group/<int:group_nr>')
+    def api_league_standings(league_id, group_nr=1):
+        """Zwraca tabelę ligową w formacie JSON.
+
+        Response:
+            {
+              "official": [...],   # tabela z meczów zakończonych
+              "virtual":  [...],   # tabela z meczów zakończonych + live
+              "has_live": bool
+            }
+        Każdy wiersz tabeli zawiera:
+            team_id, team_name, team_short_name,
+            games, points, wins, draws, loses,
+            goals_scored, goals_lost, goal_difference,
+            league_group_nr   # 1 = mistrzowska, 2 = spadkowa
+        """
+        from flask import jsonify
+        from app.models.game import Game
+        from app.models.league import League
+
+        league = League.query.get(league_id)
+        if not league:
+            return jsonify({'error': 'Nie znaleziono ligi'}), 404
+
+        data = Game.get_league_tables(league_id, group_nr=group_nr)
+        return jsonify(data)
 
     @app.route('/leagues/<int:league_id>/games/scrape')
     def scrape_games(league_id):
