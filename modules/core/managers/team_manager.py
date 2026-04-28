@@ -4,6 +4,7 @@ from core.extensions import db
 import threading
 import logging
 import os
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -52,49 +53,30 @@ class TeamManager:
         Team = _get_team()
         return Team.query.get(team_id)
     
-    def get_team_by_url(self, team_url: str):
-        """Get team by team_url (unique identifier)"""
-        Team = _get_team()
-        return Team.query.filter_by(team_url=team_url).first()
+    # def get_team_by_url(self, team_url: str):
+    #     """Get team by team_url (unique identifier)"""
+    #     Team = _get_team()
+    #     return Team.query.filter_by(team_url=team_url).first()
     
     def get_team_by_name(self, name: str):
         """Get team by team_url (unique identifier)"""
         Team = _get_team()
         return Team.query.filter_by(name=name).first()
     
-    def create_team(self, name: str, name_14: str, short_name: str, 
-                   team_url: str, logo_path: str = 'static/images/logos/default.png',
-                   foreign_id: str = None, coach: str = None, uniform: dict = None):
-        """
-        Create new team
-        
-        Args:
-            name: Full team name
-            name_14: Shortened name (max 20 chars)
-            short_name: 3-letter abbreviation
-            team_url: Unique URL from NALF
-            logo_path: Path to logo image
-            foreign_id: Optional external ID for integration
-        
-        Returns:
-            Created Team object
-        """
-        import json
+    def create_team(self, name, name_14, short_name,
+                logo_path='static/images/logos/default.png',
+                foreign_id=None, uniform=None):
         Team = _get_team()
         team = Team(
-            name=name,
-            name_14=name_14,
+            name=name, name_14=name_14,
             short_name=short_name.upper(),
-            team_url=team_url,
+            # Usunięto: team_url=team_url,
             logo_path=logo_path,
             foreign_id=foreign_id,
-            uniform=json.dumps(uniform) if uniform else None
+            uniform=json.dumps(uniform) if uniform else None,
         )
-        
         db.session.add(team)
         db.session.commit()
-        
-        logger.info(f"Created team: {team.name} ({team.short_name})")
         return team
     
     def update_team(self, team_id: int, **kwargs):
@@ -112,7 +94,7 @@ class TeamManager:
         if not team:
             return None
         
-        allowed_fields = ['name', 'coach', 'name_14', 'short_name', 'team_url', 'logo_path', 'uniform']
+        allowed_fields = ['name', 'name_14', 'short_name', 'logo_path', 'uniform']
         
         import json
         for field, value in kwargs.items():

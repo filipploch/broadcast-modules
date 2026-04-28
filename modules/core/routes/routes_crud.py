@@ -1631,6 +1631,7 @@ def register_routes(app, exclude=None):
                     short_name=request.form.get('short_name'),
                     team_url=request.form.get('team_url'),
                     logo_path=request.form.get('logo_path'),
+                    coach=request.form.get('coach'),          # ← dodać
                     uniform={'home': uniform_home, 'away': uniform_away}
                 )
 

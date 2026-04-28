@@ -493,7 +493,16 @@ function scrapeSquad() {
                 statusEl.textContent = 'Scrapowanie w toku — proszę czekać...';
             } else {
                 return r.json().then(function(d) {
-                    statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+                    if (d.error === 'file_missing') {
+                        statusEl.innerHTML =
+                            'Nie znaleziono pliku z kadrą <strong>' + d.team_name + '</strong>. ' +
+                            'Najpierw zapisz plik! ' +
+                            '<a href="#" onclick="navigator.clipboard.writeText(\'' + d.url + '\');' +
+                            'this.textContent=\'✓ skopiowano\';return false;" ' +
+                            'title="' + d.url + '">ADRES</a>';
+                    } else {
+                        statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+                    }
                     btn.disabled = false;
                 });
             }
@@ -503,6 +512,29 @@ function scrapeSquad() {
             btn.disabled = false;
         });
 }
+
+// function scrapeSquad() {
+//     if (!_contentType) return;
+//     const statusEl = document.getElementById('modal-scrape-status');
+//     const btn = document.querySelector('#scrape-btn');
+//     btn.disabled = true;
+//     statusEl.textContent = 'Scrapowanie...';
+//     fetch('/teams/' + _squadTeamId + '/scrape-players')
+//         .then(function(r) {
+//             if (r.status === 202) {
+//                 statusEl.textContent = 'Scrapowanie w toku — proszę czekać...';
+//             } else {
+//                 return r.json().then(function(d) {
+//                     statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+//                     btn.disabled = false;
+//                 });
+//             }
+//         })
+//         .catch(function() {
+//             statusEl.textContent = 'Błąd połączenia';
+//             btn.disabled = false;
+//         });
+// }
 
 // ── SocketIO ───────────────────────────────────────────────────────────
 const _socket = io();

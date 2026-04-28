@@ -7,9 +7,9 @@ import logging
 from flask import current_app
 from core.managers import (get_hub_client, get_timer_manager,
                            get_sequence_manager, get_recorder_manager)
-from core.managers.game_event_manager import GameEventManager
-from core.managers.game_manager import GameManager
-
+# from core.managers.game_event_manager import GameEventManager
+# from core.managers.game_manager import GameManager
+from app.managers import GamePlayerManager, GameManager, PeriodManager, GameEventManager, TimerManager, EventManager
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +24,7 @@ def _resolve_event_id(event_type: str) -> int:
 
 def _get_timer_manager_or_error():
     from flask_socketio import emit
-    tm = get_timer_manager()
+    tm = TimerManager()
     if not tm:
         emit('error', {'message': 'Timer manager not available'})
         return None
@@ -51,9 +51,9 @@ def register_events(socketio):
     @socketio.on('get_game_teams')
     def handle_get_game_teams():
         # from core.managers.game_player_manager import GamePlayerManager
-        from app.managers.game_player_manager import GamePlayerManager
+        # from app.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_manager import GameManager
         from app.models.game_player import GamePlayer
-        from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         import json
         settings = Settings.get_settings()
@@ -92,7 +92,7 @@ def register_events(socketio):
         game_obj    = Game.query.get(period.game_id) if period else None
         game        = game_obj.to_dict() if game_obj else None
 
-        timer_manager = get_timer_manager()
+        timer_manager = TimerManager()
         main_gt = (
             timer_manager.get_active_main_timer(settings.current_period_id)
             if (timer_manager and period) else None
@@ -235,7 +235,7 @@ def register_events(socketio):
     def handle_change_game_value(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from app.managers.period_manager import PeriodManager
+        # from app.managers.period_manager import PeriodManager
 
         period_manager   = PeriodManager()
         current_game_id  = Settings.get_settings().current_game_id
@@ -283,8 +283,8 @@ def register_events(socketio):
     def handle_add_game_event_to_db(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from app.managers.period_manager import PeriodManager
-        from core.managers.game_event_manager import GameEventManager
+        # from app.managers.period_manager import 
+        # from core.managers.game_event_manager import GameEventManager
 
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
@@ -298,7 +298,7 @@ def register_events(socketio):
         # z fallbackiem na DB (ostatni zsynchronizowany stan).
         # WAŻNE: cache jest indeksowany przez plugin_timer_id (np. "main-p2"),
         # nie przez DB id — stąd używamy main_timer.plugin_timer_id jako klucza.
-        tm = get_timer_manager()
+        tm = TimerManager()
         main_timer    = tm.get_active_main_timer(period_id)
         plugin_timer_id = main_timer.plugin_timer_id if main_timer else None
         timer_state   = tm.get_timer_state(plugin_timer_id) if plugin_timer_id else None
@@ -355,8 +355,8 @@ def register_events(socketio):
 
     @socketio.on('show_info')
     def handle_show_info(data):
-        from core.managers.game_event_manager import GameEventManager
-        from core.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_event_manager import GameEventManager
+        # from core.managers.game_player_manager import GamePlayerManager
 
         gm  = GameEventManager()
         gpm = GamePlayerManager()
@@ -395,10 +395,10 @@ def register_events(socketio):
             return
 
         if content_type == 'events':
-            from core.managers.event_manager import EventManager
-            from core.managers.game_event_manager import GameEventManager
+            # from core.managers.event_manager import EventManager
+            # from core.managers.game_event_manager import GameEventManager
             from app.models.settings import Settings
-            from core.managers.game_manager import GameManager
+            # from core.managers.game_manager import GameManager
 
             settings   = Settings.get_settings()
             game       = GameManager().get_game_by_id(settings.current_game_id)
@@ -421,7 +421,7 @@ def register_events(socketio):
             })
 
         elif content_type == 'edit_event':
-            from core.managers.event_manager import EventManager
+            # from core.managers.event_manager import EventManager
             from app.models.settings import Settings
 
             payload      = data.get('payload', {})
@@ -451,8 +451,8 @@ def register_events(socketio):
 
 
     def _get_game_event_data(game_event_id, new_event_type_id=None):
-        from core.managers.game_event_manager import GameEventManager
-        from core.managers.game_manager import GameManager
+        # from core.managers.game_event_manager import GameEventManager
+        # from core.managers.game_manager import GameManager
 
         gem        = GameEventManager()
         game_event = gem.get_game_event_by_id(game_event_id)
@@ -488,7 +488,7 @@ def register_events(socketio):
 
     @socketio.on('update_game_event')
     def handle_update_game_event(data):
-        from core.managers.game_event_manager import GameEventManager
+        # from core.managers.game_event_manager import GameEventManager
 
         gem     = GameEventManager()
         success = gem.update_game_event(

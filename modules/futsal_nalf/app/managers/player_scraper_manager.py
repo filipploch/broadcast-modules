@@ -4,7 +4,7 @@ from flask import current_app
 from core.extensions import db
 from app.models.player import Player
 from app.models.team import Team
-from core.managers.player_manager import PlayerManager
+from app.managers import PlayerManager
 import threading
 import logging
 

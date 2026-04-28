@@ -21,3 +21,4 @@
 **/app/data/
 *.env
 **/temp/**
+*.png

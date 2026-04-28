@@ -64,7 +64,7 @@ def generate_show_overlay_data(data):
                 'away_team_logo': current_game_data['away_team_logo']
             })
         case 'break-container':
-            from core.managers.game_event_manager import GameEventManager
+            from app.managers import GameEventManager
             manager = GameEventManager()
             scorers = _get_dict(manager.get_goals_summary(game_id=settings.current_game_id))
             data.update({
@@ -76,7 +76,7 @@ def generate_show_overlay_data(data):
                 'away_team_scorers': scorers['away']
             })
         case 'shootout-container':
-            from app.managers.shootout_manager import ShootoutManager
+            from app.managers import ShootoutManager
             shootout_manager = ShootoutManager()
             shootout = shootout_manager.get_shootout_by_game(current_game_data['id'])
             shootout_data = shootout.to_dict()

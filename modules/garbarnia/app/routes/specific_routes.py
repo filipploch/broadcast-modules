@@ -10,14 +10,14 @@ from core.extensions import db
 from app.managers import (
     GameManager, TeamManager, LeagueManager, SeasonManager,
     GameEventManager, CameraManager, GameCameraManager,
-    CommentatorManager, GameCommentatorManager,
-    RefereeManager, GameRefereeManager,
-    GamePlayerManager, PlayerManager,
+    CommentatorManager, GameScraperManager, GameCommentatorManager,
+    RefereeManager, TeamScraperManager, GameRefereeManager,
+    GamePlayerManager, PlayerScraperManager, PlayerManager,
     StadiumManager, EventManager,
 )
-from app.managers.game_scraper_manager import GameScraperManager
-from app.managers.team_scraper_manager import TeamScraperManager
-from app.managers.player_scraper_manager import PlayerScraperManager
+# from app.managers.game_scraper_manager import GameScraperManager
+# from app.managers.team_scraper_manager import TeamScraperManager
+# from app.managers.player_scraper_manager import PlayerScraperManager
 from app.models.period import Period
 from app.models.settings import Settings
 import logging
@@ -78,14 +78,14 @@ def register_routes(app):
         from flask import jsonify
     
         from app.models.game import Game
-        from core.managers.game_player_manager import GamePlayerManager
-        from core.managers.player_manager import PlayerManager
-        from core.managers.game_referee_manager import GameRefereeManager
-        from core.managers.referee_manager import RefereeManager
-        from core.managers.game_commentator_manager import GameCommentatorManager
-        from core.managers.commentator_manager import CommentatorManager
-        from core.managers.game_camera_manager import GameCameraManager
-        from core.managers.camera_manager import CameraManager
+        # from app.managers.game_player_manager import GamePlayerManager
+        # from core.managers.player_manager import PlayerManager
+        # from core.managers.game_referee_manager import GameRefereeManager
+        # from core.managers.referee_manager import RefereeManager
+        # from core.managers.game_commentator_manager import GameCommentatorManager
+        # from core.managers.commentator_manager import CommentatorManager
+        # from core.managers.game_camera_manager import GameCameraManager
+        # from core.managers.camera_manager import CameraManager
         from app.models.game_camera import VALID_HDMI_INPUTS, HDMI_DEFAULT_LOCATION
         from app.models.player import Player
 
@@ -104,9 +104,9 @@ def register_routes(app):
             team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
             team    = game.home_team    if content_type == 'home-squad' else game.away_team
  
-            from app.managers.game_player_manager import GamePlayerManager as _GPM
+            # from app.managers.game_player_manager import GamePlayerManager as _GPM
             from app.models.game_player import ROLE_STARTER, ROLE_SUBSTITUTE
-            pg_mgr = _GPM()
+            pg_mgr = GamePlayerManager()
  
             starters    = pg_mgr.get_starters(game_id,   team_id=team_id)
             substitutes = pg_mgr.get_substitutes(game_id, team_id=team_id)
@@ -288,14 +288,31 @@ def register_routes(app):
 
     @app.route('/teams/<int:team_id>/scrape-players')
     def scrape_players(team_id):
-        """Start scraping players for a team in background thread, return JSON"""
         from flask import jsonify
+        from app.models.team import Team
+
         if player_scraper_manager.is_scraping_in_progress():
             return jsonify({'error': 'Scrapowanie zawodników już trwa'}), 409
+
+        team = Team.query.get(team_id)
+        if not team:
+            return jsonify({'error': 'Nie znaleziono drużyny'}), 404
+
+        if not team.foreign_id:
+            return jsonify({'error': 'Drużyna nie ma skonfigurowanego foreign_id'}), 400
+
+        if not player_scraper_manager.check_file_exists(team_id):
+            url = f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team.foreign_id}'
+            return jsonify({
+                'error': 'file_missing',
+                'team_name': team.name,
+                'url': url,
+            }), 404
+
         started = player_scraper_manager.scrape_players_async(team_id)
         if started:
             return jsonify({'status': 'started'}), 202
-        return jsonify({'error': 'Nie można rozpocząć scrapowania — sprawdź czy drużyna ma skonfigurowany URL'}), 400
+        return jsonify({'error': 'Nie można rozpocząć scrapowania'}), 400
 
     # =========================
     # ASSIGNMENT API
@@ -353,10 +370,10 @@ def register_routes(app):
         from app.models.settings import Settings
         from app.models.game import Game
         from app.models.period import Period
-        from app.managers.game_player_manager import GamePlayerManager
-        from core.managers.game_referee_manager import GameRefereeManager
-        from core.managers.game_commentator_manager import GameCommentatorManager
-        from core.managers.game_camera_manager import GameCameraManager
+        # from app.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_referee_manager import GameRefereeManager
+        # from core.managers.game_commentator_manager import GameCommentatorManager
+        # from core.managers.game_camera_manager import GameCameraManager
 
         settings = Settings.get_settings()
 
@@ -478,26 +495,25 @@ def register_routes(app):
         try:
             # ── home_squad / away_squad ──────────────────────────────────────────
             if content_type in ('home-squad', 'away-squad'):
-                from core.managers.game_player_manager import GamePlayerManager
-                from app.models.game_player import GamePlayer
+                # from app.managers.game_player_manager import GamePlayerManager  # garbarnia manager!
+                from app.models.game_player import GamePlayer, ROLE_STARTER, ROLE_SUBSTITUTE
                 team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
 
                 pg_mgr = GamePlayerManager()
-                # Remove all current assignments for this team in this game
                 existing = GamePlayer.query.filter_by(game_id=game_id, team_id=team_id).all()
-            
                 for pg in existing:
                     db.session.delete(pg)
                 db.session.commit()
 
-                # Re-assign from submitted list
-                for item in data.get('assigned', []):
-                    pg_mgr.assign_player_to_game(item['player_id'], game_id)
+                for item in data.get('starters', []):
+                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_STARTER)
+                for item in data.get('substitutes', []):
+                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_SUBSTITUTE)
                 return jsonify({'ok': True})
 
             # ── referees ─────────────────────────────────────────────────────────
             if content_type == 'referees':
-                from core.managers.game_referee_manager import GameRefereeManager
+                # from core.managers.game_referee_manager import GameRefereeManager
                 from app.models.game_referee import GameReferee
             
 
@@ -513,7 +529,7 @@ def register_routes(app):
 
             # ── commentators ─────────────────────────────────────────────────────
             if content_type == 'commentators':
-                from core.managers.game_commentator_manager import GameCommentatorManager
+                # from core.managers.game_commentator_manager import GameCommentatorManager
                 from app.models.game_commentator import GameCommentator
             
 
@@ -529,7 +545,7 @@ def register_routes(app):
 
             # ── cameras ───────────────────────────────────────────────────────────
             if content_type == 'cameras':
-                from core.managers.game_camera_manager import GameCameraManager
+                # from core.managers.game_camera_manager import GameCameraManager
                 from app.models.game_camera import GameCamera
             
 
@@ -586,7 +602,7 @@ def register_routes(app):
     @app.route('/api/games/scrape/status')
     def api_games_scrape_status():
         """API: Get current game scraping status"""
-        from app.managers.game_scraper_manager import GameScraperManager
+        # from app.managers.game_scraper_manager import GameScraperManager
         from flask import jsonify
         game_scraper_manager = GameScraperManager()
         status = game_scraper_manager.get_scraping_status()

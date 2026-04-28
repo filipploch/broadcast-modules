@@ -39,28 +39,36 @@ def shutdown_all_managers():
 
 
 # ── Direct imports ────────────────────────────────────────────────────────────
-from core.managers.game_manager import GameManager
-from core.managers.league_manager import LeagueManager
-from core.managers.team_manager import TeamManager
-from core.managers.season_manager import SeasonManager
-from core.managers.player_manager import PlayerManager
-from core.managers.shootout_manager import ShootoutManager
-from core.managers.shootout_kick_manager import ShootoutKickManager
-from core.managers.game_event_manager import GameEventManager
-from app.managers.substitution_manager import SubstitutionManager
-from app.managers.team_scraper_manager import TeamScraperManager
-from app.managers.player_scraper_manager import PlayerScraperManager
-
-# Managery z core re-eksportowane dla wygody
+# Managery z core re-eksportowane dla wygody importów w module
 from core.managers.camera_manager import CameraManager
 from core.managers.commentator_manager import CommentatorManager
-from core.managers.referee_manager import RefereeManager
-from core.managers.stadium_manager import StadiumManager
-from core.managers.period_manager import PeriodManager
 from core.managers.event_manager import EventManager
 from core.managers.game_camera_manager import GameCameraManager
 from core.managers.game_commentator_manager import GameCommentatorManager
+from core.managers.game_event_manager import GameEventManager
+from core.managers.game_manager import GameManager
 from core.managers.game_referee_manager import GameRefereeManager
+# hub_client
+from core.managers.league_manager import LeagueManager
+# obs_ws_manager
+from core.managers.player_manager import PlayerManager
+# plugin_manager
+# recorder_manager
+from core.managers.referee_manager import RefereeManager
+# replay_export_manager
+from core.managers.season_manager import SeasonManager
+# sequence_manager
+# shootout_kick_manager
+from core.managers.shootout_kick_manager import ShootoutKickManager
+from core.managers.shootout_manager import ShootoutManager
+from core.managers.stadium_manager import StadiumManager
 
-# Nadpisane przez moduł
 from app.managers.game_player_manager import GamePlayerManager
+from app.managers.game_scraper_manager import GameScraperManager
+from app.managers.period_manager import PeriodManager
+from app.managers.player_scraper_manager import PlayerScraperManager
+from app.managers.team_scraper_manager import TeamScraperManager
+from app.managers.team_manager import TeamManager
+from app.managers.timer_manager import TimerManager
+from app.managers.substitution_manager import SubstitutionManager
+from app.managers.substitution_manager import SubstitutionItem

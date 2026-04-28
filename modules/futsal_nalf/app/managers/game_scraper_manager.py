@@ -4,8 +4,8 @@ from flask import session, current_app
 from core.extensions import db
 from app.models.team import Team
 from app.models.game import Game
-from core.managers.team_manager import TeamManager
-from core.managers.game_manager import GameManager
+from app.managers.team_manager import TeamManager
+from app.managers import GameManager
 from datetime import datetime
 import threading
 import logging

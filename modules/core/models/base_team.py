@@ -94,7 +94,7 @@ class BaseTeamMixin:
             'name': self.name,
             'name_14': self.name_14,
             'short_name': self.short_name,
-            'team_url': self.team_url,
+            # 'team_url': self.team_url,
             'logo_path': self.logo_path,
             'foreign_id': self.foreign_id,
             'uniform': self.get_uniform(),

@@ -79,8 +79,13 @@ window.addEventListener('load', function () {
                 'animated-element'
             );
             row.dataset.animationOrder = '3';
-            row.innerHTML = '<span class="squad-player-number"> trener </span>' +
-                '<span class="squad-coach-name">' + coach + '</span>';
+            console.log('coach: ', coach);
+            if(coach[0] !== null){
+                row.innerHTML = '<span class="squad-player-number"> trener </span>' +
+                    '<span class="squad-coach-name">' + coach + '</span>';
+            }else{
+                row.style.display = 'none';
+            }
             return row;
         }
 

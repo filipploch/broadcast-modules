@@ -28,6 +28,15 @@ class PlayerScraperManager:
             'error': None,
         }
 
+    def check_file_exists(self, team_id: int) -> bool:
+        """Sprawdza czy plik HTML dla drużyny istnieje w katalogu temp."""
+        team = Team.query.get(team_id)
+        if not team or not team.foreign_id:
+            return False
+        temp_dir = sys.path[0] + current_app.config['TEMP_DIR']
+        from app.managers.scrapers import PlayerScraper
+        return PlayerScraper().find_html_file_for_team(temp_dir, team.foreign_id) is not None
+
     # =========================
     # Scraping Workflow (Threaded)
     # =========================

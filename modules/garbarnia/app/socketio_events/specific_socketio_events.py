@@ -7,8 +7,12 @@ import logging
 from flask import current_app
 from core.managers import (get_hub_client, get_timer_manager,
                            get_sequence_manager, get_recorder_manager)
-from core.managers.game_manager import GameManager
-from core.managers.game_event_manager import GameEventManager
+from app.managers import (
+    GameManager, GameEventManager, GamePlayerManager, GameEventManager, SubstitutionManager, SubstitutionItem,
+    ShootoutKickManager, PeriodManager
+)
+# from core.managers.game_manager import GameManager
+# from core.managers.game_event_manager import GameEventManager
 from core.socketio_events.base import handle_ui_monitor_content
 
 logger = logging.getLogger(__name__)
@@ -37,7 +41,7 @@ def register_events(socketio):
     @socketio.on('get_shootouts')
     def handle_get_shootout_data():
         from app.models.shootout import Shootout
-        from core.managers.shootout_kick_manager import ShootoutKickManager
+        # from core.managers.shootout_kick_manager import ShootoutKickManager
         from app.models.settings import Settings
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
@@ -51,9 +55,9 @@ def register_events(socketio):
     @socketio.on('get_game_teams')
     def handle_get_game_teams():
         # from core.managers.game_player_manager import GamePlayerManager
-        from app.managers.game_player_manager import GamePlayerManager
+        # from app.managers.game_player_manager import GamePlayerManager
         from app.models.game_player import GamePlayer
-        from core.managers.game_manager import GameManager
+        # from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         import json
         settings = Settings.get_settings()
@@ -235,7 +239,7 @@ def register_events(socketio):
     def handle_change_game_value(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from core.managers.period_manager import PeriodManager
+        # from core.managers.period_manager import PeriodManager
 
         period_manager   = PeriodManager()
         current_game_id  = Settings.get_settings().current_game_id
@@ -283,8 +287,8 @@ def register_events(socketio):
     def handle_add_game_event_to_db(data):
         from app.models.settings import Settings
         from app.models.game import Game
-        from core.managers.period_manager import PeriodManager
-        from core.managers.game_event_manager import GameEventManager
+        # from core.managers.period_manager import PeriodManager
+        # from core.managers.game_event_manager import GameEventManager
 
         settings  = Settings.get_settings()
         game_id   = settings.current_game_id
@@ -357,8 +361,8 @@ def register_events(socketio):
 
     @socketio.on('show_info')
     def handle_show_info(data):
-        from core.managers.game_event_manager import GameEventManager
-        from core.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_event_manager import GameEventManager
+        # from app.managers.game_player_manager import GamePlayerManager
 
         gm  = GameEventManager()
         gpm = GamePlayerManager()
@@ -394,8 +398,8 @@ def register_events(socketio):
     
     @socketio.on('show_substitution')
     def handle_show_substitution(data):
-        from app.managers.substitution_manager import SubstitutionManager
-        from core.managers.game_manager import GameManager
+        # from app.managers.substitution_manager import SubstitutionManager
+        # from core.managers.game_manager import GameManager
         from app.models.period import Period
 
         period_id          = data.get('period_id')
@@ -443,7 +447,7 @@ def register_events(socketio):
 
     @socketio.on('update_game_event')
     def handle_update_game_event(data):
-        from core.managers.game_event_manager import GameEventManager
+        # from core.managers.game_event_manager import GameEventManager
 
         gem     = GameEventManager()
         success = gem.update_game_event(
@@ -578,8 +582,8 @@ def register_events(socketio):
 def _module_content_handler(content_type, data):
     """Obsługuje content_type specyficzne dla modułu."""
     if content_type == 'substitutions':
-        from app.managers.substitution_manager import SubstitutionManager
-        from core.managers.game_manager import GameManager
+        # from app.managers.substitution_manager import SubstitutionManager
+        # from core.managers.game_manager import GameManager
         from app.models.settings import Settings
 
         settings  = Settings.get_settings()
@@ -615,8 +619,8 @@ def _module_content_handler(content_type, data):
         }
 
     elif content_type == 'addSubstitution':
-        from app.managers.game_player_manager import GamePlayerManager
-        from core.managers.game_manager import GameManager
+        # from app.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         from app.models.game_player import ROLE_STARTER, ROLE_SUBSTITUTE
 
@@ -655,8 +659,8 @@ def _module_content_handler(content_type, data):
     elif content_type == 'confirmSubstitution':
         # Zatwierdź grupę zmian przygotowaną w UI.
         # payload: { team_id, game_time_ms, pairs: [{player_in_id, player_out_id}, ...] }
-        from app.managers.substitution_manager import SubstitutionManager, SubstitutionItem
-        from core.managers.game_manager import GameManager
+        # from app.managers.substitution_manager import SubstitutionManager, SubstitutionItem
+        # from core.managers.game_manager import GameManager
         from app.models.settings import Settings
 
         settings  = Settings.get_settings()
@@ -685,9 +689,9 @@ def _module_content_handler(content_type, data):
         return {'content_type': 'substitutions'}
 
     elif content_type == 'substitution-edit':
-        from app.managers.substitution_manager import SubstitutionManager
-        from app.managers.game_player_manager import GamePlayerManager
-        from core.managers.game_manager import GameManager
+        # from app.managers.substitution_manager import SubstitutionManager
+        # from app.managers.game_player_manager import GamePlayerManager
+        # from core.managers.game_manager import GameManager
         from app.models.settings import Settings
         from app.models.game_player import ROLE_STARTER, ROLE_SUBSTITUTE
 
@@ -739,9 +743,9 @@ def _module_content_handler(content_type, data):
         }
 
     elif content_type == 'saveSubstitutionEdit':
-        from app.managers.substitution_manager import SubstitutionManager
+        # from app.managers.substitution_manager import SubstitutionManager
         from app.models.settings import Settings
-        from core.managers.game_manager import GameManager
+        # from core.managers.game_manager import GameManager
 
         payload         = data.get('payload', {})
         substitution_id = payload.get('substitution_id')
@@ -779,9 +783,9 @@ def _module_content_handler(content_type, data):
         }
 
     elif content_type == 'deleteSubstitution':
-        from app.managers.substitution_manager import SubstitutionManager
+        # from app.managers.substitution_manager import SubstitutionManager
         from app.models.settings import Settings
-        from core.managers.game_manager import GameManager
+        # from core.managers.game_manager import GameManager
 
         payload         = data.get('payload', {})
         substitution_id = payload.get('substitution_id')
