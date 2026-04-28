@@ -68,27 +68,19 @@
                 ondblclick="enableElementToEdit(this)">
         </div>
         
+        {% if team.team_url is defined and team.team_url is not none %}
         <div class="form-group">
-            <label for="team_url">
-                URL Zespołu NALF *
-            </label>
-            <input 
-                type="url" 
-                id="team_url" 
-                name="team_url" 
-                value="{{ team.team_url }}">
+            <label for="team_url">URL Zespołu NALF *</label>
+            <input type="url" id="team_url" name="team_url" value="{{ team.team_url }}">
         </div>
+        {% endif %}
 
+        {% if team.coach is defined %}
         <div class="form-group">
-            <label for="coach">
-                Trener *
-            </label>
-            <input 
-                type="text" 
-                id="coach" 
-                name="coach" 
-                value="{{ team.coach }}">
+            <label for="coach">Trener *</label>
+            <input type="text" id="coach" name="coach" value="{{ team.coach }}">
         </div>
+        {% endif %}
         
         <div class="form-group">
             <label for="logo_path">

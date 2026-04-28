@@ -57,10 +57,14 @@ def create_app(config_name='default'):
         from core.routes import broadcast as core_broadcast
         from core.routes import routes_crud as routes_crud
         from core.socketio_events import base as core_events
+        from app.managers.team_manager import TeamManager
+
         core_broadcast.register_routes(app)
-        routes_crud.register_routes(app, exclude={
-            '/game-setup'
-            })
+        from app.managers.team_manager import TeamManager as AppTeamManager
+        routes_crud.register_routes(app,
+            exclude={'/game-setup'},
+            team_manager=AppTeamManager()
+        )
         core_events.register_events(socketio)
 
         # Trasy i eventy specyficzne dla modułu

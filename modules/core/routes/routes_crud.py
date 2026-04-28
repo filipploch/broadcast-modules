@@ -3,7 +3,7 @@ from flask import render_template, jsonify, current_app, flash, redirect, url_fo
 from core.managers.season_manager import SeasonManager
 from core.managers.league_manager import LeagueManager
 from core.managers.game_manager import GameManager
-from core.managers.team_manager import TeamManager
+# from core.managers.team_manager import TeamManager
 from core.managers.camera_manager import CameraManager
 from core.managers.game_camera_manager import GameCameraManager
 # from core.models.base_team import get_team_model
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 season_manager = SeasonManager()
 league_manager = LeagueManager()
 game_manager = GameManager()
-team_manager = TeamManager()
+# team_manager = TeamManager()
 
 def _get_team():
     from core.models.base_team import get_team_model
@@ -42,10 +42,16 @@ def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
 
+
 # =========================
 # SEASON ROUTES
 # =========================
-def register_routes(app, exclude=None):
+from core.managers.team_manager import TeamManager
+
+def register_routes(app, exclude=None, team_manager=None):
+    if team_manager is None:
+        team_manager = TeamManager()
+        
     exclude = exclude or set()
 
     """Rejestruje wspólne trasy w instancji Flask aplikacji."""
@@ -1595,12 +1601,12 @@ def register_routes(app, exclude=None):
                     name=request.form['name'],
                     name_14=request.form['name_14'],
                     short_name=request.form['short_name'],
-                    team_url=request.form['team_url'],
                     logo_path=request.form.get('logo_path', 'static/images/logos/default.png'),
+                    coach=request.form.get('coach'),
                     uniform={'home': uniform_home, 'away': uniform_away}
                 )
 
-                flash(f'Dodano zespół: {name}', 'success')
+                flash(f'Dodano zespół: {team.name}', 'success')
                 return redirect(url_for('view_team', team_id=team.id))
 
             except Exception as e:

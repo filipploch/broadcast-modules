@@ -47,9 +47,11 @@ def create_app(config_name='default'):
         from core.routes import routes_crud as routes_crud
         from core.socketio_events import base as core_events
         core_broadcast.register_routes(app)
-        routes_crud.register_routes(app, exclude={
-            '/game-setup'
-            })
+        from app.managers.team_manager import TeamManager as AppTeamManager
+        routes_crud.register_routes(app,
+            exclude={'/game-setup'},
+            team_manager=AppTeamManager()
+        )
         core_events.register_events(socketio)
 
         from app.routes import specific_routes as specific_routes
