@@ -1067,6 +1067,21 @@ def register_routes(app, exclude=None, team_manager=None):
     # GAME STATUS API
     # =============================================================================
 
+    @app.route('/api/player/<int:player_id>', methods=['PATCH'])
+    def api_patch_player(player_id):
+        """API: Aktualizuj dane zawodnika (first_name, last_name itp.)"""
+        from flask import jsonify, request
+        body = request.get_json() or {}
+        allowed = {'first_name', 'last_name', 'number', 'is_goalkeeper', 'is_captain'}
+        kwargs = {k: v for k, v in body.items() if k in allowed}
+        if not kwargs:
+            return jsonify({'error': 'Brak dozwolonych pól do aktualizacji'}), 400
+        from core.managers.player_manager import PlayerManager as _PM
+        player = _PM().update_player(player_id, **kwargs)
+        if not player:
+            return jsonify({'error': 'Nie znaleziono zawodnika'}), 404
+        return jsonify(player.to_dict())
+
     @app.route('/api/games/<int:game_id>/score', methods=['PATCH'])
     def api_update_game_score(game_id):
         """API: Zmień wynik meczu."""

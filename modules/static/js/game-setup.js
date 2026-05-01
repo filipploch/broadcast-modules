@@ -754,27 +754,18 @@ function renderUniformOptions(side, options, selectedColors) {
             inputsWrap.style.cssText = 'display:flex;gap:.3rem;flex-wrap:wrap;';
             colors.forEach(function(hex, ci) {
                 const inp = document.createElement('input');
-                inp.type = 'text'; inp.value = hex; inp.maxLength = 7;
-                inp.style.cssText = 'width:6rem;font-size:.82rem;padding:.2rem .4rem;border:1px solid #ced4da;border-radius:4px;font-family:monospace;';
+                inp.type = 'color';
+                inp.value = hex;
+                inp.style.cssText = 'width:2.4rem;height:2rem;padding:0;border:1px solid #ced4da;border-radius:4px;cursor:pointer;';
                 inp.addEventListener('input', function() {
-                    const val = inp.value.trim();
+                    const val = inp.value;
                     opt.colors[ci] = val;
                     if (side === 'home' && _colorsEqual(_uniformHomeSelected, colors)) _uniformHomeSelected = opt.colors.slice();
                     if (side === 'away' && _colorsEqual(_uniformAwaySelected, colors)) _uniformAwaySelected = opt.colors.slice();
-                    if (/^#[0-9a-fA-F]{3,6}$/.test(val)) _rebuildSwatch(swatch, opt.colors, radio.checked);
+                    _rebuildSwatch(swatch, opt.colors, radio.checked);
                 });
                 inputsWrap.appendChild(inp);
             });
-            const addBtn = document.createElement('button');
-            addBtn.textContent = '+'; addBtn.title = 'Dodaj kolor';
-            addBtn.style.cssText = 'padding:.2rem .5rem;font-size:.82rem;border:1px dashed #adb5bd;border-radius:4px;background:#f8f9fa;cursor:pointer;';
-            addBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                opt.colors.push('#ffffff');
-                radio.value = JSON.stringify(opt.colors);
-                renderUniformOptions(side, options, side === 'home' ? _uniformHomeSelected : _uniformAwaySelected);
-            });
-            inputsWrap.appendChild(addBtn);
             row.appendChild(inputsWrap);
         } else {
             const label = document.createElement('label');
@@ -796,7 +787,7 @@ function _buildColorSwatch(colors, isSelected) {
 function _fillSwatch(swatch, colors, isSelected) {
     swatch.innerHTML = '';
     swatch.style.cssText =
-        'display:flex;width:120px;height:32px;border-radius:5px;overflow:hidden;' +
+        'display:flex;width:75px;height:32px;border-radius:5px;overflow:hidden;' +
         'border:3px solid ' + (isSelected ? '#0d6efd' : '#dee2e6') + ';flex-shrink:0;';
     const validColors = colors.filter(function(c) { return /^#[0-9a-fA-F]{3,6}$/.test(c); });
     (validColors.length ? validColors : ['#cccccc']).forEach(function(hex) {

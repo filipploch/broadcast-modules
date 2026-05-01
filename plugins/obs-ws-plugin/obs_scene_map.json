@@ -21,6 +21,7 @@
     "ObrazTest": 23,
     "Overlay": 27,
     "Replay": 28,
+    "Tekst (GDI+)": 32,
     "Test1": 29,
     "Test2": 30,
     "Tło biały": 31,
@@ -29,6 +30,7 @@
   },
   "STREAM": {
     "BackgroundImage": 12,
+    "Kolor": 13,
     "OUTPUT": 10
   },
   "VIDEO_SOURCES": {
