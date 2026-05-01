@@ -669,17 +669,37 @@ def register_routes(app, exclude=None, team_manager=None):
 
     @app.route('/api/games')
     def api_list_games():
-        """API: List all games"""
-        league_id = request.args.get('league_id', type=int)
-        team_id = request.args.get('team_id', type=int)
-        status = request.args.get('status', type=int)
-        
+        """API: List all games.
+
+        Query params:
+          league_id  — filtruj po lidze
+          team_id    — filtruj po drużynie
+          status     — filtruj po statusie (0/1/2)
+          date_from  — od daty włącznie (YYYY-MM-DD)
+          date_to    — do daty włącznie (YYYY-MM-DD), domyślnie = date_from
+          today      — shortcut: date_from=date_to=dzisiaj (1/true)
+        """
+        from datetime import date as _date
+        league_id  = request.args.get('league_id', type=int)
+        team_id    = request.args.get('team_id', type=int)
+        status     = request.args.get('status', type=int)
+        date_from  = request.args.get('date_from')
+        date_to    = request.args.get('date_to')
+        today_flag = request.args.get('today', '').lower() in ('1', 'true')
+
+        if today_flag:
+            today_str = _date.today().isoformat()
+            date_from = date_from or today_str
+            date_to   = date_to   or today_str
+
         games = game_manager.get_all_games(
             league_id=league_id,
             team_id=team_id,
-            status=status
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
         )
-        
+
         return jsonify({
             'games': [game.to_dict() for game in games]
         })
@@ -1046,6 +1066,20 @@ def register_routes(app, exclude=None, team_manager=None):
     # =============================================================================
     # GAME STATUS API
     # =============================================================================
+
+    @app.route('/api/games/<int:game_id>/score', methods=['PATCH'])
+    def api_update_game_score(game_id):
+        """API: Zmień wynik meczu."""
+        game = game_manager.get_game_by_id(game_id)
+        if not game:
+            return jsonify({'error': 'Nie znaleziono meczu'}), 404
+        body = request.get_json() or {}
+        home = body.get('home_team_goals')
+        away = body.get('away_team_goals')
+        if home is None or away is None:
+            return jsonify({'error': 'Wymagane pola: home_team_goals, away_team_goals'}), 400
+        game_manager.update_game(game_id, home_team_goals=int(home), away_team_goals=int(away))
+        return jsonify(game_manager.get_game_by_id(game_id).to_dict())
 
     @app.route('/api/games/<int:game_id>/status', methods=['PATCH'])
     def api_update_game_status(game_id):

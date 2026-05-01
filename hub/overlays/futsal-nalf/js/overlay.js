@@ -135,11 +135,19 @@
         switch(containerType) {
             case 'squad':
                 closeSquadContainer(container);
-                console.log('closeSquadContainer()')
+                console.log('closeSquadContainer()');
+                break;
+            case 'start':
+                closeStartContainer(container);
+                console.log('closeStartContainer()');
+                break;
+            case 'break':
+                closeBreakContainer(container);
+                console.log('closeBreakContainer()');
                 break;
             default:
                 closeDefaultContainer(container);
-                console.log('closeDefaultContainer()')
+                console.log('closeDefaultContainer()');
                 break;
         }
         
@@ -150,6 +158,276 @@
             container.style.display = 'none';
         }, animationDuration);
     }
+
+    // ── WYNIKI / TABELA ──────────────────────────────────────────────────────
+
+    var _resultsTimer = null;   // guard przed wielokrotnym wywołaniem
+    var _resultsTimer2 = null;  // timer animacji zamiany (virtual_table)
+
+    // ── Budowanie DOM ─────────────────────────────────────────────────────────
+
+    function buildResultsContent(resultsEl, games) {
+        // Filtrowanie: tylko mecze z liczbowymi wynikami obu drużyn
+        const validGames = games.filter(g =>
+            typeof g.home_team_goals === 'number' && typeof g.away_team_goals === 'number'
+        );
+        resultsEl.innerHTML = '';
+
+        resultsEl.innerHTML = '';
+
+        let header = document.createElement('div');
+        header.id = 'results-header';
+        header.className = 'results-row rotate-show-element0';
+        header.textContent = 'WYNIKI';
+        resultsEl.appendChild(header);
+
+        validGames.forEach((game, index) => {
+            let row = document.createElement('div');
+            const statusClass = game.status === 2 ? 'finished' : 'pending';
+            row.className = `results-row rotate-show-element${index + 1} ${statusClass}`;
+
+            let homeName = document.createElement('div');
+            homeName.className = 'results-home-team-name14 results-team-name14';
+            homeName.textContent = game.home_team_name14;
+
+            let homeResult = document.createElement('div');
+            homeResult.className = 'results-home-team-result results-team-result';
+            homeResult.textContent = game.home_team_goals;
+
+            let separator = document.createElement('div');
+            separator.className = 'results-separator';
+            separator.textContent = ':';
+
+            let awayResult = document.createElement('div');
+            awayResult.className = 'results-away-team-result results-team-result';
+            awayResult.textContent = game.away_team_goals;
+
+            let awayName = document.createElement('div');
+            awayName.className = 'results-away-team-name14 results-team-name14';
+            awayName.textContent = game.away_team_name14;
+
+            row.appendChild(homeName);
+            row.appendChild(homeResult);
+            row.appendChild(separator);
+            row.appendChild(awayResult);
+            row.appendChild(awayName);
+            resultsEl.appendChild(row);
+        });
+    }
+
+    function buildTableContent(resultsEl, rows, headerText) {
+        resultsEl.innerHTML = '';
+
+        let header = document.createElement('div');
+        header.id = 'table-header';
+        header.className = 'results-row rotate-show-element0';
+        header.textContent = headerText;
+        resultsEl.appendChild(header);
+
+        rows.forEach((row, index) => {
+            let el = document.createElement('div');
+            el.className = `results-row rotate-show-element${index + 1}`;
+            el.dataset.teamName14 = row.team_name14;
+
+            let diff = document.createElement('div');
+            diff.className = 'results-difference';
+            // Wypełnianie ▲/▼ następuje przy animacji zamiany
+            diff.textContent = '';
+
+            let standing = document.createElement('div');
+            standing.className = 'results-standing';
+            standing.textContent = index + 1;
+
+            let name = document.createElement('div');
+            name.className = 'results-name14';
+            name.textContent = row.team_name14;
+
+            let pts = document.createElement('div');
+            pts.className = 'results-points';
+            pts.textContent = row.points;
+
+            el.appendChild(diff);
+            el.appendChild(standing);
+            el.appendChild(name);
+            el.appendChild(pts);
+            resultsEl.appendChild(el);
+        });
+    }
+
+    // ── Zamknięcie kontenera ─────────────────────────────────────────────────
+
+    function closeResultsTableContainer(container, onDone) {
+        let rows = container.querySelectorAll('.results-row');
+        rows.forEach(row => {
+            row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
+        });
+        let body = container.querySelector('.results');
+        if (body) {
+            body.style.setProperty('animation', 'collapseHeight', 'important');
+            body.style.animationDuration = '750ms';
+            body.style.animationDelay = '250ms';
+            body.style.animationFillMode = 'both';
+        }
+        setTimeout(() => {
+            container.style.display = 'none';
+            rows.forEach(r => { r.style.animation = ''; });
+            if (body) {
+                body.style.animation = '';
+                body.style.animationDuration = '';
+                body.style.animationDelay = '';
+                body.style.animationFillMode = '';
+            }
+            if (onDone) onDone();
+        }, 1000);
+    }
+
+    // ── Animacja zamiany pozycji (virtual_table) ──────────────────────────────
+
+    function animateTableSwap(container, officialRows, virtualRows) {
+        // Mapa: team_name14 → indeks (0-based) w official
+        const officialPos = {};
+        officialRows.forEach((r, i) => { officialPos[r.team_name14] = i; });
+
+        // Elementy DOM (bez nagłówka)
+        const rowEls = Array.from(container.querySelectorAll('.results-row:not(:first-child)'));
+        const rowMap = {};
+        rowEls.forEach(el => { rowMap[el.dataset.teamName14] = el; });
+
+        // Sprawdź czy cokolwiek się zmieniło
+        const movers = [];
+        virtualRows.forEach((vRow, vIdx) => {
+            const el = rowMap[vRow.team_name14];
+            if (!el) return;
+            if (officialPos[vRow.team_name14] !== vIdx) movers.push(el);
+        });
+        if (movers.length === 0) return;
+
+        // Ustaw początkowy order = pozycja w official (CSS flexbox order)
+        rowEls.forEach(el => {
+            el.style.order = officialPos[el.dataset.teamName14] ?? 0;
+        });
+
+        // Upewnij się że container jest flex
+        container.style.display        = 'flex';
+        container.style.flexDirection  = 'column';
+
+        // Zaktualizuj klasy promotion/degradation, standing, points
+        virtualRows.forEach((vRow, vIdx) => {
+            const el = rowMap[vRow.team_name14];
+            if (!el) return;
+            const oldIdx = officialPos[vRow.team_name14];
+            el.classList.remove('promotion', 'degradation');
+            if (vIdx < oldIdx)      el.classList.add('promotion');
+            else if (vIdx > oldIdx) el.classList.add('degradation');
+            const standing = el.querySelector('.results-standing');
+            const pts      = el.querySelector('.results-points');
+            if (standing) standing.textContent = vIdx + 1;
+            if (pts)      pts.textContent      = vRow.points;
+        });
+
+        // F — zapamiętaj pozycje przy obecnym order (official)
+        container.getBoundingClientRect(); // reflow
+        const firstPos = {};
+        rowEls.forEach(el => {
+            firstPos[el.dataset.teamName14] = el.getBoundingClientRect().top;
+        });
+
+        // L — zmień order na docelowy (virtual)
+        virtualRows.forEach((vRow, vIdx) => {
+            const el = rowMap[vRow.team_name14];
+            if (el) el.style.order = vIdx;
+        });
+
+        // I — reflow, oblicz delty, ustaw translateY do starej pozycji
+        container.getBoundingClientRect();
+        rowEls.forEach(el => {
+            const name  = el.dataset.teamName14;
+            const delta = firstPos[name] - el.getBoundingClientRect().top;
+            el.style.transition = 'none';
+            el.style.transform  = `translateY(${delta}px)`;
+        });
+
+        // P — reflow, uruchom animację
+        container.getBoundingClientRect();
+        rowEls.forEach(el => {
+            el.style.transition = 'transform 1s ease';
+            el.style.transform  = '';
+        });
+
+        // Wyczyść po zakończeniu
+        setTimeout(() => {
+            rowEls.forEach(el => {
+                el.style.transition = '';
+                el.style.transform  = '';
+            });
+        }, 1050);
+    }
+
+    // ── Główna funkcja wyświetlania ───────────────────────────────────────────
+
+    function showInResultsTableContainer(type, payload) {
+        const container = document.getElementById('results-table-container');
+        if (!container) {
+            console.warn('[overlay] Brak #results-table-container w DOM');
+            return;
+        }
+
+        // Anuluj ewentualne poprzednie timery
+        if (_resultsTimer !== null)  { clearTimeout(_resultsTimer);  _resultsTimer  = null; }
+        if (_resultsTimer2 !== null) { clearTimeout(_resultsTimer2); _resultsTimer2 = null; }
+        container.style.display = 'none';
+
+        const headerText = (type === 'results') ? 'WYNIKI' : 'TABELA';
+
+        if (type === 'results') {
+            const games = (payload && payload.games) || [];
+            container.querySelectorAll('.results').forEach(el => {
+                buildResultsContent(el, games);
+            });
+            container.style.display = 'flex';
+            _resultsTimer = setTimeout(() => {
+                _resultsTimer = null;
+                closeResultsTableContainer(container, null);
+            }, 20000);
+
+        } else if (type === 'table') {
+            const rows = (payload && payload.rows) || [];
+            container.querySelectorAll('.results').forEach(el => {
+                buildTableContent(el, rows, headerText);
+            });
+            container.style.display = 'flex';
+            _resultsTimer = setTimeout(() => {
+                _resultsTimer = null;
+                closeResultsTableContainer(container, null);
+            }, 20000);
+
+        } else if (type === 'virtual_table') {
+            const official = (payload && payload.official) || [];
+            const virtual  = (payload && payload.virtual)  || [];
+
+            // t=0: pokaż tabelę finished
+            container.querySelectorAll('.results').forEach(el => {
+                buildTableContent(el, official, headerText);
+            });
+            container.style.display = 'flex';
+
+            // t=9500ms: animacja zamiany na virtual
+            _resultsTimer2 = setTimeout(() => {
+                _resultsTimer2 = null;
+                container.querySelectorAll('.results').forEach(el => {
+                    animateTableSwap(el, official, virtual);
+                });
+            }, 9500);
+
+            // t=20000ms: zamknięcie
+            _resultsTimer = setTimeout(() => {
+                _resultsTimer = null;
+                closeResultsTableContainer(container, null);
+            }, 20000);
+        }
+    }
+
+    // ── KONIEC WYNIKI / TABELA ────────────────────────────────────────────────
 
     function closeSquadContainer(container) {
         let logo = container.querySelector('img');
@@ -165,6 +443,62 @@
         squadBody.style.animationDelay = '250ms';
         squadBody.style.animationFillMode = 'both';
         infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
+    }
+
+    function closeStartContainer(container) {
+        // Trzy grafiki: herby drużyn i logo ligi → fadeOut
+        let logos = container.querySelectorAll('#start-home-team-logo img, #start-league-logo img, #start-away-team-logo img');
+        logos.forEach(logo => {
+            logo.style.animation = `fadeOut 250ms ease both`;
+        });
+        // Elementy rotate (nazwy drużyn) → rotateHideElement reverse
+        let rotateElements = container.querySelectorAll('.rotate-show-element1');
+        rotateElements.forEach(el => {
+            el.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
+        });
+        // Body → collapseHeight
+        let startBody = container.querySelector('.start-body');
+        if (startBody) {
+            startBody.style.setProperty('animation', 'collapseHeight', 'important');
+            startBody.style.animationDuration = '750ms';
+            startBody.style.animationDelay = '250ms';
+            startBody.style.animationFillMode = 'both';
+        }
+        // Head → rotateHideElement reverse
+        let infoHead = container.querySelector('.info-head');
+        if (infoHead) {
+            infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
+        }
+    }
+
+    function closeBreakContainer(container) {
+        // Dwa herby drużyn + wynik (zastąpił logo ligi) → fadeOut
+        let logos = container.querySelectorAll('#start-home-team-logo img, #start-away-team-logo img');
+        logos.forEach(logo => {
+            logo.style.animation = `fadeOut 250ms ease both`;
+        });
+        let result = container.querySelector('#start-league-logo');
+        if (result) {
+            result.style.animation = `fadeOut 250ms ease both`;
+        }
+        // Wiersze strzelców → rotateHideElement reverse
+        let scorerRows = container.querySelectorAll('.break-scorer-element');
+        scorerRows.forEach(row => {
+            row.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
+        });
+        // Body → collapseHeight
+        let startBody = container.querySelector('.start-body');
+        if (startBody) {
+            startBody.style.setProperty('animation', 'collapseHeight', 'important');
+            startBody.style.animationDuration = '750ms';
+            startBody.style.animationDelay = '250ms';
+            startBody.style.animationFillMode = 'both';
+        }
+        // Head → rotateHideElement reverse
+        let infoHead = container.querySelector('.info-head');
+        if (infoHead) {
+            infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
+        }
     }
 
     function closeDefaultContainer(container) {
@@ -765,5 +1099,17 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             setTimeout(() => {
                 actionInfoContainer.style.display = 'none';
             }, 11100);
+        }
+
+        if (msg.type === 'results' || msg.type === 'table' || msg.type === 'virtual_table') {
+            const gameContainer = document.getElementById('game-container');
+            const gameVisible = gameContainer && gameContainer.style.display !== 'none';
+
+            if (gameVisible) {
+                showInResultsTableContainer(msg.type, msg.payload);
+            } else {
+                // Scenariusz B — TODO: inny kontener
+                console.log('[results-table] game-container ukryty — scenariusz B (TODO)');
+            }
         }
     }

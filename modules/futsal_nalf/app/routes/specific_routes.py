@@ -311,14 +311,18 @@ def register_routes(app):
 
     @app.route('/api/leagues/<int:league_id>/standings')
     @app.route('/api/leagues/<int:league_id>/standings/group/<int:group_nr>')
-    def api_league_standings(league_id, group_nr=1):
+    def api_league_standings(league_id, group_nr=None):
         """Zwraca tabelę ligową w formacie JSON.
+
+        Query params:
+            group_nr — numer rundy/fazy (domyślnie: najwyższy dostępny w tej lidze)
 
         Response:
             {
               "official": [...],   # tabela z meczów zakończonych
               "virtual":  [...],   # tabela z meczów zakończonych + live
-              "has_live": bool
+              "has_live": bool,
+              "group_nr": int      # faktycznie użyty group_nr
             }
         Każdy wiersz tabeli zawiera:
             team_id, team_name, team_short_name,
@@ -326,7 +330,7 @@ def register_routes(app):
             goals_scored, goals_lost, goal_difference,
             league_group_nr   # 1 = mistrzowska, 2 = spadkowa
         """
-        from flask import jsonify
+        from flask import jsonify, request
         from app.models.game import Game
         from app.models.league import League
 
@@ -334,7 +338,19 @@ def register_routes(app):
         if not league:
             return jsonify({'error': 'Nie znaleziono ligi'}), 404
 
+        # group_nr: URL path > query param > najwyższy dostępny w lidze
+        if group_nr is None:
+            group_nr = request.args.get('group_nr', type=int)
+        if group_nr is None:
+            max_group = (
+                db.session.query(db.func.max(Game.group_nr))
+                .filter(Game.league_id == league_id)
+                .scalar()
+            )
+            group_nr = max_group or 1
+
         data = Game.get_league_tables(league_id, group_nr=group_nr)
+        data['group_nr'] = group_nr
         return jsonify(data)
 
     @app.route('/leagues/<int:league_id>/games/scrape')

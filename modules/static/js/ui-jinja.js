@@ -1599,3 +1599,521 @@ window.debugTimers = () => {
     console.log('DOM timer IDs:', getAllTimerIds());
     console.log('Socket connected:', socket.connected);
 };
+
+
+// =============================================================================
+// ── ZAKŁADKA MECZE ───────────────────────────────────────────────────────────
+// =============================================================================
+
+// Stan zakładki MECZE — przechowywany między odświeżeniami w tej samej sesji
+var _gamesTab = {
+    leagueId:    null,
+    maxGroupNr:  1,      // najwyższy group_nr meczów w wybranej lidze
+    dateFrom:    null,
+    dateTo:      null,
+    activeTab:   'results',   // 'results' | 'table' | 'virtual'
+    games:       [],          // lokalna kopia aktualnie wyświetlanych meczów
+};
+
+// ── Budowanie widoku MECZE ────────────────────────────────────────────────────
+
+function _buildGamesView(data, container) {
+    container.innerHTML = '';
+    container.dataset.isEventsUpdateBlocked = 'true';
+
+    // Zapamiętaj stan
+    _gamesTab.leagueId = data.league_id;
+    _gamesTab.dateFrom = data.date_from;
+    _gamesTab.dateTo   = data.date_to;
+    _gamesTab.games    = data.games ? data.games.slice() : [];
+
+    // Zapamiętaj max_group_nr wybranej ligi
+    var selectedLeague = (data.leagues || []).find(function(l) { return l.id === data.league_id; });
+    _gamesTab.maxGroupNr = selectedLeague ? (selectedLeague.max_group_nr || 1) : 1;
+
+    // ── Nagłówek: wybór ligi ──────────────────────────────────────────────
+    var leagueBar = document.createElement('div');
+    leagueBar.id = 'games-league-bar';
+    leagueBar.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:#111;';
+
+    data.leagues.forEach(function(league) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = league.name;
+        btn.dataset.leagueId = league.id;
+        btn.style.cssText = 'flex:1;min-width:80px;font-size:9px;cursor:pointer;';
+        if (league.id === data.league_id) {
+            btn.style.fontWeight = '700';
+            btn.style.outline = '2px solid #fff';
+        }
+        btn.onclick = function() {
+            showUiMonitorContent('games', {
+                league_id: league.id,
+                date_from: _gamesTab.dateFrom,
+                date_to:   _gamesTab.dateTo,
+            });
+        };
+        leagueBar.appendChild(btn);
+    });
+    container.appendChild(leagueBar);
+
+    // ── Pasek filtra dat (floating, domyślnie ukryty) ────────────────────
+    var dateToggleBtn = document.createElement('button');
+    dateToggleBtn.id = 'games-date-toggle';
+    dateToggleBtn.type = 'button';
+    dateToggleBtn.textContent = '📅';
+    dateToggleBtn.title = 'Filtruj daty';
+    dateToggleBtn.style.cssText = 'font-size:10px;cursor:pointer;';
+    dateToggleBtn.onclick = function() {
+        var panel = document.getElementById('games-date-bar');
+        panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    };
+    // Wstaw przycisk na końcu leagueBar
+    leagueBar.appendChild(dateToggleBtn);
+
+    // Panel dat — floating, nie przesuwa elementów poniżej
+    var dateBar = document.createElement('div');
+    dateBar.id = 'games-date-bar';
+    dateBar.style.cssText = [
+        'display:none',
+        'position:absolute',
+        'top:' + (leagueBar.offsetHeight || 32) + 'px',
+        'left:0',
+        'right:0',
+        'z-index:100',
+        'align-items:center',
+        'gap:6px',
+        'padding:6px 8px',
+        'background:#2a2a2a',
+        'border-bottom:1px solid #444',
+        'box-shadow:0 4px 12px rgba(0,0,0,.6)',
+    ].join(';');
+    dateBar.innerHTML =
+        '<span style="color:#aaa;font-size:11px;white-space:nowrap;">Od:</span>' +
+        '<input type="date" id="games-date-from" style="font-size:11px;padding:2px;flex:1;" value="' + (data.date_from || '') + '">' +
+        '<span style="color:#aaa;font-size:11px;white-space:nowrap;">Do:</span>' +
+        '<input type="date" id="games-date-to"   style="font-size:11px;padding:2px;flex:1;" value="' + (data.date_to   || '') + '">' +
+        '<button type="button" id="games-date-today" style="font-size:11px;padding:2px 6px;white-space:nowrap;">Dziś</button>' +
+        '<button type="button" id="games-date-apply" style="font-size:11px;padding:2px 6px;white-space:nowrap;">Filtruj</button>';
+
+    // container musi mieć position:relative żeby absolute działał poprawnie
+    container.style.position = 'relative';
+    container.appendChild(dateBar);
+
+    document.getElementById('games-date-apply').onclick = function() {
+        var df = document.getElementById('games-date-from').value;
+        var dt = document.getElementById('games-date-to').value || df;
+        document.getElementById('games-date-bar').style.display = 'none';
+        showUiMonitorContent('games', {
+            league_id: _gamesTab.leagueId,
+            date_from: df || null,
+            date_to:   dt || null,
+        });
+    };
+    document.getElementById('games-date-today').onclick = function() {
+        var today = new Date().toISOString().slice(0, 10);
+        document.getElementById('games-date-bar').style.display = 'none';
+        showUiMonitorContent('games', {
+            league_id: _gamesTab.leagueId,
+            date_from: today,
+            date_to:   today,
+        });
+    };
+
+    // ── Podzakładki ───────────────────────────────────────────────────────
+    var tabBar = document.createElement('div');
+    tabBar.id = 'games-tab-bar';
+    tabBar.style.cssText = 'display:flex;border-bottom:2px solid #444;';
+
+    var tabs = [
+        { id: 'results', label: 'Wyniki' },
+        { id: 'table',   label: 'Tabela' },
+        { id: 'virtual', label: 'Tabela wirtualna' },
+    ];
+    tabs.forEach(function(tab) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = tab.label;
+        btn.dataset.tabId = tab.id;
+        btn.style.cssText = 'flex:1;font-size:10px;border-top:none;border-right:none;border-left:none;border-image:initial;cursor:pointer;' +
+            'background:' + (tab.id === _gamesTab.activeTab ? '#333' : '#1a1a1a') + ';' +
+            'color:' + (tab.id === _gamesTab.activeTab ? '#fff' : '#aaa') + ';' +
+            'border-bottom:' + (tab.id === _gamesTab.activeTab ? '2px solid #fff' : '2px solid transparent') + ';';
+        btn.onclick = function() { _switchGamesTab(tab.id, data); };
+        tabBar.appendChild(btn);
+    });
+    container.appendChild(tabBar);
+
+    // ── Obszar treści podzakładki ─────────────────────────────────────────
+    var tabContent = document.createElement('div');
+    tabContent.id = 'games-tab-content';
+    tabContent.style.cssText = 'overflow-y:auto;height:calc(100vh - 67px);';
+    container.appendChild(tabContent);
+
+    _switchGamesTab(_gamesTab.activeTab, data);
+}
+
+function _switchGamesTab(tabId, data) {
+    _gamesTab.activeTab = tabId;
+
+    // Podświetl aktywną zakładkę
+    document.querySelectorAll('#games-tab-bar button').forEach(function(btn) {
+        var active = btn.dataset.tabId === tabId;
+        btn.style.background    = active ? '#333' : '#1a1a1a';
+        btn.style.color         = active ? '#fff' : '#aaa';
+        btn.style.borderTop     = 'none';
+        btn.style.borderRight   = 'none';
+        btn.style.borderLeft    = 'none';
+        btn.style.borderImage   = 'initial';
+        btn.style.borderBottom  = active ? '2px solid #fff' : '2px solid transparent';
+    });
+
+    var tabContent = document.getElementById('games-tab-content');
+    if (!tabContent) return;
+    tabContent.innerHTML = '';
+
+    if (tabId === 'results') {
+        _renderResultsTab(data, tabContent);
+    } else if (tabId === 'table' || tabId === 'virtual') {
+        _renderStandingsTab(tabId, data, tabContent);
+    }
+}
+
+// ── Podzakładka: Wyniki ───────────────────────────────────────────────────────
+
+function _renderResultsTab(data, container) {
+    if (!data.games || data.games.length === 0) {
+        container.innerHTML = '<p style="color:#888;text-align:center;padding:1rem;">Brak meczów w wybranym dniu.</p>';
+        return;
+    }
+
+    // Przycisk wysyłania do overlay
+    var sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.textContent = '▶ Wyślij do overlay';
+    sendBtn.style.cssText = 'display:block;width:100%;padding:5px;font-size:12px;margin-bottom:4px;cursor:pointer;';
+    sendBtn.onclick = function() { _sendResultsToOverlay(_gamesTab.games); };
+    container.appendChild(sendBtn);
+
+    var table = document.createElement('table');
+    table.id = 'games-monitor-table';
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;color:#ddd;';
+    table.innerHTML =
+        '<thead><tr style="background:#222;">' +
+        '<th style="font-size:10px;">Data</th>' +
+        '<th style="font-size:10px;">Mecz</th>' +
+        '<th style="font-size:10px;">Wynik</th>' +
+        '<th style="font-size:10px;">Status</th>' +
+        '<th style="font-size:10px;"></th>' +
+        '</tr></thead>';
+
+    var tbody = document.createElement('tbody');
+    tbody.id = 'games-monitor-tbody';
+    data.games.forEach(function(g) { tbody.appendChild(_makeGameRow(g)); });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    // Modal zmiany statusu (osadzony w monitorze)
+    container.appendChild(_buildStatusModal());
+    container.appendChild(_buildScoreModal());
+}
+
+function _makeGameRow(g) {
+    var tr = document.createElement('tr');
+    tr.dataset.gameId = g.id;
+    tr.style.borderBottom = '1px solid #333';
+
+    var statusClass = g.status === 1 ? 'live' : g.status === 2 ? 'finished' : 'upcoming';
+    var statusText  = g.status === 0 ? 'Nie rozp.' : g.status === 1 ? 'Trwa' : 'Zak.';
+    var date = g.date ? g.date.replace('T', ' ').slice(0, 16) : '-';
+
+    tr.innerHTML =
+        '<td style="padding:1px 4px;color:#aaa;white-space:nowrap;">' + date + '</td>' +
+        '<td style="padding:1px 4px;"><strong>' + (g.home_team_short_name || '?') + '</strong>' +
+            ' – <strong>' + (g.away_team_short_name || '?') + '</strong></td>' +
+        '<td style="padding:1px 4px;text-align:center;" id="games-score-' + g.id + '">' +
+            (g.score_string || '-') + '</td>' +
+        '<td style="padding:1px 4px;text-align:center;cursor:pointer;" ' +
+            'ondblclick="_openMonitorStatusModal(' + g.id + ',' + g.status + ')">' +
+            '<span class="game-status status-' + statusClass + '">' + statusText + '</span></td>' +
+        '<td style="padding:1px 4px;text-align:center;">' +
+            '<button type="button" style="font-size:10px;padding:1px 5px;" ' +
+            'onclick="_openMonitorScoreModal(' + g.id + ',' +
+                (g.home_team_goals !== null ? g.home_team_goals : 0) + ',' +
+                (g.away_team_goals !== null ? g.away_team_goals : 0) + ')">✏</button>' +
+        '</td>';
+    return tr;
+}
+
+// ── Modal zmiany statusu (lekki, wbudowany w monitor) ────────────────────────
+
+var _monitorCurrentGameId = null;
+
+function _buildStatusModal() {
+    var el = document.createElement('div');
+    el.id = 'monitor-status-modal';
+    el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center;';
+    el.innerHTML =
+        '<div style="background:#222;border-radius:6px;padding:1rem;min-width:220px;color:#ddd;">' +
+        '<p style="margin:0 0 .75rem;font-weight:700;">Zmień status meczu</p>' +
+        '<div style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:.75rem;">' +
+        '<label><input type="radio" name="mon-status-radio" value="0"> Nie rozpoczęty</label>' +
+        '<label><input type="radio" name="mon-status-radio" value="1"> Trwa</label>' +
+        '<label><input type="radio" name="mon-status-radio" value="2"> Zakończony</label>' +
+        '</div>' +
+        '<div style="display:flex;gap:.5rem;justify-content:flex-end;">' +
+        '<button type="button" onclick="_closeMonitorStatusModal()">Anuluj</button>' +
+        '<button type="button" onclick="_saveMonitorStatus()">Zapisz</button>' +
+        '</div></div>';
+    el.addEventListener('click', function(e) { if (e.target === el) _closeMonitorStatusModal(); });
+    return el;
+}
+
+function _openMonitorStatusModal(gameId, currentStatus) {
+    _monitorCurrentGameId = gameId;
+    document.querySelectorAll('input[name="mon-status-radio"]').forEach(function(r) {
+        r.checked = parseInt(r.value) === currentStatus;
+    });
+    document.getElementById('monitor-status-modal').style.display = 'flex';
+}
+
+function _closeMonitorStatusModal() {
+    var m = document.getElementById('monitor-status-modal');
+    if (m) m.style.display = 'none';
+    _monitorCurrentGameId = null;
+}
+
+function _saveMonitorStatus() {
+    var selected = document.querySelector('input[name="mon-status-radio"]:checked');
+    if (!selected || _monitorCurrentGameId === null) return;
+
+    fetch('/api/games/' + _monitorCurrentGameId + '/status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: parseInt(selected.value) }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.error) { alert('Błąd: ' + d.error); return; }
+        var gameId = _monitorCurrentGameId || d.id;
+        _closeMonitorStatusModal();
+        _refreshMonitorGame(gameId);
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+// ── Modal edycji wyniku ───────────────────────────────────────────────────────
+
+function _buildScoreModal() {
+    var el = document.createElement('div');
+    el.id = 'monitor-score-modal';
+    el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center;';
+    el.innerHTML =
+        '<div style="background:#222;border-radius:6px;padding:1rem;min-width:200px;color:#ddd;">' +
+        '<p style="margin:0 0 .75rem;font-weight:700;">Zmień wynik</p>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">' +
+        '<input type="number" id="mon-score-home" min="0" style="width:48px;font-size:1.2rem;text-align:center;">' +
+        '<span style="font-size:1.2rem;">:</span>' +
+        '<input type="number" id="mon-score-away" min="0" style="width:48px;font-size:1.2rem;text-align:center;">' +
+        '</div>' +
+        '<div style="display:flex;gap:.5rem;justify-content:flex-end;">' +
+        '<button type="button" onclick="_closeMonitorScoreModal()">Anuluj</button>' +
+        '<button type="button" onclick="_saveMonitorScore()">Zapisz</button>' +
+        '</div></div>';
+    el.addEventListener('click', function(e) { if (e.target === el) _closeMonitorScoreModal(); });
+    return el;
+}
+
+function _openMonitorScoreModal(gameId, homeGoals, awayGoals) {
+    _monitorCurrentGameId = gameId;
+    document.getElementById('mon-score-home').value = homeGoals;
+    document.getElementById('mon-score-away').value = awayGoals;
+    document.getElementById('monitor-score-modal').style.display = 'flex';
+}
+
+function _closeMonitorScoreModal() {
+    var m = document.getElementById('monitor-score-modal');
+    if (m) m.style.display = 'none';
+    _monitorCurrentGameId = null;
+}
+
+function _saveMonitorScore() {
+    if (_monitorCurrentGameId === null) return;
+    var home = parseInt(document.getElementById('mon-score-home').value);
+    var away = parseInt(document.getElementById('mon-score-away').value);
+    if (isNaN(home) || isNaN(away)) return;
+
+    fetch('/api/games/' + _monitorCurrentGameId + '/score', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ home_team_goals: home, away_team_goals: away }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.error) { alert('Błąd: ' + d.error); return; }
+        var gameId = _monitorCurrentGameId;
+        _closeMonitorScoreModal();
+        _refreshMonitorGame(gameId);
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+function _refreshMonitorGame(gameId) {
+    fetch('/api/games/' + gameId)
+    .then(function(r) { return r.json(); })
+    .then(function(g) {
+        // Zaktualizuj lokalną kopię
+        var idx = _gamesTab.games.findIndex(function(x) { return x.id === gameId; });
+        if (idx !== -1) _gamesTab.games[idx] = g;
+
+        // Zaktualizuj wiersz w tabeli
+        var tr = document.querySelector('#games-monitor-tbody tr[data-game-id="' + gameId + '"]');
+        if (tr) tr.replaceWith(_makeGameRow(g));
+    });
+}
+
+// ── Podzakładki: Tabela / Tabela wirtualna ────────────────────────────────────
+
+function _renderStandingsTab(tabId, data, container) {
+    var virtual = (tabId === 'virtual');
+    var leagueId = data.league_id;
+    if (!leagueId) {
+        container.innerHTML = '<p style="color:#888;padding:1rem;text-align:center;">Brak wybranej ligi.</p>';
+        return;
+    }
+
+    container.innerHTML = '<p style="color:#888;padding:1rem;text-align:center;">Wczytuję tabelę...</p>';
+
+    var groupNr = _gamesTab.maxGroupNr || 1;
+    console.log('[standings] leagueId=' + leagueId + ' group_nr=' + groupNr + ' virtual=' + virtual);
+    fetch('/api/leagues/' + leagueId + '/standings?group_nr=' + groupNr)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        console.log('[standings] response:', d);
+        container.innerHTML = '';
+
+        // Przycisk wysyłania do overlay (obsługa w przyszłości)
+        var sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.textContent = '▶ Wyślij do overlay';
+        sendBtn.style.cssText = 'display:block;width:100%;padding:5px;font-size:12px;margin-bottom:4px;cursor:pointer;';
+        sendBtn.dataset.tabId = tabId;
+        sendBtn.onclick = (function(capturedTabId, capturedD) {
+            return function() { _sendStandingsToOverlay(capturedTabId, capturedD); };
+        })(tabId, d);
+        container.appendChild(sendBtn);
+
+        var rows = virtual ? d.virtual : d.official;
+        if (!rows || rows.length === 0) {
+            var msg = virtual
+                ? 'Brak meczów zakończonych lub trwających w tej lidze.'
+                : 'Brak zakończonych meczów w tej lidze.';
+            container.innerHTML += '<p style="color:#888;padding:1rem;text-align:center;">' + msg + '</p>';
+            return;
+        }
+
+        var table = document.createElement('table');
+        table.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;color:#ddd;';
+
+        var thead = document.createElement('thead');
+        thead.innerHTML =
+            '<tr style="background:#222;text-align:center;">' +
+            '<th style="padding:3px 2px;">#</th>' +
+            '<th style="padding:3px 2px;text-align:left;">Drużyna</th>' +
+            '<th title="Mecze" style="padding:3px 2px;">M</th>' +
+            '<th title="Wygrane" style="padding:3px 2px;">W</th>' +
+            '<th title="Remisy" style="padding:3px 2px;">R</th>' +
+            '<th title="Porażki" style="padding:3px 2px;">P</th>' +
+            '<th title="Bramki zdobyte" style="padding:3px 2px;">GZ</th>' +
+            '<th title="Bramki stracone" style="padding:3px 2px;">GS</th>' +
+            '<th title="Bilans bramek" style="padding:3px 2px;">BR</th>' +
+            '<th title="Punkty" style="padding:3px 2px;">Pkt</th>' +
+            '</tr>';
+        table.appendChild(thead);
+
+        var tbody = document.createElement('tbody');
+        rows.forEach(function(row, idx) {
+            var tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #2a2a2a';
+            var br = row.goal_difference > 0 ? '+' + row.goal_difference : row.goal_difference;
+            tr.innerHTML =
+                '<td style="padding:3px 2px;text-align:center;color:#aaa;">' + (idx + 1) + '</td>' +
+                '<td style="padding:3px 4px;">' + (row.team_short_name || row.team_name) + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.games + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.wins + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.draws + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.loses + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.goals_scored + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + row.goals_lost + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;">' + br + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;font-weight:700;">' + row.points + '</td>';
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+
+        if (virtual && d.has_live) {
+            var note = document.createElement('p');
+            note.style.cssText = 'color:#f0ad4e;font-size:10px;padding:4px 6px;margin:0;';
+            note.textContent = '⚡ Tabela uwzględnia wyniki aktualnie trwających meczów.';
+            container.appendChild(note);
+        }
+    })
+    .catch(function() {
+        container.innerHTML = '<p style="color:#e74c3c;padding:1rem;text-align:center;">Błąd pobierania tabeli.</p>';
+    });
+}
+
+// ── Podłączenie do socket.on('show_ui_monitor_content') ──────────────────────
+// Obsługa 'games' dodana przez rozszerzenie istniejącego handlera poniżej.
+// Wywołanie _buildGamesView jest wstrzykiwane przez patch na końcu pliku:
+
+var _origSocketHandler = null;
+(function() {
+    // Patch: jeśli handler już istnieje, dodajemy gałąź 'games' bez modyfikacji źródła
+    // Obsługa przez globalny listener — patrz socket.on('show_ui_monitor_content') powyżej
+    // Rozszerzona gałąź jest dołączana przez kolejny socket.on (socket.io akumuluje listenery)
+})();
+
+socket.on('show_ui_monitor_content', function(data) {
+    if (data.content_type !== 'games') return;  // pozostałe typy obsługuje główny handler
+    var uiMonitorContent = document.getElementById('ui-monitor-content');
+    _buildGamesView(data, uiMonitorContent);
+});
+
+function _sendToOverlay(type, payloadObj) {
+    socket.emit('send_to_overlay', { type: type, payload: payloadObj });
+}
+
+function _sendResultsToOverlay(games) {
+    // Wysyła wszystkie mecze — filtrowanie niekompletnych wyników następuje w overlay
+    var mapped = games.map(function(g) {
+        return {
+            home_team_name14: g.home_team_name_14 || g.home_team_name || '',
+            home_team_goals:  g.home_team_goals,
+            away_team_goals:  g.away_team_goals,
+            away_team_name14: g.away_team_name_14 || g.away_team_name || '',
+            status:           g.status,
+        };
+    });
+    _sendToOverlay('results', { games: mapped });
+}
+
+function _mapStandingsRow(row) {
+    return {
+        team_name14:     row.team_name_14 || row.team_name || '',
+        points:          row.points,
+        goal_difference: row.goal_difference,
+    };
+}
+
+function _sendStandingsToOverlay(tabId, d) {
+    if (tabId === 'table') {
+        var rows = (d.official || []).map(_mapStandingsRow);
+        _sendToOverlay('table', { rows: rows });
+    } else if (tabId === 'virtual') {
+        var official = (d.official || []).map(_mapStandingsRow);
+        var virtual  = (d.virtual  || []).map(_mapStandingsRow);
+        _sendToOverlay('virtual_table', { official: official, virtual: virtual });
+    }
+}

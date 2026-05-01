@@ -71,7 +71,7 @@ body {
   align-items: center;
   font-weight: 700;
   font-size: 200px;
-  text-shadow: rgb(83, 83, 83) 0px 0px 10px;
+  text-shadow: rgba(83, 83, 83, 0.3) 0px 0px 5px;
 }
 
 #start-league-logo>img{

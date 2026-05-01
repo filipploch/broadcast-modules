@@ -591,6 +591,7 @@ class BaseGameMixin:
                     stats[game.home_team_id][key] += home_stats[key]
                 stats[game.home_team_id]['team_id'] = game.home_team_id
                 stats[game.home_team_id]['team_name'] = game.home_team.name
+                stats[game.home_team_id]['team_name_14'] = game.home_team.name_14
                 stats[game.home_team_id]['team_short_name'] = game.home_team.short_name
 
             if away_stats:
@@ -598,6 +599,7 @@ class BaseGameMixin:
                     stats[game.away_team_id][key] += away_stats[key]
                 stats[game.away_team_id]['team_id'] = game.away_team_id
                 stats[game.away_team_id]['team_name'] = game.away_team.name
+                stats[game.away_team_id]['team_name_14'] = game.away_team.name_14
                 stats[game.away_team_id]['team_short_name'] = game.away_team.short_name
 
         # Calculate goal difference

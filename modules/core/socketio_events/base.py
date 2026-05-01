@@ -276,6 +276,24 @@ def register_events(socketio):
         db.session.commit()
         _sio.emit('scoreboard_reversed', {'is_reversed': settings.is_scoreboard_reversed})
 
+    # ── Send to overlay ───────────────────────────────────────────────────────
+
+    @socketio.on('send_to_overlay')
+    def handle_send_to_overlay(data):
+        """Przekazuje dowolny sygnał bezpośrednio do overlay przez hub.
+
+        data = { 'type': str, 'payload': any }
+        """
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send({
+                'from': current_app.config['MODULE_ID'],
+                'to':   'stream-overlay',
+                'type': data.get('type'),
+                'payload': data.get('payload', {}),
+            })
+
     # ── Show overlay ──────────────────────────────────────────────────────────
 
     @socketio.on('show_overlay_container')
@@ -375,4 +393,55 @@ def _handle_core_content(content_type, data):
             'game_event':   game_event_d['game_event'],
             'team_squad':   game_event_d['team_squad'],
         }
+    elif content_type == 'games':
+        from core.managers.game_manager import GameManager
+        from core.managers.league_manager import LeagueManager
+        from core.models.base_settings import get_settings_model
+        from datetime import date
+
+        payload    = data.get('payload') or {}
+        league_id  = payload.get('league_id')
+        date_from  = payload.get('date_from', date.today().isoformat())
+        date_to    = payload.get('date_to', date_from)
+
+        # Domyślnie: liga aktualnie transmitowanego meczu
+        if league_id is None:
+            Settings = get_settings_model()
+            settings = Settings.get_settings()
+            current_game = GameManager().get_game_by_id(settings.current_game_id)
+            league_id = current_game.league_id if current_game else None
+
+        from core.extensions import db
+        from core.models.base_game import get_game_model
+        Game = get_game_model()
+
+        leagues = LeagueManager().get_all_leagues()
+
+        # Dołącz max_group_nr per liga (potrzebne do standings fetch w JS)
+        leagues_data = []
+        for l in leagues:
+            d = l.to_dict()
+            max_grp = (
+                db.session.query(db.func.max(Game.group_nr))
+                .filter(Game.league_id == l.id)
+                .scalar()
+            )
+            d['max_group_nr'] = max_grp or 1
+            leagues_data.append(d)
+
+        games = GameManager().get_all_games(
+            league_id=league_id,
+            date_from=date_from,
+            date_to=date_to,
+        ) if league_id else []
+
+        return {
+            'content_type': 'games',
+            'league_id':    league_id,
+            'date_from':    date_from,
+            'date_to':      date_to,
+            'leagues':      leagues_data,
+            'games':        [g.to_dict() for g in games],
+        }
+
     return None  # nieznany — przekaż do modułu

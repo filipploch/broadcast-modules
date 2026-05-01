@@ -8,25 +8,34 @@
     "Camera1": 1
   },
   "EMPTY": {},
-  "END_SCREEN": {},
+  "END_SCREEN": {
+    "napisyKoncowe": 1,
+    "outro-sociale": 2
+  },
   "MICROPHONES": {
-    "Mic1": 5,
-    "Mic2": 1,
-    "Mic3": 6
+    "Mic1": 1,
+    "Mic2": 2
   },
   "OUTPUT": {
-    "AUDIO_SOURCES": 1,
-    "Lew": 14,
-    "Overlay": 3,
-    "Replay": 11,
-    "Tło biały": 4,
-    "VIDEO_SOURCES": 2
+    "AUDIO_SOURCES": 25,
+    "ObrazTest": 23,
+    "Overlay": 27,
+    "Replay": 28,
+    "Test1": 29,
+    "Test2": 30,
+    "Tło biały": 31,
+    "VIDEO_SOURCES": 26,
+    "VideoTest": 24
   },
   "STREAM": {
-    "BackgroundImage": 2,
-    "OUTPUT": 1
+    "BackgroundImage": 12,
+    "OUTPUT": 10
   },
   "VIDEO_SOURCES": {
     "CAMERAS": 1
+  },
+  "ZAPROSZENIE": {
+    "Tło_mecz": 4,
+    "Zapowiedz-28": 10
   }
 }

@@ -38,9 +38,21 @@ class GameManager:
         except Exception as e:
             current_app.logger.error(f"Failed to emit to UI: {e}")
 
-    def get_all_games(self, league_id=None, team_id=None, status=None):
-        Game = _get_game()  # ← raz pobierz klasę
-        query = Game.query  # ← użyj do zapytania
+    def get_all_games(self, league_id=None, team_id=None, status=None,
+                      date_from=None, date_to=None):
+        """Zwraca listę meczów z opcjonalnym filtrowaniem.
+
+        Args:
+            league_id:  filtruj po lidze
+            team_id:    filtruj po drużynie (gosp. lub gości)
+            status:     filtruj po statusie (0/1/2)
+            date_from:  od daty włącznie (str YYYY-MM-DD lub date/datetime)
+            date_to:    do daty włącznie (str YYYY-MM-DD lub date/datetime)
+                        jeśli None i date_from podane — domyślnie = date_from
+        """
+        from datetime import datetime, date, timedelta
+        Game = _get_game()
+        query = Game.query
 
         if league_id:
             query = query.filter_by(league_id=league_id)
@@ -52,6 +64,20 @@ class GameManager:
 
         if status is not None:
             query = query.filter_by(status=status)
+
+        if date_from is not None:
+            if isinstance(date_from, str):
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+            query = query.filter(Game.date >= datetime.combine(date_from, datetime.min.time()))
+
+        if date_from is not None:
+            _date_to = date_to if date_to is not None else date_from
+            if isinstance(_date_to, str):
+                _date_to = datetime.strptime(_date_to, '%Y-%m-%d').date()
+            # Koniec dnia = początek następnego dnia
+            query = query.filter(
+                Game.date < datetime.combine(_date_to + timedelta(days=1), datetime.min.time())
+            )
 
         return query.order_by(Game.date).all()
 
