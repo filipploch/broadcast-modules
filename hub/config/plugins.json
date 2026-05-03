@@ -51,5 +51,15 @@
     "heartbeat_timeout": 30,
     "is_critical": false,
     "description": "External camera recorder plugin on Debian with reverse discovery"
-  }
+  },
+  "replay-plugin": {
+    "type": "local",
+    "executable_path": "../plugins/replay-plugin/replay-plugin.exe",
+    "working_dir": "../plugins/replay-plugin",
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 2000
+}
 }

@@ -353,6 +353,7 @@ def register_events(socketio):
                             'camera3': False, 'camera4': False},
             })
 
+
     @socketio.on('show_info')
     def handle_show_info(data):
         # from core.managers.game_event_manager import GameEventManager

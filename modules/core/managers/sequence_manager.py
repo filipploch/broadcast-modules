@@ -44,6 +44,10 @@ class SequenceManager:
         self._obs_event_listeners: dict = {}
         self._obs_lock = threading.Lock()
 
+        # { msg_type: [ _HubMessageListener, ... ] }
+        self._hub_msg_listeners: dict = {}
+        self._hub_msg_lock = threading.Lock()
+
         self.load_sequences()
 
     # =========================================================================
@@ -94,11 +98,14 @@ class SequenceManager:
         event_steps   = []
         special_steps = []
 
+        hub_msg_steps = []
         for step in steps:
             if step.get('action') == 'watch_media_cursor':
                 special_steps.append(step)
             elif step.get('wait_for_obs_event'):
                 event_steps.append(step)
+            elif step.get('wait_for_hub_message'):
+                hub_msg_steps.append(step)
             else:
                 timer_steps.append(step)
 
@@ -145,6 +152,29 @@ class SequenceManager:
             timers.append(t)
             t.start()
 
+        # --- Kroki na wiadomość z huba ---
+        hub_msg_listeners = []
+        for step in hub_msg_steps:
+            listener = _HubMessageListener(
+                msg_type=step['wait_for_hub_message'],
+                timeout_ms=step.get('timeout_ms', 60000),
+            )
+            with self._hub_msg_lock:
+                self._hub_msg_listeners.setdefault(listener.msg_type, []).append(listener)
+            hub_msg_listeners.append((step, listener))
+            logger.debug(
+                f"[SequenceManager] HubMessageListener '{listener.msg_type}' zarejestrowany"
+            )
+
+        for step, listener in hub_msg_listeners:
+            t = threading.Thread(
+                target=self._run_hub_msg_step,
+                args=[step, listener, context, sequence_id],
+                daemon=True
+            )
+            timers.append(t)
+            t.start()
+
         # --- Kroki specjalne: watch_media_cursor ---
         for step in special_steps:
             t = threading.Thread(
@@ -177,6 +207,31 @@ class SequenceManager:
             return
 
         self._execute_steps([step], context, sequence_id)
+
+    def _run_hub_msg_step(self, step: dict, listener: '_HubMessageListener',
+                          context: dict, sequence_id: str):
+        triggered = listener.wait()
+
+        with self._hub_msg_lock:
+            bucket = self._hub_msg_listeners.get(listener.msg_type, [])
+            if listener in bucket:
+                bucket.remove(listener)
+
+        if not triggered:
+            logger.warning(
+                f"[SequenceManager] Krok '{step.get('action', step.get('wait_for_hub_message'))}' "
+                f"pominięty — hub message '{listener.msg_type}' "
+                f"nie nadszedł w ciągu {listener.timeout_ms}ms"
+            )
+            # Timeout — wykonaj kroki fallback jeśli zdefiniowane
+            fallback = step.get('on_timeout')
+            if fallback:
+                self._execute_steps(fallback, context, sequence_id)
+            return
+
+        # Wzbogać context o payload z wiadomości
+        enriched_context = {**(context or {}), 'hub_msg_payload': listener.payload}
+        self._execute_steps([step], enriched_context, sequence_id)
 
     # =========================================================================
     # WATCH MEDIA CURSOR
@@ -290,6 +345,24 @@ class SequenceManager:
             f"→ zaakceptowano przez {notified}/{len(listeners)} listener(ów)"
         )
 
+    def notify_hub_message(self, msg_type: str, payload: dict = None):
+        """
+        Powiadamia listenery czekające na wiadomość z huba danego typu.
+        Wywoływane przez handler socketio gdy nadejdzie wiadomość (np. replay_done).
+        """
+        with self._hub_msg_lock:
+            listeners = list(self._hub_msg_listeners.get(msg_type, []))
+
+        notified = 0
+        for listener in listeners:
+            if listener.notify(payload):
+                notified += 1
+
+        logger.debug(
+            f"[SequenceManager] notify_hub_message '{msg_type}' "
+            f"→ powiadomiono {notified}/{len(listeners)} listener(ów)"
+        )
+
     # =========================================================================
     # ZATRZYMYWANIE SEKWENCJI
     # =========================================================================
@@ -361,3 +434,31 @@ class _EventListener:
 
     def wait(self) -> bool:
         return self._event.wait(timeout=self.timeout_ms / 1000)
+
+
+class _HubMessageListener:
+    """
+    Listener czekający na wiadomość określonego typu z huba.
+    Używany przez krok wait_for_hub_message w sekwencji.
+    Pozwala zakończyć sekwencję na podstawie sygnału zewnętrznego
+    (np. replay_done od replay-plugin) zamiast sztywnego czasu.
+    """
+
+    def __init__(self, msg_type: str, timeout_ms: int = 60000):
+        self.msg_type      = msg_type
+        self.timeout_ms    = timeout_ms
+        self.registered_at = time.monotonic()
+        self._event        = threading.Event()
+        self._payload      = None
+
+    def notify(self, payload: dict = None) -> bool:
+        self._payload = payload
+        self._event.set()
+        return True
+
+    def wait(self) -> bool:
+        return self._event.wait(timeout=self.timeout_ms / 1000)
+
+    @property
+    def payload(self):
+        return self._payload

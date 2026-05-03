@@ -310,6 +310,54 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    @socketio.on('replay_control')
+    def handle_replay_control(data):
+        """
+        Przekazuje polecenia sterowania powtórką do replay-plugin przez hub.
+
+        Obsługiwane typy (data.type):
+            pause        — pauza
+            resume       — wznów
+            stop         — zatrzymaj
+            speed        — zmień prędkość (data.speed: float)
+            frame_fwd    — krok o klatkę do przodu (wymaga pauzy)
+            frame_back   — krok o klatkę do tyłu (wymaga pauzy)
+            cancel_timer — cancel_time_dependent_replay_end
+            end          — end_replay (tylko w trybie ręcznym)
+        """
+        from core.managers import get_hub_client
+        hub = get_hub_client()
+        if not hub:
+            return
+
+        cmd_type = data.get('type')
+        type_to_signal = {
+            'pause':        'replay_pause',
+            'resume':       'replay_resume',
+            'stop':         'replay_stop',
+            'speed':        'replay_speed',
+            'frame_fwd':    'replay_frame_forward',
+            'frame_back':   'replay_frame_back',
+            'cancel_timer': 'cancel_time_dependent_replay_end',
+            'end':          'end_replay',
+        }
+        signal = type_to_signal.get(cmd_type)
+        if not signal:
+            current_app.logger.warning(f'[replay_control] Nieznany typ: {cmd_type}')
+            return
+
+        payload = {}
+        if cmd_type == 'speed':
+            payload['speed'] = data.get('speed', 0.9)
+
+        hub.send({
+            'from':    current_app.config.get('MODULE_ID', 'main-module'),
+            'to':      'replay-plugin',
+            'type':    signal,
+            'payload': payload,
+        })
+        current_app.logger.info(f'[replay_control] {cmd_type} → {signal}')
+
 
 def handle_ui_monitor_content(data, extra_handler=None):
     """
@@ -445,3 +493,4 @@ def _handle_core_content(content_type, data):
         }
 
     return None  # nieznany — przekaż do modułu
+

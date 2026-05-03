@@ -23,27 +23,81 @@ def goal_sequence(team: str, player_name: str) -> list:
 
 
 def replay_sequence(context) -> list:
-    _file_path         = context['video_path']
-    _replay_start_time = context['replay_start_time']
+    """
+    Sekwencja powtórki z replay-plugin (mpv) i transition OBS.
 
-    overlay           = current_app.config.get('REPLAY_OVERLAY', False)
-    playback_behavior = current_app.config.get('REPLAY_PLAYBACK_BEHAVIOR', None)
+    Przepływ:
+      t=0ms     → SetSceneItemEnabled(Replay, false) — upewnij się że Replay ukryty
+      t=0ms     → replay_play do replay-plugin — mpv ładuje plik, seekuje, czeka na start
+      t=700ms   → SetSceneItemEnabled(Replay, true)
+                  OBS triggeruje transition (stinger) — transition zasłania przejście
+                  mpv zaczyna odtwarzać (synchronizacja z transition)
+
+      [replay trwa — replay-plugin monitoruje AB-loop]
+
+      Po odebraniu 'replay_done' z replay-plugin:
+      t+0ms     → SetSceneItemEnabled(Replay, false)
+                  OBS triggeruje transition — transition zasłania powrót do live
+
+    Zakończenie powtórki NIE jest hardkodowane czasowo — sekwencja czeka
+    na sygnał 'replay_done' od replay-plugin (wait_for_hub_message).
+    Timeout 120s jako zabezpieczenie.
+    """
+    scene_name  = current_app.config.get('REPLAY_SCENE',  'OUTPUT')
+    source_name = current_app.config.get('REPLAY_SOURCE', 'Replay')
+
+    replay_duration_ms = context.get('replay_end_time', 0) - context.get('replay_start_time', 0)
+    speed              = context.get('speed', current_app.config.get('REPLAY_DEFAULT_SPEED', 0.9))
+    # Szacowany czas trwania powtórki z uwzględnieniem prędkości
+    # Używany tylko jako sugestia dla replay-plugin — zakończenie triggeruje replay_done
+    estimated_duration_ms = int(replay_duration_ms / speed) if speed > 0 else replay_duration_ms
 
     return [
-        # 1. Uruchom polling cursora w tle — czeka aż cursor >= 2000ms,
-        #    wtedy pokazuje scenę Replay i po 10s ją ukrywa
-        watch_media_cursor(scene_name="OUTPUT", source_name="Replay",
-                           delay_ms=200),
+        # 0. Upewnij się że Replay jest ukryty
+        show_source(scene_name, source_name, is_visible=False, delay_ms=0),
 
-        # 2. Załaduj plik
-        set_replay_file(_file_path,
-                        overlay=overlay, playback_behavior="pause_unpause"),
+        # 1. Wyślij replay_play do replay-plugin
+        #    mpv ładuje plik i czeka — odtworzy po otrzymaniu sygnału
+        {
+            'target':   'replay-plugin',
+            'action':   'replay_play',
+            'payload':  {
+                'video_path':        context.get('video_path'),
+                'replay_start_time': context.get('replay_start_time', 0),
+                'replay_end_time':   context.get('replay_end_time', 0),
+                'speed':             speed,
+                'estimated_duration_ms': estimated_duration_ms,
+                'scene_name':        scene_name,
+                'source_name':       source_name,
+            },
+            'delay_ms': 0,
+        },
 
-        # 3. RESTART — wymusza przejście do PLAYING nawet ze stanu STOPPED
-        restart_replay(delay_ms=100),
+        # 2. Po 700ms włącz widoczność Replay w OBS
+        #    OBS triggeruje transition (stinger) — zasłania przejście do powtórki
+        show_source(scene_name, source_name, is_visible=True, delay_ms=700),
 
-        # 4. Seek do właściwej pozycji — OBS zaakceptuje bo źródło gra
-        set_replay_start_time(_replay_start_time, delay_ms=700),
+        # 3. Czekaj na sygnał zakończenia od replay-plugin
+        #    replay-plugin wyśle 'replay_done' gdy AB-loop się zakończy
+        #    on_timeout: wyłącz Replay po 120s jeśli sygnał nie nadejdzie
+        {
+            'wait_for_hub_message': 'replay_done',
+            'timeout_ms':           20_000,
+            'target':               'obs-ws-plugin',
+            'action':               'obs_command_by_name',
+            'payload': {
+                'requestType': 'SetSceneItemEnabled',
+                'sceneName':   scene_name,
+                'sourceName':  source_name,
+                'requestData': {
+                    'sceneName':        scene_name,
+                    'sceneItemEnabled': False,
+                },
+            },
+            'on_timeout': [
+                show_source(scene_name, source_name, is_visible=False, delay_ms=0),
+            ],
+        },
     ]
 
 

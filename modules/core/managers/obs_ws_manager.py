@@ -98,11 +98,41 @@ class ObsWsManager:
                 response_data  = payload.get('responseData')
                 replay_end_time = response_data.get('outputDuration')
                 manager = GameEventManager()
-                manager.update_game_event(
+                game_event = manager.update_game_event(
                     game_event_id=request_id,
                     video_path=video_path,
                     replay_end_time=replay_end_time
                 )
+
+                # Auto-trigger powtórki jeśli zdarzenie to bramka
+                # W przyszłości: sprawdzaj pole Event.auto_replay zamiast nazwy
+                _is_goal = False
+                if game_event:
+                    try:
+                        from core.models.base_event import get_event_model
+                        Event = get_event_model()
+                        ev = Event.query.get(game_event.event_id)
+                        _is_goal = ev is not None and ev.name.lower() == 'bramka'
+                    except Exception:
+                        pass
+                if _is_goal:
+                    from core.managers import get_hub_client
+                    hub = get_hub_client()
+                    if hub and game_event.video_path and game_event.replay_end_time:
+                        hub.send({
+                            'from':    current_app.config.get('MODULE_ID', 'main-module'),
+                            'to':      'replay-plugin',
+                            'type':    'replay_play',
+                            'payload': {
+                                'video_path':        game_event.video_path,
+                                'replay_start_time': game_event.replay_start_time,
+                                'replay_end_time':   game_event.replay_end_time,
+                                'speed':             current_app.config.get('REPLAY_DEFAULT_SPEED', 0.9),
+                            }
+                        })
+                        current_app.logger.info(
+                            f'[replay] auto-trigger: game_event_id={game_event.id}'
+                        )
             except Exception as e:
                 current_app.logger.error(f'❌ Failed to save game event: {e}')
                 self._emit_to_ui('error', {'message': str(e)})

@@ -182,6 +182,14 @@
 			</div>
 			<div id="ui-monitor-content" data-is-events-update-blocked="false"></div>
 		</div>
+		<div id="replay-controller">
+			<div id="replay-pause-element" class="replay-element"
+			onclick="replayPause()"
+			ondblclick="replayEnd()"><img src="{{ url_for('static', filename='images/pause-icon.svg') }}"></div>
+			<div id="replay-resume-element" class="replay-element"
+			onclick="replayResume()"
+			ondblclick="replayEnd()"><img src="{{ url_for('static', filename='images/play-icon.svg') }}"></div>
+		</div>
 
 	</div>
 	<div id="flash-msg-display" style="display: none;"></div>
@@ -200,6 +208,7 @@
 	<script src="{{ url_for('static', filename='js/plugins-states.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/overlay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/events-controllers.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/replay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/servo-utils.js') }}"></script>
 </body>
 

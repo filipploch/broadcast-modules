@@ -20,11 +20,9 @@
     "AUDIO_SOURCES": 25,
     "ObrazTest": 23,
     "Overlay": 27,
-    "Replay": 28,
-    "Tekst (GDI+)": 32,
+    "Replay": 38,
     "Test1": 29,
     "Test2": 30,
-    "Tło biały": 31,
     "VIDEO_SOURCES": 26,
     "VideoTest": 24
   },
@@ -37,6 +35,7 @@
     "CAMERAS": 1
   },
   "ZAPROSZENIE": {
+    "Obraz": 12,
     "Tło_mecz": 4,
     "Zapowiedz-28": 10
   }

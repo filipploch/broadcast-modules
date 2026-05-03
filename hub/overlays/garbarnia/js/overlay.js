@@ -870,14 +870,14 @@
                                         }
                                     }
                                     
-    ws.onopen = () => {
-        console.log('✅ Connected to HUB');
-        
-        ws.send(JSON.stringify({
-            type: 'register',
-            from: overlayId,
-            to: 'hub',
-            payload: {
+                                    ws.onopen = () => {
+                                        console.log('✅ Connected to HUB');
+                                        
+                                        ws.send(JSON.stringify({
+                                            type: 'register',
+                                            from: overlayId,
+                                            to: 'hub',
+                                            payload: {
                 id: overlayId,
                 component_type: 'overlay',
                 type: 'overlay'

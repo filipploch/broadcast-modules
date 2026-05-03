@@ -9,9 +9,50 @@ import (
 	"path/filepath"
 )
 
+// OverlayEntry opisuje jeden overlay zdefiniowany w config/overlays.json
+type OverlayEntry struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Description string `json:"description"`
+}
+
+type OverlaysConfig struct {
+	Overlays []OverlayEntry `json:"overlays"`
+}
+
+// loadOverlaysConfig wczytuje listę overlays z config/overlays.json.
+// Jeśli plik nie istnieje, zwraca pustą listę bez błędu.
+func loadOverlaysConfig(configPath string) OverlaysConfig {
+	data, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		log.Printf("⚠️  Brak %s — overlays nie będą wyświetlone w logach", configPath)
+		return OverlaysConfig{}
+	}
+	if err != nil {
+		log.Printf("⚠️  Błąd odczytu %s: %v", configPath, err)
+		return OverlaysConfig{}
+	}
+	var cfg OverlaysConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.Printf("⚠️  Błąd parsowania %s: %v", configPath, err)
+		return OverlaysConfig{}
+	}
+	return cfg
+}
+
 // serveHome serves a simple home page
-func serveHome(w http.ResponseWriter, r *http.Request) {
+func serveHome(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	overlayCfg := loadOverlaysConfig("config/overlays.json")
+	overlayLinks := ""
+	for _, o := range overlayCfg.Overlays {
+		url := fmt.Sprintf("http://%s/overlays/%s", r.Host, o.Path)
+		overlayLinks += fmt.Sprintf(`<li><strong>%s</strong> — <a href="%s">%s</a><br><small>%s</small></li>`, o.Name, url, url, o.Description)
+	}
+	if overlayLinks == "" {
+		overlayLinks = `<li><em>Brak zdefiniowanych overlays (dodaj config/overlays.json)</em></li>`
+	}
 
 	html := `
 <!DOCTYPE html>
@@ -91,6 +132,8 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
                 View plugin health monitoring
             </li>
         </ul>
+        <h2>Overlays</h2>
+        <ul class="endpoints">` + overlayLinks + `</ul>
         
         <h2>mDNS Discovery</h2>
         <p>
@@ -171,6 +214,10 @@ func setupHTTPServer(hub *Hub) *http.Server {
 	mux := http.NewServeMux()
 
 	// WebSocket endpoint
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		serveHome(hub, w, r)
+	})
+
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
@@ -221,10 +268,16 @@ func setupHTTPServer(hub *Hub) *http.Server {
 		fileServer.ServeHTTP(w, r)
 	})))
 
-	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("📡 Overlay URL:")
-	log.Printf("   http://localhost:%d/overlays/futsal-nalf/overlay.html", hub.Port)
-	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	// Wczytaj i wyświetl overlays z config/overlays.json
+	overlayCfg := loadOverlaysConfig("config/overlays.json")
+	if len(overlayCfg.Overlays) > 0 {
+		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Printf("📡 Overlay URLs:")
+		for _, o := range overlayCfg.Overlays {
+			log.Printf("   [%s] http://localhost:%d/overlays/%s", o.Name, hub.Port, o.Path)
+		}
+		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	}
 
 	addr := fmt.Sprintf("0.0.0.0:%d", hub.Port)
 	server := &http.Server{

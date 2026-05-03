@@ -20,7 +20,8 @@ body {
     position: absolute;
     display: flex;
     height:264px;
-    width:645px;
+    /* width:645px; */
+    width:838px;
     border:1px solid black;
     margin:0px;
     padding:0;
@@ -482,4 +483,29 @@ button.top-bar-element {
     content: ' ✎';
     font-size: .7rem;
     color: #444;
+}
+
+#replay-controller{
+    width: 193px;
+    height: 264px;
+}
+
+.replay-element {
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+}
+
+#replay-resume-element{
+    display: none;
+}
+
+#replay-pause-element{
+    display: flex;
+}
+
+.replay-element>img{
+    width: 80%;
+    object-fit: cover;
+    aspect-ratio: 1;
 }

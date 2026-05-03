@@ -349,3 +349,17 @@
     transition: all 0.3s ease;
 }
 
+#replay-controller{
+    width: 192px;
+    height: 264px;
+}
+
+#replay-play-element{
+    display: none;
+}
+
+#replay-pause-element{
+    display: block;
+}
+
+.replay-element>img{width:100%;height:100%;object-fit: cover;}

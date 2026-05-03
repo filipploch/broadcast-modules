@@ -397,6 +397,7 @@ function getGameEventSquadByEventType(_gameEventId, _newEventTypeId) {
 }
 
 function showReplay(videoPath, replayStartTime, replayEndTime) {
+    _replayCurrentSpeed = 0.9; // reset prędkości — nowa powtórka startuje z domyślną
     socket.emit('trigger_sequence', { sequence: 'replay', context: {
         'video_path': videoPath,
         'replay_start_time': replayStartTime,
@@ -2080,6 +2081,43 @@ socket.on('show_ui_monitor_content', function(data) {
     var uiMonitorContent = document.getElementById('ui-monitor-content');
     _buildGamesView(data, uiMonitorContent);
 });
+
+// =============================================================================
+// ── STEROWANIE POWTÓRKĄ ──────────────────────────────────────────────────────
+// =============================================================================
+ 
+function replayControl(type, extra) {
+    var data = Object.assign({ type: type }, extra || {});
+    socket.emit('replay_control', data);
+}
+
+var replayResumeElement = document.querySelector('#replay-resume-element');
+var replayPauseElement = document.querySelector('#replay-pause-element');
+
+function replayPause(){
+    replayCancelTimer()
+    replayPauseElement.style.display = 'none';
+    replayResumeElement.style.display = 'flex'; 
+    replayControl('pause');
+}
+
+function replayResume(){
+    replayCancelTimer()
+    replayResumeElement.style.display = 'none'; 
+    replayPauseElement.style.display = 'flex';
+    replayControl('resume');
+}
+function replayStop(){ replayControl('stop'); }
+function replayFrameFwd(){ replayControl('frame_fwd'); }
+function replayFrameBack(){ replayControl('frame_back'); }
+function replayCancelTimer(){ replayControl('cancel_timer'); }
+function replayEnd(){
+    replaySpeed(0.8);
+    replayControl('end');
+}
+function replaySpeed(speed){ replayControl('speed', { speed: parseFloat(speed) }); }
+ 
+// =============================================================================
 
 function _sendToOverlay(type, payloadObj) {
     socket.emit('send_to_overlay', { type: type, payload: payloadObj });
