@@ -11,18 +11,16 @@ import (
 )
 
 var (
-	kernel32                    = syscall.NewLazyDLL("kernel32.dll")
-	procCreateFileW             = kernel32.NewProc("CreateFileW")
-	procWriteFile               = kernel32.NewProc("WriteFile")
-	procCloseHandle             = kernel32.NewProc("CloseHandle")
-	procSetNamedPipeHandleState = kernel32.NewProc("SetNamedPipeHandleState")
+	kernel32        = syscall.NewLazyDLL("kernel32.dll")
+	procCreateFileW = kernel32.NewProc("CreateFileW")
+	procWriteFile   = kernel32.NewProc("WriteFile")
+	procCloseHandle = kernel32.NewProc("CloseHandle")
 )
 
 const (
 	GENERIC_WRITE  = 0x40000000
 	OPEN_EXISTING  = 3
 	INVALID_HANDLE = ^uintptr(0)
-	PIPE_NOWAIT    = uintptr(0x00000001) // tryb nieblokujący
 )
 
 type MpvIPC struct {
@@ -52,13 +50,6 @@ func (m *MpvIPC) Connect(timeout time.Duration) error {
 		)
 		if handle != INVALID_HANDLE {
 			m.handle = handle
-
-			// Ustaw tryb nieblokujący — WriteFile zwraca natychmiast
-			// zamiast czekać gdy bufor pipe jest pełny
-			mode := PIPE_NOWAIT
-			procSetNamedPipeHandleState.Call(handle,
-				uintptr(unsafe.Pointer(&mode)), 0, 0)
-
 			log.Printf("✅ mpv IPC connected: %s", m.pipeName)
 			return nil
 		}
@@ -81,25 +72,40 @@ func (m *MpvIPC) Send(command []interface{}) error {
 	}
 	data = append(data, '\n')
 
-	written := uint32(0)
-	ret, _, callErr := procWriteFile.Call(
-		m.handle,
-		uintptr(unsafe.Pointer(&data[0])),
-		uintptr(len(data)),
-		uintptr(unsafe.Pointer(&written)),
-		0,
-	)
-	if ret == 0 {
-		// W trybie NOWAIT błąd ERROR_NO_DATA (232) oznacza że bufor pełny
-		// — ignoruj, komenda zostanie pominięta (lepsza niż blokada)
-		errCode := callErr.(syscall.Errno)
-		if errCode == 232 { // ERROR_NO_DATA
-			log.Printf("⚠️  mpv IPC busy — komenda pominięta: %v", command[0])
+	var lastErr error
+	for attempt := 1; attempt <= 5; attempt++ {
+		written := uint32(0)
+		ret, _, callErr := procWriteFile.Call(
+			m.handle,
+			uintptr(unsafe.Pointer(&data[0])),
+			uintptr(len(data)),
+			uintptr(unsafe.Pointer(&written)),
+			0,
+		)
+		if ret != 0 && written == uint32(len(data)) {
 			return nil
 		}
-		return fmt.Errorf("WriteFile failed: %w", callErr)
+
+		lastErr = fmt.Errorf("WriteFile failed: %w", callErr)
+		if ret != 0 {
+			lastErr = fmt.Errorf("WriteFile incomplete: wrote %d/%d bytes", written, len(data))
+		}
+
+		errno, ok := callErr.(syscall.Errno)
+		if ok && (errno == 231 || errno == 232 || errno == 233) {
+			// ERROR_PIPE_BUSY / ERROR_NO_DATA / ERROR_PIPE_NOT_CONNECTED.
+			// Po długich sekwencjach frame-step mpv potrafi chwilowo nie odbierać IPC.
+			time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+			continue
+		}
+
+		if ret == 0 {
+			time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+			continue
+		}
 	}
-	return nil
+
+	return lastErr
 }
 
 func (m *MpvIPC) Close() {
@@ -151,6 +157,15 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 
 	log.Printf("▶ replay: %s [%.1fs → %.1fs] x%.2f", videoPath, startSec, endSec, speed)
 
+	// Przed załadowaniem kolejnego replaya twardo czyścimy stan mpv.
+	// To zapobiega pozostawieniu starej klatki po długim frame-step/frame-back-step.
+	if err := mc.ipc.Send([]interface{}{"set_property", "pause", true}); err != nil {
+		return fmt.Errorf("pre-pause failed: %w", err)
+	}
+	if err := mc.DisableAbLoop(); err != nil {
+		return fmt.Errorf("pre-disable ab-loop failed: %w", err)
+	}
+
 	startArg := fmt.Sprintf("start=%.3f", startSec)
 	if err := mc.ipc.Send([]interface{}{
 		"loadfile", videoPath, "replace", 0, startArg,
@@ -160,9 +175,15 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 
 	time.Sleep(300 * time.Millisecond)
 
-	mc.ipc.Send([]interface{}{"set_property", "speed", speed})
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-a", startSec})
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-b", endSec})
+	if err := mc.ipc.Send([]interface{}{"set_property", "speed", speed}); err != nil {
+		return fmt.Errorf("set speed failed: %w", err)
+	}
+	if err := mc.ipc.Send([]interface{}{"set_property", "ab-loop-a", startSec}); err != nil {
+		return fmt.Errorf("set ab-loop-a failed: %w", err)
+	}
+	if err := mc.ipc.Send([]interface{}{"set_property", "ab-loop-b", endSec}); err != nil {
+		return fmt.Errorf("set ab-loop-b failed: %w", err)
+	}
 
 	if err := mc.ipc.Send([]interface{}{"set_property", "pause", false}); err != nil {
 		return fmt.Errorf("unpause failed: %w", err)
@@ -197,19 +218,28 @@ func (mc *MpvController) Stop() error {
 	if !mc.isReady() {
 		return nil
 	}
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-a", "no"})
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-b", "no"})
+	if err := mc.DisableAbLoop(); err != nil {
+		return err
+	}
 	return mc.ipc.Send([]interface{}{"set_property", "pause", true})
 }
 
-func (mc *MpvController) DisableAbLoop() {
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-a", "no"})
-	mc.ipc.Send([]interface{}{"set_property", "ab-loop-b", "no"})
+func (mc *MpvController) DisableAbLoop() error {
+	if !mc.isReady() {
+		return nil
+	}
+	if err := mc.ipc.Send([]interface{}{"set_property", "ab-loop-a", "no"}); err != nil {
+		return err
+	}
+	return mc.ipc.Send([]interface{}{"set_property", "ab-loop-b", "no"})
 }
 
 func (mc *MpvController) FrameStepForward() error {
 	if !mc.isReady() {
 		return nil
+	}
+	if err := mc.ipc.Send([]interface{}{"set_property", "pause", true}); err != nil {
+		return err
 	}
 	return mc.ipc.Send([]interface{}{"frame-step"})
 }
@@ -217,6 +247,9 @@ func (mc *MpvController) FrameStepForward() error {
 func (mc *MpvController) FrameStepBack() error {
 	if !mc.isReady() {
 		return nil
+	}
+	if err := mc.ipc.Send([]interface{}{"set_property", "pause", true}); err != nil {
+		return err
 	}
 	return mc.ipc.Send([]interface{}{"frame-back-step"})
 }

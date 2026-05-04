@@ -7,6 +7,38 @@ from core.sequences.steps import (
     show_overlay_container,
 )
 from flask import current_app
+import json
+import os
+
+
+def _get_replay_transition_lead_ms(default=700):
+    """
+    Czyta opóźnienie transition dla Replay z konfiguracji aplikacji albo
+    z plugins/replay-plugin/config.json. Ta sama wartość decyduje o tym,
+    jak wcześnie OBS ma ukryć źródło Replay przed pauzą mpv.
+    """
+    value = current_app.config.get('REPLAY_TRANSITION_LEAD_MS')
+    if value is not None:
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            current_app.logger.warning(
+                f"Niepoprawne REPLAY_TRANSITION_LEAD_MS={value!r}; używam {default}ms"
+            )
+
+    config_path = current_app.config.get(
+        'REPLAY_PLUGIN_CONFIG',
+        os.path.abspath(os.path.join(current_app.root_path, '..', 'plugins', 'replay-plugin', 'config.json'))
+    )
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return max(0, int(data.get('transition_lead_ms', default)))
+    except Exception as exc:
+        current_app.logger.warning(
+            f"Nie mogę odczytać transition_lead_ms z {config_path}: {exc}; używam {default}ms"
+        )
+        return default
 
 
 def goal_sequence(team: str, player_name: str) -> list:
@@ -29,19 +61,21 @@ def replay_sequence(context) -> list:
     Przepływ:
       t=0ms     → SetSceneItemEnabled(Replay, false) — upewnij się że Replay ukryty
       t=0ms     → replay_play do replay-plugin — mpv ładuje plik, seekuje, czeka na start
-      t=700ms   → SetSceneItemEnabled(Replay, true)
-                  OBS triggeruje transition (stinger) — transition zasłania przejście
-                  mpv zaczyna odtwarzać (synchronizacja z transition)
+      t=transition_lead_ms → SetSceneItemEnabled(Replay, true)
+                  transition_lead_ms jest czytane z config.json replay-plugin
+                  i synchronizuje pokazanie/ukrycie źródła Replay z mpv
 
       [replay trwa — replay-plugin monitoruje AB-loop]
 
       Po odebraniu 'replay_done' z replay-plugin:
       t+0ms     → SetSceneItemEnabled(Replay, false)
-                  OBS triggeruje transition — transition zasłania powrót do live
+                  replay-plugin pauzuje mpv dopiero po transition_lead_ms, więc
+                  OBS ukrywa źródło wcześniej niż faktyczny koniec powtórki.
 
     Zakończenie powtórki NIE jest hardkodowane czasowo — sekwencja czeka
     na sygnał 'replay_done' od replay-plugin (wait_for_hub_message).
-    Timeout 120s jako zabezpieczenie.
+    Timeout jest tylko długim zabezpieczeniem awaryjnym konfigurowanym przez
+    REPLAY_WAIT_TIMEOUT_MS.
     """
     scene_name  = current_app.config.get('REPLAY_SCENE',  'OUTPUT')
     source_name = current_app.config.get('REPLAY_SOURCE', 'Replay')
@@ -51,6 +85,9 @@ def replay_sequence(context) -> list:
     # Szacowany czas trwania powtórki z uwzględnieniem prędkości
     # Używany tylko jako sugestia dla replay-plugin — zakończenie triggeruje replay_done
     estimated_duration_ms = int(replay_duration_ms / speed) if speed > 0 else replay_duration_ms
+
+    wait_timeout_ms = current_app.config.get('REPLAY_WAIT_TIMEOUT_MS', 600_000)
+    transition_lead_ms = _get_replay_transition_lead_ms()
 
     return [
         # 0. Upewnij się że Replay jest ukryty
@@ -73,16 +110,18 @@ def replay_sequence(context) -> list:
             'delay_ms': 0,
         },
 
-        # 2. Po 700ms włącz widoczność Replay w OBS
-        #    OBS triggeruje transition (stinger) — zasłania przejście do powtórki
-        show_source(scene_name, source_name, is_visible=True, delay_ms=700),
+        # 2. Po czasie z config.json włącz widoczność Replay w OBS.
+        #    Ten sam lead jest używany przy końcu: OBS ukrywa źródło po replay_done,
+        #    a replay-plugin pauzuje mpv dopiero po transition_lead_ms.
+        show_source(scene_name, source_name, is_visible=True, delay_ms=transition_lead_ms),
 
         # 3. Czekaj na sygnał zakończenia od replay-plugin
-        #    replay-plugin wyśle 'replay_done' gdy AB-loop się zakończy
-        #    on_timeout: wyłącz Replay po 120s jeśli sygnał nie nadejdzie
+        #    replay-plugin wyśle 'replay_done' po czasie z DB albo po ręcznym end_replay.
+        #    Długi timeout jest tylko bezpiecznikiem awaryjnym, żeby ręczna powtórka
+        #    nie została ukryta po krótkim czasie bez sygnału użytkownika.
         {
             'wait_for_hub_message': 'replay_done',
-            'timeout_ms':           20_000,
+            'timeout_ms':           wait_timeout_ms,
             'target':               'obs-ws-plugin',
             'action':               'obs_command_by_name',
             'payload': {

@@ -2095,15 +2095,13 @@ var replayResumeElement = document.querySelector('#replay-resume-element');
 var replayPauseElement = document.querySelector('#replay-pause-element');
 
 function replayPause(){
-    replayCancelTimer()
     replayPauseElement.style.display = 'none';
-    replayResumeElement.style.display = 'flex'; 
+    replayResumeElement.style.display = 'flex';
     replayControl('pause');
 }
 
 function replayResume(){
-    replayCancelTimer()
-    replayResumeElement.style.display = 'none'; 
+    replayResumeElement.style.display = 'none';
     replayPauseElement.style.display = 'flex';
     replayControl('resume');
 }
@@ -2112,7 +2110,6 @@ function replayFrameFwd(){ replayControl('frame_fwd'); }
 function replayFrameBack(){ replayControl('frame_back'); }
 function replayCancelTimer(){ replayControl('cancel_timer'); }
 function replayEnd(){
-    replaySpeed(0.8);
     replayControl('end');
 }
 function replaySpeed(speed){ replayControl('speed', { speed: parseFloat(speed) }); }

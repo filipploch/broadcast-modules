@@ -76,12 +76,15 @@ type Plugin struct {
 	speedCh chan float64
 	mu      sync.Mutex
 
-	// Stan powtórki
-	doneTimer     *time.Timer
-	timeDependent bool
-	// sessionID: atomic counter — inkrementowany przy każdym replay_play
-	// Timer callback porównuje swój sessionID z aktualnym
-	// Jeśli różne — callback jest z poprzedniej powtórki i ignoruje wysyłkę
+	// Stan bieżącej sesji powtórki.
+	// autoEndTimer działa tylko dopóki użytkownik nie wykona ręcznej modyfikacji
+	// odtwarzania (pauza, resume, speed, frame-step itd.).
+	autoEndTimer *time.Timer
+	activeReplay bool
+	manualMode   bool
+	// sessionID: atomic counter — inkrementowany przy każdym replay_play.
+	// Timer callback porównuje swój sessionID z aktualnym, żeby ignorować
+	// callbacki ze starych powtórek.
 	sessionID atomic.Int64
 }
 
@@ -166,16 +169,86 @@ func (p *Plugin) startMpv() error {
 	return nil
 }
 
-// cancelTimer anuluje aktywny timer zakończenia powtórki.
-// Bezpieczne do wywołania wielokrotnie.
-func (p *Plugin) cancelTimer() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.doneTimer != nil {
-		p.doneTimer.Stop()
-		p.doneTimer = nil
+// cancelAutoEndTimerLocked anuluje timer automatycznego zakończenia powtórki.
+// Wymaga zewnętrznej blokady p.mu.
+func (p *Plugin) cancelAutoEndTimerLocked() {
+	if p.autoEndTimer != nil {
+		p.autoEndTimer.Stop()
+		p.autoEndTimer = nil
 	}
-	p.timeDependent = false
+}
+
+// enterManualMode przełącza bieżącą powtórkę w tryb ręczny.
+// Od tej chwili replay-plugin nie wyśle replay_done automatycznie;
+// zakończenie musi przyjść jako end_replay.
+func (p *Plugin) enterManualMode(reason string) {
+	p.mu.Lock()
+	if !p.activeReplay {
+		p.mu.Unlock()
+		return
+	}
+	alreadyManual := p.manualMode
+	p.manualMode = true
+	p.cancelAutoEndTimerLocked()
+	p.mu.Unlock()
+
+	// W trybie ręcznym nie chcemy, żeby mpv sam zapętlał fragment A-B.
+	if err := p.mpv.DisableAbLoop(); err != nil {
+		log.Printf("⚠️  DisableAbLoop: %v", err)
+	}
+	if !alreadyManual {
+		log.Printf("🕹  replay manual mode (%s) — auto end disabled", reason)
+	}
+}
+
+func (p *Plugin) resetReplaySettings() {
+	if err := p.mpv.DisableAbLoop(); err != nil {
+		log.Printf("⚠️  DisableAbLoop: %v", err)
+	}
+	if err := p.mpv.SetSpeed(p.cfg.DefaultSpeed); err != nil {
+		log.Printf("⚠️  Reset speed: %v", err)
+	}
+	if err := p.mpv.Pause(); err != nil {
+		log.Printf("⚠️  Pause: %v", err)
+	}
+	log.Printf("⏸  mpv paused, replay settings reset → speed %.2f", p.cfg.DefaultSpeed)
+}
+
+func (p *Plugin) finishReplay(source string, payload map[string]interface{}) {
+	p.mu.Lock()
+	if !p.activeReplay {
+		p.mu.Unlock()
+		log.Printf("⏹  finishReplay(%s) ignored — no active replay", source)
+		return
+	}
+	p.activeReplay = false
+	p.manualMode = false
+	p.cancelAutoEndTimerLocked()
+	p.sessionID.Add(1) // unieważnij ewentualne stare callbacki timera
+	p.mu.Unlock()
+
+	if payload == nil {
+		payload = map[string]interface{}{}
+	}
+	payload["source"] = source
+
+	// Najpierw informujemy backend, żeby ukrył źródło Replay w OBS.
+	// Faktyczne zatrzymanie/pauza mpv następuje dopiero po TransitionLeadMs,
+	// dzięki czemu ukrycie źródła wyprzedza koniec powtórki o wartość z config.json.
+	p.hub.Send(&Message{
+		To:      "main-module",
+		Type:    "replay_done",
+		Payload: payload,
+	})
+
+	lead := p.cfg.TransitionLeadMs
+	if lead < 0 {
+		lead = 0
+	}
+	log.Printf("⏳ replay_done sent (%s); mpv pause/reset in %dms", source, lead)
+	time.AfterFunc(time.Duration(lead)*time.Millisecond, func() {
+		p.resetReplaySettings()
+	})
 }
 
 func (p *Plugin) messageLoop() {
@@ -196,7 +269,7 @@ func (p *Plugin) messageLoop() {
 		}
 	}()
 
-	// Worker: frame step forward — debounce 80ms
+	// Worker: frame step forward — debounce 120ms
 	go func() {
 		for range frameFwdCh {
 			for len(frameFwdCh) > 0 {
@@ -205,11 +278,11 @@ func (p *Plugin) messageLoop() {
 			if err := p.mpv.FrameStepForward(); err != nil {
 				log.Printf("⚠️  FrameStepForward: %v", err)
 			}
-			time.Sleep(80 * time.Millisecond)
+			time.Sleep(120 * time.Millisecond)
 		}
 	}()
 
-	// Worker: frame step back — debounce 80ms
+	// Worker: frame step back — debounce 120ms
 	go func() {
 		for range frameBackCh {
 			for len(frameBackCh) > 0 {
@@ -218,7 +291,7 @@ func (p *Plugin) messageLoop() {
 			if err := p.mpv.FrameStepBack(); err != nil {
 				log.Printf("⚠️  FrameStepBack: %v", err)
 			}
-			time.Sleep(80 * time.Millisecond)
+			time.Sleep(120 * time.Millisecond)
 		}
 	}()
 
@@ -232,8 +305,8 @@ func (p *Plugin) messageLoop() {
 			go p.handlePlay(msg.Payload)
 
 		case "replay_speed":
-			// Zmiana prędkości = ingerencja → anuluj timer
-			p.cancelTimer()
+			// Zmiana prędkości = ingerencja → tryb ręczny
+			p.enterManualMode("speed")
 			speed := payloadFloat(msg.Payload, "speed", p.cfg.DefaultSpeed)
 			select {
 			case p.speedCh <- speed:
@@ -245,64 +318,46 @@ func (p *Plugin) messageLoop() {
 			}
 
 		case "replay_pause":
-			// Pauza = ingerencja → anuluj timer
-			p.cancelTimer()
+			// Pauza = ingerencja → tryb ręczny
+			p.enterManualMode("pause")
 			if err := p.mpv.Pause(); err != nil {
 				log.Printf("⚠️  Pause: %v", err)
 			}
 
 		case "replay_resume":
+			// Resume po ręcznej pauzie też utrzymuje tryb ręczny.
+			p.enterManualMode("resume")
 			if err := p.mpv.Resume(); err != nil {
 				log.Printf("⚠️  Resume: %v", err)
 			}
 
 		case "replay_stop":
-			p.cancelTimer()
-			if err := p.mpv.Stop(); err != nil {
-				log.Printf("⚠️  Stop: %v", err)
-			}
+			p.finishReplay("stop", nil)
 
 		case "replay_frame_forward":
-			// Krok klatkowy = ingerencja → anuluj timer
-			p.cancelTimer()
+			// Krok klatkowy = ingerencja → tryb ręczny
+			p.enterManualMode("frame_forward")
 			select {
 			case frameFwdCh <- struct{}{}:
 			default:
 			}
 
 		case "replay_frame_back":
-			// Krok klatkowy = ingerencja → anuluj timer
-			p.cancelTimer()
+			// Krok klatkowy = ingerencja → tryb ręczny
+			p.enterManualMode("frame_back")
 			select {
 			case frameBackCh <- struct{}{}:
 			default:
 			}
 
 		case "cancel_time_dependent_replay_end":
-			// Jawne anulowanie timera + wyłącz AB-loop
-			// TODO: zabezpieczenie max czasu oczekiwania na end_replay
-			p.cancelTimer()
-			p.mpv.DisableAbLoop()
-			log.Printf("⏹  cancel_time_dependent_replay_end — czekam na end_replay")
+			// Jawne przełączenie na zakończenie ręczne.
+			p.enterManualMode("cancel_time_dependent_replay_end")
+			log.Printf("⏹  auto end cancelled — waiting for end_replay")
 
 		case "end_replay":
-			p.mu.Lock()
-			timeDep := p.timeDependent
-			p.mu.Unlock()
-			if timeDep {
-				log.Printf("⚠️  end_replay zignorowany — replay jest time-dependent")
-				break
-			}
-			log.Printf("✅ end_replay — wysyłam replay_done")
-			p.mpv.SetSpeed(p.cfg.DefaultSpeed)
-			p.mpv.Pause()
-			p.hub.Send(&Message{
-				To:   "main-module",
-				Type: "replay_done",
-				Payload: map[string]interface{}{
-					"source": "manual",
-				},
-			})
+			log.Printf("✅ end_replay — finishing replay")
+			p.finishReplay("manual", nil)
 		}
 	}
 }
@@ -340,18 +395,29 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 		<-p.speedCh
 	}
 
-	// Anuluj poprzedni timer i nowa sesja
+	// Anuluj poprzedni timer i rozpocznij nową sesję automatyczną.
 	p.mu.Lock()
-	if p.doneTimer != nil {
-		p.doneTimer.Stop()
-		p.doneTimer = nil
-	}
-	p.timeDependent = false
+	p.cancelAutoEndTimerLocked()
+	p.activeReplay = true
+	p.manualMode = false
 	mySession := p.sessionID.Add(1) // nowy unikalny ID sesji
 	p.mu.Unlock()
 
 	if err := p.mpv.LoadAndPlay(videoPath, startMs, endMs, speed); err != nil {
 		log.Printf("❌ LoadAndPlay: %v", err)
+		p.mu.Lock()
+		p.activeReplay = false
+		p.manualMode = false
+		p.cancelAutoEndTimerLocked()
+		p.mu.Unlock()
+		p.hub.Send(&Message{
+			To:   "main-module",
+			Type: "replay_error",
+			Payload: map[string]interface{}{
+				"error":      err.Error(),
+				"video_path": videoPath,
+			},
+		})
 		return
 	}
 
@@ -368,49 +434,50 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 		},
 	})
 
-	// Ustaw timer zakończenia
+	// Ustaw timer automatycznego zakończenia. Jeśli użytkownik wykona modyfikację
+	// sterowania, enterManualMode() anuluje ten timer.
 	lead := p.cfg.TransitionLeadMs
-	if estimatedDurationMs > lead {
-		doneTriggerMs := estimatedDurationMs - lead
-		log.Printf("⏱  replay_done za ~%dms (transition lead=%dms)", doneTriggerMs, lead)
-
-		p.mu.Lock()
-		p.timeDependent = true
-		p.doneTimer = time.AfterFunc(
-			time.Duration(doneTriggerMs)*time.Millisecond,
-			func() {
-				p.mu.Lock()
-				// Sprawdź: czy to wciąż ta sama sesja i czy nadal time-dependent
-				if p.sessionID.Load() != mySession || !p.timeDependent {
-					p.mu.Unlock()
-					log.Printf("⏹  timer: sesja lub stan nieaktualne — pomijam replay_done")
-					return
-				}
-				p.timeDependent = false
-				p.doneTimer = nil
-				p.mu.Unlock()
-
-				log.Printf("⏱  wysyłam replay_done")
-				p.hub.Send(&Message{
-					To:   "main-module",
-					Type: "replay_done",
-					Payload: map[string]interface{}{
-						"video_path": videoPath,
-						"start_ms":   startMs,
-						"end_ms":     endMs,
-						"source":     "timer",
-					},
-				})
-				// Pause i reset prędkości po transition
-				time.AfterFunc(time.Duration(lead)*time.Millisecond, func() {
-					p.mpv.SetSpeed(p.cfg.DefaultSpeed)
-					p.mpv.Pause()
-					log.Printf("⏸  mpv paused, speed reset → %.2f", p.cfg.DefaultSpeed)
-				})
-			},
-		)
-		p.mu.Unlock()
+	doneTriggerMs := estimatedDurationMs - lead
+	if doneTriggerMs < 0 {
+		doneTriggerMs = 0
 	}
+
+	log.Printf("⏱  replay_done za ~%dms (transition lead=%dms)", doneTriggerMs, lead)
+
+	p.mu.Lock()
+	p.autoEndTimer = time.AfterFunc(
+		time.Duration(doneTriggerMs)*time.Millisecond,
+		func() {
+			p.mu.Lock()
+			// Sprawdź: czy to wciąż ta sama sesja, czy replay jest aktywny
+			// i czy użytkownik nie przełączył go w tryb ręczny.
+			if p.sessionID.Load() != mySession || !p.activeReplay || p.manualMode {
+				p.mu.Unlock()
+				log.Printf("⏹  timer: session/state changed — skipping replay_done")
+				return
+			}
+			p.activeReplay = false
+			p.autoEndTimer = nil
+			p.mu.Unlock()
+
+			log.Printf("⏱  replay auto end — sending replay_done")
+			p.hub.Send(&Message{
+				To:   "main-module",
+				Type: "replay_done",
+				Payload: map[string]interface{}{
+					"video_path": videoPath,
+					"start_ms":   startMs,
+					"end_ms":     endMs,
+					"source":     "timer",
+				},
+			})
+			// Pause i reset po czasie przejścia, żeby powrót OBS do live był czysty.
+			time.AfterFunc(time.Duration(lead)*time.Millisecond, func() {
+				p.resetReplaySettings()
+			})
+		},
+	)
+	p.mu.Unlock()
 }
 
 func (p *Plugin) heartbeatLoop() {
@@ -429,7 +496,11 @@ func (p *Plugin) heartbeatLoop() {
 }
 
 func (p *Plugin) Stop() {
-	p.cancelTimer()
+	p.mu.Lock()
+	p.cancelAutoEndTimerLocked()
+	p.activeReplay = false
+	p.manualMode = false
+	p.mu.Unlock()
 	p.mpv.Stop()
 	p.mpv.Close()
 	if p.mpvCmd != nil && p.mpvCmd.Process != nil {
