@@ -33,6 +33,9 @@ var homeFoulsLabel = document.getElementById('foulsHome');
 var awayFoulsLabel = document.getElementById('foulsAway');
 var currentSequenceId = null;
 
+var replayResumeElement = document.querySelector('#replay-resume-element');
+var replayPauseElement = document.querySelector('#replay-pause-element');
+
 
 
 socket.on('connect', () => {
@@ -80,6 +83,7 @@ socket.on('all_sequences_stopped', ({}) => {
 socket.on('reload_ui_dashboard', function() {
     window.location.href = '/ui';
 });
+
 
 function runSequence(){
     socket.emit('trigger_sequence', { sequence: 'halftime_start', context: {} });
@@ -2091,8 +2095,17 @@ function replayControl(type, extra) {
     socket.emit('replay_control', data);
 }
 
-var replayResumeElement = document.querySelector('#replay-resume-element');
-var replayPauseElement = document.querySelector('#replay-pause-element');
+socket.on('replay_started', (data) => {
+    console.log('replay_started');
+    replayResumeElement.style.display = 'none';
+    replayPauseElement.style.display = 'flex';
+});
+
+socket.on('replay_done', (data) => {
+    console.log('replay_done');
+    replayResumeElement.style.display = 'none';
+    replayPauseElement.style.display = 'none';
+});
 
 function replayPause(){
     replayPauseElement.style.display = 'none';

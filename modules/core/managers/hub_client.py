@@ -378,14 +378,19 @@ class HubClient:
 
         # Replay Plugin messages
         if msg_from == 'replay-plugin':
+            from core.managers import get_sequence_manager
+            seq_mgr = get_sequence_manager()
             if msg_type == 'replay_done':
-                from core.managers import get_sequence_manager
-                seq_mgr = get_sequence_manager()
                 if seq_mgr:
-                    seq_mgr.notify_hub_message('replay_done', payload)
+                    seq_mgr.notify_hub_message('replay_done')
                     self._log("info", f"[replay] replay_done — sekwencja powiadomiona")
+                    seq_mgr.emit_to_ui('replay_done', payload)
             elif msg_type == 'replay_state':
-                self._log("info", f"[replay] state: {payload.get('status')}")
+                status = payload.get('status')
+                if seq_mgr:
+                    if status == 'playing':
+                        seq_mgr.emit_to_ui('replay_started', payload)
+                self._log("info", f"[replay] state: {status}")
             elif msg_type == 'replay_error':
                 self._log("warning", f"[replay] error: {payload.get('error')}")
 

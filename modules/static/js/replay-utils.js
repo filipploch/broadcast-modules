@@ -4,7 +4,7 @@
 var _replayCurrentSpeed = 0.9; // synchronizuj z config.json default_speed
 var _replayIsPaused = false;
 var _replayLastFrameStepAt = 0;
-var _replayFrameStepThrottleMs = 120;
+var _replayFrameStepThrottleMs = 350;
 
 function replayRequestFrameStep(deltaY) {
     var now = Date.now();

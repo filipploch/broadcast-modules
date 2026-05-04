@@ -363,6 +363,7 @@ class SequenceManager:
             f"→ powiadomiono {notified}/{len(listeners)} listener(ów)"
         )
 
+
     # =========================================================================
     # ZATRZYMYWANIE SEKWENCJI
     # =========================================================================
@@ -407,6 +408,14 @@ class SequenceManager:
                 'type':    step['action'],
                 'payload': payload
             })
+
+    def emit_to_ui(self, msg_type, data):
+        """Emit event to UI clients via SocketIO"""
+        try:
+            from core.extensions import socketio
+            socketio.emit(msg_type, data)
+        except Exception as e:
+            self.app.logger.error(f"Failed to emit to UI: {e}")
 
 
 class _EventListener:

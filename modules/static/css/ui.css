@@ -501,7 +501,7 @@ button.top-bar-element {
 }
 
 #replay-pause-element{
-    display: flex;
+    display: none;
 }
 
 .replay-element>img{

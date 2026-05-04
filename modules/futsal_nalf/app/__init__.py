@@ -57,7 +57,6 @@ def create_app(config_name='default'):
         from core.routes import broadcast as core_broadcast
         from core.routes import routes_crud as routes_crud
         from core.socketio_events import base as core_events
-        from app.managers.team_manager import TeamManager
 
         core_broadcast.register_routes(app)
         from app.managers.team_manager import TeamManager as AppTeamManager
