@@ -1,0 +1,18 @@
+{
+  "plugin_id": "controller-plugin",
+  "plugin_name": "USB Controller Plugin",
+  "hub_url": "ws://localhost:8080/ws",
+  "key_bindings": {
+    "btn1":      { "vk": 112, "ctrl": true },
+    "btn2":      { "vk": 113, "ctrl": true },
+    "btn3":      { "vk": 114, "ctrl": true },
+    "wheel_btn": { "vk": 115, "ctrl": true },
+    "wheel_cw":  { "vk": 116, "ctrl": true },
+    "wheel_ccw": { "vk": 117, "ctrl": true }
+  },
+  "wheel_batch_ms": 25,
+  "_comment": {
+    "key_bindings": "Mapowanie logicznych nazw na kody klawiszy wirtualnych Windows (VK_*) oraz wymagane modyfikatory. Obecnie Ctrl+F1..Ctrl+F6: F1=112, F2=113, F3=114, F4=115, F5=116, F6=117. Obslugiwane modyfikatory: ctrl, shift, alt, win.",
+    "wheel_batch_ms": "Okno akumulacji obrotow rolki w ms. Tiki w tym oknie sa zsumowane i wyslane jako jeden controller_wheel."
+  }
+}

@@ -366,10 +366,8 @@ def handle_ui_monitor_content(data, extra_handler=None):
     specyficzne dla modułu. Zwraca dict lub None.
     """
     content_type = data.get('type')
-    print(f'data: {data}')
     # Wspólne content_type obsługiwane przez core
     result = _handle_core_content(content_type, data)
-    print(f'result: {result}')
 
     # Jeśli core nie obsłużył — przekaż do modułu
     if result is None and extra_handler:

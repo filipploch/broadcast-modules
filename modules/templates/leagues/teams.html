@@ -1,0 +1,117 @@
+{% extends "base/base.html" %}
+
+{% block title %}Zarządzanie Drużynami - {{ league.name }}{% endblock %}
+
+{% block content %}
+<div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+    <strong>⚽ Liga:</strong> {{ league.name }}
+    <br>
+    <strong>🏆 Sezon:</strong> {{ league.season.name if league.season else '-' }}
+    <a href="{{ url_for('view_league', league_id=league.id) }}" style="margin-left: 1rem; color: #3498db;">Zobacz szczegóły ligi →</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>Drużyny w lidze: {{ league.name }}</span>
+        <div class="actions">
+            <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">
+                ← Powrót do ligi
+            </a>
+        </div>
+    </div>
+    
+    {% if teams %}
+    <table>
+        <thead>
+            <tr>
+                <th>Skrót</th>
+                <th>Nazwa</th>
+                <th>Grupa</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in teams %}
+            <tr>
+                <td><strong>{{ team.team.short_name }}</strong></td>
+                <td>{{ team.team.name }}</td>
+                <td>
+                    <form action="{{ url_for('update_team_group', league_id=league.id, team_id=team.team_id) }}"
+                          method="POST"
+                          style="display: inline;">
+                        <input type="number" 
+                               name="group_nr" 
+                               value="{{ team.group_nr }}"
+                               min="1"
+                               max="10"
+                               style="width: 60px; padding: 0.3rem; border: 1px solid #ddd; border-radius: 4px;">
+                        <button type="submit" class="btn btn-primary btn-small">Zapisz</button>
+                    </form>
+                </td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('view_team', team_id=team.team_id) }}" class="btn btn-secondary btn-small">
+                            Widok
+                        </a>
+                        <form action="{{ url_for('remove_team_from_league', league_id=league.id, team_id=team.team_id) }}"
+                              method="POST"
+                              style="display: inline;"
+                              onsubmit="return confirm('Czy na pewno chcesz usunąć {{ team.team.name }} z tej ligi?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Brak drużyn w tej lidze.
+    </p>
+    {% endif %}
+</div>
+
+{% if available_teams %}
+<div class="card">
+    <div class="card-header">
+        <span>Dodaj Drużynę do Ligi</span>
+    </div>
+    
+    <form method="POST" action="{{ url_for('add_team_to_league', league_id=league.id) }}">
+        <div style="display: grid; grid-template-columns: 1fr 150px auto; gap: 1rem; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="team_id">Wybierz Drużynę</label>
+                <select id="team_id" name="team_id" required>
+                    <option value="">-- Wybierz drużynę --</option>
+                    {% for team in available_teams %}
+                    <option value="{{ team.id }}">{{ team.name }} ({{ team.short_name }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="group_nr">Grupa</label>
+                <input type="number" 
+                       id="group_nr" 
+                       name="group_nr" 
+                       value="1"
+                       min="1"
+                       max="10"
+                       required>
+            </div>
+            
+            <button type="submit" class="btn btn-success">➕ Dodaj</button>
+        </div>
+    </form>
+</div>
+{% else %}
+<div class="card">
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        Wszystkie drużyny z bazy danych są już przypisane do tej ligi.
+        <br>
+        <a href="{{ url_for('create_team') }}" style="color: #3498db;">Dodaj nową drużynę</a>
+    </p>
+</div>
+{% endif %}
+{% endblock %}

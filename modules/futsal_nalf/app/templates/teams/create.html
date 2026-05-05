@@ -1,0 +1,171 @@
+{% extends "base/base.html" %}
+
+{% block title %}Dodaj Zespół Ręcznie{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Dodaj Nowy Zespół Ręcznie</span>
+    </div>
+    
+    <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <strong>⚠️ Uwaga:</strong>
+        <p style="margin-top: 0.5rem;">
+            Ta opcja pozwala dodać zespół bez scrapowania. Wszystkie pola są wymagane.
+            Jeśli chcesz dodać zespoły z NALF, użyj funkcji 
+            <a href="{{ url_for('scrape_teams') }}" style="color: #3498db;">scrapowania</a>.
+        </p>
+    </div>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">
+                Pełna Nazwa Zespołu *
+            </label>
+            <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                required
+                maxlength="100"
+                placeholder="np. IGLOMEN Kraków">
+        </div>
+        
+        <div class="form-group">
+            <label for="name_14">
+                Nazwa Skrócona (max 14 znaków) *
+            </label>
+            <input 
+                type="text" 
+                id="name_14" 
+                name="name_14" 
+                maxlength="14"
+                required
+                placeholder="np. IGLOMEN">
+            <small id="name14_counter">0 / 14 znaków</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="short_name">
+                Skrót 3-literowy (TLA) *
+            </label>
+            <input 
+                type="text" 
+                id="short_name" 
+                name="short_name" 
+                minlength="3"
+                maxlength="3"
+                required
+                placeholder="np. IGL"
+                style="text-transform: uppercase;">
+        </div>
+
+        <div class="form-group">
+            <label for="foreign_id">
+                Foreign ID
+            </label>
+            <input
+                type="text"
+                id="foreign_id"
+                name="foreign_id"
+                maxlength="500"
+                placeholder="np. external-team-999">
+        </div>
+        
+        <div class="form-group">
+            <label for="team_url">
+                URL Zespołu NALF *
+            </label>
+            <input 
+                type="url" 
+                id="team_url" 
+                name="team_url" 
+                required
+                placeholder="https://nalffutsal.pl/?sp_team=nazwa-zespolu">
+        </div>
+        
+        <div class="form-group">
+            <label for="logo_path">
+                Ścieżka do Logo
+            </label>
+            <input
+                type="text"
+                id="logo_path"
+                name="logo_path"
+                value="static/images/logos/default.png"
+                placeholder="static/images/logos/nazwa_zespolu.png">
+            <div id="selected-logo-preview">
+                <img src="/static/images/logos/default.png" alt="Domyślne logo" style="max-width: 200px;">
+            </div>
+            <button type="button" onclick="openModal('logos-container')">Wybierz logo</button>
+        </div>
+        
+        <div class="form-group">
+            <label>Barwy domowe</label>
+            <div id="home-colors" class="color-swatches"></div>
+            <button type="button" onclick="addSwatch('home-colors', 'uniform_home[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
+        </div>
+
+        <div class="form-group">
+            <label>Barwy wyjazdowe</label>
+            <div id="away-colors" class="color-swatches"></div>
+            <button type="button" onclick="addSwatch('away-colors', 'uniform_away[]')" class="btn btn-secondary btn-sm">+ Dodaj kolor</button>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Dodaj Zespół</button>
+            <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block modal_content %}
+    <div id="logos-container" class="modal-content invisible">
+        {% if logos %}
+            {% for logo in logos %}
+                <div class="logo-option">
+                    <input type="radio" class="invisible" id="logo-{{ loop.index }}" name="selected-logo" value="{{ logo.path[1:] }}">
+                    <label for="logo-{{ loop.index }}">
+                        <img src="{{ url_for('static', filename=logo.path[8:]) }}"
+                             alt="{{ logo.filename[:-4] }}"
+                             ondblclick="getSelectedLogo();"
+                             class="logo-image">
+                        <br>
+                        {{ logo.filename[:-4] }}
+                    </label>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Brak dostępnych logo w folderze.</p>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Character counter for name_14
+    document.getElementById('name_14').addEventListener('input', function() {
+        const value = this.value;
+        document.getElementById('name14_counter').textContent = value.length + ' / 14 znaków';
+    });
+    
+    // Auto-uppercase for short_name
+    document.getElementById('short_name').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+    });
+
+    function addSwatch(containerId, inputName) {
+        const container = document.getElementById(containerId);
+        const entry = document.createElement('div');
+        entry.className = 'color-swatch-entry';
+        entry.innerHTML = `<input type="color" name="${inputName}" value="#ffffff">
+            <button type="button" class="btn-remove-color" onclick="removeSwatch(this)">✕</button>`;
+        container.appendChild(entry);
+    }
+
+    function removeSwatch(btn) {
+        btn.closest('.color-swatch-entry').remove();
+    }
+</script>
+{% endblock %}

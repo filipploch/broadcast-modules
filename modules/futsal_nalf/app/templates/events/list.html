@@ -1,0 +1,60 @@
+{% extends "base/base.html" %}
+{% block title %}Zdarzenia{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Zdarzenia</span>
+        <div class="actions">
+            <a href="{{ url_for('create_event') }}" class="btn btn-primary">➕ Dodaj zdarzenie</a>
+        </div>
+    </div>
+    {% if events %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nazwa</th>
+                <th>Skrót</th>
+                <th>Raportowane</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td><strong>{{ event.name }}</strong></td>
+                <td><code>{{ event.short_name }}</code></td>
+                <td>
+                    <span style="display:inline-flex;align-items:center;gap:.5rem;">
+                        <span style="display:inline-block;width:1.2rem;height:1.2rem;border-radius:3px;
+                                     background:{{ event.color }};border:1px solid #ccc;"></span>
+                        <code>{{ event.color }}</code>
+                    </span>
+                </td>
+                <td>
+                    {% if event.filter_class %}
+                        <code>{{ event.filter_class }}</code>
+                    {% else %}
+                        <span style="color:#aaa;">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ '✅ Tak' if event.is_reported else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('edit_event', event_id=event.id) }}" class="btn btn-secondary btn-small">Edytuj</a>
+                        <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display:inline;"
+                              onsubmit="return confirm('Usunąć zdarzenie {{ event.name }}? Spowoduje to usunięcie wszystkich powiązanych wpisów!');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak zdarzeń. <a href="{{ url_for('create_event') }}" style="color:#3498db;">Dodaj pierwsze</a>.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

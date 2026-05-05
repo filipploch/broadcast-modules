@@ -2101,6 +2101,49 @@ socket.on('replay_started', (data) => {
     replayPauseElement.style.display = 'flex';
 });
 
+socket.on('replay_state_changed', function(data) {
+    // Wysyłane przez ControllerManager przy każdej zmianie stanu lub prędkości.
+    // status: 'idle' | 'playing' | 'paused'
+    // speed:  float w zakresie [0.3, 0.9]
+    if (!data) return;
+
+    if (data.status === 'playing') {
+        if (typeof replayResumeElement !== 'undefined' && replayResumeElement) {
+            replayResumeElement.style.display = 'none';
+        }
+        if (typeof replayPauseElement !== 'undefined' && replayPauseElement) {
+            replayPauseElement.style.display = 'flex';
+        }
+    } else if (data.status === 'paused') {
+        if (typeof replayResumeElement !== 'undefined' && replayResumeElement) {
+            replayResumeElement.style.display = 'flex';
+        }
+        if (typeof replayPauseElement !== 'undefined' && replayPauseElement) {
+            replayPauseElement.style.display = 'none';
+        }
+    } else {
+        // idle — powtórka skończona
+        if (typeof replayResumeElement !== 'undefined' && replayResumeElement) {
+            replayResumeElement.style.display = 'none';
+        }
+        if (typeof replayPauseElement !== 'undefined' && replayPauseElement) {
+            replayPauseElement.style.display = 'none';
+        }
+    }
+
+    // Synchronizacja wskaźnika/suwaka prędkości (jeśli istnieje w UI).
+    // Nazwa elementu jest sugestią — dostosuj do faktycznej nazwy w uj-jinja.html.
+    
+    // var speedEl = document.getElementById('replay-speed');
+    // if (speedEl && typeof data.speed === 'number') {
+    //     if (speedEl.tagName === 'INPUT') {
+    //         speedEl.value = data.speed;
+    //     } else {
+    //         speedEl.textContent = data.speed.toFixed(2);
+    //     }
+    // }
+});
+
 socket.on('replay_done', (data) => {
     console.log('replay_done');
     replayResumeElement.style.display = 'none';

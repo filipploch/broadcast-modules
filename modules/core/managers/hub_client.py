@@ -378,90 +378,63 @@ class HubClient:
 
         # Replay Plugin messages
         if msg_from == 'replay-plugin':
-            from core.managers import get_sequence_manager
+            from core.managers import get_sequence_manager, get_controller_manager
             seq_mgr = get_sequence_manager()
+            controller_mgr = get_controller_manager()
+
             if msg_type == 'replay_done':
                 if seq_mgr:
                     seq_mgr.notify_hub_message('replay_done')
                     self._log("info", f"[replay] replay_done — sekwencja powiadomiona")
                     seq_mgr.emit_to_ui('replay_done', payload)
-            elif msg_type == 'replay_state':
-                status = payload.get('status')
+                if controller_mgr:
+                    controller_mgr.on_replay_done(payload)
+
+            elif msg_type == 'replay_started':
+                # ⭐ NOWE: nowy sygnał z replay-plugin (po LoadAndPlay)
                 if seq_mgr:
-                    if status == 'playing':
-                        seq_mgr.emit_to_ui('replay_started', payload)
+                    seq_mgr.emit_to_ui('replay_started', payload)
+                if controller_mgr:
+                    controller_mgr.on_replay_started(payload)
+                self._log("info", f"[replay] started: speed={payload.get('speed')}")
+
+            elif msg_type == 'replay_paused':
+                # ⭐ NOWE: po replay_pause od main-module → mpv pauza → ten sygnał
+                if seq_mgr:
+                    seq_mgr.emit_to_ui('replay_paused', payload)
+                if controller_mgr:
+                    controller_mgr.on_replay_paused(payload)
+
+            elif msg_type == 'replay_resumed':
+                # ⭐ NOWE: po replay_resume
+                if seq_mgr:
+                    seq_mgr.emit_to_ui('replay_resumed', payload)
+                if controller_mgr:
+                    controller_mgr.on_replay_resumed(payload)
+
+            elif msg_type == 'replay_state':
+                # Zachowane dla wstecznej kompatybilności (replay-plugin emituje
+                # to obok replay_started)
+                status = payload.get('status')
+                if seq_mgr and status == 'playing':
+                    seq_mgr.emit_to_ui('replay_started', payload)
                 self._log("info", f"[replay] state: {status}")
+
             elif msg_type == 'replay_error':
                 self._log("warning", f"[replay] error: {payload.get('error')}")
 
-        # Timer Plugin messages
-        if msg_from == 'timer-plugin':
-            print('msg from timer-plugin', msg)
-            from core.managers import get_timer_manager
-            timer_manager = get_timer_manager()
-
-            if msg_type == 'timer_updated':
-                timer_manager.on_timer_updated(msg)
-            elif msg_type == 'timer_event':
-                timer_manager.on_timer_event(msg)
-            elif msg_type == 'timer_created':
-                timer_manager.on_timer_created(msg)
-            elif msg_type == 'timer_started':
-                timer_manager.on_timer_started(msg)
-            elif msg_type == 'timer_paused':
-                timer_manager.on_timer_paused(msg)
-            elif msg_type == 'timer_reset':
-                timer_manager.on_timer_reset(msg)
-            elif msg_type == 'timer_adjusted':
-                timer_manager.on_timer_adjusted(msg)
-            elif msg_type == 'all_timers':
-                timer_manager.on_all_timers(msg)
-            elif msg_type == 'limit_reached':
-                timer_manager.on_limit_reached(msg)
-
-    # def _on_plugin_online(self, plugin_id, payload):
-    #     """Handle plugin coming online"""
-    #     # Update database
-    #     from core.managers import get_plugin_manager
-    #     plugin_manager = get_plugin_manager()
-    #     if plugin_manager:
-    #         plugin_manager.mark_plugin_online(plugin_id)
-
-        # Emit to UI
-        # self._emit_to_ui('plugin_status', {
-        #     'plugin_id': plugin_id,
-        #     'status': 'online'
-        # })
-
-        # Special handling for specific plugins
-        # if plugin_id == 'recorder':
-        #     from core.managers import get_recorder_manager
-        #     recorder_manager = get_recorder_manager()
-        #     if recorder_manager:
-        #         recorder_manager.on_recorder_online()
-
-    # def _on_plugin_offline(self, plugin_id):
-    #     """Handle plugin going offline"""
-    #     # Update database
-    #     from core.managers import get_plugin_manager
-    #     plugin_manager = get_plugin_manager()
-    #     if plugin_manager:
-    #         plugin_manager.mark_plugin_offline(plugin_id)
-
-        # Emit to UI
-        # self._emit_to_ui('plugin_status', {
-        #     'plugin_id': plugin_id,
-        #     'status': 'offline'
-        # })
-
-    # def _emit_to_ui(self, event, data):
-    #     """Emit event to UI clients via SocketIO"""
-    #     try:
-    #         from core.extensions import socketio
-    #         # socketio.emit(event, data, broadcast=True)
-    #         socketio.emit(event, data)
-    #     except Exception as e:
-    #         self._log("error", f"Failed to emit to UI: {e}")
+                # Controller Plugin messages
+        if msg_from == 'controller-plugin':
+            from core.managers import get_controller_manager
+            controller_mgr = get_controller_manager()
+            if controller_mgr:
+                if msg_type == 'controller_button':
+                    controller_mgr.on_controller_button(payload)
+                elif msg_type == 'controller_wheel':
+                    controller_mgr.on_controller_wheel(payload)
+            else:
+                self._log("warning",
+                          f"[controller] message {msg_type} dropped — manager not initialized")
 
     def _on_error(self, ws, error):
         """Handle WebSocket error - RUNS IN WEBSOCKET THREAD"""

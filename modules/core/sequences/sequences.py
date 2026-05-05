@@ -28,7 +28,7 @@ def _get_replay_transition_lead_ms(default=700):
 
     config_path = current_app.config.get(
         'REPLAY_PLUGIN_CONFIG',
-        os.path.abspath(os.path.join(current_app.root_path, '..', 'plugins', 'replay-plugin', 'config.json'))
+        os.path.abspath(os.path.join(current_app.root_path, '..', '..', '..', 'plugins', 'replay-plugin', 'config.json'))
     )
     try:
         with open(config_path, 'r', encoding='utf-8') as f:

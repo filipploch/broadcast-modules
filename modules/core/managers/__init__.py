@@ -9,18 +9,19 @@ import threading
 import time
 
 # ── Globalne singletony ───────────────────────────────────────────────────────
-_hub_client           = None
-_timer_manager        = None
-_recorder_manager     = None
-_obs_ws_manager       = None
-_sequence_manager     = None
-_plugin_manager       = None
-_current_game_manager = None
-_game_event_manager   = None
+_hub_client            = None
+_timer_manager         = None
+_recorder_manager      = None
+_obs_ws_manager        = None
+_sequence_manager      = None
+_plugin_manager        = None
+_current_game_manager  = None
+_game_event_manager    = None
 _replay_export_manager = None
-_initialization_lock  = threading.Lock()
-_initialized          = False
-_timer_manager_class = None  # moduł może ustawić przed initialize_core_managers
+_controller_manager    = None  # ⭐ NOWY: integracja USB controllera
+_initialization_lock   = threading.Lock()
+_initialized           = False
+_timer_manager_class   = None  # moduł może ustawić przed initialize_core_managers
 
 
 
@@ -34,11 +35,13 @@ def initialize_core_managers(app):
       2. Rejestracja jako main_module
       3. Deklaracja wymaganych pluginów → hub je startuje
       4. Subskrypcja klas wiadomości
-      5. Pozostałe managery lazy-init przy pierwszym użyciu
+      5. ControllerManager — łącznik controller-plugin ↔ replay-plugin
+      6. Pozostałe managery lazy-init przy pierwszym użyciu
     """
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
-           _replay_export_manager, _game_event_manager, _initialized
+           _replay_export_manager, _game_event_manager, _controller_manager, \
+           _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -73,6 +76,14 @@ def initialize_core_managers(app):
             time.sleep(1.0)
 
             _hub_client.subscribe_to_classes(app.config['SUBSCRIBE_CLASSES'])
+
+            # ⭐ ControllerManager — eager init (musi istnieć zanim przyjdą
+            # pierwsze sygnały od controller-plugin / replay-plugin).
+            from core.managers.controller_manager import ControllerManager
+            default_speed = app.config.get('REPLAY_DEFAULT_SPEED', 0.9)
+            _controller_manager = ControllerManager(_hub_client, default_speed=default_speed)
+            _controller_manager.attach_app(app)
+            app.logger.info("✅ Controller Manager initialized")
 
             _initialized = True
             app.logger.info("✅ Core managers initialization complete")
@@ -166,26 +177,34 @@ def get_replay_export_manager():
     return _replay_export_manager
 
 
+def get_controller_manager():
+    """⭐ Singleton ControllerManager. Zwraca None jeśli initialize_core_managers
+    jeszcze nie wykonało się (typowe w bardzo wczesnej fazie startu)."""
+    global _controller_manager
+    return _controller_manager
+
+
 def shutdown_core_managers():
     """Rozłącza hub i zeruje wszystkie singletony."""
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
-           _replay_export_manager, _initialized
+           _replay_export_manager, _controller_manager, _initialized
 
     current_app.logger.info("Shutting down core managers...")
 
     if _hub_client is not None:
         _hub_client.disconnect()
 
-    _hub_client           = None
-    _timer_manager        = None
-    _recorder_manager     = None
-    _obs_ws_manager       = None
-    _sequence_manager     = None
-    _plugin_manager       = None
-    _current_game_manager = None
+    _hub_client            = None
+    _timer_manager         = None
+    _recorder_manager      = None
+    _obs_ws_manager        = None
+    _sequence_manager      = None
+    _plugin_manager        = None
+    _current_game_manager  = None
     _replay_export_manager = None
-    _game_event_manager   = None
-    _initialized          = False
+    _game_event_manager    = None
+    _controller_manager    = None
+    _initialized           = False
 
     current_app.logger.info("✅ Core managers shutdown complete")
