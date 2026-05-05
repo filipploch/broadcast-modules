@@ -12,17 +12,27 @@ import (
 )
 
 var (
-	kernel32        = syscall.NewLazyDLL("kernel32.dll")
-	procCreateFileW = kernel32.NewProc("CreateFileW")
-	procWriteFile   = kernel32.NewProc("WriteFile")
-	procReadFile    = kernel32.NewProc("ReadFile")
-	procCloseHandle = kernel32.NewProc("CloseHandle")
+	kernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procCreateFileW             = kernel32.NewProc("CreateFileW")
+	procWriteFile               = kernel32.NewProc("WriteFile")
+	procReadFile                = kernel32.NewProc("ReadFile")
+	procCloseHandle             = kernel32.NewProc("CloseHandle")
+	procSetNamedPipeHandleState = kernel32.NewProc("SetNamedPipeHandleState")
 )
 
 const (
 	GENERIC_READ_WRITE = 0xC0000000
 	OPEN_EXISTING      = 3
 	INVALID_HANDLE     = ^uintptr(0)
+
+	// PIPE_NOWAIT: ReadFile zwraca natychmiast jeśli brak danych (ERROR_NO_DATA).
+	// Dzięki temu ReadFile w readPump nie blokuje OS-thread,
+	// co pozwala WriteFile działać normalnie na tym samym handle.
+	PIPE_NOWAIT = 0x00000001
+
+	// Windows error code: ReadFile w trybie PIPE_NOWAIT zwraca ten błąd
+	// gdy w pipe nie ma jeszcze danych — to normalny przypadek, nie błąd.
+	ERROR_NO_DATA = syscall.Errno(232)
 )
 
 // frameStepSec — czas jednej klatki w sekundach (30fps).
@@ -33,16 +43,6 @@ const seekTimeout = 3 * time.Second
 
 // ── MpvIPC ────────────────────────────────────────────────────────────────────
 
-// MpvIPC obsługuje komunikację z mpv przez Named Pipe w trybie read-write.
-//
-// Architektura:
-//   - Jedno połączenie przez cały czas życia pluginu (bez Reconnect).
-//   - Jedna goroutyna readPump startuje przy Connect i nigdy się nie restartuje.
-//   - send()        — fire-and-forget, używane w LoadAndPlay / SetSpeed / Pause / Resume
-//   - SendAndWait() — czeka na potwierdzenie, używane TYLKO w FrameStep
-//
-// Dzięki temu nigdy nie mamy dwóch readPump na tym samym handle.
-
 type mpvResponse struct {
 	RequestID int64  `json:"request_id"`
 	Error     string `json:"error"`
@@ -51,7 +51,7 @@ type mpvResponse struct {
 type MpvIPC struct {
 	pipeName string
 
-	mu     sync.Mutex // chroni handle i operacje WriteFile
+	mu     sync.Mutex
 	handle uintptr
 
 	nextID    atomic.Int64
@@ -66,8 +66,11 @@ func NewMpvIPC(pipeName string) *MpvIPC {
 	}
 }
 
-// Connect otwiera połączenie z pipe mpv i startuje readPump.
-// Powinno być wywołane dokładnie raz — przy starcie pluginu.
+// Connect otwiera pipe w trybie read-write z PIPE_NOWAIT i startuje readPump.
+//
+// PIPE_NOWAIT jest kluczowy: bez niego blokujący ReadFile serialyzuje się
+// z WriteFile na tym samym handle — komendy do mpv nie docierają.
+// Z PIPE_NOWAIT ReadFile odpytuje co 5ms i nie blokuje WriteFile.
 func (m *MpvIPC) Connect(timeout time.Duration) error {
 	namePtr, err := syscall.UTF16PtrFromString(m.pipeName)
 	if err != nil {
@@ -83,24 +86,39 @@ func (m *MpvIPC) Connect(timeout time.Duration) error {
 			OPEN_EXISTING,
 			0, 0,
 		)
-		if handle != INVALID_HANDLE {
-			m.handle = handle
-			log.Printf("✅ mpv IPC connected (rw): %s", m.pipeName)
-			go m.readPump()
-			return nil
+		if handle == INVALID_HANDLE {
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
-		time.Sleep(100 * time.Millisecond)
+
+		// Ustaw PIPE_NOWAIT — ReadFile nie będzie blokować OS-threadu.
+		mode := uint32(PIPE_NOWAIT)
+		ret, _, setErr := procSetNamedPipeHandleState.Call(
+			handle,
+			uintptr(unsafe.Pointer(&mode)),
+			0, 0,
+		)
+		if ret == 0 {
+			procCloseHandle.Call(handle)
+			return fmt.Errorf("SetNamedPipeHandleState failed: %w", setErr)
+		}
+
+		m.handle = handle
+		log.Printf("✅ mpv IPC connected (rw+nowait): %s", m.pipeName)
+		go m.readPump()
+		return nil
 	}
 	return fmt.Errorf("timeout connecting to mpv pipe: %s", m.pipeName)
 }
 
-// readPump czyta odpowiedzi JSON z mpv i przekazuje je do oczekujących SendAndWait.
-// Uruchamiana raz przez Connect — działa przez cały czas życia pluginu.
+// readPump odpytuje pipe co 5ms i dostarcza odpowiedzi do SendAndWait.
+// Dzięki PIPE_NOWAIT ReadFile zwraca natychmiast jeśli brak danych —
+// goroutyna nie blokuje OS-threadu, WriteFile może działać równolegle.
 func (m *MpvIPC) readPump() {
 	buf := make([]byte, 4096)
 	var partial []byte
 
-	log.Printf("📡 readPump: start")
+	log.Printf("📡 readPump: start (polling co 5ms)")
 	for {
 		m.mu.Lock()
 		handle := m.handle
@@ -112,7 +130,7 @@ func (m *MpvIPC) readPump() {
 		}
 
 		var bytesRead uint32
-		ret, _, _ := procReadFile.Call(
+		ret, _, lastErr := procReadFile.Call(
 			handle,
 			uintptr(unsafe.Pointer(&buf[0])),
 			uintptr(len(buf)),
@@ -120,14 +138,24 @@ func (m *MpvIPC) readPump() {
 			0,
 		)
 
-		if ret == 0 || bytesRead == 0 {
+		if ret == 0 {
+			if lastErr == ERROR_NO_DATA {
+				// Normalny przypadek — pipe pusty, odpytaj za chwilę.
+				time.Sleep(5 * time.Millisecond)
+				continue
+			}
+			// Inny błąd (np. pipe zamknięty) — krótka przerwa.
 			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+
+		if bytesRead == 0 {
+			time.Sleep(5 * time.Millisecond)
 			continue
 		}
 
 		partial = append(partial, buf[:bytesRead]...)
 
-		// mpv wysyła po jednym JSON per linia.
 		for {
 			idx := -1
 			for i, b := range partial {
@@ -162,12 +190,11 @@ func (m *MpvIPC) readPump() {
 					}
 				}
 			}
-			// RequestID==0: odpowiedź na komendę bez request_id lub event — ignorujemy.
 		}
 	}
 }
 
-// send wysyła komendę bez czekania na odpowiedź (fire-and-forget).
+// send wysyła komendę fire-and-forget (bez czekania na odpowiedź).
 func (m *MpvIPC) send(command []interface{}) error {
 	data, err := json.Marshal(map[string]interface{}{"command": command})
 	if err != nil {
@@ -181,7 +208,7 @@ func (m *MpvIPC) send(command []interface{}) error {
 }
 
 // SendAndWait wysyła komendę i czeka na potwierdzenie od mpv.
-// Używane tylko w FrameStep — gwarantuje serialne przetwarzanie seeków.
+// Używane w FrameStep — gwarantuje serialne wykonanie seeków.
 func (m *MpvIPC) SendAndWait(command []interface{}, timeout time.Duration) error {
 	id := m.nextID.Add(1)
 	ch := make(chan mpvResponse, 1)
@@ -298,11 +325,6 @@ func (mc *MpvController) isReady() bool {
 	return mc.ready
 }
 
-// LoadAndPlay ładuje plik i odtwarza powtórkę.
-//
-// Używa wyłącznie fire-and-forget (send), tak jak oryginalny kod.
-// Jedyna zmiana vs oryginał: pause zamiast stop przed loadfile,
-// żeby OBS (Window Capture po tytule) nie tracił źródła.
 func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, speed float64) error {
 	if !mc.isReady() {
 		return fmt.Errorf("mpv IPC not ready")
@@ -311,9 +333,8 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 	startSec := float64(startMs) / 1000.0
 	log.Printf("▶ replay: %s [start=%.3fs] x%.2f", videoPath, startSec, speed)
 
-	// Zatrzymaj bieżące odtwarzanie i zresetuj speed.
-	// pause zamiast stop — stop resetuje tytuł okna mpv, przez co
-	// OBS (Window Capture po tytule "replay-plugin-mpv") traci źródło.
+	// pause zamiast stop — stop resetuje tytuł okna mpv,
+	// przez co OBS traci źródło Window Capture.
 	if err := mc.ipc.send([]interface{}{"set_property", "pause", true}); err != nil {
 		log.Printf("⚠️  pre-pause: %v", err)
 	}
@@ -327,8 +348,8 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 	}); err != nil {
 		return fmt.Errorf("loadfile failed: %w", err)
 	}
+	log.Printf("✅ loadfile sent")
 
-	// Czekaj aż mpv otworzy plik, potem ustaw speed i odtwarzaj.
 	time.Sleep(300 * time.Millisecond)
 
 	if err := mc.ipc.send([]interface{}{"set_property", "speed", speed}); err != nil {
@@ -338,7 +359,7 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 		return fmt.Errorf("unpause failed: %w", err)
 	}
 
-	log.Printf("✅ LoadAndPlay: sent all commands")
+	log.Printf("✅ LoadAndPlay: done")
 	return nil
 }
 
@@ -346,7 +367,6 @@ func (mc *MpvController) SetSpeed(speed float64) error {
 	if !mc.isReady() {
 		return fmt.Errorf("mpv IPC not ready")
 	}
-	log.Printf("⚡ speed → %.2f", speed)
 	return mc.ipc.send([]interface{}{"set_property", "speed", speed})
 }
 
@@ -371,47 +391,37 @@ func (mc *MpvController) Stop() error {
 	return mc.ipc.send([]interface{}{"set_property", "pause", true})
 }
 
-// FrameStepForward przesuwa o jedną klatkę do przodu (seek +1/30s).
-//
-// Używa SendAndWait — blokuje aż mpv potwierdzi wykonanie.
-// Worker w main.go naturalnie czeka na powrót funkcji przed obsłużeniem
-// kolejnego kroku — gwarantuje serialne przetwarzanie bez race condition.
 func (mc *MpvController) FrameStepForward() error {
 	if !mc.isReady() {
 		return nil
 	}
 	if err := mc.ipc.SendAndWait(
-		[]interface{}{"set_property", "pause", true},
-		seekTimeout,
+		[]interface{}{"set_property", "pause", true}, seekTimeout,
 	); err != nil {
-		return fmt.Errorf("pause before fwd: %w", err)
+		return fmt.Errorf("pause: %w", err)
 	}
 	if err := mc.ipc.SendAndWait(
-		[]interface{}{"seek", fmt.Sprintf("%.6f", frameStepSec), "relative+exact"},
-		seekTimeout,
+		[]interface{}{"seek", fmt.Sprintf("%.6f", frameStepSec), "relative+exact"}, seekTimeout,
 	); err != nil {
-		return fmt.Errorf("fwd seek: %w", err)
+		return fmt.Errorf("fwd: %w", err)
 	}
 	log.Printf("⏩  frame fwd: done")
 	return nil
 }
 
-// FrameStepBack przesuwa o jedną klatkę do tyłu (seek -1/30s).
 func (mc *MpvController) FrameStepBack() error {
 	if !mc.isReady() {
 		return nil
 	}
 	if err := mc.ipc.SendAndWait(
-		[]interface{}{"set_property", "pause", true},
-		seekTimeout,
+		[]interface{}{"set_property", "pause", true}, seekTimeout,
 	); err != nil {
-		return fmt.Errorf("pause before back: %w", err)
+		return fmt.Errorf("pause: %w", err)
 	}
 	if err := mc.ipc.SendAndWait(
-		[]interface{}{"seek", fmt.Sprintf("%.6f", -frameStepSec), "relative+exact"},
-		seekTimeout,
+		[]interface{}{"seek", fmt.Sprintf("%.6f", -frameStepSec), "relative+exact"}, seekTimeout,
 	); err != nil {
-		return fmt.Errorf("back seek: %w", err)
+		return fmt.Errorf("back: %w", err)
 	}
 	log.Printf("⏪  frame back: done")
 	return nil
