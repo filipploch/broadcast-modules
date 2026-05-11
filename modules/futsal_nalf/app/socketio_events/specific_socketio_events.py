@@ -155,12 +155,17 @@ def register_events(socketio):
         hub_client = get_hub_client()
         if hub_client:
             from datetime import datetime
+            from core.managers.game_camera_manager import GameCameraManager
+            from app.models.settings import Settings
+            settings = Settings.get_settings()
+            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+                       if settings and settings.current_game_id else
+                       {'camera1': False, 'camera2': False, 'camera3': False, 'camera4': False})
             hub_client.broadcast(msg_type='recording_command', payload={
                 'requestType': 'GetRecordStatus',
                 'requestData': {},
                 'request_id': f'rec-status-{datetime.now()}',
-                'cameras': {'camera1': True, 'camera2': False,
-                            'camera3': False, 'camera4': False},
+                'cameras': cameras,
             })
 
     @socketio.on('timer_create')
@@ -327,6 +332,24 @@ def register_events(socketio):
             game    = Game.query.get(game_id)
             team_id = game.home_team_id if team_type == 'home' else game.away_team_id
 
+        # Dla bramki: inkrementuj wynik PRZED zapisem eventu, żeby game_event
+        # dostał aktualny wynik (unikamy race condition z change_game_value).
+        if data.get('event_type') == 'Bramka' and team_type in ('home', 'away'):
+            period_goal = period_manager.increment_period_goal(period_id, team_type, 1)
+            if period_goal:
+                from core.extensions import socketio as _sio
+                game_now = Game.query.get(period_goal.game_id)
+                payload = {
+                    'home_team_goals': game_now.home_team_goals,
+                    'home_team_fouls': period_goal.home_team_fouls,
+                    'away_team_goals': game_now.away_team_goals,
+                    'away_team_fouls': period_goal.away_team_fouls,
+                }
+                hc = get_hub_client()
+                if hc:
+                    hc.broadcast_to_class('game_data_receiver', 'scoreboard_data', payload)
+                _sio.emit('scoreboard_data', {'payload': payload})
+
         try:
             manager    = GameEventManager()
             game_event = manager.record_event(
@@ -344,13 +367,18 @@ def register_events(socketio):
 
         hub_client = get_hub_client()
         if hub_client:
+            from core.managers.game_camera_manager import GameCameraManager
+            from app.models.settings import Settings
+            settings = Settings.get_settings()
+            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+                       if settings and settings.current_game_id else
+                       {'camera1': False, 'camera2': False, 'camera3': False, 'camera4': False})
             hub_client.broadcast(msg_type='recording_command', payload={
                 'requestType': 'GetRecordStatus',
                 'requestData': {},
                 'request_id': f'get-record-status-{game_event.id}',
                 'game_event_id': game_event.id,
-                'cameras': {'camera1': True, 'camera2': False,
-                            'camera3': False, 'camera4': False},
+                'cameras': cameras,
             })
 
 
@@ -415,6 +443,80 @@ def register_events(socketio):
             socketio.emit('game_event_updated', {
                 'game_event_id': success.id,
                 'content_type':  data.get('content_type'),
+            })
+
+    @socketio.on('hide_game_event')
+    def handle_hide_game_event(data):
+        from app.models.game import Game
+        from core.extensions import socketio as _sio
+
+        gem = GameEventManager()
+        game_event = gem.get_game_event_by_id(data.get('game_event_id'))
+        if not game_event:
+            return
+
+        if game_event.event and game_event.event.filter_class == 'goal' and game_event.team_id:
+            game = Game.query.get(game_event.game_id)
+            if game:
+                team = 'home' if game_event.team_id == game.home_team_id else 'away'
+                period = PeriodManager().increment_period_goal(game_event.period_id, team, -1)
+                if period:
+                    game_now = Game.query.get(period.game_id)
+                    payload = {
+                        'home_team_goals': game_now.home_team_goals,
+                        'home_team_fouls': period.home_team_fouls,
+                        'away_team_goals': game_now.away_team_goals,
+                        'away_team_fouls': period.away_team_fouls,
+                    }
+                    hc = get_hub_client()
+                    if hc:
+                        hc.broadcast_to_class('game_data_receiver', 'scoreboard_data', payload)
+                    _sio.emit('scoreboard_data', {'payload': payload})
+
+        success = gem.update_game_event(
+            game_event_id=game_event.id,
+            is_visible=False,
+        )
+        if success:
+            socketio.emit('game_event_hidden', {
+                'game_event_id': success.id,
+            })
+
+    @socketio.on('restore_game_event')
+    def handle_restore_game_event(data):
+        from app.models.game import Game
+        from core.extensions import socketio as _sio
+
+        gem = GameEventManager()
+        game_event = gem.get_game_event_by_id(data.get('game_event_id'))
+        if not game_event:
+            return
+
+        if game_event.event and game_event.event.filter_class == 'goal' and game_event.team_id:
+            game = Game.query.get(game_event.game_id)
+            if game:
+                team = 'home' if game_event.team_id == game.home_team_id else 'away'
+                period = PeriodManager().increment_period_goal(game_event.period_id, team, 1)
+                if period:
+                    game_now = Game.query.get(period.game_id)
+                    payload = {
+                        'home_team_goals': game_now.home_team_goals,
+                        'home_team_fouls': period.home_team_fouls,
+                        'away_team_goals': game_now.away_team_goals,
+                        'away_team_fouls': period.away_team_fouls,
+                    }
+                    hc = get_hub_client()
+                    if hc:
+                        hc.broadcast_to_class('game_data_receiver', 'scoreboard_data', payload)
+                    _sio.emit('scoreboard_data', {'payload': payload})
+
+        success = gem.update_game_event(
+            game_event_id=game_event.id,
+            is_visible=True,
+        )
+        if success:
+            socketio.emit('game_event_restored', {
+                'game_event_id': success.id,
             })
 
 

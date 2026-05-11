@@ -128,6 +128,13 @@ button.top-bar-element {
     padding-right: 0;
 }
 
+#filter-hidden-button{
+    font-weight: 700;
+    font-size: 10px !important;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
 #game-events-table{
     font-size: 12px;
 }

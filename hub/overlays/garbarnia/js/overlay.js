@@ -10,8 +10,8 @@
         
         var homeTeamScoreElement = document.getElementById('home-team-score');
         var awayTeamScoreElement = document.getElementById('away-team-score');
-        var homeTeamFoulsElement = document.getElementById('home-team-fouls');
-        var awayTeamFoulsElement = document.getElementById('away-team-fouls');
+        var homeTeamFoulsElement = document.getElementById('home-team-red-cards');
+        var awayTeamFoulsElement = document.getElementById('away-team-red-cards');
 
         function showTransition() {
             let gameContainer = document.querySelector('#game-container');
@@ -92,7 +92,7 @@
             prepareToOpenContainer(openContainer, targetContainer);
             activateElementsAfterTime('start-content', 2500, 'flex');
         }else if (containerType === 'break'){
-            expandStartContainer(_data, true);
+            expandBreakContainer(_data);
             prepareToOpenContainer(openContainer, targetContainer);
             activateElementsAfterTime('break-content', 2500, 'flex');
         }else if (containerType === 'shootout'){
@@ -111,7 +111,7 @@
         overlayContainers.forEach(cont => {
             if(cont.style.display !== 'none') {
                 closeContainer(cont);
-                console.log('cont none');
+                console.log('cont:', cont.id);
                 // cont.style.display = 'none';
                 delayTime = 1000;
             }
@@ -471,34 +471,88 @@
         }
     }
 
+    function restartAnimation(element, animationValue) {
+        if (!element) return;
+
+        element.style.animation = 'none';
+        // Wymusza reflow, żeby przeglądarka faktycznie zresetowała poprzednią animację
+        // przed ustawieniem kolejnej animacji na tym samym elemencie.
+        void element.offsetWidth;
+        element.style.animation = animationValue;
+    }
+
+    function setBreakElementClosedState(element, properties) {
+        if (!element) return;
+
+        Object.entries(properties).forEach(([property, value]) => {
+            element.style[property] = value;
+        });
+    }
+
     function closeBreakContainer(container) {
-        // Dwa herby drużyn + wynik (zastąpił logo ligi) → fadeOut
-        let logos = container.querySelectorAll('#start-home-team-logo img, #start-away-team-logo img');
-        logos.forEach(logo => {
-            logo.style.animation = `fadeOut 250ms ease both`;
+        const players = container.querySelectorAll('.rotate-show-element');
+        const homeTeamLogoContainer = container.querySelector('#home-team-logo-container');
+        const awayTeamLogoContainer = container.querySelector('#away-team-logo-container');
+        const homeTeamNameElement = container.querySelector('#home-team-name-element');
+        const awayTeamNameElement = container.querySelector('#away-team-name-element');
+        const resultElement = container.querySelector('#result-element');
+
+        players.forEach(player => {
+            restartAnimation(player, 'rotateHideElement 250ms ease 0ms 1 reverse forwards');
         });
-        let result = container.querySelector('#start-league-logo');
-        if (result) {
-            result.style.animation = `fadeOut 250ms ease both`;
-        }
-        // Wiersze strzelców → rotateHideElement reverse
-        let scorerRows = container.querySelectorAll('.break-scorer-element');
-        scorerRows.forEach(row => {
-            row.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
-        });
-        // Body → collapseHeight
-        let startBody = container.querySelector('.start-body');
-        if (startBody) {
-            startBody.style.setProperty('animation', 'collapseHeight', 'important');
-            startBody.style.animationDuration = '750ms';
-            startBody.style.animationDelay = '250ms';
-            startBody.style.animationFillMode = 'both';
-        }
-        // Head → rotateHideElement reverse
-        let infoHead = container.querySelector('.info-head');
-        if (infoHead) {
-            infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-        }
+
+        restartAnimation(
+            homeTeamLogoContainer,
+            'moveHomeTeamLogo 200ms ease-in-out 300ms 1 reverse forwards'
+        );
+
+        restartAnimation(
+            awayTeamLogoContainer,
+            'moveAwayTeamLogo 200ms ease-in-out 300ms 1 reverse forwards'
+        );
+
+        restartAnimation(
+            homeTeamNameElement,
+            'moveHomeTeamNameElement 300ms ease-in-out 500ms 1 reverse forwards'
+        );
+
+        restartAnimation(
+            awayTeamNameElement,
+            'moveAwayTeamNameElement 300ms ease-in-out 500ms 1 reverse forwards'
+        );
+
+        restartAnimation(
+            resultElement,
+            'resultFadeIn 300ms ease 700ms 1 reverse forwards'
+        );
+
+        // Zabezpieczenie przed „odbiciem” elementów do stylu bazowego po animationend.
+        // Wartości odpowiadają klatce 0% Twoich animacji wejścia.
+        setTimeout(() => {
+            setBreakElementClosedState(homeTeamLogoContainer, {
+                left: '130px',
+                visibility: 'hidden'
+            });
+
+            setBreakElementClosedState(awayTeamLogoContainer, {
+                right: '130px',
+                visibility: 'hidden'
+            });
+
+            setBreakElementClosedState(homeTeamNameElement, {
+                left: '500px',
+                visibility: 'hidden'
+            });
+
+            setBreakElementClosedState(awayTeamNameElement, {
+                right: '500px',
+                visibility: 'hidden'
+            });
+
+            setBreakElementClosedState(resultElement, {
+                opacity: 0
+            });
+        }, 850);
     }
 
     function closeDefaultContainer(container) {
@@ -577,39 +631,373 @@
         return wrapper;
     }
 
-    function generateScorersList(_scorers) {
-        let wrapper = document.createElement('div');
-        addClassName(wrapper, 'break-scorers-wrapper');
-        _scorers.forEach((scorer, index)=> {
-            let _row = document.createElement('div');
-            addClassName(_row, 'break-scorer-element');
-            addClassName(_row, 'specific-colors');
-            addClassName(_row, `rotate-show-element${index}`);
-            let firstName = document.createElement('span');
-            addClassName(firstName, 'break-scorer-first-name');
-            let lastName = document.createElement('span');
-            addClassName(lastName, 'break-scorer-last-name');
-            let goalTimeContainer = document.createElement('span');
-            addClassName(goalTimeContainer, 'break-goal-time');
-            firstName.innerText = scorer.player_first_name;
-            lastName.innerText = scorer.player_last_name;
-            goalTimeContainer.innerText = '';
-            let goals = scorer.goals;
-            goals.forEach(goal => {
-				let displayedMinute = goal.minute;
-				if(goal.added_time>0) displayedMinute += `+${goal.added_time}`
-                if(goal.is_own_goal === true){
-                    goalTimeContainer.innerText += `(s)${displayedMinute}' `;
-                }else{
-                    goalTimeContainer.innerText += `${displayedMinute}' `;
-                }
-            });
-            _row.appendChild(firstName);
-            _row.appendChild(lastName);
-            _row.appendChild(goalTimeContainer);
-            wrapper.appendChild(_row);
+    function generateScorersList(_scorers, _side) {
+        const isAway = (_side === 'away');
+
+        // .break-scorers-wrapper
+        const wrapper = document.createElement('div');
+        Object.assign(wrapper.style, {
+            width:   '600px',
+            padding: '0 20px'
         });
+
+        _scorers.forEach((scorer, index) => {
+            // .break-scorer-element  +  home|away-team-scorer-break-element
+            const row = document.createElement('div');
+            Object.assign(row.style, {
+                width:      '100%',
+                textAlign:  'left',
+                padding:    '2px 0px',
+                fontSize:   '28px',
+                display:    'flex',
+                filter:     'drop-shadow(3px 3px 3px black)',
+                margin:     '2px 0',
+                color:      '#d9d9d9',
+                // skos tła zależy od strony
+                clipPath:   isAway
+                    ? 'polygon(100% 0%, 97.75% 100%, 0% 100%, 0% 0%)'
+                    : 'polygon(100% 0%, 100% 100%, 0% 100%, 2.25% 0%)',
+                // animacja wejścia — każdy wiersz z rosnącym opóźnieniem
+                animation:  `rotateShowElement 250ms ease ${250 + 0 * 250}ms 1 reverse both`,
+                visibility: 'visible'
+            });
+            // zachowaj dane potrzebne closeBreakContainer do obliczenia reverse delay
+            row.dataset.scorerIndex = index;
+
+            row.classList.add(
+                'specific-colors',
+                'rotate-show-element'
+            );
+
+            // .break-scorer-first-name
+            const firstName = document.createElement('span');
+            Object.assign(firstName.style, {
+                marginLeft: '30px'
+            });
+            firstName.textContent = scorer.player_first_name ?? '';
+
+            // .break-scorer-last-name
+            const lastName = document.createElement('span');
+            Object.assign(lastName.style, {
+                paddingLeft: '10px',
+                fontWeight:  '700'
+            });
+            lastName.textContent = scorer.player_last_name ?? '';
+
+            // .break-goal-time
+            const goalTime = document.createElement('span');
+            Object.assign(goalTime.style, {
+                marginRight: '30px',
+                textAlign:   'right',
+                width:       'inherit'
+            });
+            goalTime.textContent = '';
+            scorer.goals.forEach(goal => {
+                let min = goal.minute;
+                if (goal.added_time > 0) min += `+${goal.added_time}`;
+                goalTime.textContent += goal.is_own_goal ? `(s)${min}' ` : `${min}' `;
+            });
+
+            row.appendChild(firstName);
+            row.appendChild(lastName);
+            row.appendChild(goalTime);
+            wrapper.appendChild(row);
+        });
+
         return wrapper;
+    }
+
+    function expandBreakContainer(_data) {
+        const container = document.getElementById('break-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        // Timingі wejścia — spójne z CSS keyframes w overlay
+        // Strzelcy:  rotateShowElement reverse, delay rośnie o 250ms na wiersz, start po 2500ms
+        // Nazwy:     moveHome/AwayTeamNameElement 500ms ease-in-out delay 1000ms
+        // Wynik:     resultFadeIn 300ms ease-in-out delay 1000ms
+        // Herby:     moveHome/AwayTeamLogo 500ms ease-in-out delay 1500ms
+
+        // ── #break-scorers-container ──────────────────────────────────────────
+        // Pozycja absolutna, 1330×550px, bottom:300px, left:295px
+        const breakScorersContainer = document.createElement('div');
+        breakScorersContainer.id = 'break-scorers-container';
+        Object.assign(breakScorersContainer.style, {
+            position: 'absolute',
+            width:    '1330px',
+            height:   '550px',
+            left:     '250px',
+            bottom:   '300px',
+            display:  'none'   // activateElementsAfterTime('break-content') pokaże po 2500ms
+        });
+        addClassName(breakScorersContainer, 'break-content');
+
+        const scorersInner = document.createElement('div');
+        scorersInner.id = 'scorers-container';
+        Object.assign(scorersInner.style, {
+            display:    'flex',
+            width:      '100%',
+            height:     '100%',
+            alignItems: 'flex-end'
+        });
+
+        // Home scorers column
+        const homeScorersCol = document.createElement('div');
+        homeScorersCol.id = 'home-team-scorers-container';
+        Object.assign(homeScorersCol.style, {
+            width:          '50%',
+            display:        'flex',
+            alignItems:     'flex-end',
+            justifyContent: 'left'
+        });
+        const homeScorers = (_data.home_team_scorers && _data.home_team_scorers.scorers) || [];
+        homeScorersCol.appendChild(generateScorersList(homeScorers, 'home'));
+
+        // Away scorers column
+        const awayScorersCol = document.createElement('div');
+        awayScorersCol.id = 'away-team-scorers-container';
+        Object.assign(awayScorersCol.style, {
+            width:          '50%',
+            display:        'flex',
+            alignItems:     'flex-end',
+            justifyContent: 'right'
+        });
+        const awayScorers = (_data.away_team_scorers && _data.away_team_scorers.scorers) || [];
+        awayScorersCol.appendChild(generateScorersList(awayScorers, 'away'));
+
+        scorersInner.appendChild(homeScorersCol);
+        scorersInner.appendChild(awayScorersCol);
+        breakScorersContainer.appendChild(scorersInner);
+
+        // ── #result-container ─────────────────────────────────────────────────
+        // Pozycja absolutna, 1330×170px, bottom:100px, left:295px
+        const resultContainer = document.createElement('div');
+        resultContainer.id = 'result-container';
+        Object.assign(resultContainer.style, {
+            position:       'absolute',
+            width:          '1330px',
+            height:         '170px',
+            left:           '250px',
+            bottom:         '100px',
+            display:        'flex',
+            flexDirection:  'column',
+            justifyContent: 'center',
+            alignItems:     'center'
+        });
+
+        // ── #logo-container ───────────────────────────────────────────────────
+        const logoContainer = document.createElement('div');
+        logoContainer.id = 'logo-container';
+        Object.assign(logoContainer.style, {
+            display:  'flex',
+            position: 'absolute',
+            top:      '0',
+            height:   '100%',
+            width:    '100%'
+        });
+
+        // Home logo wrap — animacja moveHomeTeamLogo 500ms 1500ms
+        const homeLogoWrap = document.createElement('div');
+        homeLogoWrap.id = 'home-team-logo-container';
+        Object.assign(homeLogoWrap.style, {
+            visibility: 'visible',
+            position:   'absolute',
+            left:       '0px',
+            animation:  'moveHomeTeamLogo 500ms ease-in-out 1500ms both'
+        });
+
+        const homeLogoEl = document.createElement('div');
+        homeLogoEl.id = 'home-team-logo-element';
+        Object.assign(homeLogoEl.style, {
+            display:        'flex',
+            width:          '168px',
+            backgroundImage:     "url('..../../img/home-team-logo-background-image.png')",
+            backgroundRepeat:    'no-repeat',
+            height:         '100%',
+            aspectRatio:    '1',
+            flex:           '1',
+            justifyContent: 'center',
+            alignItems:     'center',
+            filter:         'drop-shadow(10px 10px 20px black)'
+        });
+        const homeLogoImg = document.createElement('img');
+        Object.assign(homeLogoImg.style, {
+            width:       '40%',
+            aspectRatio: '1',
+            objectFit:   'cover'
+        });
+        homeLogoImg.src = rootApp + (_data.home_team_logo || '');
+        homeLogoEl.appendChild(homeLogoImg);
+        homeLogoWrap.appendChild(homeLogoEl);
+
+        // Away logo wrap — animacja moveAwayTeamLogo 500ms 1500ms
+        const awayLogoWrap = document.createElement('div');
+        awayLogoWrap.id = 'away-team-logo-container';
+        Object.assign(awayLogoWrap.style, {
+            visibility: 'visible',
+            position:   'absolute',
+            right:      '0px',
+            animation:  'moveAwayTeamLogo 500ms ease-in-out 1500ms both'
+        });
+
+        const awayLogoEl = document.createElement('div');
+        awayLogoEl.id = 'away-team-logo-element';
+        Object.assign(awayLogoEl.style, {
+            display:        'flex',
+            width:          '168px',
+            backgroundImage:     "url('..../../img/away-team-logo-background-image.png')",
+            backgroundRepeat:    'no-repeat',
+            height:         '100%',
+            aspectRatio:    '1',
+            flex:           '1',
+            justifyContent: 'center',
+            alignItems:     'center',
+            filter:         'drop-shadow(10px 10px 20px black)'
+        });
+        const awayLogoImg = document.createElement('img');
+        Object.assign(awayLogoImg.style, {
+            width:       '40%',
+            aspectRatio: '1',
+            objectFit:   'cover'
+        });
+        awayLogoImg.src = rootApp + (_data.away_team_logo || '');
+        awayLogoEl.appendChild(awayLogoImg);
+        awayLogoWrap.appendChild(awayLogoEl);
+
+        logoContainer.appendChild(homeLogoWrap);
+        logoContainer.appendChild(awayLogoWrap);
+
+        // ── #x-container ──────────────────────────────────────────────────────
+        const xContainer = document.createElement('div');
+        xContainer.id = 'x-container';
+        Object.assign(xContainer.style, {
+            position: 'absolute',
+            top:      '0',
+            display:  'flex',
+            height:   '100%',
+            width:    '100%'
+        });
+
+        // Home team name wrap — animacja moveHomeTeamNameElement 500ms 1000ms
+        const homeNameWrap = document.createElement('div');
+        Object.assign(homeNameWrap.style, {
+            display:  'flex',
+            width:    '500px',
+            height:   '100%',
+            overflow: 'hidden',
+            filter:   'drop-shadow(10px 10px 20px black)'
+        });
+        const homeNameEl = document.createElement('div');
+        homeNameEl.id = 'home-team-name-element';
+        Object.assign(homeNameEl.style, {
+            visibility:          'visible',
+            position:            'relative',
+            left:                '120px',
+            backgroundImage:     "url('..../../img/home-team-name-background-image.png')",
+            backgroundRepeat:    'no-repeat',
+            width:               '100%',
+            paddingRight:        '70px',
+            fontSize:            '35px',
+            color:               '#c9c9c9',
+            display:             'flex',
+            justifyContent:      'center',
+            alignItems:          'center',
+            fontWeight:          '700',
+            animation:           'moveHomeTeamNameElement 500ms ease-in-out 1000ms both'
+        });
+        homeNameEl.textContent = (_data.home_team_name_14 || '').toUpperCase();
+        homeNameWrap.appendChild(homeNameEl);
+
+        // Result element — animacja resultFadeIn 300ms 1000ms
+        const resultParts = ((_data.result || '0 : 0').toString()).split(':').map(s => s.trim());
+        const resultEl = document.createElement('div');
+        Object.assign(resultEl.style, {
+            fontSize:        '75px',
+            color:           'white',
+            fontWeight:      '700',
+            visibility:      'visible',
+            display:         'flex',
+            width:           '324px',
+            height:          '100%',
+            backgroundImage: "url('..../../img/result-element-background-image.png')",
+            alignItems:      'center',
+            animation:       'resultFadeIn 300ms ease-in-out 1000ms both',
+            zIndex:          '10',
+            filter:          'drop-shadow(10px 10px 20px black)'
+        });
+        resultEl.id = 'result-element';
+
+        const homeResultEl = document.createElement('div');
+        homeResultEl.id = 'home-team-result-element';
+        Object.assign(homeResultEl.style, { flex: '2', textAlign: 'center' });
+        homeResultEl.textContent = resultParts[0] || '0';
+
+        const leagueLogoEl = document.createElement('div');
+        Object.assign(leagueLogoEl.style, {
+            flex:           '1',
+            display:        'flex',
+            justifyContent: 'center',
+            alignItems:     'center'
+        });
+        const leagueLogoImg = document.createElement('img');
+        Object.assign(leagueLogoImg.style, {
+            width:      '100%',
+            height:     '100%',
+            objectFit:  'cover',
+            filter:     'drop-shadow(0px 5px 10px rgba(0,0,0,0.5))'
+        });
+        leagueLogoImg.src = rootApp + setLeagueLogo();
+        leagueLogoEl.appendChild(leagueLogoImg);
+
+        const awayResultEl = document.createElement('div');
+        awayResultEl.id = 'away-team-result-element';
+        Object.assign(awayResultEl.style, { flex: '2', textAlign: 'center' });
+        awayResultEl.textContent = resultParts[1] || '0';
+
+        resultEl.appendChild(homeResultEl);
+        resultEl.appendChild(leagueLogoEl);
+        resultEl.appendChild(awayResultEl);
+
+        // Away team name wrap — animacja moveAwayTeamNameElement 500ms 1000ms
+        const awayNameWrap = document.createElement('div');
+        Object.assign(awayNameWrap.style, {
+            display:  'flex',
+            width:    '500px',
+            height:   '100%',
+            overflow: 'hidden',
+            filter:   'drop-shadow(10px 10px 20px black)'
+        });
+        const awayNameEl = document.createElement('div');
+        awayNameEl.id = 'away-team-name-element';
+        Object.assign(awayNameEl.style, {
+            visibility:       'visible',
+            position:         'relative',
+            right:            '120px',
+            backgroundImage:  "url('..../../img/away-team-name-background-image.png')",
+            backgroundRepeat: 'no-repeat',
+            width:            '100%',
+            paddingLeft:      '70px',
+            fontSize:         '35px',
+            color:            '#c9c9c9',
+            display:          'flex',
+            justifyContent:   'center',
+            alignItems:       'center',
+            fontWeight:       '700',
+            animation:        'moveAwayTeamNameElement 500ms ease-in-out 1000ms both'
+        });
+        awayNameEl.textContent = (_data.away_team_name_14 || '').toUpperCase();
+        awayNameWrap.appendChild(awayNameEl);
+
+        xContainer.appendChild(homeNameWrap);
+        xContainer.appendChild(resultEl);
+        xContainer.appendChild(awayNameWrap);
+
+        resultContainer.appendChild(logoContainer);
+        resultContainer.appendChild(xContainer);
+
+        // ── Złóż całość ───────────────────────────────────────────────────────
+        container.appendChild(breakScorersContainer);
+        container.appendChild(resultContainer);
     }
 
     function expandStartContainer(_gameData, _break=false) {
@@ -629,7 +1017,7 @@
         leagueTitleElement.innerText = setLeagueName();
         let roundTitleElement = document.createElement('div');
         addClassName(roundTitleElement, 'start-container-round-title');
-        roundTitleElement.innerText = `${data.round_name}`;
+        roundTitleElement.innerText = data.round_name ?? '';
         infoHead.appendChild(leagueTitleElement);
         infoHead.appendChild(roundTitleElement);
         startContainer.appendChild(infoHead);
@@ -812,19 +1200,12 @@
         return squadContent;
     }
     
-    function updateFoulsElement(_fouls, _foulsElement) {
-        if(_fouls === '' || _fouls === null){
-            _foulsElement.textContent = '';
-        }else if(parseInt(_fouls) !== 'undefined' && _fouls >= 0 && _fouls < 6) {
-            _foulsElement.textContent = '●'.repeat(_fouls);
-            _foulsElement.style.color = 'yellow';
-            if(_fouls > 4){
-                _foulsElement.style.color = 'red';
-            }else if(_fouls < 4){
-                _foulsElement.style.color = 'white';
-            }else{
-                
-            }
+    function updateRedCardsElement(_redCards, _element) {
+        if (_redCards === '' || _redCards === null) {
+            _element.textContent = '';
+        } else if (_redCards >= 0) {
+            _element.textContent = '■'.repeat(_redCards);
+            _element.style.color = 'red';
         }
     }
 
@@ -845,30 +1226,18 @@
     
     function updateScoreboard(data) {
         if (typeof data.home_team_goals != "undefined") {
-            if(data.home_team_goals === '' || data.home_team_goals === null){
-                homeTeamScoreElement.textContent = '';
-            }else if(parseInt(data.home_team_goals) !== 'undefined'){
-                homeTeamScoreElement.textContent = data.home_team_goals;
-            }else{
-                
-            }
+            homeTeamScoreElement.textContent = (data.home_team_goals === null || data.home_team_goals === '') ? 0 : data.home_team_goals;
         }
         if (typeof data.away_team_goals != "undefined") {
-            if(data.away_team_goals === '' || data.away_team_goals === null){
-                awayTeamScoreElement.textContent = '';
-            }else if(parseInt(data.home_team_goals) !== 'undefined'){
-                awayTeamScoreElement.textContent = data.away_team_goals;
-            }else{
-                
-            }
+            awayTeamScoreElement.textContent = (data.away_team_goals === null || data.away_team_goals === '') ? 0 : data.away_team_goals;
         }
         if (typeof data.home_team_fouls != "undefined") {
             updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
-                        }
-                        if (typeof data.away_team_fouls != "undefined") {
-                            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
-                                        }
-                                    }
+        }
+        if (typeof data.away_team_fouls != "undefined") {
+            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
+        }
+    }
                                     
                                     ws.onopen = () => {
                                         console.log('✅ Connected to HUB');
@@ -909,7 +1278,7 @@
         if (msg.type === 'registered' && !registered) {
             registered = true;
             console.log('✅ Registered! Now subscribing to timer...');
-            
+
             ws.send(JSON.stringify({
                 type: 'subscribe',
                 from: overlayId,
@@ -918,12 +1287,23 @@
                     class: ['timer', 'overlay', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
-            
+
             ws.send(JSON.stringify({
                 type: 'request_game_data',
                 from: overlayId,
                 to: 'main-module'
             }));
+
+            setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'heartbeat',
+                        from: overlayId,
+                        to: 'hub',
+                        payload: { plugin_id: overlayId, timestamp: Date.now() }
+                    }));
+                }
+            }, 5000);
         }
         
         // Po subskrypcji
@@ -958,6 +1338,18 @@
 
                 // Prześlij tick do modułu kar — przelicza remaining każdej kary
                 window.PenaltyTimers.tickMain(data.elapsed_time);
+
+                // Przy starcie zegara: wynik null/pusty → 0
+                [homeTeamScoreElement, awayTeamScoreElement].forEach(el => {
+                    if (el && (el.textContent === '' || el.textContent === 'null' || el.textContent === 'None')) {
+                        el.textContent = '0';
+                    }
+                });
+                document.querySelectorAll('.home-team-score, .away-team-score').forEach(el => {
+                    if (el.textContent === '' || el.textContent === 'null' || el.textContent === 'None') {
+                        el.textContent = '0';
+                    }
+                });
             }
         }
 
@@ -1023,34 +1415,34 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             
             if (typeof data.home_team_short_name != "undefined") {
                 homeTeamShortNameElements.forEach(element => {
-                    element.textContent = data.home_team_short_name;
+                    element.textContent = data.home_team_short_name ?? '';
                 })
             }
-            
+
             if (typeof data.away_team_short_name != "undefined") {
                 awayTeamShortNameElements.forEach(element => {
-                    element.textContent = data.away_team_short_name;
+                    element.textContent = data.away_team_short_name ?? '';
                 })
             }
-            
+
             if (typeof data.home_team_goals != "undefined") {
                 homeTeamScoreElements.forEach(element => {
-                    element.textContent = data.home_team_goals;
+                    element.textContent = data.home_team_goals ?? 0;
                 })
             }
-            
+
             if (typeof data.away_team_goals != "undefined") {
                 awayTeamScoreElements.forEach(element => {
-                    element.textContent = data.away_team_goals;
+                    element.textContent = data.away_team_goals ?? 0;
                 })
             }
             
-            if (typeof data.home_team_fouls != "undefined") {
-                updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
+            if (typeof data.home_team_red_cards != "undefined") {
+                updateRedCardsElement(data.home_team_red_cards, homeTeamFoulsElement);
             }
             
-            if (typeof data.away_team_fouls != "undefined") {
-                updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
+            if (typeof data.away_team_red_cards != "undefined") {
+                updateRedCardsElement(data.away_team_red_cards, awayTeamFoulsElement);
             }
             
             if (typeof data.home_team_uniform != "undefined") {
@@ -1088,12 +1480,12 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
             : FutsalFormatters.formatElapsedTime(data.game_time, 0, {'format': 'min', 'unit': 's'});
             actionPlayerInfoElement.textContent = '';
-            actionPlayerInfoElement.textContent = `${data.player_number} ${data.player_name}`;
-            actionPlayerTeamShortNameElement.textContent = ''; 
-            actionPlayerTeamShortNameElement.textContent = 
-                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name, data.event_type_id);
+            actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
+            actionPlayerTeamShortNameElement.textContent = '';
+            actionPlayerTeamShortNameElement.textContent =
+                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name ?? '', data.event_type_id);
             actionTeamNameElement.textContent = '';
-            actionTeamNameElement.textContent = data.team_name;
+            actionTeamNameElement.textContent = data.team_name ?? '';
 
             actionInfoContainer.style.display = 'block';
             setTimeout(() => {

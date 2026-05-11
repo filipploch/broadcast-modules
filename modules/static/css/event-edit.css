@@ -12,13 +12,15 @@
   display: inline-block;
   /* padding: 10px 20px; */
   font-family: sans-serif;
-  background-color: #f0f0f0;
+  background-color: #456789;
   border: 1px solid #ccc;
   border-radius: 5px;
   cursor: pointer;
   margin-right: 5px; 
   transition: background-color 0.2s;
   font-size: 10px;
+  align-content: center;
+  text-align: center;
 }
 
 /* 3. Styl dla etykiety, której radiobutton jest zaznaczony */
@@ -30,7 +32,7 @@
 
 /* Dodatkowy styl dla najechania myszką */
 .event-type-radio-group label:hover {
-  background-color: #e0e0e0;
+  background-color: #007bff;
 }
 .event-type-radio-group input[type="radio"]:checked + label:hover {
   background-color: #0056b3;

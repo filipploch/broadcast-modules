@@ -179,3 +179,10 @@ button.top-bar-element {
 .redCard {
     background-color: rgb(255, 0, 0) !important;
 }
+
+#stream-controllers [id$="-icon"] svg,
+#stream-controllers [id$="-plugin-icon"] svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}

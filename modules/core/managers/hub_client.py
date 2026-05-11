@@ -315,20 +315,24 @@ class HubClient:
             classes = payload.get('classes', [])
             self._log("info", f"✅ Subscribed to classes: {', '.join(classes)}")
 
-        elif msg_type == 'plugin_online':
+        elif msg_type == 'plugin_status':
+            # Hub sends this when any expected plugin connects or disconnects.
             plugin_id = payload.get('plugin_id')
-            plugin_name = payload.get('plugin_name')
-            self._log("info", f"Plugin online: {plugin_name} ({plugin_id})")
+            status    = payload.get('status')
+            self._log("info", f"Plugin status: {plugin_id} → {status}")
 
-            # Update database
-            # self._with_app_context(self._on_plugin_online, plugin_id, payload)
+            if status == 'connected':
+                self._on_plugin_connected(plugin_id)
+
+        elif msg_type == 'plugin_online':
+            # Legacy alias — kept for backward compatibility with older hub builds.
+            plugin_id = payload.get('plugin_id')
+            self._log("info", f"Plugin online (legacy): {plugin_id}")
+            self._on_plugin_connected(plugin_id)
 
         elif msg_type == 'plugin_offline':
             plugin_id = payload.get('plugin_id')
             self._log("warning", f"Plugin offline: {plugin_id}")
-
-            # Update database
-            # self._with_app_context(self._on_plugin_offline, plugin_id)
 
         elif msg_type == 'health_status':
             from core.managers import get_plugin_manager
@@ -369,12 +373,39 @@ class HubClient:
             elif msg_type == 'obs_event':
                 print('OBS_EVENT:', msg)
                 obs_ws_manager.on_obs_event(msg)
+            elif msg_type == 'obs_scene_map':
+                # ✅ FIX: route scene map — was previously unhandled (silent drop)
+                obs_ws_manager.on_obs_scene_map(msg)
             elif msg_type == 'obs_error':
                 print('OBS_ERROR:', msg)
             else:
                 print('OBS MSG:', msg)
 
 
+
+        if msg_from == 'timer-plugin':
+            from core.managers import get_timer_manager
+            tm = get_timer_manager()
+            if msg_type == 'timer_updated':
+                tm.on_timer_updated(msg)
+            elif msg_type == 'timer_started':
+                tm.on_timer_started(msg)
+            elif msg_type == 'timer_paused':
+                tm.on_timer_paused(msg)
+            elif msg_type == 'timer_reset':
+                tm.on_timer_reset(msg)
+            elif msg_type == 'timer_adjusted':
+                tm.on_timer_adjusted(msg)
+            elif msg_type == 'timer_resumed':
+                tm.on_timer_updated(msg)
+            elif msg_type == 'timer_created':
+                tm.on_timer_created(msg)
+            elif msg_type == 'timer_ensured':
+                tm.on_timer_ensured(msg)
+            elif msg_type == 'limit_reached':
+                tm.on_limit_reached(msg)
+            elif msg_type == 'all_timers':
+                tm.on_all_timers(msg)
 
         # Replay Plugin messages
         if msg_from == 'replay-plugin':
@@ -510,6 +541,9 @@ class HubClient:
                     }
                 })
 
+        # ✅ Fallback: jeśli po 10s dane nadal nie dotarły, wyślij ponowne żądanie
+        self._ensure_plugins_ready(delay=10.0)
+
     def _on_close(self, ws, close_status_code, close_msg):
         """Handle WebSocket close"""
         self.connected = False
@@ -526,6 +560,54 @@ class HubClient:
             self.ws.close()
 
         self._log("info", "Disconnected from Hub")
+
+    # =========================================================================
+    # LATE-JOIN: reagowanie na pojawienie się pluginu w dowolnym momencie
+    # =========================================================================
+
+    def _on_plugin_connected(self, plugin_id: str):
+        """
+        Wywoływana gdy hub poinformuje nas, że plugin właśnie się połączył
+        (niezależnie od tego czy stało się to przed czy po starcie main-module).
+        """
+        self._log("info", f"[late-join] Plugin connected: {plugin_id}")
+
+        if plugin_id == 'obs-ws-plugin':
+            self._request_obs_scene_map()
+
+    def _request_obs_scene_map(self):
+        """Prosi obs-ws-plugin o przesłanie aktualnej mapy scen."""
+        self._log("info", "[late-join] Requesting OBS scene map from obs-ws-plugin")
+        self.send({
+            'from':    self.module_id or 'main-module',
+            'to':      'obs-ws-plugin',
+            'type':    'request_scene_map',
+            'payload': {}
+        })
+
+    def _ensure_plugins_ready(self, delay: float = 10.0):
+        """
+        Fallback: po `delay` sekundach od rejestracji sprawdza, czy kluczowe
+        dane zostały otrzymane. Jeśli nie — wysyła ponowne żądanie.
+        Uruchamiany jako daemon thread po _on_open.
+        """
+        import threading, time
+
+        def _check():
+            time.sleep(delay)
+            try:
+                with self.app.app_context():
+                    from core.managers import get_obs_ws_manager
+                    obs = get_obs_ws_manager()
+                    if not obs.get_scene_map():
+                        self._log("warning",
+                                  "[late-join] OBS scene map still empty after "
+                                  f"{delay:.0f}s — re-requesting")
+                        self._request_obs_scene_map()
+            except Exception as e:
+                self._log("error", f"[late-join] _ensure_plugins_ready failed: {e}")
+
+        threading.Thread(target=_check, daemon=True).start()
 
     # def _handle_timer_updated(self, message):
     #     """Forward timer updates to TimerManager"""

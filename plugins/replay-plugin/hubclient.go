@@ -72,6 +72,18 @@ func (hc *HubClient) Connect() error {
 			"version": "1.0.0",
 		},
 	})
+
+	// Subscribe to classes — required for late-join broadcasts.
+	time.Sleep(100 * time.Millisecond)
+	hc.Send(&Message{
+		From: hc.pluginID,
+		To:   "hub",
+		Type: "subscribe",
+		Payload: map[string]interface{}{
+			"class": []string{"replay"},
+		},
+	})
+
 	return nil
 }
 

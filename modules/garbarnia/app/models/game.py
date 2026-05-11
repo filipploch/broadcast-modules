@@ -76,8 +76,8 @@ def sort_group(tied_rows, all_games):
 class Game(BaseGameMixin, db.Model):
     __tablename__ = 'games'
 
-    home_team_fouls = db.Column(db.Integer, nullable=False, default=0)
-    away_team_fouls = db.Column(db.Integer, nullable=False, default=0)
+    home_team_red_cards = db.Column(db.Integer, nullable=False, default=0)
+    away_team_red_cards = db.Column(db.Integer, nullable=False, default=0)
 
     is_home_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
     is_away_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
@@ -152,8 +152,8 @@ class Game(BaseGameMixin, db.Model):
 
     def to_dict(self):
         d = super().to_dict()
-        d['home_team_fouls']         = self.home_team_fouls
-        d['away_team_fouls']         = self.away_team_fouls
+        d['home_team_red_cards']     = self.home_team_red_cards
+        d['away_team_red_cards']     = self.away_team_red_cards
         d['is_home_team_lost_by_wo'] = self.is_home_team_lost_by_wo
         d['is_away_team_lost_by_wo'] = self.is_away_team_lost_by_wo
         d['is_walkover']             = self.is_walkover

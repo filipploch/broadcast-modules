@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 // Config holds full plugin configuration loaded from config.json.
@@ -105,6 +106,8 @@ func connectToHub(hubURL string, config Config, ds *DiscoveryServer, recorder *R
 	recorder.SetHubClient(hubClient)
 	defer recorder.SetHubClient(nil)
 
+	go heartbeatLoop(hubClient)
+
 	// Process incoming messages.
 	// hubClient.reconnectEnabled = true, więc po zerwaniu połączenia readMessages()
 	// uruchomi go reconnect() wewnętrznie — Messages nigdy nie jest zamykany.
@@ -158,6 +161,24 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 
 	default:
 		log.Printf("📨 Unhandled message type: %s (from: %s)", msg.Type, msg.From)
+	}
+}
+
+func heartbeatLoop(hc *HubClient) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if !hc.IsConnected() {
+			continue
+		}
+		hc.Send(&Message{
+			To:   "hub",
+			Type: "heartbeat",
+			Payload: map[string]interface{}{
+				"plugin_id": hc.PluginID,
+				"timestamp": time.Now().Unix(),
+			},
+		})
 	}
 }
 

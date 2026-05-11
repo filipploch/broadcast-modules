@@ -117,6 +117,65 @@ function updateCamerasIndicators(camerasDict) {
     }
 }
 
+function loadSvgIntoContainer(containerId, url, onLoad) {
+    fetch(url)
+        .then(r => r.text())
+        .then(svgText => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgText, 'image/svg+xml');
+            const svg = doc.querySelector('svg');
+            if (!svg) return;
+            svg.setAttribute('width', '100%');
+            svg.removeAttribute('height');
+            svg.style.display = 'block';
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.appendChild(svg);
+                if (typeof onLoad === 'function') onLoad();
+            }
+        })
+        .catch(err => console.warn(`SVG load failed for #${containerId}:`, err));
+}
+
+function parseColor(input) {
+    if (!input) return 'transparent';
+    const s = String(input).trim();
+    if (/^rgba?\s*\(/i.test(s)) return s;
+    const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+        let h = hexMatch[1];
+        if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    const tmp = document.createElement('div');
+    tmp.style.color = s;
+    document.body.appendChild(tmp);
+    const resolved = getComputedStyle(tmp).color;
+    document.body.removeChild(tmp);
+    return resolved || s;
+}
+
+function colorizeSvgBody(_svgContainerId, color) {
+    const svg = document.querySelector(`#${_svgContainerId} svg`);
+    if (!svg) return;
+    const el = svg.querySelector('#svg-body');
+    if (!el) return;
+    el.style.fill = parseColor(color);
+}
+
+function colorizeSvgBackground(_svgContainerId, color) {
+    const svg = document.querySelector(`#${_svgContainerId} svg`);
+    if (!svg) { console.warn(`[colorizeSvgBackground] no svg in #${_svgContainerId}`); return; }
+    const el = svg.querySelector('#svg-background');
+    if (!el) { console.warn(`[colorizeSvgBackground] no #svg-background in #${_svgContainerId}`); return; }
+    const parsed = parseColor(color);
+    console.log(`[colorizeSvgBackground] #${_svgContainerId} fill → ${parsed}`);
+    el.style.fill = parsed;
+}
+
 function setMultiColorBackground(elementId, colors) {
   const el = document.getElementById(elementId);
   if (!el || !Array.isArray(colors) || colors.length === 0) return;

@@ -178,6 +178,10 @@ func (p *Plugin) startMpv() error {
 		// Przy GOP=1s i 1080p H.264, 300MiB pokrywa wiele sekund wstecz.
 		"--demuxer-max-back-bytes=300MiB",
 		"--demuxer-readahead-secs=0",
+		// Osobny wątek dla demuxera — konieczne przy odtwarzaniu pliku MKV
+		// nagrywany równocześnie przez OBS. Bez tego IPC pipe może się zablokować
+		// gdy mpv czeka na dane z rosnącego pliku.
+		"--demuxer-thread=yes",
 		"--force-seekable=yes",
 		"--hr-seek=yes",
 		"--title=replay-plugin-mpv",

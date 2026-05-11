@@ -1,0 +1,41 @@
+/* #result-container{position: absolute; width: 1330px;height: 170px; left: 295px; bottom: 100px; display: flex; flex-direction: column; justify-content: center; align-items: center;}
+.team-logo-container{display: flex; width:168px; height: 100%;}
+.team-name-container{display: flex; width:500px; height: 100%; overflow:hidden;}
+#home-team-name-element{visibility:visible; position:relative; left: 500px; animation: moveHomeTeamNameElement 500ms ease-in-out 1s both; }
+#away-team-name-element{visibility:visible; position:relative; right: 120px; animation: moveAwayTeamNameElement 500ms ease-in-out 1s both;}
+.result-element{font-size:75px; color: white; font-weight:700; visibility:visible; display: flex; width:324px; height: 100%;background-image: url('../img/result-element-background-image.png'); align-items: center; animation: resultFadeIn 300ms ease-in-out 1s both; z-index: 10;}
+.team-result-element {flex:2; text-align: center;}
+.league-logo-element {flex:1; display: flex;justify-content: center;align-items: center;}
+.league-logo-element>img{width:100%;height:100%;object-fit: cover;filter: drop-shadow(0px 5px 10px rgba(0,0,0,0.5));}
+.team-name-element{background-repeat: no-repeat; font-size:35px; color: #c9c9c9; display: flex; justify-content: center; align-items: center; font-weight:700;}
+#home-team-name-element{background-image: url('../img/home-team-name-background-image.png'); width: 100%; padding-right:70px}
+#away-team-name-element{background-image: url('../img/away-team-name-background-image.png'); width: 100%; padding-left:70px}
+#home-team-logo-element{background-image: url('../img/home-team-logo-background-image.png'); width: 100%;}
+#away-team-logo-element{background-image: url('../img/away-team-logo-background-image.png'); width: 100%;}
+.team-logo-element {flex:1; display: flex;justify-content: center;align-items: center;}
+.team-logo-element>img{width:40%;aspect-ratio:1;object-fit: cover;}
+#logo-container{display: flex; position: absolute; top: 0; height: 100%; width: 100%;}
+#x-container{position:absolute; top:0;display: flex; height: 100%; width: 100%;}
+#home-team-logo-container{visibility:visible; position:absolute; left: 130px; animation: moveHomeTeamLogo 500ms ease-in-out 1500ms both; }
+#away-team-logo-container{visibility:visible; position:absolute; right: 130px; animation: moveAwayTeamLogo 500ms ease-in-out 1500ms both;}
+#break-scorers-container {position: absolute;width: 1330px;height: 550px;left: 295px;bottom: 300px;}
+.team-scorers-container {width: 50%; display: flex; align-items: end;}
+#home-team-scorers-container {justify-content: left;}
+#away-team-scorers-container {justify-content: right;}
+.break-scorers-wrapper {width: 600px; padding: 0 20px;}
+.break-scorer-element {width: 100%; text-align: left; padding: 2px 0px; font-size: 28px; display: flex; filter: drop-shadow(3px 3px 3px black); margin: 2px 0; color: #d9d9d9 !important;}
+.home-team-scorer-break-element {clip-path: polygon(100% 0%, 100% 100%, 0% 100%, 2.25% 0%);}
+.away-team-scorer-break-element {clip-path: polygon(100% 0%, 97.75% 100%, 0% 100%, 0% 0%);}
+.rotate-show-element0 {animation: rotateShowElement 250ms ease 250ms 1 reverse both;}
+.rotate-show-element0 {animation-delay: 2000ms;}
+.break-scorer-first-name {margin-left: 30px;}
+.break-scorer-last-name {padding-left: 10px;font-weight: 700;}
+.break-goal-time {margin-right: 30px;text-align: right;width: inherit;} */
+@keyframes moveHomeTeamLogo{0%{left: 130px;visibility: hidden;}100%{left: 0px;visibility: visible;}}
+@keyframes moveAwayTeamLogo{0%{right: 130px;visibility: hidden;}100%{right: 0px;visibility: visible;}}
+@keyframes resultFadeIn{0%{opacity: 0;}100%{opacity: 1;}}
+@keyframes moveHomeTeamNameElement{0%{left: 500px;visibility: hidden;}100%{left: 120px;visibility: visible;}}
+@keyframes moveAwayTeamNameElement{0%{right: 500px;visibility: hidden;}100%{right: 120px;visibility: visible;}}
+/* @-webkit-keyframes rotateShowElement {0% {-webkit-transform: translateY(0) rotateX(0deg);transform: translateY(0) rotateX(0deg);}100% {-webkit-transform: translateY(0px) rotateX(-90deg);transform: translateY(0px) rotateX(-90deg);}} */
+/* @keyframes rotateShowElement {0% {-webkit-transform: translateY(0) rotateX(0deg);transform: translateY(0) rotateX(0deg);}100% {-webkit-transform: translateY(0px) rotateX(-90deg);transform: translateY(0px) rotateX(-90deg);}} */
+/* .drop-shadow-result{filter: drop-shadow(10px 10px 20px black);} */

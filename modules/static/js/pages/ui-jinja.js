@@ -38,10 +38,49 @@ var replayPauseElement = document.querySelector('#replay-pause-element');
 
 
 
+const _MONITOR_TAB_DEFS = {
+    events:        { label: 'AKCJE',  action: () => showUiMonitorContent('events') },
+    substitutions: { label: 'ZMIANY', action: () => showUiMonitorContent('substitutions') },
+    games:         { label: 'MECZE',  action: () => showUiMonitorContent('games') },
+};
+
+function buildMonitorControls() {
+    const container = document.getElementById('ui-monitor-controlls');
+    if (!container) return;
+
+    const config = MODULE_REGISTRY[MODULE_NAME] || {};
+    const tabs = config.monitorTabs || [];
+
+    tabs.forEach(key => {
+        const def = _MONITOR_TAB_DEFS[key];
+        if (!def) return;
+        const div = document.createElement('div');
+        div.className = 'flex1';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = def.label;
+        btn.addEventListener('click', def.action);
+        div.appendChild(btn);
+        container.appendChild(div);
+    });
+
+    const closeDiv = document.createElement('div');
+    closeDiv.className = 'flex1';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = 'X';
+    closeBtn.addEventListener('click', () => showUiMonitorContent());
+    closeDiv.appendChild(closeBtn);
+    container.appendChild(closeDiv);
+}
+
+buildMonitorControls();
+
 socket.on('connect', () => {
     console.log('✅ WebSocket connected');
     socket.emit('request_initial_data');
     socket.emit('get_record_status');
+    socket.emit('get_obs_record_status');
     getObsWsConnection()
 });
 
@@ -249,7 +288,7 @@ function gameEventPlayerNameGenerator(_gameEvent) {
     if(_gameEvent.is_reported === true && _gameEvent.player_id === null){
         return `<span style="color: red;" onclick="openGameEventEditForm(${_gameEvent.id})">WYBIERZ ZAWODNIKA</span>`
     } else if (_gameEvent.is_reported === true) {
-        return `<span class="events-td-player-number">${_gameEvent.player_number}</span> ${_gameEvent.player_name}`
+        return `<span class="events-td-player-number">${_gameEvent.player_number ?? ''}</span> ${_gameEvent.player_name ?? ''}`
     } else {
         return ''
     }
@@ -423,13 +462,11 @@ function showInfo(_gameEventId, _teamId) {
 // }
 
 function fieldSvgGenerator(cellId, color) {
-    // Dynamiczne mapowanie kolumn na podstawie FIELD_COLS (A–O dla 15 kolumn)
     const colMap = {};
     for (let i = 0; i < FIELD_COLS; i++) {
         colMap[String.fromCharCode(65 + i)] = i;
     }
 
-    // Walidacja i parsowanie parametru cellId (np. „A3", „O9")
     const colLetter = cellId.charAt(0).toUpperCase();
     const rowNumber = parseInt(cellId.slice(1), 10);
     const lastColLetter = String.fromCharCode(65 + FIELD_COLS - 1);
@@ -438,27 +475,27 @@ function fieldSvgGenerator(cellId, color) {
         throw new Error(`Nieprawidłowy identyfikator komórki. Użyj formatu A1-${lastColLetter}${FIELD_ROWS}.`);
     }
 
-    const colIndex = colMap[colLetter];
-    const rowIndex = rowNumber - 1;
+    const x = colMap[colLetter];
+    const y = rowNumber - 1;
 
-    // Proporcje SVG dopasowane do siatki (30px × 18px dla 15×9)
-    const cellSize = 1;
-    const x = colIndex * cellSize;
-    const y = rowIndex * cellSize;
-    const svgW = Math.round(FIELD_COLS * 2);
-    const svgH = Math.round(FIELD_ROWS * 2);
-
-    return `<svg class="svg-field" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${FIELD_COLS} ${FIELD_ROWS}" width="${svgW}" height="${svgH}">
-    <rect width="${FIELD_COLS}" height="${FIELD_ROWS}" fill="white" stroke="none" />
-    <rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#${color}" stroke="none" />
-    </svg>`;
+    return fieldSvgStr(MODULE_NAME, x, y, '#' + color);
 }
+
+function buildGameFieldBackground() {
+    const el = document.getElementById('game-field');
+    if (!el) return;
+    const svg = fieldSvgStr(MODULE_NAME, null, null, null);
+    el.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    el.style.backgroundSize = '100% 100%';
+}
+buildGameFieldBackground();
+
+var _showHiddenEvents = false;
 
 function filterEvents(_element, _className) {
     let tableRowsToShow = document.querySelectorAll(`#game-events-table .${_className}`);
     let allTableRows = document.querySelectorAll(`#game-events-table .game-event-table-row`);
     let filterEventButtons = document.querySelectorAll('.filter-event-button');
-    // let isClicked = _element.dataset.isClicked;
     if(_element.dataset.isClicked === 'false'){
         filterEventButtons.forEach(btn => {
             btn.dataset.isClicked = 'false';
@@ -481,6 +518,12 @@ function filterEvents(_element, _className) {
             tr.style.display = 'table-row';
         });
     }
+}
+
+function toggleHiddenEvents(_element) {
+    _showHiddenEvents = !_showHiddenEvents;
+    _element.style.backgroundColor = _showHiddenEvents ? '#FF8080' : 'white';
+    showUiMonitorContent('events', { include_hidden: _showHiddenEvents });
 }
 
 function filterSelectElements(element) {
@@ -558,8 +601,10 @@ function toggleGameFieldCell(selectedCell) {
 
 function eventEditGameFieldGenerator(_eventCellID, cols = FIELD_COLS, rows = FIELD_ROWS) {
     let _cellId = ''
+    const bgSvg = fieldSvgStr(MODULE_NAME, null, null, null);
+    const bgStyle = `background-image:url('data:image/svg+xml,${encodeURIComponent(bgSvg)}');background-size:100% 100%`;
     let html = `<div id="event-edit-game-field"
-    class="game-field-selector" data-cell-id="none">`;
+    class="game-field-selector" style="${bgStyle}" data-cell-id="none">`;
     for (let row = 1; row <= rows; row++) {
         html += `<div class="game-field-row" style="display: flex;">`;
         for (let col = 0; col < cols; col++) {
@@ -571,7 +616,7 @@ function eventEditGameFieldGenerator(_eventCellID, cols = FIELD_COLS, rows = FIE
                 _class = 'selected-game-field-cell current-game-field-cell';
                 _cellId = cellId;
             }
-            html += `<div ondblclick="toggleGameFieldCell(this);" style="background-image: url(/static/images/field/empty.png)"
+            html += `<div ondblclick="toggleGameFieldCell(this);"
             data-cell-id="${cellId}" class="event-edit-game-field-cell ${_class}"></div>`;
         }
         html += `</div>`;
@@ -725,7 +770,7 @@ function eventEditTeamsSquadSelectGenerator(_gameEvent, _teamSquad) {
 function eventEditGameFieldListeners(){
     document.querySelectorAll('.event-edit-game-field-cell').forEach(element => {
         element.addEventListener('mouseover', () => {
-            element.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+            element.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
         });
     });
 
@@ -768,6 +813,22 @@ function updateGameEvent(_contentType = '') {
         }
     );
 }
+
+function hideGameEvent(gameEventId) {
+    socket.emit('hide_game_event', { 'game_event_id': gameEventId });
+}
+
+function restoreGameEvent(gameEventId) {
+    socket.emit('restore_game_event', { 'game_event_id': gameEventId });
+}
+
+socket.on('game_event_hidden', function(data) {
+    showUiMonitorContent('events', { include_hidden: _showHiddenEvents });
+});
+
+socket.on('game_event_restored', function(data) {
+    showUiMonitorContent('events', { include_hidden: _showHiddenEvents });
+});
 
 function renderSubstitutionElement(element) {
     var div = document.createElement('div');
@@ -1029,6 +1090,8 @@ function _buildSubstCol(colKey, title, players, fromRole, targetMid) {
 function _buildSubstMidCol() {
     var col = document.createElement('div');
     col.className = 'subst-col subst-col--mid';
+    col.ondragover = function (e) { e.preventDefault(); };
+    col.ondrop     = _onSubstDropMid;
 
     var body = document.createElement('div');
     body.className = 'subst-col-body subst-mid-body';
@@ -1142,6 +1205,21 @@ function _onSubstDrop(e, targetRole) {
     } else if (from.role === 'substitute') {
         _moveToMid('substitute', from.idx);
     }
+    // midStarter→ławka i midSub→boisko — ignoruj (brak pasującego warunku)
+}
+
+function _onSubstDropMid(e) {
+    e.preventDefault();
+    if (!_substDragging) return;
+    var from = _substDragging;
+    _substDragging = null;
+
+    if (from.role === 'starter') {
+        _moveToMid('starter', from.idx);
+    } else if (from.role === 'substitute') {
+        _moveToMid('substitute', from.idx);
+    }
+    // midStarter/midSub dropped na mid — ignoruj
 }
 
 function _moveToMid(fromRole, idx) {
@@ -1245,7 +1323,8 @@ socket.on('show_ui_monitor_content', data => {
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'foul')">FAULE</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'yellow_card')">Ż.KARTKI</button>
           <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'red_card')">CZ.KARTKI</button>
-          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'var')">VARY</button>`
+          <button type="button" class="filter-event-button" data-is-clicked="false" onclick="filterEvents(this, 'var')">VARY</button>
+          <button type="button" id="filter-hidden-button" style="background-color:${_showHiddenEvents ? '#FF8080' : 'white'};" onclick="toggleHiddenEvents(this)">UKRYTE</button>`
         ;
         let gameEventsContainer = document.createElement('div');
         gameEventsContainer.id = 'game-events-container';
@@ -1277,6 +1356,11 @@ socket.on('show_ui_monitor_content', data => {
                     const eventEditBtn = gameEventEditBtnGenerator(gameEvent);
                     gameEventTableRow.className = gameEvent.filter_class;
                     addClassName(gameEventTableRow, 'game-event-table-row')
+                    if (!gameEvent.is_visible) {
+                        addClassName(gameEventTableRow, 'hidden-event');
+                        gameEventTableRow.style.opacity = '0.4';
+                        gameEventTableRow.style.textDecoration = 'line-through';
+                    }
                     gameEventTableRow.style.color = gameEvent.event_color;
                     gameEventTableRow.innerHTML = `
                     <td class="events-td-svg-field">${svgCode}</td>
@@ -1313,8 +1397,8 @@ socket.on('show_ui_monitor_content', data => {
             data-away-team-goals="${gameEvent.away_team_goals}"
             data-selected-player-id="${gameEvent.player_id}">
             <span id="edit-event-current-event-type">${gameEvent.event_short_name}</span> 
-            <span id="edit-event-current-team-short-name">(${gameEvent.team_short_name})</span>
-            <span id="edit-event-current-player">${gameEvent.player_number} ${gameEvent.player_name}</span>
+            <span id="edit-event-current-team-short-name">(${gameEvent.team_short_name ?? ''})</span>
+            <span id="edit-event-current-player">${gameEvent.player_number ?? ''} ${gameEvent.player_name ?? ''}</span>
         </div>
         <div id="new-game-event-data" style="background-color: darkgoldenrod;"
             data-event-type-id="${gameEvent.event_id}"
@@ -1324,9 +1408,9 @@ socket.on('show_ui_monitor_content', data => {
             data-home-team-goals="${gameEvent.home_team_goals}"
             data-away-team-goals="${gameEvent.away_team_goals}"
             data-selected-player-id="${gameEvent.player_id}">
-            <span id="edit-event-new-event-type">${gameEvent.event_short_name}</span> 
-            <span id="edit-event-new-team-short-name">(${gameEvent.team_short_name})</span>       
-            <span id="edit-event-new-player">${gameEvent.player_number} ${gameEvent.player_name}</span>       
+            <span id="edit-event-new-event-type">${gameEvent.event_short_name ?? ''}</span>
+            <span id="edit-event-new-team-short-name">(${gameEvent.team_short_name ?? ''})</span>
+            <span id="edit-event-new-player">${gameEvent.player_number ?? ''} ${gameEvent.player_name ?? ''}</span>       
         </div>
         `;
         uiMonitorContent.append(gameEventDataContainer);
@@ -1341,10 +1425,14 @@ socket.on('show_ui_monitor_content', data => {
         eventEditLeftColumn.style.width = '160px';
         eventEditLeftColumn.innerHTML = eventEditGameFieldGenerator(gameEvent.event_place);
         eventEditLeftColumn.innerHTML += eventEditGameResultGenerator(gameEvent.home_team_goals, gameEvent.away_team_goals);
+        const _visibilityBtn = gameEvent.is_visible
+            ? `<button type="button" class="flex1" style="font-size:10px;font-weight:700;color:red;" ondblclick="hideGameEvent(${gameEvent.id})">UKRYJ</button>`
+            : `<button type="button" class="flex1" style="font-size:10px;font-weight:700;" ondblclick="restoreGameEvent(${gameEvent.id})">WRÓĆ</button>`;
         eventEditLeftColumn.innerHTML += `
         <div style="display: flex;">
-            <button type"button" class="flex1" onclick="updateGameEvent()">ZACHOWAJ</button>
-            <button type"button" class="flex1" onclick="updateGameEvent('events')"> ZAPISZ </button>
+            ${_visibilityBtn}
+            <button type="button" class="flex1" style="font-size:10px;font-weight:700;" onclick="updateGameEvent()">ZACHOWAJ</button>
+            <button type="button" class="flex1" style="font-size:10px;font-weight:700;" onclick="updateGameEvent('events')">OK</button>
         </div>`;
         let eventEditRightColumn = document.createElement('div');
         eventEditRightColumn.id = 'event-edit-right-column';

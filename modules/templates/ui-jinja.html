@@ -15,7 +15,6 @@
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/event-edit.css') }}">
 	<style>
 		.game-field-cell     { background-image: url({{ url_for('static', filename='images/field/empty.png') }}) }
-		.game-field-selector { background-image: url({{ url_for('static', filename='images/field/football.png') }}) }
 	</style>
 	<title>UI – sterowanie transmisją</title>
 </head>
@@ -32,58 +31,6 @@
 				</button>
 			</div>
 
-			<div id="plugins-states-container" style="display: flex;">
-				<div id="timer-state" class="plugin-state status-false" data-plugin-for="timer-plugin">
-					<img src="{{ url_for('static', filename='images/timer.svg') }}"
-						class="filter-gray" alt="T" height="30" width="30"/>
-				</div>
-				<div id="recorder-state" class="plugin-state status-false" data-plugin-for="recorder-plugin">
-					<img src="{{ url_for('static', filename='images/floppy-disk.svg') }}"
-						class="filter-gray" alt="R" height="30" width="30"/>
-				</div>
-				<div id="obs-ws-state" class="plugin-state status-false" data-plugin-for="obs-ws-plugin">
-					<img src="{{ url_for('static', filename='images/ObsLogo.svg') }}"
-						class="filter-gray" alt="O" height="30" width="30"/>
-				</div>
-			</div>
-
-			<div id="cameras-states-container" style="display: flex;">
-				<div>
-					<div id="obs-recording-indicator" class="recording-indicator">
-						<img src="{{ url_for('static', filename='images/handycam-obs.svg') }}"
-							class="filter-gray" alt="O" height="19" width="19"/>
-					</div>
-					<div class="pan-tilt-head-status"></div>
-				</div>
-				<div>
-					<div id="camera1-recording-indicator" class="recording-indicator" data-camera-id="camera1">
-						<img src="{{ url_for('static', filename='images/handycam1.svg') }}"
-							class="filter-gray" alt="1" height="19" width="19"/>
-					</div>
-					<div class="pan-tilt-head-status"></div>
-				</div>
-				<div>
-					<div id="camera2-recording-indicator" class="recording-indicator" data-camera-id="camera2">
-						<img src="{{ url_for('static', filename='images/gopro2.svg') }}"
-							class="filter-gray" alt="2" height="19" width="19"/>
-					</div>
-					<div class="pan-tilt-head-status"></div>
-				</div>
-				<div>
-					<div id="camera3-recording-indicator" class="recording-indicator" data-camera-id="camera3">
-						<img src="{{ url_for('static', filename='images/gopro3.svg') }}"
-							class="filter-gray" alt="3" height="19" width="19"/>
-					</div>
-					<div class="pan-tilt-head-status"></div>
-				</div>
-				<div>
-					<div id="camera4-recording-indicator" class="recording-indicator" data-camera-id="camera4">
-						<img src="{{ url_for('static', filename='images/gopro4.svg') }}"
-							class="filter-gray" alt="4" height="19" width="19"/>
-					</div>
-					<div class="pan-tilt-head-status"></div>
-				</div>
-			</div>
 
 
 			<div id="overlay-switchers-container">
@@ -164,22 +111,7 @@
 
 		<!-- ── Monitor zdarzeń ───────────────────────────────────────────── -->
 		<div id="ui-monitor-container" style="width:420px; height: 100vh; background-color: black;">
-			<div id="ui-monitor-controlls" style="display: flex;">
-				<div class="flex1">
-					<button type="button" onclick="showUiMonitorContent('events')">AKCJE</button>
-				</div>
-				{% if module_name and module_name == "garbarnia" %}
-				<div class="flex1">
-					<button type="button" onclick="showUiMonitorContent('substitutions')">ZMIANY</button>
-				</div>
-				{% endif %}
-				<div class="flex1">
-					<button type="button" onclick="showUiMonitorContent('games')">MECZE</button>
-				</div>
-				<div class="flex1">
-					<button type="button" onclick="showUiMonitorContent()">X</button>
-				</div>
-			</div>
+			<div id="ui-monitor-controlls" style="display: flex;"></div>
 			<div id="ui-monitor-content" data-is-events-update-blocked="false"></div>
 		</div>
 		<div id="replay-controller">
@@ -193,19 +125,21 @@
 	<script>
 		var period = {{ period.to_dict() | tojson if period else 'null' }};
 		var game   = {{ game.to_dict()   | tojson if game   else 'null' }};
+		var MODULE_NAME = "{{ module_name | default('') }}";
 	</script>
 
 	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-	<script src="{{ url_for('static', filename='js/data.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/ui-modal.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/event-popup.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/ui-jinja.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/plugins-states.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/overlay-utils.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/events-controllers.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/replay-utils.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/servo-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/module-registry.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui/event-popup.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/pages/ui-jinja.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/plugins-states.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/overlay-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/pages/events-controllers.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/replay-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/servo-utils.js') }}"></script>
 </body>
 
 </html>

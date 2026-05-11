@@ -50,11 +50,15 @@ class RecorderManager:
         payload = msg.get('payload', {})
         request_type = payload.get('requestType')
         if request_type == 'StartRecord':
-            cameras = payload.get('cameras')
-            self._emit_to_ui('recording_started', cameras)
+            cameras = payload.get('cameras', {})
+            for camera_id, cam_info in cameras.items():
+                if cam_info.get('succes') and cam_info.get('is_recording'):
+                    self._emit_to_ui('recording_started', {'camera_id': camera_id})
         elif request_type == 'StopRecord':
-            cameras = payload.get('cameras')
-            self._emit_to_ui('recording_stopped', cameras)
+            cameras = payload.get('cameras', {})
+            for camera_id, cam_info in cameras.items():
+                if cam_info.get('succes') and not cam_info.get('is_recording'):
+                    self._emit_to_ui('recording_stopped', {'camera_id': camera_id})
         elif request_type == 'GetRecordStatus':
             request_id = payload.get('request_id')
             if request_id.startswith('get-record-status-'):

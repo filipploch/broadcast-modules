@@ -225,8 +225,8 @@ class PeriodManager:
             _remaining_penalties = current_timers.get("penalties", {"home": [], "away": []})
             remaining_penalties = _remaining_penalties['home'] + _remaining_penalties['away']
             
-            # Create main timer
-            timer_manager.create_timer(
+            # Ensure main timer exists (idempotent — reuses if plugin already has it)
+            timer_manager.ensure_timer(
                 timer_id=period.main_timer_name,
                 timer_type="independent",
                 initial_time=period.initial_time,
@@ -238,10 +238,10 @@ class PeriodManager:
                     "timer_class": "main"
                 }
             )
-            
+
             # Update main timer in Settings
             Settings.update_main_timer(main_timer_data)
-            
+
             # Recreate penalty timers as dependent on new period's main timer.
             # elapsed_time from previous period becomes the new initial_time (UI offset),
             # and the remaining time = original limit - elapsed becomes the new limit
@@ -266,8 +266,8 @@ class PeriodManager:
                     metadata=penalty_metadata
                 )
         else:
-            # First period - just create main timer
-            timer_manager.create_timer(
+            # First period — ensure main timer exists (idempotent)
+            timer_manager.ensure_timer(
                 timer_id=period.main_timer_name,
                 timer_type="independent",
                 initial_time=period.initial_time,
@@ -279,7 +279,7 @@ class PeriodManager:
                     "timer_class": "main"
                 }
             )
-            
+
             # Update main timer in Settings
             Settings.update_main_timer(main_timer_data)
         

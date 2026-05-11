@@ -113,6 +113,14 @@ class GameCameraManager:
                 .order_by(GameCamera.hdmi_input)
                 .all())
 
+    def get_cameras_dict_for_game(self, game_id: int) -> dict:
+        """Zwróć słownik {device_name: bool} dla wszystkich slotów HDMI bieżącego meczu."""
+        from core.models.base_game_camera import HDMI_TO_DEVICE
+        cameras = {device: False for device in HDMI_TO_DEVICE.values()}
+        for gc in self.get_cameras_for_game(game_id):
+            cameras[gc.device_name] = True
+        return cameras
+
     def get_main_camera(self, game_id: int):
         """Zwróć kamerę główną meczu (slot HDMI 1), lub None jeśli nie przypisana."""
         GameCamera = _get_game_camera_model()

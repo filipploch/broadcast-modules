@@ -50,7 +50,7 @@ function gameFieldGenerator(cols = _FIELD_COLS, rows = _FIELD_ROWS) {
 function attachGameFieldHoverListeners() {
     allGameFieldCells.forEach(cell => {
         cell.addEventListener('mouseover', () => {
-            cell.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+            cell.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
         });
         cell.addEventListener('mouseout', () => {
             cell.style.backgroundColor = 'rgba(0, 0, 0, 0)';
@@ -108,7 +108,6 @@ function showUiMonitorEvents() {
 
 function addTeamEvent(_team, _event) {
     if (_event === 'Bramka') {
-        changeGameValue('score', _team, 1);
         socket.emit('broadcast_goal', { 'team_type': _team });
     }
     if (selectedCellID === null) {

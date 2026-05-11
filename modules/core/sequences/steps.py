@@ -223,6 +223,8 @@ def show_transition(delay_ms: int = 0) -> dict:
 
 def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
     import datetime
+    from core.models.base_game_camera import HDMI_TO_DEVICE
+    _cameras = cameras if cameras is not None else {d: False for d in HDMI_TO_DEVICE.values()}
     return {
         "target": "broadcast",
         "action": "recording_command",
@@ -230,8 +232,7 @@ def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
             'requestType': 'StartRecord',
             'requestData': {},
             'request_id':  f'my-unique-id-{datetime.datetime.now()}',
-            'cameras': {'camera1': True, 'camera2': False,
-                        'camera3': False, 'camera4': False},
+            'cameras': _cameras,
         },
         "delay_ms": delay_ms
     }
@@ -239,6 +240,8 @@ def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
 
 def stop_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
     import datetime
+    from core.models.base_game_camera import HDMI_TO_DEVICE
+    _cameras = cameras if cameras is not None else {d: False for d in HDMI_TO_DEVICE.values()}
     return {
         "target": "broadcast",
         "action": "recording_command",
@@ -246,8 +249,7 @@ def stop_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
             'requestType': 'StopRecord',
             'requestData': {},
             'request_id':  f'my-unique-id-{datetime.datetime.now()}',
-            'cameras': {'camera1': True, 'camera2': False,
-                        'camera3': False, 'camera4': False},
+            'cameras': _cameras,
         },
         "delay_ms": delay_ms
     }

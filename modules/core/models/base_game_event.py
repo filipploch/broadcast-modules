@@ -40,6 +40,9 @@ class BaseGameEventMixin:
     replay_end_time = db.Column(db.Integer, nullable=True)   # file length at moment of event (ms)
     video_path = db.Column(db.String, nullable=True)     # path to fallback video file
 
+    # Visibility flag — False means the event is hidden from the AKCJE view
+    is_visible = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -151,6 +154,7 @@ class BaseGameEventMixin:
             'video_path':          self.video_path,
             'has_camera_data':     self.has_camera_data,
             'event_cameras':       [gc.to_dict() for gc in self.event_cameras],
+            'is_visible':          self.is_visible,
             'created_at':          self.created_at.isoformat() if self.created_at else None,
             'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
         }

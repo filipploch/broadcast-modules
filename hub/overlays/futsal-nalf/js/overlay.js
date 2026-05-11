@@ -591,8 +591,8 @@
             addClassName(lastName, 'break-scorer-last-name');
             let goalTimeContainer = document.createElement('span');
             addClassName(goalTimeContainer, 'break-goal-time');
-            firstName.innerText = scorer.player_first_name;
-            lastName.innerText = scorer.player_last_name;
+            firstName.innerText = scorer.player_first_name ?? '';
+            lastName.innerText = scorer.player_last_name ?? '';
             goalTimeContainer.innerText = '';
             let goals = scorer.goals;
             goals.forEach(goal => {
@@ -629,7 +629,7 @@
         leagueTitleElement.innerText = setLeagueName();
         let roundTitleElement = document.createElement('div');
         addClassName(roundTitleElement, 'start-container-round-title');
-        roundTitleElement.innerText = `${data.round_name}`;
+        roundTitleElement.innerText = data.round_name ?? '';
         infoHead.appendChild(leagueTitleElement);
         infoHead.appendChild(roundTitleElement);
         startContainer.appendChild(infoHead);
@@ -717,12 +717,12 @@
             addClassName(homeTeamNameElement, 'start-team');
             addClassName(homeTeamNameElement, 'specific-colors');
             addClassName(homeTeamNameElement, 'rotate-show-element1');
-            homeTeamNameElement.innerText = data.home_team_name;
+            homeTeamNameElement.innerText = data.home_team_name ?? '';
             let awayTeamNameElement = document.createElement('div');
             addClassName(awayTeamNameElement, 'start-team');
             addClassName(awayTeamNameElement, 'specific-colors');
             addClassName(awayTeamNameElement, 'rotate-show-element1');
-            awayTeamNameElement.innerText = data.away_team_name;
+            awayTeamNameElement.innerText = data.away_team_name ?? '';
             startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
             startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
             startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
@@ -845,30 +845,18 @@
     
     function updateScoreboard(data) {
         if (typeof data.home_team_goals != "undefined") {
-            if(data.home_team_goals === '' || data.home_team_goals === null){
-                homeTeamScoreElement.textContent = '';
-            }else if(parseInt(data.home_team_goals) !== 'undefined'){
-                homeTeamScoreElement.textContent = data.home_team_goals;
-            }else{
-                
-            }
+            homeTeamScoreElement.textContent = (data.home_team_goals === null || data.home_team_goals === '') ? 0 : data.home_team_goals;
         }
         if (typeof data.away_team_goals != "undefined") {
-            if(data.away_team_goals === '' || data.away_team_goals === null){
-                awayTeamScoreElement.textContent = '';
-            }else if(parseInt(data.home_team_goals) !== 'undefined'){
-                awayTeamScoreElement.textContent = data.away_team_goals;
-            }else{
-                
-            }
+            awayTeamScoreElement.textContent = (data.away_team_goals === null || data.away_team_goals === '') ? 0 : data.away_team_goals;
         }
         if (typeof data.home_team_fouls != "undefined") {
             updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
-                        }
-                        if (typeof data.away_team_fouls != "undefined") {
-                            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
-                                        }
-                                    }
+        }
+        if (typeof data.away_team_fouls != "undefined") {
+            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
+        }
+    }
                                     
     ws.onopen = () => {
         console.log('✅ Connected to HUB');
@@ -909,7 +897,7 @@
         if (msg.type === 'registered' && !registered) {
             registered = true;
             console.log('✅ Registered! Now subscribing to timer...');
-            
+
             ws.send(JSON.stringify({
                 type: 'subscribe',
                 from: overlayId,
@@ -918,12 +906,23 @@
                     class: ['timer', 'overlay', 'timer_update_receiver', 'timer_state_receiver', 'game_data_receiver']
                 }
             }));
-            
+
             ws.send(JSON.stringify({
                 type: 'request_game_data',
                 from: overlayId,
                 to: 'main-module'
             }));
+
+            setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'heartbeat',
+                        from: overlayId,
+                        to: 'hub',
+                        payload: { plugin_id: overlayId, timestamp: Date.now() }
+                    }));
+                }
+            }, 5000);
         }
         
         // Po subskrypcji
@@ -958,6 +957,18 @@
 
                 // Prześlij tick do modułu kar — przelicza remaining każdej kary
                 window.PenaltyTimers.tickMain(data.elapsed_time);
+
+                // Przy starcie zegara: wynik null/pusty → 0
+                [homeTeamScoreElement, awayTeamScoreElement].forEach(el => {
+                    if (el && (el.textContent === '' || el.textContent === 'null' || el.textContent === 'None')) {
+                        el.textContent = '0';
+                    }
+                });
+                document.querySelectorAll('.home-team-score, .away-team-score').forEach(el => {
+                    if (el.textContent === '' || el.textContent === 'null' || el.textContent === 'None') {
+                        el.textContent = '0';
+                    }
+                });
             }
         }
 
@@ -1023,25 +1034,25 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             
             if (typeof data.home_team_short_name != "undefined") {
                 homeTeamShortNameElements.forEach(element => {
-                    element.textContent = data.home_team_short_name;
+                    element.textContent = data.home_team_short_name ?? '';
                 })
             }
-            
+
             if (typeof data.away_team_short_name != "undefined") {
                 awayTeamShortNameElements.forEach(element => {
-                    element.textContent = data.away_team_short_name;
+                    element.textContent = data.away_team_short_name ?? '';
                 })
             }
-            
+
             if (typeof data.home_team_goals != "undefined") {
                 homeTeamScoreElements.forEach(element => {
-                    element.textContent = data.home_team_goals;
+                    element.textContent = data.home_team_goals ?? 0;
                 })
             }
-            
+
             if (typeof data.away_team_goals != "undefined") {
                 awayTeamScoreElements.forEach(element => {
-                    element.textContent = data.away_team_goals;
+                    element.textContent = data.away_team_goals ?? 0;
                 })
             }
             
@@ -1088,12 +1099,12 @@ if (msg.type === 'limit_reached' || msg.type === 'timer_removed') {
             ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
             : FutsalFormatters.formatElapsedTime(data.game_time, 0, {'format': 'min', 'unit': 's'});
             actionPlayerInfoElement.textContent = '';
-            actionPlayerInfoElement.textContent = `${data.player_number} ${data.player_name}`;
-            actionPlayerTeamShortNameElement.textContent = ''; 
-            actionPlayerTeamShortNameElement.textContent = 
-                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name, data.event_type_id);
+            actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
+            actionPlayerTeamShortNameElement.textContent = '';
+            actionPlayerTeamShortNameElement.textContent =
+                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name ?? '', data.event_type_id);
             actionTeamNameElement.textContent = '';
-            actionTeamNameElement.textContent = data.team_name;
+            actionTeamNameElement.textContent = data.team_name ?? '';
 
             actionInfoContainer.style.display = 'block';
             setTimeout(() => {

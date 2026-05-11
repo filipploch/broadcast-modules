@@ -267,22 +267,26 @@ class GameEventManager:
         )
 
     def get_events_for_game(self, game_id: int, period_id: int = None,
-                           event_id: int = None, team_id: int = None):
+                           event_id: int = None, team_id: int = None,
+                           include_hidden: bool = False):
         """
         Get events for a game with optional filters
-        
+
         Args:
             game_id: Game ID
             period_id: Optional filter by period
             event_id: Optional filter by event type
             team_id: Optional filter by team
+            include_hidden: If True, include events with is_visible=False
 
         Returns:
             List of GameEvent objects ordered by time
         """
         GameEvent = _get_game_event()
         query = GameEvent.query.filter_by(game_id=game_id)
-        
+        if not include_hidden:
+            query = query.filter_by(is_visible=True)
+
         if period_id:
             query = query.filter_by(period_id=period_id)
         if event_id:
@@ -300,7 +304,8 @@ class GameEventManager:
     def update_game_event(self, game_event_id: int, event_id: int = None, game_time: int = None,
                         replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
                         event_place: str = None, team_id: int = None, player_id: int = None,
-                        home_team_goals: int = None, away_team_goals: int = None):
+                        home_team_goals: int = None, away_team_goals: int = None,
+                        is_visible: bool = None):
         """
         Update game event
 
@@ -351,6 +356,8 @@ class GameEventManager:
                 game_event.home_team_goals = home_team_goals
             if away_team_goals is not None:
                 game_event.away_team_goals = away_team_goals
+            if is_visible is not None:
+                game_event.is_visible = is_visible
 
             db.session.commit()
             logger.info(f"Updated GameEvent ID {game_event_id}")
@@ -441,6 +448,7 @@ class GameEventManager:
             .join(Event, GameEvent.event_id == Event.id)
             .filter(
                 GameEvent.game_id == game_id,
+                GameEvent.is_visible == True,
                 Event.filter_class == 'goal',
             )
             .order_by(GameEvent.game_time)

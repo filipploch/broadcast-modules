@@ -85,6 +85,8 @@ def generate_show_overlay_data(data):
                 'result': current_game_data['score_string'],
                 'home_team_logo': current_game_data['home_team_logo'],
                 'away_team_logo': current_game_data['away_team_logo'],
+                'home_team_name_14': current_game_data['home_team_name_14'],
+                'away_team_name_14': current_game_data['away_team_name_14'],
                 'home_team_scorers': scorers['home'],
                 'away_team_scorers': scorers['away']
             })

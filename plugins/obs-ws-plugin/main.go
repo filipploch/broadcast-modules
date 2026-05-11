@@ -178,13 +178,9 @@ func main() {
 
 	plugin.hubClient.ConnectWithRetry()
 
-	if err := plugin.obsClient.Connect(); err != nil {
-		log.Printf("⚠️  Failed to connect to OBS: %v", err)
-		log.Printf("    Will retry automatically...")
-	} else {
-		// Pierwsze połączenie — odśwież mapę scen z OBS
-		go plugin.refreshSceneMap()
-	}
+	// Połącz z OBS w tle z automatycznym retry — plugin nie wymaga,
+	// żeby OBS był uruchomiony przed jego startem.
+	go plugin.connectToOBSWithRetry()
 
 	go plugin.routeHubToOBS()
 	go plugin.routeOBSToHub()
@@ -293,79 +289,104 @@ func (p *Plugin) routeHubToOBS() {
 	log.Println("🔀 Starting Hub → OBS routing")
 
 	for msg := range p.hubClient.Messages {
+		// request_scene_map — main module asks us to re-send the current map.
+		// Useful when main module (re)starts after obs-ws-plugin is already up.
+		if msg.Type == "request_scene_map" {
+			log.Printf("📨 Hub → OBS: request_scene_map from %s", msg.From)
+			if p.obsClient.IsConnected() {
+				go p.refreshSceneMap()
+			} else {
+				// OBS not yet connected — send whatever we have cached in memory
+				p.hubClient.Send(&hub.Message{
+					From:    p.config.Plugin.ID,
+					To:      "main-module",
+					Type:    "obs_scene_map",
+					Payload: map[string]interface{}{"scene_map": p.sceneMap.toRaw()},
+				})
+			}
+			continue
+		}
+
 		if msg.Type != "obs_command" && msg.Type != "obs_command_by_name" &&
 			msg.Type != "recording_command" {
 			continue
 		}
 
-		requestID := msg.Payload["request_id"]
-		log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
+		// Each OBS request runs in its own goroutine so that a slow command
+		// (e.g. StartStream waiting for RTMP handshake) never blocks subsequent
+		// commands (e.g. StartRecord arriving 200 ms later).
+		go p.handleObsCommand(msg)
+	}
+}
 
-		if !p.obsClient.IsConnected() {
-			log.Printf("⚠️  OBS not connected, cannot forward command")
-			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
-				Payload: map[string]interface{}{
-					"error": "OBS not connected", "command": msg.Payload,
-				},
-			})
-			continue
-		}
+func (p *Plugin) handleObsCommand(msg *hub.Message) {
+	requestID := msg.Payload["request_id"]
+	log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
 
-		requestType, ok := msg.Payload["requestType"].(string)
-		if !ok || requestType == "" {
-			log.Printf("⚠️  obs_command missing requestType")
-			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
-				Payload: map[string]interface{}{"error": "obs_command payload must contain requestType"},
-			})
-			continue
-		}
-
-		var requestData map[string]interface{}
-		if rd, ok := msg.Payload["requestData"].(map[string]interface{}); ok {
-			requestData = rd
-		}
-
-		// obs_command_by_name: wstrzyknij sceneItemId na podstawie sourceName
-		if msg.Type == "obs_command_by_name" {
-			resolved, err := p.resolveSceneItemId(msg.Payload, requestData)
-			if err != nil {
-				log.Printf("❌ Cannot resolve source name: %v", err)
-				p.hubClient.Send(&hub.Message{
-					From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
-					Payload: map[string]interface{}{
-						"error":       err.Error(),
-						"requestType": requestType,
-					},
-				})
-				continue
-			}
-			requestData = resolved
-		}
-
-		responseData, err := p.obsClient.SendRequest(requestType, requestData)
-		if err != nil {
-			log.Printf("❌ OBS request failed (%s): %v", requestType, err)
-			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
-				Payload: map[string]interface{}{
-					"error": err.Error(), "requestType": requestType,
-				},
-			})
-			continue
-		}
-
-		log.Printf("✅ OBS response received for %s", requestType)
+	if !p.obsClient.IsConnected() {
+		log.Printf("⚠️  OBS not connected, cannot forward command")
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID, To: msg.From, Type: "obs_response",
+			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
 			Payload: map[string]interface{}{
-				"requestType":  requestType,
-				"requestID":    requestID,
-				"responseData": responseData,
+				"error": "OBS not connected", "command": msg.Payload,
 			},
 		})
+		return
 	}
+
+	requestType, ok := msg.Payload["requestType"].(string)
+	if !ok || requestType == "" {
+		log.Printf("⚠️  obs_command missing requestType")
+		p.hubClient.Send(&hub.Message{
+			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+			Payload: map[string]interface{}{"error": "obs_command payload must contain requestType"},
+		})
+		return
+	}
+
+	var requestData map[string]interface{}
+	if rd, ok := msg.Payload["requestData"].(map[string]interface{}); ok {
+		requestData = rd
+	}
+
+	// obs_command_by_name: wstrzyknij sceneItemId na podstawie sourceName
+	if msg.Type == "obs_command_by_name" {
+		resolved, err := p.resolveSceneItemId(msg.Payload, requestData)
+		if err != nil {
+			log.Printf("❌ Cannot resolve source name: %v", err)
+			p.hubClient.Send(&hub.Message{
+				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+				Payload: map[string]interface{}{
+					"error":       err.Error(),
+					"requestType": requestType,
+				},
+			})
+			return
+		}
+		requestData = resolved
+	}
+
+	responseData, err := p.obsClient.SendRequest(requestType, requestData)
+	if err != nil {
+		log.Printf("❌ OBS request failed (%s): %v", requestType, err)
+		p.hubClient.Send(&hub.Message{
+			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+			Payload: map[string]interface{}{
+				"error": err.Error(), "requestType": requestType,
+			},
+		})
+		return
+	}
+
+	log.Printf("✅ OBS response received for %s", requestType)
+	p.hubClient.Send(&hub.Message{
+		From: p.config.Plugin.ID, To: msg.From, Type: "obs_response",
+		Payload: map[string]interface{}{
+			"requestType":  requestType,
+			"requestID":    requestID,
+			"responseData": responseData,
+		},
+	})
 }
 
 // resolveSceneItemId wstrzykuje sceneItemId do requestData na podstawie
@@ -441,6 +462,35 @@ func (p *Plugin) monitorOBSStatus() {
 		// struktura scen mogła się zmienić podczas rozłączenia.
 		if status == "connected" {
 			go p.refreshSceneMap()
+		}
+	}
+}
+
+// connectToOBSWithRetry próbuje połączyć się z OBS w pętli z exponential backoff.
+// Po udanym połączeniu oddaje kontrolę wewnętrznemu mechanizmowi reconnect
+// w obs/client.go (który obsługuje zerwania połączenia podczas działania).
+func (p *Plugin) connectToOBSWithRetry() {
+	backoff := 3 * time.Second
+	maxBackoff := 30 * time.Second
+	attempt := 0
+
+	for {
+		attempt++
+		log.Printf("🎬 Connecting to OBS (attempt %d): %s:%d",
+			attempt, p.config.OBS.Host, p.config.OBS.Port)
+
+		if err := p.obsClient.Connect(); err == nil {
+			log.Printf("✅ Connected to OBS on attempt %d", attempt)
+			go p.refreshSceneMap()
+			return // dalej reconnectami zarządza obs/client.go przez StatusChanged
+		} else {
+			log.Printf("⚠️  OBS connection failed: %v — retrying in %v", err, backoff)
+		}
+
+		time.Sleep(backoff)
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
 		}
 	}
 }

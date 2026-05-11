@@ -95,7 +95,9 @@
 }
 
 .timer-small-controllers>button {
-  background-color: blue;
+    background-color: blue;
+    margin: 0;
+    padding: 0;
 }
 
 button.timer-main-controller {

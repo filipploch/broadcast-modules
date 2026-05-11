@@ -150,15 +150,40 @@ def register_events(socketio):
 
     # ── Recording ─────────────────────────────────────────────────────────────
 
+    @socketio.on('get_camera_assignments')
+    def handle_get_camera_assignments():
+        from flask_socketio import emit
+        from core.models.base_game_camera import HDMI_TO_DEVICE
+        logger.info('get_camera_assignments received')
+        try:
+            from core.managers.game_camera_manager import GameCameraManager
+            Settings = _get_settings()
+            settings = Settings.get_settings()
+            logger.info('get_camera_assignments: settings=%s', settings)
+            if settings and settings.current_game_id:
+                cameras = GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+            else:
+                cameras = {device: False for device in HDMI_TO_DEVICE.values()}
+            logger.info('get_camera_assignments: cameras=%s', cameras)
+            emit('camera_assignments', {'cameras': cameras})
+        except Exception as e:
+            logger.exception('get_camera_assignments error: %s', e)
+            emit('camera_assignments', {'cameras': {d: False for d in HDMI_TO_DEVICE.values()}})
+
     @socketio.on('start_recording')
-    def handle_start_recording(data):
+    def handle_start_recording(data=None):
         from core.managers import get_hub_client
         from core.managers import get_recorder_manager
         from flask_socketio import emit
         hub_client = get_hub_client()
         if hub_client:
             from core.sequences.steps import start_recording
-            step = start_recording()
+            from core.managers.game_camera_manager import GameCameraManager
+            Settings = _get_settings()
+            settings = Settings.get_settings()
+            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+                       if settings and settings.current_game_id else None)
+            step = start_recording(cameras=cameras)
             hub_client.send({
                 'from': current_app.config['MODULE_ID'],
                 'to': step['target'],
@@ -167,13 +192,18 @@ def register_events(socketio):
             })
 
     @socketio.on('stop_recording')
-    def handle_stop_recording(data):
+    def handle_stop_recording(data=None):
         from core.managers import get_hub_client
         from flask_socketio import emit
         hub_client = get_hub_client()
         if hub_client:
             from core.sequences.steps import stop_recording
-            step = stop_recording()
+            from core.managers.game_camera_manager import GameCameraManager
+            Settings = _get_settings()
+            settings = Settings.get_settings()
+            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+                       if settings and settings.current_game_id else None)
+            step = stop_recording(cameras=cameras)
             hub_client.send({
                 'from': current_app.config['MODULE_ID'],
                 'to': step['target'],
@@ -190,6 +220,62 @@ def register_events(socketio):
                 'requestType': 'GetVersion',
                 'requestData': {},
                 'request_id': 'get-websocket-connection'
+            })
+
+    @socketio.on('get_source_visibility')
+    def handle_get_source_visibility(data):
+        from flask_socketio import emit
+        from core.managers import get_obs_ws_manager
+        scene_name  = data.get('scene_name')
+        source_name = data.get('source_name')
+        obs     = get_obs_ws_manager()
+        item_id = obs.get_scene_item_id(scene_name, source_name)
+        if item_id is None:
+            return
+        enabled = obs.get_scene_item_enabled(scene_name, item_id)
+        if enabled is not None:
+            emit('source_visibility_response', {
+                'scene_name':  scene_name,
+                'source_name': source_name,
+                'enabled':     enabled,
+            })
+
+    @socketio.on('toggle_source_visibility')
+    def handle_toggle_source_visibility(data):
+        from core.managers import get_obs_ws_manager
+        from core.extensions import socketio as _sio
+        scene_name  = data.get('scene_name')
+        source_name = data.get('source_name')
+        obs     = get_obs_ws_manager()
+        item_id = obs.get_scene_item_id(scene_name, source_name)
+        if item_id is None:
+            return
+        enabled = obs.get_scene_item_enabled(scene_name, item_id)
+        if enabled is not None:
+            new_enabled = not enabled
+            obs.set_scene_item_enabled(scene_name, item_id, new_enabled)
+            _sio.emit('source_visibility_changed', {
+                'scene_name':  scene_name,
+                'source_name': source_name,
+                'enabled':     new_enabled,
+            })
+
+    @socketio.on('refresh_overlay_and_switch_scene')
+    def handle_refresh_overlay_and_switch_scene():
+        from core.managers import get_obs_ws_manager
+        obs = get_obs_ws_manager()
+        obs.refresh_browser_source('Overlay')
+        obs.set_current_program_scene('STREAM')
+
+    @socketio.on('get_obs_record_status')
+    def handle_get_obs_record_status():
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send_to_plugin('obs-ws-plugin', 'obs_command', {
+                'requestType': 'GetRecordStatus',
+                'requestData': {},
+                'request_id': 'ui-obs-record-status',
             })
 
     # ── Filters ───────────────────────────────────────────────────────────────
@@ -396,11 +482,14 @@ def _handle_core_content(content_type, data):
         gem        = GameEventManager()
         event_mgr  = EventManager()
 
+        payload       = data.get('payload') or {}
+        include_hidden = bool(payload.get('include_hidden', False))
         events_types = [e.to_dict() for e in event_mgr.get_all_events()]
         game_events  = []
         for period in game.get_periods_list():
             period_events = gem.get_events_for_game(settings.current_game_id,
-                                                    period_id=period.id)
+                                                    period_id=period.id,
+                                                    include_hidden=include_hidden)
             if period_events:
                 game_events.extend(e.to_dict() for e in period_events)
                 game_events.append(period.description)

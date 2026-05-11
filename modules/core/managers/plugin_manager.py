@@ -30,18 +30,21 @@ class PluginManager:
         plugins_health = payload.get('plugin_health')
 
         plugins = {
-            # 'obs-ws-plugin': {},
-            'recorder-plugin': {},
-            'timer-plugin': {}
+            'timer-plugin':      {'is_active': False, 'is_healthy': False},
+            'recorder-plugin':   {'is_active': False, 'is_healthy': False},
+            'obs-ws-plugin':     {'is_active': False, 'is_healthy': False},
+            'replay-plugin':     {'is_active': False, 'is_healthy': False},
+            'controller-plugin': {'is_active': False, 'is_healthy': False},
+            'stream-overlay':    {'is_active': False, 'is_healthy': False},
         }
 
-        for _plugin in connected_plugins:
-            if connected_plugins[_plugin]['plugin_id'] in plugins:
-                plugins[_plugin].update({'is_active': connected_plugins[_plugin]['is_active']})
+        for plugin_id, info in connected_plugins.items():
+            if plugin_id in plugins:
+                plugins[plugin_id]['is_active'] = info.get('is_active', False)
 
-        for _plugin in plugins_health:
-            if plugins_health[_plugin]['plugin_id'] in plugins:
-                plugins[_plugin].update({'is_healthy': plugins_health[_plugin]['is_healthy']})
+        for plugin_id, info in plugins_health.items():
+            if plugin_id in plugins:
+                plugins[plugin_id]['is_healthy'] = info.get('is_healthy', False)
 
         self._emit_to_ui('plugins_states', plugins)
 

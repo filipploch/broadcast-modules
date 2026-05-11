@@ -85,9 +85,10 @@ def create_app(config_name='default'):
                     'broadcast_game_id': settings.current_game_id,
                     'season': season,
                     'timer_desc':        app.config.get('TIMER_DESC', True),
+                    'module_name':       app.config.get('MODULE_NAME', ''),
                 }
             except Exception:
-                return {'broadcast_game_id': None, 'season': None}
+                return {'broadcast_game_id': None, 'season': None, 'module_name': ''}
 
     # Inicjalizacja managerów w tle
     def init_managers():

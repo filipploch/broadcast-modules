@@ -72,6 +72,20 @@ func (hc *HubClient) Connect() error {
 			"version": "1.0.0",
 		},
 	})
+
+	// Subscribe to classes so hub can deliver broadcast:class messages to us.
+	// Also required for late-join: hub sends plugin_status to main-module only
+	// for expected plugins; subscriptions ensure we receive any future broadcasts.
+	time.Sleep(100 * time.Millisecond)
+	hc.Send(&Message{
+		From: hc.pluginID,
+		To:   "hub",
+		Type: "subscribe",
+		Payload: map[string]interface{}{
+			"class": []string{"controller"},
+		},
+	})
+
 	return nil
 }
 

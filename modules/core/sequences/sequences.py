@@ -140,7 +140,18 @@ def replay_sequence(context) -> list:
     ]
 
 
+def _get_current_cameras():
+    from core.managers.game_camera_manager import GameCameraManager
+    from core.models.base_settings import get_settings_model
+    Settings = get_settings_model()
+    settings = Settings.get_settings()
+    if settings and settings.current_game_id:
+        return GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+    return None
+
+
 def start_live_sequence(context) -> list:
+    cameras = _get_current_cameras()
     return [
         obs_mute('Mic1', delay_ms=0),
         obs_mute('Mic2', delay_ms=50),
@@ -149,7 +160,7 @@ def start_live_sequence(context) -> list:
         show_source('OUTPUT', source_name='Overlay', is_visible=False, delay_ms=200),
         obs_switch_scene('EMPTY', delay_ms=250),
         start_stream(delay_ms=300),
-        start_recording(delay_ms=500),
+        start_recording(cameras=cameras, delay_ms=500),
         show_source('AUDIO_SOURCES', source_name='music_start', is_visible=True, delay_ms=550),
         obs_switch_scene('STREAM', delay_ms=600),
         show_source('OUTPUT', source_name='Overlay', is_visible=True, delay_ms=650),
@@ -160,6 +171,7 @@ def start_live_sequence(context) -> list:
 
 
 def end_live_sequence(context) -> list:
+    cameras = _get_current_cameras()
     return [
         show_source('END_SCREEN', source_name='outro-sociale', is_visible=False, delay_ms=0),
         obs_mute('Mic1', delay_ms=50),
@@ -168,7 +180,7 @@ def end_live_sequence(context) -> list:
         show_source('AUDIO_SOURCES', source_name='music_break', is_visible=False, delay_ms=200),
         show_source('END_SCREEN', source_name='outro-sociale', is_visible=True, delay_ms=250),
         obs_switch_scene('END_SCREEN', delay_ms=300),
-        stop_recording(delay_ms=10500),
+        stop_recording(cameras=cameras, delay_ms=10500),
         stop_stream(delay_ms=11000),
     ]
 

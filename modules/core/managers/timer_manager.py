@@ -41,7 +41,6 @@ class TimerManager:
                     'state':        'idle',
                     'initial_time': kwargs.get('initial_time'),
                     'elapsed_time': 0,
-                    'initial_time': kwargs.get('initial_time'),
                     'limit':        kwargs.get('limit'),
                     'parent_id':    kwargs.get('parent_id'),
                     'metadata':     kwargs.get('metadata', {}),
@@ -49,6 +48,34 @@ class TimerManager:
             current_app.logger.info(f'✅ Created timer: {timer_id} ({timer_type})')
         else:
             current_app.logger.error(f'❌ Failed to create timer: {timer_id}')
+        return success
+
+    def ensure_timer(self, timer_id, timer_type='independent', **kwargs):
+        """Idempotent create-or-reuse: sends ensure_timer to plugin.
+
+        The plugin creates the timer only if it does not already exist
+        in its memory. The response (timer_ensured) is handled by on_timer_ensured().
+        """
+        payload = {'timer_id': timer_id, 'timer_type': timer_type, **kwargs}
+        success = self.hub_client.send_to_plugin(
+            self.timer_plugin_id, 'ensure_timer', payload
+        )
+        if success:
+            with self.lock:
+                if timer_id not in self.timers:
+                    self.timers[timer_id] = {
+                        'timer_id':     timer_id,
+                        'timer_type':   timer_type,
+                        'state':        'idle',
+                        'initial_time': kwargs.get('initial_time'),
+                        'elapsed_time': 0,
+                        'limit':        kwargs.get('limit'),
+                        'parent_id':    kwargs.get('parent_id'),
+                        'metadata':     kwargs.get('metadata', {}),
+                    }
+            current_app.logger.info(f'✅ Ensured timer: {timer_id} ({timer_type})')
+        else:
+            current_app.logger.error(f'❌ Failed to ensure timer: {timer_id}')
         return success
 
     def start_timer(self, timer_id):
@@ -512,6 +539,46 @@ class TimerManager:
         penalties = self._get_penalties_dict(game_id)
         self._emit_to_ui('reload_penalty_timers', {'penalties': penalties})
         self._broadcast_penalty_state(game_id)
+
+    def on_timer_ensured(self, msg):
+        """
+        Response from plugin after ensure_timer.
+        If created=True the timer is new — run full DB setup.
+        If created=False the timer already existed — sync state to UI.
+        """
+        payload      = msg.get('payload', {})
+        timer_id     = payload.get('timer_id')
+        created      = payload.get('created', False)
+        initial_time = payload.get('initial_time', 0) or 0
+        limit        = payload.get('limit', 0) or 0
+        state        = payload.get('state', 'idle')
+        elapsed_time = payload.get('elapsed_time', 0) or 0
+        metadata     = payload.get('metadata', {}) or {}
+
+        self.update_timer_state(timer_id, {
+            'elapsed_time': elapsed_time,
+            'initial_time': initial_time,
+            'state':        state,
+            'limit':        limit,
+            'last_update':  datetime.now().isoformat(),
+        })
+
+        if created:
+            is_penalty = (timer_id.startswith('penalty_home') or
+                          timer_id.startswith('penalty_away'))
+            if is_penalty:
+                self._handle_penalty_timer_created(timer_id, limit, state, metadata)
+            else:
+                self._handle_main_timer_created(timer_id, initial_time, limit,
+                                                state, metadata)
+        else:
+            self._emit_to_ui('timer_ensured', {
+                'timer_id':     timer_id,
+                'elapsed_time': elapsed_time,
+                'initial_time': initial_time,
+                'state':        state,
+                'limit':        limit,
+            })
 
     def on_limit_reached(self, msg):
         from core.models.base_game_timer import get_game_timer_model

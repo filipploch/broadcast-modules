@@ -102,16 +102,16 @@
 					</div>
 					<div class="reversible scoreboard">
 						<label class="flex-item flex1 fouls-label" id="labelFoulsHome" data-reverse-anchor>
-							<span id="foulsHome">{{ period.home_team_fouls }}</span>
+							<span id="foulsHome">{{ period.home_team_fouls or 0 }}</span>
 						</label>
 						<label class="flex-item flex1 goals-label" id="labelScoreHome">
-							<span id="scoreHome">{{ game.home_team_goals }}</span>
+							<span id="scoreHome">{{ game.home_team_goals or 0 }}</span>
 						</label>
 						<label class="flex-item flex1 goals-label" id="labelScoreAway">
-							<span id="scoreAway">{{ game.away_team_goals }}</span>
+							<span id="scoreAway">{{ game.away_team_goals or 0 }}</span>
 						</label>
 						<label class="flex-item flex1 fouls-label" id="labelFoulsAway">
-							<span id="foulsAway">{{ period.away_team_fouls }}</span>
+							<span id="foulsAway">{{ period.away_team_fouls or 0 }}</span>
 						</label>
 					</div>
 					<div class="reversible scoreboard">
@@ -126,13 +126,13 @@
 					</div>
 					<div class="reversible">
 						<div class="flex-item flex3 data-item data-home"
-							id="teamHomeName" data-reverse-anchor>{{ teams.home.short_name }}</div>
+							id="teamHomeName" data-reverse-anchor>{{ teams.home.short_name or '' }}</div>
 						<div class="flex-item flex2">
 							<button id="reverse-scoreboard-button"
 								onclick="onReverseButtonClick()"><=></button>
 						</div>
 						<div class="flex-item flex3 data-item data-away"
-							id="teamAwayName">{{ teams.away.short_name }}</div>
+							id="teamAwayName">{{ teams.away.short_name or '' }}</div>
 					</div>
 					<div class="reversible cards-container">
 						<div class="cards flex3" data-reverse-anchor data-reverse-anchor>
@@ -152,18 +152,26 @@
 				</div>
 			</div>
 
-			<!-- Szybkie akcje -->
-			<div style="display:flex;">
-				<button type="button" ondblclick="startRecording()">R.START</button>
-				<button type="button" ondblclick="stopRecording()">R.STOP</button>
-			</div>
-			<div style="display:flex;">
-				<button type="button" ondblclick="startStream()">S.START</button>
-				<button type="button" ondblclick="stopStream()">S.STOP</button>
-			</div>
-			<div style="display:flex;">
-				<button type="button" onclick="getObsWsConnection()">GET STATUS</button>
-				<button type="button" ondblclick="showOverlay('shootout-container')">KAR</button>
+			<div id="stream-controllers">
+				<div style="display:flex; width:100%;">
+					<div id="stream-icon" style="width:20%;" ondblclick="onStreamIconDblClick()"></div>
+					<div id="record-icon" style="width:20%;" ondblclick="onRecordIconDblClick()"></div>
+					<div id="cameras-icons" style="width:20%; display:flex; flex-wrap:wrap;">
+						<div id="camera1-icon" style="width:50%;"></div>
+						<div id="camera2-icon" style="width:50%;"></div>
+						<div id="camera3-icon" style="width:50%;"></div>
+						<div id="camera4-icon" style="width:50%;"></div>
+					</div>
+					<div id="microphone-icon" style="width:20%;" ondblclick="onMicrophoneIconDblClick()"></div>
+					<div id="stream-overlay-plugin-icon" style="width:20%;" ondblclick="onStreamOverlayIconDblClick()"></div>
+				</div>
+				<div style="display:flex; width:100%;">
+					<div id="timer-plugin-icon" style="width:12.5%;"></div>
+					<div id="recorder-plugin-icon" style="width:12.5%;"></div>
+					<div id="obs-ws-plugin-icon" style="width:12.5%;"></div>
+					<div id="replay-plugin-icon" style="width:12.5%;"></div>
+					<div id="controller-plugin-icon" style="width:12.5%;"></div>
+				</div>
 			</div>
 		</div>
 
@@ -177,11 +185,30 @@
 	</script>
 
 	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-	<script src="{{ url_for('static', filename='js/data.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/ui-modal.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/index.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/timer-recovery.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/pages/index.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/timer-recovery.js') }}"></script>
+	<script>
+		const _SVG_BASE = "{{ url_for('static', filename='images/ui/') }}";
+		[
+			'stream-icon', 'record-icon',
+			'microphone-icon', 'stream-overlay-plugin-icon',
+			'timer-plugin-icon', 'recorder-plugin-icon', 'obs-ws-plugin-icon',
+			'replay-plugin-icon', 'controller-plugin-icon',
+		].forEach(id => loadSvgIntoContainer(id, _SVG_BASE + id + '.svg'));
+
+		const _CAMERA_SVG_MAP = {
+			'camera1-icon': 'handycam1-icon.svg',
+			'camera2-icon': 'gopro2-icon.svg',
+			'camera3-icon': 'gopro3-icon.svg',
+			'camera4-icon': 'gopro4-icon.svg',
+		};
+		Object.entries(_CAMERA_SVG_MAP).forEach(([id, svgFile]) =>
+			loadSvgIntoContainer(id, _SVG_BASE + svgFile, () => _applyOneCameraIconColor(id))
+		);
+	</script>
 </body>
 
 </html>

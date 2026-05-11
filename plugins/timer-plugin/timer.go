@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+
 // TimerType represents the type of timer
 type TimerType string
 
@@ -93,10 +94,8 @@ func NewManager() *Manager {
 	}
 }
 
-// Create creates a new timer and returns its ID
-func (m *Manager) Create(config TimerConfig) string {
-	id := generateID()
-
+// Create creates a new timer with the given id.
+func (m *Manager) Create(id string, config TimerConfig) {
 	updateInterval := config.UpdateInterval
 	if updateInterval == 0 {
 		updateInterval = 50 * time.Millisecond
@@ -126,8 +125,46 @@ func (m *Manager) Create(config TimerConfig) string {
 	m.mu.Lock()
 	m.timers[id] = t
 	m.mu.Unlock()
+}
 
-	return id
+// Ensure creates a timer with the given id only if it does not already exist.
+// Returns true if the timer was created, false if it already existed.
+func (m *Manager) Ensure(id string, config TimerConfig) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.timers[id]; exists {
+		return false
+	}
+
+	updateInterval := config.UpdateInterval
+	if updateInterval == 0 {
+		updateInterval = 50 * time.Millisecond
+	}
+
+	t := &timer{
+		id:                  id,
+		timerType:           config.Type,
+		parentID:            config.ParentID,
+		state:               StateIdle,
+		elapsedBase:         0,
+		remainderTime:       0,
+		initialTime:         config.InitialTime,
+		limit:               config.Limit,
+		pauseAtLimit:        config.PauseAtLimit,
+		updateInterval:      updateInterval,
+		lastBroadcastSecond: -1,
+		metadata:            config.Metadata,
+		callbacks:           config.Callbacks,
+		stopChan:            make(chan struct{}),
+	}
+
+	if t.metadata == nil {
+		t.metadata = make(map[string]interface{})
+	}
+
+	m.timers[id] = t
+	return true
 }
 
 // Start starts a timer
@@ -464,7 +501,3 @@ func (m *Manager) calculateElapsedTime(t *timer) time.Duration {
 	return elapsed
 }
 
-// generateID generates a unique timer ID
-func generateID() string {
-	return fmt.Sprintf("timer_%d", time.Now().UnixNano())
-}

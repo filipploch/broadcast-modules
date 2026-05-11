@@ -22,9 +22,182 @@ var awayScoreLabel = document.getElementById('scoreAway');
 var homeFoulsLabel = document.getElementById('foulsHome');
 var awayFoulsLabel = document.getElementById('foulsAway');
 
+// ============================================================================
+// CAMERA ICONS
+// ============================================================================
+
+const _CAMERA_ICON_MAP = {
+    'camera1-icon': 'camera1',
+    'camera2-icon': 'camera2',
+    'camera3-icon': 'camera3',
+    'camera4-icon': 'camera4',
+};
+
+let _cameraAssignments = null; // null = not yet received; {camera1: bool, ...} once received
+let _cameraRecording   = {};   // {camera1: bool, ...}
+
+function _applyOneCameraIconColor(iconId) {
+    const cameraId = _CAMERA_ICON_MAP[iconId];
+    if (!cameraId) return;
+    console.log(`[_applyOneCameraIconColor] iconId=${iconId} cameraId=${cameraId} assignments=`, _cameraAssignments);
+    if (_cameraAssignments !== null) {
+        const assigned = _cameraAssignments[cameraId];
+        console.log(`[_applyOneCameraIconColor] assigned=${assigned} → colorizeSvgBackground(${iconId}, ${assigned ? 'black' : '#666666'})`);
+        colorizeSvgBackground(iconId, assigned ? 'black' : '#666666');
+    }
+    if (_cameraRecording[cameraId] !== undefined) {
+        colorizeSvgBody(iconId, _cameraRecording[cameraId] ? 'red' : '#cccccc');
+    }
+}
+
+function _applyCameraIconColors() {
+    for (const iconId of Object.keys(_CAMERA_ICON_MAP)) {
+        _applyOneCameraIconColor(iconId);
+    }
+}
+
+socket.on('camera_assignments', (data) => {
+    console.log('[camera_assignments] received:', data);
+    if (data && data.cameras) {
+        _cameraAssignments = data.cameras;
+    }
+    console.log('[camera_assignments] _cameraAssignments:', _cameraAssignments);
+    _applyCameraIconColors();
+});
+
+socket.on('recording_status_response', (data) => {
+    const cameras = data.cameras || {};
+    for (const [cameraId, isRecording] of Object.entries(cameras)) {
+        _cameraRecording[cameraId] = isRecording;
+    }
+    _applyCameraIconColors();
+});
+
+socket.on('recording_started', (data) => {
+    if (data.camera_id) {
+        _cameraRecording[data.camera_id] = true;
+        _applyCameraIconColors();
+    }
+});
+
+socket.on('recording_stopped', (data) => {
+    if (data.camera_id) {
+        _cameraRecording[data.camera_id] = false;
+        _applyCameraIconColors();
+    }
+});
+
+// ============================================================================
+// STREAM ICON
+// ============================================================================
+
+let _streamState = 'disabled';
+
+socket.on('obs_stream_state', (data) => {
+    _streamState = data.state || 'disabled';
+    const bodyColor = _streamState === 'active'   ? 'red'
+                    : _streamState === 'changing'  ? 'yellow'
+                    : '#cccccc';
+    colorizeSvgBody('stream-icon', bodyColor);
+});
+
+function onStreamIconDblClick() {
+    if (_streamState === 'active') {
+        stopStream();
+    } else {
+        startStream();
+    }
+}
+
+// ============================================================================
+// RECORD ICON
+// ============================================================================
+
+let _recordState = 'disabled';
+
+socket.on('obs_record_state', (data) => {
+    _recordState = data.state || 'disabled';
+    const bodyColor = _recordState === 'active'  ? 'red'
+                    : _recordState === 'changing' ? 'yellow'
+                    : '#cccccc';
+    colorizeSvgBody('record-icon', bodyColor);
+});
+
+function onRecordIconDblClick() {
+    if (_recordState === 'active') {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+// ============================================================================
+// MICROPHONE ICON
+// ============================================================================
+
+function _applyMicrophoneColor(enabled) {
+    colorizeSvgBody('microphone-icon', enabled ? '#00FF00' : '#cccccc');
+}
+
+socket.on('source_visibility_response', (data) => {
+    if (data.scene_name === 'AUDIO_SOURCES' && data.source_name === 'MICROPHONES') {
+        _applyMicrophoneColor(data.enabled);
+    }
+});
+
+socket.on('source_visibility_changed', (data) => {
+    if (data.scene_name === 'AUDIO_SOURCES' && data.source_name === 'MICROPHONES') {
+        _applyMicrophoneColor(data.enabled);
+    }
+});
+
+function onMicrophoneIconDblClick() {
+    socket.emit('toggle_source_visibility', {
+        scene_name:  'AUDIO_SOURCES',
+        source_name: 'MICROPHONES',
+    });
+}
+
+// ============================================================================
+// STREAM OVERLAY ICON
+// ============================================================================
+
+function onStreamOverlayIconDblClick() {
+    socket.emit('refresh_overlay_and_switch_scene');
+}
+
+// ============================================================================
+// PLUGIN ICONS
+// ============================================================================
+
+const _PLUGIN_ICON_MAP = {
+    'timer-plugin-icon':          'timer-plugin',
+    'recorder-plugin-icon':       'recorder-plugin',
+    'obs-ws-plugin-icon':         'obs-ws-plugin',
+    'replay-plugin-icon':         'replay-plugin',
+    'controller-plugin-icon':     'controller-plugin',
+    'stream-overlay-plugin-icon': 'stream-overlay',
+};
+
+socket.on('plugins_states', (data) => {
+    for (const [iconId, pluginId] of Object.entries(_PLUGIN_ICON_MAP)) {
+        const state = data[pluginId];
+        if (!state) continue;
+        colorizeSvgBackground(iconId, state.is_active  ? 'black'   : '#666666');
+        colorizeSvgBody(iconId,       state.is_healthy ? '#00FF00' : '#cccccc');
+    }
+});
+
+// ============================================================================
+// WEBSOCKET
+// ============================================================================
+
 socket.on('connect', () => {
     console.log('✅ WebSocket connected');
     socket.emit('request_initial_data');
+    socket.emit('get_camera_assignments');
+    socket.emit('get_obs_record_status');
+    socket.emit('get_source_visibility', { scene_name: 'AUDIO_SOURCES', source_name: 'MICROPHONES' });
 });
 
 socket.on('disconnect', () => {

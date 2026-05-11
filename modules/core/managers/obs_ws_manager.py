@@ -137,16 +137,63 @@ class ObsWsManager:
                 current_app.logger.error(f'❌ Failed to save game event: {e}')
                 self._emit_to_ui('error', {'message': str(e)})
                 return
+        elif request_id == 'ui-obs-record-status':
+            response_data = payload.get('responseData', {})
+            output_active = response_data.get('outputActive', False)
+            state = 'active' if output_active else 'disabled'
+            self._emit_to_ui('obs_record_state', {'state': state})
         elif request_id.startswith('sync-request-'):
             self._handle_sync_request(payload=payload)
         else:
             print(f'OBS_X_RESPONSE: {msg}')
 
     def _handle_sync_request(self, payload):
-        response_data = payload.get('responseData', None)
-        media_cursor = response_data.get('mediaCursor', None) if response_data is not None else None
-        if response_data and media_cursor:
+        request_id    = payload.get('requestID')
+        response_data = payload.get('responseData') or {}
+
+        media_cursor = response_data.get('mediaCursor')
+        if media_cursor:
             current_app.config['MEDIA_CURSOR'] = media_cursor
+
+        with self._pending_lock:
+            event = self._pending_requests.pop(request_id, None)
+            if event:
+                self._pending_responses[request_id] = response_data
+                event.set()
+
+    # =========================================================================
+    # WIDOCZNOŚĆ ŹRÓDEŁ OBS
+    # =========================================================================
+
+    def get_scene_item_id(self, scene_name: str, source_name: str) -> int | None:
+        with self.lock:
+            item_id = self._scene_map.get(scene_name, {}).get(source_name)
+        return item_id
+
+    def get_scene_item_enabled(self, scene_name: str, scene_item_id: int) -> bool | None:
+        result = self.send_obs_request_sync('GetSceneItemEnabled', {
+            'sceneName':   scene_name,
+            'sceneItemId': scene_item_id,
+        })
+        return result.get('sceneItemEnabled') if result else None
+
+    def set_scene_item_enabled(self, scene_name: str, scene_item_id: int, enabled: bool):
+        self.send_obs_request_sync('SetSceneItemEnabled', {
+            'sceneName':        scene_name,
+            'sceneItemId':      scene_item_id,
+            'sceneItemEnabled': enabled,
+        })
+
+    def refresh_browser_source(self, input_name: str):
+        self.send_obs_request_sync('PressInputPropertiesButton', {
+            'inputName':    input_name,
+            'propertyName': 'refreshnocache',
+        })
+
+    def set_current_program_scene(self, scene_name: str):
+        self.send_obs_request_sync('SetCurrentProgramScene', {
+            'sceneName': scene_name,
+        })
 
     def on_obs_event(self, msg):
         payload    = msg.get('payload')
@@ -162,6 +209,17 @@ class ObsWsManager:
         except Exception as e:
             current_app.logger.error(f"notify_obs_event failed: {e}")
 
+        if event_type == 'StreamStateChanged':
+            output_state = event_data.get('outputState')
+            match output_state:
+                case 'OBS_WEBSOCKET_OUTPUT_STARTING' | 'OBS_WEBSOCKET_OUTPUT_STOPPING':
+                    self._emit_to_ui('obs_stream_state', {'state': 'changing'})
+                case 'OBS_WEBSOCKET_OUTPUT_STARTED':
+                    self._emit_to_ui('obs_stream_state', {'state': 'active'})
+                case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
+                    self._emit_to_ui('obs_stream_state', {'state': 'disabled'})
+                    current_app.logger.warning('⚠️  OBS stream stopped unexpectedly')
+
         if event_type == 'RecordStateChanged':
             from core.models.base_settings import get_settings_model
             Settings = get_settings_model()
@@ -170,13 +228,45 @@ class ObsWsManager:
                 case 'OBS_WEBSOCKET_OUTPUT_STARTING' | 'OBS_WEBSOCKET_OUTPUT_STOPPING':
                     self._emit_to_ui('obs_record_state', {'state': 'changing'})
                 case 'OBS_WEBSOCKET_OUTPUT_STARTED':
-                    obs_record_filepath = event_data.get('outputPath')
-                    Settings.set_obs_record_filepath(obs_record_filepath)
+                    obs_record_filepath = event_data.get('outputPath', '')
+                    if obs_record_filepath:
+                        Settings.set_obs_record_filepath(obs_record_filepath)
+                        current_app.logger.info(f'📹 OBS recording started: {obs_record_filepath}')
+                    else:
+                        # OBS WebSocket < 5.5.4 sends empty outputPath on STARTED.
+                        # The actual path arrives only in the STOPPED event.
+                        current_app.logger.warning(
+                            '⚠️  OBS RecordStateChanged(STARTED): outputPath is empty '
+                            '(upgrade OBS WebSocket to ≥5.5.4 to fix this)'
+                        )
                     self._emit_to_ui('obs_record_state', {'state': 'active'})
                 case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
-                    obs_record_filepath = ''
-                    Settings.set_obs_record_filepath(obs_record_filepath)
+                    obs_record_filepath = event_data.get('outputPath', '')
+                    if obs_record_filepath:
+                        # STOPPED always carries the final file path — save it so
+                        # any game event that was recorded without a path can be
+                        # identified retrospectively.
+                        Settings.set_obs_record_filepath(obs_record_filepath)
+                        current_app.logger.info(f'📹 OBS recording saved: {obs_record_filepath}')
+                    else:
+                        Settings.set_obs_record_filepath('')
                     self._emit_to_ui('obs_record_state', {'state': 'disabled'})
+
+        if event_type == 'SceneItemEnableStateChanged':
+            scene_name    = event_data.get('sceneName')
+            scene_item_id = event_data.get('sceneItemId')
+            enabled       = event_data.get('sceneItemEnabled')
+            with self.lock:
+                source_name = next(
+                    (k for k, v in self._scene_map.get(scene_name, {}).items() if v == scene_item_id),
+                    None
+                )
+            if source_name:
+                self._emit_to_ui('source_visibility_changed', {
+                    'scene_name':  scene_name,
+                    'source_name': source_name,
+                    'enabled':     enabled,
+                })
 
     def send_obs_request_sync(self, request_type: str, request_data: dict,
                               timeout: float = 2.0) -> dict | None:
@@ -209,36 +299,6 @@ class ObsWsManager:
 
         with self._pending_lock:
             return self._pending_responses.pop(request_id, None)
-
-        def on_obs_event(self, msg):
-            payload    = msg.get('payload')
-            event_type = payload.get('eventType')
-            event_data = payload.get('eventData')
-
-        # Powiadom SequenceManager o każdym evencie OBS
-        try:
-            from core.managers import get_sequence_manager
-            seq_mgr = get_sequence_manager()
-            if seq_mgr:
-                seq_mgr.notify_obs_event(event_type, event_data)
-        except Exception as e:
-            current_app.logger.error(f"notify_obs_event failed: {e}")
-
-        if event_type == 'RecordStateChanged':
-            from core.models.base_settings import get_settings_model
-            Settings = get_settings_model()
-            output_state = event_data.get('outputState')
-            match output_state:
-                case 'OBS_WEBSOCKET_OUTPUT_STARTING' | 'OBS_WEBSOCKET_OUTPUT_STOPPING':
-                    self._emit_to_ui('obs_record_state', {'state': 'changing'})
-                case 'OBS_WEBSOCKET_OUTPUT_STARTED':
-                    obs_record_filepath = event_data.get('outputPath')
-                    Settings.set_obs_record_filepath(obs_record_filepath)
-                    self._emit_to_ui('obs_record_state', {'state': 'active'})
-                case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
-                    obs_record_filepath = ''
-                    Settings.set_obs_record_filepath(obs_record_filepath)
-                    self._emit_to_ui('obs_record_state', {'state': 'disabled'})
 
     def enable_source_filter(self, source_name, filter_name, filter_state=True):
         _request_type = 'SetSourceFilterEnabled'
