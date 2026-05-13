@@ -126,6 +126,8 @@ func (p *Plugin) handleMessage(msg *Message) {
 		log.Printf("✅ Plugin registered with Hub")
 	case "create_timer":
 		p.handleCreateTimer(msg)
+	case "ensure_timer":
+		p.handleEnsureTimer(msg)
 	case "start_timer":
 		p.handleStartTimer(msg)
 	case "pause_timer":
@@ -158,6 +160,64 @@ func (p *Plugin) handleMessage(msg *Message) {
 // MESSAGE HANDLERS
 // ============================================================================
 
+// buildTimerConfig constructs a TimerConfig from a hub message payload.
+// timerID is used as the timer's external (and now internal) ID.
+func (p *Plugin) buildTimerConfig(msg *Message, timerID string) TimerConfig {
+	timerType, _ := msg.Payload["timer_type"].(string)
+	if timerType == "" {
+		timerType = "independent"
+	}
+
+	config := TimerConfig{Type: TimerType(timerType)}
+
+	if parentID, ok := msg.Payload["parent_id"].(string); ok {
+		config.ParentID = parentID
+	}
+
+	if limitTime, ok := msg.Payload["limit"].(float64); ok {
+		config.Limit = time.Duration(limitTime) * time.Millisecond
+	}
+
+	if pal, ok := msg.Payload["pause_at_limit"].(bool); ok {
+		config.PauseAtLimit = pal
+	}
+
+	if initTime, ok := msg.Payload["initial_time"].(float64); ok {
+		config.InitialTime = time.Duration(initTime) * time.Millisecond
+	}
+
+	if metadata, ok := msg.Payload["metadata"].(map[string]interface{}); ok {
+		config.Metadata = metadata
+	} else {
+		config.Metadata = make(map[string]interface{})
+	}
+	config.Metadata["timer_id"] = timerID
+	config.Metadata["creator"] = msg.From
+
+	if intervalMs, ok := msg.Payload["update_interval_ms"].(float64); ok && intervalMs > 0 {
+		config.UpdateInterval = time.Duration(intervalMs) * time.Millisecond
+	} else if p.config.UpdateInterval > 0 {
+		config.UpdateInterval = time.Duration(p.config.UpdateInterval) * time.Millisecond
+	}
+
+	config.Callbacks = &Callbacks{
+		OnStart: func(_ time.Duration, id string) {
+			p.broadcastTimerStarted(id, id, 0)
+		},
+		OnSecondTick: func(_ time.Duration, id string) {
+			p.broadcastTimerUpdated(id, id, 0)
+		},
+		OnPause: func(_ time.Duration, id string) {
+			p.broadcastTimerPaused(id, id, 0)
+		},
+		OnLimit: func(_ time.Duration, id string) {
+			p.broadcastLimitReached(id, id, 0)
+		},
+	}
+
+	return config
+}
+
 func (p *Plugin) handleCreateTimer(msg *Message) {
 	timerID, ok := msg.Payload["timer_id"].(string)
 	if !ok {
@@ -165,95 +225,62 @@ func (p *Plugin) handleCreateTimer(msg *Message) {
 		return
 	}
 
-	timerType, _ := msg.Payload["timer_type"].(string)
-	if timerType == "" {
-		timerType = "independent"
-	}
+	config := p.buildTimerConfig(msg, timerID)
 
-	// Build config
-	config := TimerConfig{
-		Type: TimerType(timerType),
-	}
+	p.manager.Create(timerID, config)
 
-	// Optional: parent_id
-	if parentID, ok := msg.Payload["parent_id"].(string); ok {
-		config.ParentID = parentID
-	}
+	timerState, _ := p.manager.GetState(timerID)
 
-	// Optional: limit (renamed to limit)
-	if limitTime, ok := msg.Payload["limit"].(float64); ok {
-		config.Limit = time.Duration(limitTime) * time.Millisecond
-	}
-
-	// pause_at_limit
-	pauseAtLimit := false
-	if pal, ok := msg.Payload["pause_at_limit"].(bool); ok {
-		pauseAtLimit = pal
-	}
-	config.PauseAtLimit = pauseAtLimit
-
-	// Optional: initial_time (renamed to initial_time)
-	initialTime := time.Duration(0)
-	if initTime, ok := msg.Payload["initial_time"].(float64); ok {
-		initialTime = time.Duration(initTime) * time.Millisecond
-	}
-	config.InitialTime = initialTime
-
-	// Optional: metadata
-	if metadata, ok := msg.Payload["metadata"].(map[string]interface{}); ok {
-		config.Metadata = metadata
-	} else {
-		config.Metadata = make(map[string]interface{})
-	}
-
-	// Store original timer_id in metadata
-	config.Metadata["timer_id"] = timerID
-	config.Metadata["creator"] = msg.From
-
-	// Set update interval: prefer per-timer value from payload, fallback to plugin config
-	if intervalMs, ok := msg.Payload["update_interval_ms"].(float64); ok && intervalMs > 0 {
-		config.UpdateInterval = time.Duration(intervalMs) * time.Millisecond
-	} else if p.config.UpdateInterval > 0 {
-		config.UpdateInterval = time.Duration(p.config.UpdateInterval) * time.Millisecond
-	}
-
-	// Setup callbacks
-	config.Callbacks = &Callbacks{
-		OnStart: func(elapsedTime time.Duration, internalID string) {
-			p.broadcastTimerStarted(internalID, timerID, elapsedTime)
-		},
-		OnSecondTick: func(elapsedTime time.Duration, internalID string) {
-			p.broadcastTimerUpdated(internalID, timerID, elapsedTime)
-		},
-		OnPause: func(elapsedTime time.Duration, internalID string) {
-			p.broadcastTimerPaused(internalID, timerID, elapsedTime)
-		},
-		OnLimit: func(elapsedTime time.Duration, internalID string) {
-			p.broadcastLimitReached(internalID, timerID, elapsedTime)
-		},
-	}
-
-	// Create timer
-	internalID := p.manager.Create(config)
-
-	// Get timer state after creation
-	timerState, _ := p.manager.GetState(internalID)
-
-	// Send timer_created response
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "timer_created",
 		Payload: map[string]interface{}{
 			"timer_id":     timerID,
-			"internal_id":  internalID,
-			"initial_time": initialTime.Milliseconds(),
+			"internal_id":  timerID,
+			"initial_time": config.InitialTime.Milliseconds(),
 			"state":        string(timerState.State),
 			"limit":        timerState.Limit.Milliseconds(),
 		},
 	})
+}
 
-	// log.Printf("✅ Timer created: %s (internal: %s, initial_time: %dms)", timerID, internalID, initialTime.Milliseconds())
+func (p *Plugin) handleEnsureTimer(msg *Message) {
+	timerID, ok := msg.Payload["timer_id"].(string)
+	if !ok {
+		p.sendError(msg.From, "ensure_timer", "timer_id is required")
+		return
+	}
+
+	config := p.buildTimerConfig(msg, timerID)
+	created := p.manager.Ensure(timerID, config)
+
+	timerState, err := p.manager.GetState(timerID)
+	if err != nil {
+		p.sendError(msg.From, "ensure_timer", err.Error())
+		return
+	}
+
+	var limitMs interface{}
+	if timerState.Limit > 0 {
+		limitMs = timerState.Limit.Milliseconds()
+	}
+
+	p.hubClient.Send(&Message{
+		From: p.ID,
+		To:   msg.From,
+		Type: "timer_ensured",
+		Payload: map[string]interface{}{
+			"timer_id":     timerID,
+			"created":      created,
+			"initial_time": timerState.InitialTime.Milliseconds(),
+			"state":        string(timerState.State),
+			"limit":        limitMs,
+			"elapsed_time": timerState.ElapsedTime.Milliseconds(),
+		},
+	})
+
+	log.Printf("✅ Timer ensured: %s (created=%v)", timerID, created)
 }
 
 func (p *Plugin) handleStartTimer(msg *Message) {
@@ -275,13 +302,7 @@ func (p *Plugin) handleStartTimer(msg *Message) {
 
 	// Start all timers
 	for _, timerID := range timerIDs {
-		internalID := p.findInternalID(timerID)
-		if internalID == "" {
-			p.sendError(msg.From, "start_timer", fmt.Sprintf("timer %s not found", timerID))
-			continue
-		}
-
-		if err := p.manager.Start(internalID); err != nil {
+		if err := p.manager.Start(timerID); err != nil {
 			p.sendError(msg.From, "start_timer", fmt.Sprintf("%s: %s", timerID, err.Error()))
 			continue
 		}
@@ -297,13 +318,7 @@ func (p *Plugin) handlePauseTimer(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "pause_timer", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
-	if err := p.manager.Pause(internalID); err != nil {
+	if err := p.manager.Pause(timerID); err != nil {
 		p.sendError(msg.From, "pause_timer", err.Error())
 		return
 	}
@@ -318,19 +333,13 @@ func (p *Plugin) handleResumeTimer(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "resume_timer", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
-	if err := p.manager.Resume(internalID); err != nil {
+	if err := p.manager.Resume(timerID); err != nil {
 		p.sendError(msg.From, "resume_timer", err.Error())
 		return
 	}
 
 	// Broadcast resume to all receivers (main_module + overlays)
-	timerInfo, err := p.manager.GetState(internalID)
+	timerInfo, err := p.manager.GetState(timerID)
 	if err == nil {
 		var limitMs interface{}
 		if timerInfo.Limit > 0 {
@@ -360,19 +369,13 @@ func (p *Plugin) handleResetTimer(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "reset_timer", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
-	if err := p.manager.Reset(internalID); err != nil {
+	if err := p.manager.Reset(timerID); err != nil {
 		p.sendError(msg.From, "reset_timer", err.Error())
 		return
 	}
 
 	// Get state and broadcast
-	timerInfo, err := p.manager.GetState(internalID)
+	timerInfo, err := p.manager.GetState(timerID)
 	if err == nil {
 		var limitMs interface{}
 		if timerInfo.Limit > 0 {
@@ -408,20 +411,14 @@ func (p *Plugin) handleAdjustTime(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "adjust_time", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
 	deltaTime := time.Duration(delta) * time.Millisecond
-	if err := p.manager.AdjustTime(internalID, deltaTime); err != nil {
+	if err := p.manager.AdjustTime(timerID, deltaTime); err != nil {
 		p.sendError(msg.From, "adjust_time", err.Error())
 		return
 	}
 
 	// Get state and broadcast
-	timerInfo, err := p.manager.GetState(internalID)
+	timerInfo, err := p.manager.GetState(timerID)
 	if err == nil {
 		var limitMs interface{}
 		if timerInfo.Limit > 0 {
@@ -460,20 +457,14 @@ func (p *Plugin) handleSetElapsedTime(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "set_elapsed_time", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
 	newElapsed := time.Duration(elapsedMs) * time.Millisecond
-	if err := p.manager.SetElapsedTime(internalID, newElapsed); err != nil {
+	if err := p.manager.SetElapsedTime(timerID, newElapsed); err != nil {
 		p.sendError(msg.From, "set_elapsed_time", err.Error())
 		return
 	}
 
 	// Broadcast new state to all receivers
-	timerInfo, err := p.manager.GetState(internalID)
+	timerInfo, err := p.manager.GetState(timerID)
 	if err == nil {
 		var limitMs interface{}
 		if timerInfo.Limit > 0 {
@@ -503,13 +494,7 @@ func (p *Plugin) handleGetTimerState(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "get_timer_state", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
-	timerInfo, err := p.manager.GetState(internalID)
+	timerInfo, err := p.manager.GetState(timerID)
 	if err != nil {
 		p.sendError(msg.From, "get_timer_state", err.Error())
 		return
@@ -532,12 +517,7 @@ func (p *Plugin) handleGetAllTimers(msg *Message) {
 
 	states := make([]map[string]interface{}, 0, len(allTimers))
 	for _, timerInfo := range allTimers {
-		externalID := timerInfo.ID
-		if id, ok := timerInfo.Metadata["timer_id"].(string); ok {
-			externalID = id
-		}
-
-		states = append(states, p.convertTimerInfo(timerInfo, externalID))
+		states = append(states, p.convertTimerInfo(timerInfo, timerInfo.ID))
 	}
 
 	p.hubClient.Send(&Message{
@@ -558,12 +538,6 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 		return
 	}
 
-	internalID := p.findInternalID(timerID)
-	if internalID == "" {
-		p.sendError(msg.From, "remove_timer", fmt.Sprintf("timer %s not found", timerID))
-		return
-	}
-
 	// Step 1: Broadcast timer_stopped to all overlay receivers before removing
 	p.hubClient.Send(&Message{
 		From: p.ID,
@@ -576,7 +550,7 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 	})
 
 	// Step 2: Remove timer (stops goroutine and deletes from map)
-	if err := p.manager.Remove(internalID); err != nil {
+	if err := p.manager.Remove(timerID); err != nil {
 		p.sendError(msg.From, "remove_timer", err.Error())
 		return
 	}
@@ -719,16 +693,6 @@ func (p *Plugin) broadcastLimitReached(internalID, externalID string, _ time.Dur
 // ============================================================================
 // HELPER METHODS
 // ============================================================================
-
-func (p *Plugin) findInternalID(externalID string) string {
-	allTimers := p.manager.GetAllTimers()
-	for _, timer := range allTimers {
-		if id, ok := timer.Metadata["timer_id"].(string); ok && id == externalID {
-			return timer.ID
-		}
-	}
-	return ""
-}
 
 func (p *Plugin) convertTimerInfo(info *TimerInfo, externalID string) map[string]interface{} {
 	var limitMs interface{}

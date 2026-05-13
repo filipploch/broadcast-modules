@@ -51,5 +51,43 @@
     "heartbeat_timeout": 30,
     "is_critical": false,
     "description": "External camera recorder plugin on Debian with reverse discovery"
+  },
+  "replay-plugin": {
+    "id": "replay-plugin",
+    "name": "Replay Plugin",
+    "type": "local",
+    "executable_path": "../plugins/replay-plugin/replay-plugin.exe",
+    "working_dir": "../plugins/replay-plugin",
+    "args": [],
+    "env": [
+      "PLUGIN_ID=replay-plugin",
+      "HUB_URL=ws://localhost:8080/ws"
+    ],
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 2000,
+    "health_check_interval": 10,
+    "is_critical": false
+  },
+  "controller-plugin": {
+    "id": "controller-plugin",
+    "name": "USB Controller Plugin",
+    "type": "local",
+    "executable_path": "../plugins/controller-plugin/controller-plugin.exe",
+    "working_dir": "../plugins/controller-plugin",
+    "args": [],
+    "env": [
+      "PLUGIN_ID=controller-plugin",
+      "HUB_URL=ws://localhost:8080/ws"
+    ],
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 1500,
+    "health_check_interval": 10,
+    "is_critical": false
   }
 }

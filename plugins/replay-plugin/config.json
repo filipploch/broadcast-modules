@@ -1,0 +1,14 @@
+{
+  "hub_url": "ws://localhost:8080/ws",
+  "mpv_path": "C:\\Users\\filip\\Projects\\broadcast-modules\\plugins\\replay-plugin\\mpv.exe",
+  "mpv_pipe": "\\\\.\\pipe\\mpvsocket",
+  "mpv_screen": "1",
+  "window_geometry": "1920x1080+1920+0",
+  "default_speed": 0.8,
+  "transition_lead_ms": 700,
+  "comment": {
+    "hub_url": "Adres WebSocket huba",
+    "window_geometry": "Rozmiar i pozycja okna mpv: SZEROKO��xWYSOKO��+X+Y",
+    "default_speed": "Domy�lna pr�dko�� odtwarzania (0.5 = zwolniony, 1.0 = normalny)"
+  }
+}

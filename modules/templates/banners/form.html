@@ -1,0 +1,45 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj baner' if banner else 'Dodaj baner' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj baner' if banner else 'Nowy baner' }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Nazwa *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ banner.name if banner else '' }}"
+                   required maxlength="100" placeholder="np. Like-Sub-Bell">
+        </div>
+        <div class="form-group">
+            <label for="order">Kolejność</label>
+            <input type="number" id="order" name="order"
+                   value="{{ banner.order if banner else 0 }}"
+                   min="0">
+        </div>
+        <div class="form-group">
+            <label for="activation_function">Funkcja aktywacji</label>
+            <input type="text" id="activation_function" name="activation_function"
+                   value="{{ banner.activation_function if banner else '' }}"
+                   maxlength="100" placeholder="np. startLikeSubBellAnimation">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_visible"
+                       {{ 'checked' if (not banner or banner.is_visible) else '' }}>
+                Widoczny
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="source">Treść (HTML/SVG) *</label>
+            <textarea id="source" name="source" required
+                      rows="20" style="width:100%; font-family:monospace; font-size:12px;">{{ banner.source if banner else '' }}</textarea>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_banners') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{
+  "AUDIO_SOURCES": {
+    "MICROPHONES": 1,
+    "music_break": 3,
+    "music_start": 2
+  },
+  "CAMERAS": {
+    "Camera1": 1
+  },
+  "EMPTY": {},
+  "END_SCREEN": {},
+  "MICROPHONES": {
+    "Mic1": 5,
+    "Mic2": 1,
+    "Mic3": 6
+  },
+  "OUTPUT": {
+    "AUDIO_SOURCES": 1,
+    "Lew": 14,
+    "Overlay": 3,
+    "Replay": 15,
+    "Tło biały": 4,
+    "VIDEO_SOURCES": 2
+  },
+  "STREAM": {
+    "BackgroundImage": 2,
+    "OUTPUT": 1
+  },
+  "VIDEO_SOURCES": {
+    "CAMERAS": 1
+  }
+}

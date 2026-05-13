@@ -1,0 +1,71 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj zdarzenie' if event else 'Dodaj zdarzenie' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj zdarzenie' if event else 'Nowe zdarzenie' }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Nazwa *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ event.name if event else '' }}"
+                   required maxlength="100" placeholder="np. Bramka">
+        </div>
+        <div class="form-group">
+            <label for="color">Kolor</label>
+            <div style="display:flex;align-items:center;gap:.75rem;">
+                <input type="color" id="color" name="color"
+                       value="{{ event.color if event else '#000000' }}"
+                       style="width:3rem;height:2.2rem;padding:2px;border:1px solid #ccc;border-radius:4px;cursor:pointer;">
+                <code id="color-hex">{{ event.color if event else '#000000' }}</code>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="filter_class">Klasa filtra</label>
+            <input type="text" id="filter_class" name="filter_class"
+                   value="{{ event.filter_class if event and event.filter_class else '' }}"
+                   maxlength="50" placeholder="np. goal, yellow_card — puste = nie wyświetlaj">
+            <small style="color:#7f8c8d;">
+                Zdarzenia z tą samą klasą filtra są traktowane jako jedna grupa.
+                Zostaw puste, jeśli zdarzenie nie ma być wyświetlane w filtrach.
+            </small>
+        </div>
+        <div class="form-group">
+            <label for="short_name">Skrót *</label>
+            <input type="text" id="short_name" name="short_name"
+                   value="{{ event.short_name if event else '' }}"
+                   required maxlength="50" placeholder="np. G">
+        </div>
+        <div class="form-group">
+            <label for="image_path">Ścieżka do ikony</label>
+            <input type="text" id="image_path" name="image_path"
+                   value="{{ event.image_path if event and event.image_path else '' }}"
+                   maxlength="500" placeholder="np. static/icons/goal.png">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_reported"
+                       {{ 'checked' if event and event.is_reported else '' }}>
+                Raportowane (wymaga przypisania drużyny/zawodnika)
+            </label>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="player_from_opponent"
+                       {{ 'checked' if event and event.player_from_opponent else '' }}>
+                Zawodnik z drużyny przeciwnej (np. bramka samobójcza)
+            </label>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_events') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+<script>
+    const colorInput = document.getElementById('color');
+    const colorHex   = document.getElementById('color-hex');
+    colorInput.addEventListener('input', () => { colorHex.textContent = colorInput.value; });
+</script>
+{% endblock %}

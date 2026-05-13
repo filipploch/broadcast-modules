@@ -42,10 +42,11 @@ type CameraRecorder struct {
 	config    CameraConfig
 	outputDir string
 
-	mu        sync.Mutex
-	recording bool
-	lastMeta  RecordingMeta
-	cmd       *exec.Cmd // active ffmpeg process, nil when not recording
+	mu             sync.Mutex
+	recording      bool
+	lastMeta       RecordingMeta
+	cmd            *exec.Cmd // active ffmpeg process, nil when not recording
+	onUnexpectedStop func(cameraID string, meta RecordingMeta) // callback → RecorderManager
 }
 
 // NewCameraRecorder creates a CameraRecorder for the given camera config.
@@ -54,6 +55,14 @@ func NewCameraRecorder(cfg CameraConfig, outputDir string) *CameraRecorder {
 		config:    cfg,
 		outputDir: outputDir,
 	}
+}
+
+// SetOnUnexpectedStop registers a callback invoked when ffmpeg exits unexpectedly.
+// The callback receives the camera ID and last recording metadata.
+func (cr *CameraRecorder) SetOnUnexpectedStop(fn func(cameraID string, meta RecordingMeta)) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	cr.onUnexpectedStop = fn
 }
 
 // IsRecording returns true if a recording session is currently active.
@@ -236,6 +245,14 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 			} else {
 				log.Printf("⚠️  [%s] ffmpeg exited with status 0 (unexpected)", cr.config.ID)
 			}
+			// Invoke callback outside the lock to avoid deadlock
+			callback := cr.onUnexpectedStop
+			snapshotMeta := cr.lastMeta
+			cr.mu.Unlock()
+			if callback != nil {
+				callback(cr.config.ID, snapshotMeta)
+			}
+			cr.mu.Lock() // re-acquire before defer fires
 		}
 	}()
 

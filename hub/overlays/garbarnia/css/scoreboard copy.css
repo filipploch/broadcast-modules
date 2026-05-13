@@ -1,0 +1,36 @@
+#scoreboard-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.scoreboard-row {
+    display: grid;
+    grid-template-columns: 80px 40px 40px 40px 40px;
+    /* grid-template-rows: 14px; */
+}
+
+#top-scoreboard-container {
+    height: 10px;
+}
+
+#main-scoreboard-container {
+    height: 40px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+}
+
+.penalty-timer-container {
+    height: 15px;
+}
+
+#bottom-scoreboard-container {
+    display: grid;
+    grid-template-columns: 80px 40px 40px 40px 40px;
+    /* grid-template-rows: 14px; */
+}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+	
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+		<!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css') }}"> -->
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/timer.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/penalty-timer-modal.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/reversible-elements.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/plugins-states.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/scoreboard.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/game-field.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/events-controllers.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/overlay-switcher.css') }}">
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/event-edit.css') }}">
+		<style>
+			.game-field-cell {background-image: url({{ url_for('static', filename='images/field/empty.png') }})}
+			.game-field-selector {background-image: url({{ url_for('static', filename='images/field/football.png') }})}
+		</style>
+		<title>Browser</title>
+	</head>
+	
+	<body>
+		<div id="container">
+            <div id="data" data-shootout_id="" data-home-team-id="" data-away-team-id="" data-home-team-players="" data-away-team-players=""></div>
+            <div id="shootout-controller" style="height: 100%; aspect-ratio: 1; background-color: cadetblue;">
+                <div id="players-container">
+                    <table id="players">
+
+                    </table>
+                </div>
+                
+                <div id="round-and-kicks-buttons-container">
+                    <div id="add-round-button-container">
+                        <button type="button" onclick="newRound()">nowa kolejka</button>
+                    </div>
+                    <div id="set-team-buttons-container" style="display: none;">
+                        <button id="back-to-add-round-container" type="button" onclick="backToContainer('round')">X</button>
+                        <button id="set-home-team-button" type="button" onclick="setTeam('home')"></button>
+                        <button id="set-away-team-button" type="button" onclick="setTeam('away')"></button>
+                    </div>
+                </div>
+            </div>
+            <div id="shootouts-container">
+                <table id="shootouts">
+
+                </table>             
+            </div>
+        </div>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/ui-jinja.js') }}"></script>
+    <script>
+
+        var dataElement = document.querySelector('#data');
+        var homeTeamPlayers;
+        var awayTeamPlayers;
+
+        socket.on('connect', () => {
+            console.log('✅ WebSocket connected');
+            socket.emit('get_shootouts');
+            // getObsWsConnection()
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ WebSocket disconnected');
+        });
+
+
+
+        function newRound() {
+            
+            socket.emit('get_game_teams');
+        }
+
+        function backToContainer(_alias) {
+            let teamsBtnsContainer = document.querySelector('#set-team-buttons-container');
+            let roundButtonContainer = document.querySelector('#add-round-button-container');
+            if(_alias === 'round') {
+                roundButtonContainer.style.display = 'flex';
+                teamsBtnsContainer.style.display = 'none';
+            };
+        }
+
+        function addKick(data){
+            console.log('addKick data:', data);
+        }
+
+        function propagateTeamPlayers(_players) {
+            let playersTable = document.querySelector('#players');
+            playersTable.innerHTML = '';
+            _players.forEach(player => {
+                let row = document.createElement('tr');
+                row.setAttribute('data-player-id', player.id);
+                row.setAttribute('onclick', 'addKick('+row.dataset.playerId+')');
+                let playerInfo = document.createElement('td');
+                playerInfo.innerText = `${player.number} ${player.first_name} ${player.last_name}`;   
+                row.appendChild(playerInfo);
+                playersTable.appendChild(row);
+            });
+        }
+
+        function setTeam(_alias){
+            let homeTeamId = dataElement.dataset.homeTeamId;
+            let awayTeamId = dataElement.dataset.awayTeamId;
+            let teamId;
+            let players;
+            if(_alias === 'home') {
+                teamId = parseInt(homeTeamId);
+                players = homeTeamPlayers;
+            }else{
+                teamId = parseInt(awayTeamId);
+                players = awayTeamPlayers;
+            }
+            propagateTeamPlayers(players);
+        }
+
+
+
+        socket.on('response_get_shootouts', _data => {
+            
+            console.log('_response_get_shootouts: ', _data);
+            let shootout = _data.shootout;
+            let shootoutId = shootout.id;
+            dataElement.dataset.ShootoutId = shootoutId;
+        });
+
+        socket.on('response_get_game_teams', _data => {
+            let teamsBtnsContainer = document.querySelector('#set-team-buttons-container');
+            let roundButtonContainer = document.querySelector('#add-round-button-container');
+            let setHomeTeamButton = document.querySelector('#set-home-team-button');
+            let setAwayTeamButton = document.querySelector('#set-away-team-button');
+            gameData = _data.game_data;
+            homeTeamPlayers = _data.home_team_players;
+            awayTeamPlayers = _data.away_team_players;
+            dataElement.dataset.homeTeamId = _data.home_team_id;
+            dataElement.dataset.awayTeamId = _data.away_team_id;
+            homeTeamPlayers = _data.home_team_players;
+            awayTeamPlayers = _data.away_team_players;
+            setHomeTeamButton.innerText = _data.game_data.home_team_short_name
+            setAwayTeamButton.innerText = _data.game_data.away_team_short_name
+            
+            roundButtonContainer.style.display = 'none';
+            teamsBtnsContainer.style.display = 'flex';
+        });
+    </script>
+    </body>

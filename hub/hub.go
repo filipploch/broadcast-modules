@@ -137,7 +137,7 @@ func (h *Hub) handleUnregister(module *Module) {
 
 		// Notify main module
 		if h.MainModule != nil && h.MainModule.IsActive {
-			notification := NewMessage("hub", "futsal-nalf", "plugin_status", map[string]interface{}{
+			notification := NewMessage("hub", "main-module", "plugin_status", map[string]interface{}{
 				"plugin_id": module.ID,
 				"status":    "disconnected",
 			})
@@ -171,6 +171,10 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleGetPluginStatus(msg)
 	case "subscribe":
 		h.handleSubscribe(msg)
+	case "request_scene_map":
+		// Main module asks obs-ws-plugin to re-send its scene map
+		// (used when obs-ws-plugin was already online before main module started).
+		h.routeMessage(msg)
 	default:
 		h.routeMessage(msg)
 	}
@@ -257,6 +261,42 @@ func (h *Hub) registerMainModule(module *Module) {
 	if data, err := confirmMsg.ToJSON(); err == nil {
 		module.Send <- data
 	}
+
+	// Immediately notify main module of all plugins already connected —
+	// this eliminates any startup-order dependency: the main module learns
+	// the current world state right after registration, regardless of which
+	// component started first.
+	go h.sendCurrentPluginStates(module)
+}
+
+// sendCurrentPluginStates sends plugin_status/connected for every plugin that
+// is already registered and active at the moment the main module connects.
+// Called in a goroutine so it doesn't block the registration path.
+func (h *Hub) sendCurrentPluginStates(mainModule *Module) {
+	// Small delay so the main module's _on_open handler finishes setting up
+	// message routing before the flood of plugin_status messages arrives.
+	time.Sleep(200 * time.Millisecond)
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for id, plugin := range h.Plugins {
+		if !plugin.IsActive {
+			continue
+		}
+		notification := NewMessage("hub", mainModule.ID, "plugin_status", map[string]interface{}{
+			"plugin_id": id,
+			"status":    "connected",
+		})
+		if data, err := notification.ToJSON(); err == nil {
+			select {
+			case mainModule.Send <- data:
+				log.Printf("📤 Late-join: notified main module of already-connected plugin %s", id)
+			default:
+				log.Printf("⚠️  sendCurrentPluginStates: main module send buffer full for %s", id)
+			}
+		}
+	}
 }
 
 // registerPlugin registers a plugin (local or external - doesn't matter!)
@@ -294,7 +334,7 @@ func (h *Hub) registerPlugin(module *Module) {
 
 // notifyPluginOnline notifies main module that a plugin is online
 func (h *Hub) notifyPluginOnline(plugin *Module) {
-	notification := NewMessage("hub", "futsal-nalf", "plugin_status", map[string]interface{}{
+	notification := NewMessage("hub", "main-module", "plugin_status", map[string]interface{}{
 		"plugin_id": plugin.ID,
 		"status":    "connected",
 	})

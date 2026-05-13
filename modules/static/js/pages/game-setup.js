@@ -1,0 +1,867 @@
+// ── Helpers: wykrywanie trybu ─────────────────────────────────────────
+function _isSquadContent(ct) {
+    return ct === 'home-squad' || ct === 'away-squad';
+}
+function _useThreeCol() {
+    return _isGarbarnia && _isSquadContent(_contentType);
+}
+
+// ── Panel visibility ───────────────────────────────────────────────────
+function _showPanel(name) {
+    // name: 'two-col' | 'three-col' | 'uniforms'
+    document.getElementById('game-players-select-container').style.display =
+        name === 'two-col'   ? 'flex' : 'none';
+    document.getElementById('squad-three-col-container').style.display =
+        name === 'three-col' ? 'flex' : 'none';
+    document.getElementById('uniforms-container').style.display =
+        name === 'uniforms'  ? 'flex' : 'none';
+}
+
+// ── Open / Close ───────────────────────────────────────────────────────
+function openAssignModal(contentType) {
+    _contentType = contentType;
+
+    if (contentType === 'uniforms') {
+        _showPanel('uniforms');
+        openUniformsModal();
+        return;
+    }
+
+    const isSquad = _isSquadContent(contentType);
+    _showPanel(_useThreeCol() ? 'three-col' : 'two-col');
+
+    document.getElementById('modal-title').textContent = 'Wczytywanie...';
+    if (!_useThreeCol()) {
+        document.getElementById('available-list').innerHTML = '';
+        document.getElementById('assigned-list').innerHTML  = '';
+    }
+    document.getElementById('assign-modal-overlay').style.display = 'flex';
+
+    const scrapeBtn = document.getElementById('scrape-btn');
+    if (isSquad) {
+        scrapeBtn.style.display = 'block';
+        document.getElementById('modal-scrape-status').textContent = '';
+    } else {
+        scrapeBtn.style.display = 'none';
+    }
+
+    fetch('/api/assign/' + contentType + '/data')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); closeAssignModal(); return; }
+            document.getElementById('modal-title').textContent = data.title;
+            if (data.team_id) _squadTeamId = data.team_id;
+
+            if (_useThreeCol()) {
+                _starters    = data.starters    || [];
+                _substitutes = data.substitutes || [];
+                _available   = data.available   || [];
+                renderThreeCol();
+            } else {
+                _available = data.available || [];
+                _assigned  = data.assigned  || [];
+                renderLists();
+            }
+        })
+        .catch(function() { alert('Błąd wczytywania danych'); closeAssignModal(); });
+}
+
+function closeAssignModal() {
+    document.getElementById('assign-modal-overlay').style.display = 'none';
+    _showPanel('two-col');
+    _contentType  = null;
+    _available    = [];
+    _assigned     = [];
+    _starters     = [];
+    _substitutes  = [];
+    _uniformsData = null;
+}
+
+document.getElementById('assign-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAssignModal();
+});
+
+// Auto-open modal from URL param
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get('open');
+    if (open) {
+        history.replaceState(null, '', '/game-setup');
+        openAssignModal(open);
+    }
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// TRYB 2-KOLUMNOWY (futsal lub inne typy)
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderLists() {
+    renderSide('available-list', _available, 'available');
+    renderSide('assigned-list',  _assigned,  'assigned');
+    document.getElementById('available-count').textContent = '(' + _available.length + ')';
+    document.getElementById('assigned-count').textContent  = '(' + _assigned.length  + ')';
+}
+
+function renderSide(containerId, items, side) {
+    const el = document.getElementById(containerId);
+    if (items.length === 0) {
+        el.innerHTML = '<div style="padding:2rem;text-align:center;color:#adb5bd;font-size:.9rem;">Przeciągnij tu elementy</div>';
+        return;
+    }
+    el.innerHTML = items.map(function(item, idx) { return buildCard(item, side, idx); }).join('');
+}
+
+function buildCard(item, side, idx) {
+    const label   = item.label || '';
+    const sub     = item.sub   || '';
+    const isSquad = _isSquadContent(_contentType);
+
+    // ── Referee / commentator type selector ───────────────────────────
+    let typeSelect = '';
+    if (side === 'assigned' && item.types) {
+        const opts = item.types.map(function(t) {
+            return '<option value="' + t + '"' + (t === (item.type || item.types[0]) ? ' selected' : '') + '>' + t + '</option>';
+        }).join('');
+        typeSelect = '<select data-idx="' + idx + '" data-side="' + side + '" onchange="onTypeChange(this)" ' +
+            'style="font-size:.78rem;padding:.15rem .3rem;border:1px solid #ced4da;border-radius:4px;margin-top:.25rem;">' +
+            opts + '</select>';
+    }
+
+    // ── Camera HDMI selector ──────────────────────────────────────────
+    let hdmiSelect = '';
+    if (side === 'assigned' && _contentType === 'cameras') {
+        const usedHdmi = _assigned.filter(function(_, i) { return i !== idx; }).map(function(a) { return a.hdmi_input; }).filter(Boolean);
+        const freeHdmi = [1,2,3,4].filter(function(h) { return !usedHdmi.includes(h) || h === item.hdmi_input; });
+        const labels = item.hdmi_labels || {};
+        const opts = freeHdmi.map(function(h) {
+            return '<option value="' + h + '"' + (h === item.hdmi_input ? ' selected' : '') + '>HDMI ' + h + ' \u2013 ' + (labels[h] || '') + '</option>';
+        }).join('');
+        hdmiSelect = '<select data-idx="' + idx + '" data-side="' + side + '" onchange="onHdmiChange(this)" ' +
+            'style="font-size:.78rem;padding:.15rem .3rem;border:1px solid #ced4da;border-radius:4px;margin-top:.25rem;">' +
+            opts + '</select>';
+    }
+
+    // ── Squad inline editor (assigned side, futsal 2-col) ─────────────
+    let playerEditor = '';
+    if (isSquad && side === 'assigned' && item.pg_id) {
+        playerEditor = _buildPlayerEditor(item, _contentType);
+    }
+
+    // ── Center content ────────────────────────────────────────────────
+    let centerContent = '';
+    if (isSquad && side === 'available') {
+        const sub2 = (item.is_goalkeeper ? 'GK ' : '') + (item.number != null ? '#' + item.number : '');
+        centerContent =
+            '<div style="font-weight:600;font-size:.9rem;">' + label +
+            (sub2 ? '<span style="font-size:.78rem;color:#6c757d;"> ' + sub2 + '</span>' : '') + '</div>';
+    } else if (isSquad && side === 'assigned') {
+        centerContent = '';
+    } else {
+        centerContent =
+            '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
+            (sub ? '<div style="font-size:.78rem;color:#6c757d;">' + sub + '</div>' : '') +
+            typeSelect + hdmiSelect;
+    }
+
+    const arrow = side === 'available'
+        ? '<span class="move-item-btn" title="Przypisz" onclick="moveItem(\'available\',' + idx + ')" style="color:#28a745;">&#8594;</span>'
+        : '<span class="move-item-btn" title="Usu\u0144"    onclick="moveItem(\'assigned\','  + idx + ')" style="color:#dc3545;">&#8592;</span>';
+
+    return '<div draggable="true" ondragstart="onDragStart(event,\'' + side + '\',' + idx + ')" ' +
+        'data-side="' + side + '" data-idx="' + idx + '" class="player-container">' +
+        '<span style="color:#adb5bd;font-size:1rem;flex-shrink:0;margin-top:.15rem;">&#8291;</span>' +
+        '<div style="flex:1;min-width:0;">' + centerContent + playerEditor + '</div>' +
+        arrow + '</div>';
+}
+
+// ── Drag & Drop 2-col ─────────────────────────────────────────────────
+function onDragStart(event, side, idx) {
+    _dragging = { side: side, idx: idx };
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+function onDrop(event, targetSide) {
+    event.preventDefault();
+    if (!_dragging) return;
+    if (_dragging.side === targetSide) { _dragging = null; return; }
+    moveItem(_dragging.side, _dragging.idx);
+    _dragging = null;
+}
+
+function moveItem(fromSide, idx) {
+    const src = fromSide === 'available' ? _available : _assigned;
+    const dst = fromSide === 'available' ? _assigned  : _available;
+    const item = src.splice(idx, 1)[0];
+
+    if (fromSide === 'available' && item.types && !item.type) {
+        item.type = item.types[0];
+    }
+    if (fromSide === 'available' && _contentType === 'cameras') {
+        const usedHdmi = _assigned.map(function(a) { return a.hdmi_input; }).filter(Boolean);
+        item.hdmi_input = [1,2,3,4].find(function(h) { return !usedHdmi.includes(h); }) || 1;
+    }
+
+    dst.push(item);
+    _dragging = null;
+
+    const isSquad = _isSquadContent(_contentType);
+    if (isSquad) {
+        _saveSquadThenReload();
+    } else {
+        renderLists();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TRYB 3-KOLUMNOWY (garbarnia squad)
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderThreeCol() {
+    _renderThreeSide('avail3-list',      _available,   'available');
+    _renderThreeSide('starters-list',    _starters,    'starters');
+    _renderThreeSide('substitutes-list', _substitutes, 'substitutes');
+
+    document.getElementById('avail3-count').textContent      = '(' + _available.length   + ')';
+    document.getElementById('starters-count').textContent    = '(' + _starters.length    + '/' + _MAX_STARTERS + ')';
+    document.getElementById('substitutes-count').textContent = '(' + _substitutes.length + ')';
+
+    // Podświetl nagłówek kolumny grających gdy osiągamy limit
+    const limitEl = document.getElementById('starters-limit');
+    if (_starters.length >= _MAX_STARTERS) {
+        limitEl.style.color = '#dc3545';
+        limitEl.style.fontWeight = '600';
+    } else {
+        limitEl.style.color = '#6c757d';
+        limitEl.style.fontWeight = '400';
+    }
+}
+
+function _renderThreeSide(containerId, items, side) {
+    const el = document.getElementById(containerId);
+    if (items.length === 0) {
+        el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:#adb5bd;font-size:.85rem;">Przeciągnij tu elementy</div>';
+        return;
+    }
+    el.innerHTML = items.map(function(item, idx) {
+        return _buildThreeCard(item, side, idx);
+    }).join('');
+}
+
+// pg_id zawodnika aktualnie w trybie edycji; null = nikt
+let _editingPgId = null;
+
+function _buildThreeCard(item, side, idx) {
+    const label      = item.label || '';
+    const isAssigned = (side === 'starters' || side === 'substitutes');
+    const numStr     = item.number != null ? ' #' + item.number : '';
+
+    // Odznaki (GK / M / C) — wspólne dla wszystkich kolumn
+    function badges(it) {
+        let b = '';
+        if (it.is_goalkeeper) b += '<span style="font-size:.72rem;background:#17a2b8;color:#fff;border-radius:3px;padding:0 .25rem;margin-left:.3rem;">GK</span>';
+        if (it.is_youth)      b += '<span style="font-size:.72rem;background:#fd7e14;color:#fff;border-radius:3px;padding:0 .25rem;margin-left:.2rem;">M</span>';
+        if (it.is_captain)    b += '<span style="font-size:.72rem;background:#6f42c1;color:#fff;border-radius:3px;padding:0 .25rem;margin-left:.2rem;">C</span>';
+        return b;
+    }
+
+    // ── Widok edycji (tylko assigned, po dwukliku) ────────────────────
+    const isEditing = isAssigned
+        && _editingPgId !== null
+        && String(item.pg_id) === String(_editingPgId);
+
+    if (isEditing) {
+        return '<div class="player-container player-container--editing" data-side="' + side + '" data-idx="' + idx + '">' +
+            '<span style="color:#adb5bd;font-size:1rem;flex-shrink:0;margin-top:.15rem;">&#8291;</span>' +
+            '<div style="flex:1;min-width:0;">' + _buildPlayerEditor(item, _contentType) + '</div>' +
+            '</div>';
+    }
+
+    // ── Widok kompaktowy ──────────────────────────────────────────────
+    let rightBtn = '';
+    if (side === 'available') {
+        rightBtn = '<span class="move-item-btn" title="Dodaj do składu" onclick="moveToSquad(\'' + side + '\',' + idx + ')" style="color:#28a745;">&#8594;</span>';
+    } else if (side === 'starters') {
+        rightBtn =
+            '<div style="display:flex;flex-direction:column;gap:.1rem;flex-shrink:0;">' +
+            '<span class="move-item-btn" title="Do rezerwy" onclick="moveThree(\'starters\',' + idx + ',\'substitutes\')" style="color:#fd7e14;font-size:.8rem;">R&#8594;</span>' +
+            '<span class="move-item-btn" title="Usuń" onclick="moveThree(\'starters\',' + idx + ',\'available\')" style="color:#dc3545;">&#8592;</span>' +
+            '</div>';
+    } else {
+        rightBtn =
+            '<div style="display:flex;flex-direction:column;gap:.1rem;flex-shrink:0;">' +
+            '<span class="move-item-btn" title="Do składu" onclick="moveThree(\'substitutes\',' + idx + ',\'starters\')" style="color:#28a745;font-size:.8rem;">&#8592;S</span>' +
+            '<span class="move-item-btn" title="Usuń" onclick="moveThree(\'substitutes\',' + idx + ',\'available\')" style="color:#dc3545;">&#8592;</span>' +
+            '</div>';
+    }
+
+    const dblclick = isAssigned ? 'ondblclick="openPlayerEdit(\'' + side + '\',' + idx + ')"' : '';
+    const tooltip  = isAssigned ? 'title="Kliknij dwukrotnie aby edytować"' : '';
+
+    return '<div draggable="true" ondragstart="onDragStart3(event,\'' + side + '\',' + idx + ')" ' +
+        dblclick + ' ' + tooltip + ' ' +
+        'class="player-container" data-side="' + side + '" data-idx="' + idx + '">' +
+        '<span style="color:#adb5bd;font-size:1rem;flex-shrink:0;">&#8291;</span>' +
+        '<div style="flex:1;min-width:0;display:flex;font-size:.70rem;' + (isAssigned ? 'cursor:pointer;' : '') + '">' +
+            '<span style="font-weight:600;">' + label + '</span>' +
+            (numStr ? '<span style="color:#6c757d;font-size:.78rem;">' + numStr + '</span>' : '') +
+            badges(item) +
+        '</div>' +
+        rightBtn +
+        '</div>';
+}
+
+// Otwórz edycję — tylko re-render, bez zapytania do serwera
+function openPlayerEdit(side, idx) {
+    const arr = side === 'starters' ? _starters : _substitutes;
+    _editingPgId = arr[idx] ? arr[idx].pg_id : null;
+    renderThreeCol();
+}
+
+// Kliknięcie → dodaj do składu (starters jeśli miejsce, inaczej substitutes)
+function moveToSquad(fromSide, idx) {
+    const src = fromSide === 'available' ? _available : (fromSide === 'starters' ? _starters : _substitutes);
+    const item = src.splice(idx, 1)[0];
+
+    if (_starters.length < _MAX_STARTERS) {
+        item.role = 'starter';
+        _starters.push(item);
+    } else {
+        item.role = 'substitute';
+        _substitutes.push(item);
+    }
+    _save3ColThenReload();
+}
+
+// Przeniesienie między kolumnami w trybie 3-col
+function moveThree(fromSide, idx, toSide) {
+    const _map = { available: _available, starters: _starters, substitutes: _substitutes };
+    const src  = _map[fromSide];
+    const dst  = _map[toSide];
+    const item = src.splice(idx, 1)[0];
+
+    if (toSide === 'starters' && _starters.length >= _MAX_STARTERS) {
+        // Limit osiągnięty — przesuń do rezerwy zamiast
+        item.role = 'substitute';
+        _substitutes.push(item);
+    } else if (toSide === 'available') {
+        // Usuń — wróć do dostępnych (pg_id znika po przeładowaniu)
+        _available.push(item);
+    } else {
+        item.role = toSide === 'starters' ? 'starter' : 'substitute';
+        dst.push(item);
+    }
+    _save3ColThenReload();
+}
+
+// ── Drag & Drop 3-col ─────────────────────────────────────────────────
+let _dragging3 = null;
+
+function onDragStart3(event, side, idx) {
+    _dragging3 = { side: side, idx: idx };
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+function onDrop3(event, targetSide) {
+    event.preventDefault();
+    if (!_dragging3) return;
+    const from = _dragging3.side;
+    const idx  = _dragging3.idx;
+    _dragging3 = null;
+    if (from === targetSide) return;
+
+    if (targetSide === 'available') {
+        moveThree(from, idx, 'available');
+    } else if (targetSide === 'starters') {
+        if (from === 'available') {
+            moveToSquad('available', idx);
+        } else {
+            moveThree(from, idx, 'starters');
+        }
+    } else if (targetSide === 'substitutes') {
+        if (from === 'available') {
+            // Wymuś do rezerwy niezależnie od limitu
+            const item = _available.splice(idx, 1)[0];
+            item.role = 'substitute';
+            _substitutes.push(item);
+            _save3ColThenReload();
+        } else {
+            moveThree(from, idx, 'substitutes');
+        }
+    }
+}
+
+function _save3ColThenReload() {
+    fetch('/api/assign/' + _contentType + '/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            starters:    _starters,
+            substitutes: _substitutes,
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WSPÓLNY edytor zawodnika (używany w obu trybach)
+// ═══════════════════════════════════════════════════════════════════════
+
+function _buildPlayerEditor(item, contentType) {
+    const num   = item.number != null ? item.number : '';
+    const ln    = item.last_name  || '';
+    const fn    = item.first_name || '';
+    const isGK  = item.is_goalkeeper ? 'checked' : '';
+    const isCap = item.is_captain    ? 'checked' : '';
+    const isYth = item.is_youth      ? 'checked' : '';
+    const pgId  = item.pg_id;
+    const plId  = item.player_id;
+    const ts    = contentType;
+    const inp   = 'border:1px solid #ced4da;border-radius:3px;font-size:.78rem;padding:.1rem .3rem;background:#fff;';
+
+    let youthCheckbox = '';
+    if (_isGarbarnia) {
+        youthCheckbox =
+            '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Młodzieżowiec">' +
+                '<input type="checkbox" ' + isYth + ' ' +
+                    'data-pg="' + pgId + '" data-field="is_youth" ' +
+                    'onchange="patchGamePlayer(this)"> M' +
+            '</label>';
+    }
+
+    return (
+        '<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">' +
+            '<input type="number" min="1" max="99" placeholder="#" value="' + num + '" ' +
+                'data-pg="' + pgId + '" data-field="number" ' +
+                'style="' + inp + 'width:3rem;" ' +
+                'onkeydown="if(event.key===\'Enter\'){patchGamePlayer(this);this.blur();}" ' +
+                'onblur="patchGamePlayer(this)">' +
+            '<input type="text" placeholder="Nazwisko" value="' + ln.replace(/"/g, '&quot;') + '" ' +
+                'data-pl="' + plId + '" data-field="last_name" ' +
+                'style="' + inp + 'width:5rem;" ' +
+                'onkeydown="if(event.key===\'Enter\'){patchPlayer(this);this.blur();}" ' +
+                'onblur="patchPlayer(this)">' +
+            '<input type="text" placeholder="Imi\u0119" value="' + fn.replace(/"/g, '&quot;') + '" ' +
+                'data-pl="' + plId + '" data-field="first_name" ' +
+                'style="' + inp + 'width:5rem;" ' +
+                'onkeydown="if(event.key===\'Enter\'){patchPlayer(this);this.blur();}" ' +
+                'onblur="patchPlayer(this)">' +
+            '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Bramkarz">' +
+                '<input type="checkbox" ' + isGK + ' ' +
+                    'data-pg="' + pgId + '" data-field="is_goalkeeper" ' +
+                    'onchange="patchGamePlayer(this)"> GK' +
+            '</label>' +
+            '<label style="font-size:.78rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;" title="Kapitan">' +
+                '<input type="radio" name="captain-' + ts + '" ' + isCap + ' ' +
+                    'data-pg="' + pgId + '" data-field="is_captain" ' +
+                    'onchange="patchCaptain(this)"> \u00a9' +
+            '</label>' +
+            youthCheckbox +
+        '</div>'
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Type / HDMI / scrape — bez zmian
+// ═══════════════════════════════════════════════════════════════════════
+
+function onTypeChange(sel) {
+    const idx  = parseInt(sel.dataset.idx);
+    const side = sel.dataset.side;
+    const arr  = side === 'assigned' ? _assigned : _available;
+    arr[idx].type = sel.value;
+}
+
+function onHdmiChange(sel) {
+    _assigned[parseInt(sel.dataset.idx)].hdmi_input = parseInt(sel.value);
+    renderLists();
+}
+
+function scrapeSquad() {
+    if (!_contentType) return;
+    const statusEl = document.getElementById('modal-scrape-status');
+    const btn = document.querySelector('#scrape-btn');
+    btn.disabled = true;
+    statusEl.textContent = 'Scrapowanie...';
+    fetch('/teams/' + _squadTeamId + '/scrape-players')
+        .then(function(r) {
+            if (r.status === 202) {
+                statusEl.textContent = 'Scrapowanie w toku — proszę czekać...';
+            } else {
+                return r.json().then(function(d) {
+                    if (d.error === 'file_missing') {
+                        statusEl.innerHTML =
+                            'Nie znaleziono pliku z kadrą <strong>' + d.team_name + '</strong>. ' +
+                            'Najpierw zapisz plik! ' +
+                            '<a href="#" onclick="navigator.clipboard.writeText(\'' + d.url + '\');' +
+                            'this.textContent=\'✓ skopiowano\';return false;" ' +
+                            'title="' + d.url + '">ADRES</a>';
+                    } else {
+                        statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+                    }
+                    btn.disabled = false;
+                });
+            }
+        })
+        .catch(function() {
+            statusEl.textContent = 'Błąd połączenia';
+            btn.disabled = false;
+        });
+}
+
+function openAddPlayerForm() {
+    document.getElementById('new-player-first-name').value = '';
+    document.getElementById('new-player-last-name').value = '';
+    document.getElementById('new-player-number').value = '';
+    document.getElementById('new-player-goalkeeper').checked = false;
+    document.getElementById('add-player-status').textContent = '';
+    document.getElementById('add-player-form-container').style.display = 'block';
+    document.getElementById('new-player-first-name').focus();
+}
+
+function closeAddPlayerForm() {
+    document.getElementById('add-player-form-container').style.display = 'none';
+}
+
+function submitAddPlayer() {
+    var firstName = document.getElementById('new-player-first-name').value.trim();
+    var lastName  = document.getElementById('new-player-last-name').value.trim();
+    var number    = document.getElementById('new-player-number').value.trim();
+    var isGoalkeeper = document.getElementById('new-player-goalkeeper').checked;
+    var statusEl  = document.getElementById('add-player-status');
+
+    if (!firstName || !lastName) {
+        statusEl.textContent = 'Imię i nazwisko są wymagane.';
+        return;
+    }
+
+    fetch('/api/teams/' + _squadTeamId + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            first_name:    firstName,
+            last_name:     lastName,
+            number:        number ? parseInt(number) : null,
+            is_goalkeeper: isGoalkeeper,
+        }),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (!res.ok) {
+            statusEl.textContent = res.data.error || 'Błąd zapisu.';
+            return;
+        }
+        closeAddPlayerForm();
+        openAssignModal(_contentType);
+    })
+    .catch(function() { statusEl.textContent = 'Błąd połączenia.'; });
+}
+
+// function scrapeSquad() {
+//     if (!_contentType) return;
+//     const statusEl = document.getElementById('modal-scrape-status');
+//     const btn = document.querySelector('#scrape-btn');
+//     btn.disabled = true;
+//     statusEl.textContent = 'Scrapowanie...';
+//     fetch('/teams/' + _squadTeamId + '/scrape-players')
+//         .then(function(r) {
+//             if (r.status === 202) {
+//                 statusEl.textContent = 'Scrapowanie w toku — proszę czekać...';
+//             } else {
+//                 return r.json().then(function(d) {
+//                     statusEl.textContent = 'Błąd: ' + (d.error || 'nieznany');
+//                     btn.disabled = false;
+//                 });
+//             }
+//         })
+//         .catch(function() {
+//             statusEl.textContent = 'Błąd połączenia';
+//             btn.disabled = false;
+//         });
+// }
+
+// ── SocketIO ───────────────────────────────────────────────────────────
+const _socket = io();
+
+_socket.on('player_scraping_completed', function(data) {
+    const side = (data.team_id === _homeTeamId) ? 'home-squad' : 'away-squad';
+    window.location.href = '/game-setup?open=' + side;
+});
+
+// ── Reload modal ──────────────────────────────────────────────────────
+function _saveSquadThenReload() {
+    fetch('/api/assign/' + _contentType + '/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned: _assigned }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+function _reloadModal() {
+    const ct = _contentType;
+    fetch('/api/assign/' + ct + '/data')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            if (data.team_id) _squadTeamId = data.team_id;
+            _editingPgId = null;   // zamknij edycję po każdym przeładowaniu
+            if (_useThreeCol()) {
+                _starters    = data.starters    || [];
+                _substitutes = data.substitutes || [];
+                _available   = data.available   || [];
+                renderThreeCol();
+            } else {
+                _available = data.available || [];
+                _assigned  = data.assigned  || [];
+                renderLists();
+            }
+        });
+}
+
+// ── Inline patch helpers ──────────────────────────────────────────────
+function patchGamePlayer(el) {
+    const pgId  = el.dataset.pg;
+    const field = el.dataset.field;
+    let value;
+    if (el.type === 'checkbox') value = el.checked;
+    else if (el.type === 'number') value = el.value === '' ? null : parseInt(el.value);
+    else value = el.value;
+
+    // Optimistyczna aktualizacja lokalnego stanu (2-col)
+    const idx = _assigned.findIndex(function(a) { return String(a.pg_id) === String(pgId); });
+    if (idx !== -1) _assigned[idx][field] = value;
+
+    fetch('/api/player-game/' + pgId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd: ' + data.error); return; }
+        if (field === 'number' && idx !== -1) _assigned[idx].number = data.pg.number;
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+function patchCaptain(el) {
+    patchGamePlayer(el);
+}
+
+function patchPlayer(el) {
+    const plId  = el.dataset.pl;
+    const field = el.dataset.field;
+    const value = el.value.trim();
+    if (!value) return;
+
+    const idx = _assigned.findIndex(function(a) { return String(a.player_id) === String(plId); });
+    if (idx !== -1) {
+        _assigned[idx][field] = value;
+        _assigned[idx].label  = _assigned[idx].last_name + ' ' + _assigned[idx].first_name;
+    }
+
+    fetch('/api/player/' + plId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd: ' + data.error); }
+        _reloadModal();
+    })
+    .catch(function() { alert('Błąd połączenia'); });
+}
+
+// ── Save ───────────────────────────────────────────────────────────────
+function saveAssignments() {
+    if (!_contentType) return;
+    const isSquad = _isSquadContent(_contentType);
+
+    if (isSquad) {
+        // Skład zapisywany przy każdym ruchu — zamknij i przeładuj stronę
+        window.location.reload();
+        return;
+    }
+
+    if (_contentType === 'uniforms') {
+        saveUniforms();
+        return;
+    }
+
+    fetch('/api/assign/' + _contentType + '/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned: _assigned }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        window.location.reload();
+    })
+    .catch(function() { alert('Błąd komunikacji z serwerem'); });
+}
+
+// ── Uniforms Modal — bez zmian ────────────────────────────────────────
+let _uniformsData = null;
+let _uniformHomeSelected = null;
+let _uniformAwaySelected = null;
+
+function _showUniformsPanel(show) {
+    _showPanel(show ? 'uniforms' : (_useThreeCol() ? 'three-col' : 'two-col'));
+}
+
+function openUniformsModal() {
+    document.getElementById('modal-title').textContent = 'Wczytywanie...';
+    _showPanel('uniforms');
+    document.getElementById('assign-modal-overlay').style.display = 'flex';
+    document.getElementById('scrape-btn').style.display = 'none';
+
+    fetch('/api/assign/uniforms/data')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); closeAssignModal(); return; }
+            _uniformsData = data;
+            document.getElementById('modal-title').textContent = '👕 Stroje';
+            document.getElementById('uniforms-home-title').textContent = '🏠 ' + data.home_team_name;
+            document.getElementById('uniforms-away-title').textContent = '✈️ ' + data.away_team_name;
+            _uniformHomeSelected = _resolveInitialSelection(data.home);
+            _uniformAwaySelected = _resolveInitialSelection(data.away);
+            renderUniformOptions('home', data.home.options, _uniformHomeSelected);
+            renderUniformOptions('away', data.away.options, _uniformAwaySelected);
+        })
+        .catch(function() { alert('Błąd wczytywania danych'); closeAssignModal(); });
+}
+
+function _colorsEqual(a, b) {
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    return a.every(function(c, i) { return c === b[i]; });
+}
+
+function _resolveInitialSelection(sideData) {
+    const saved = sideData.selected_colors;
+    const DEFAULT_SENTINEL = ['#000'];
+    if (!saved || _colorsEqual(saved, DEFAULT_SENTINEL)) {
+        return sideData.options.length > 0 ? sideData.options[0].colors : null;
+    }
+    for (var i = 0; i < sideData.options.length; i++) {
+        if (_colorsEqual(saved, sideData.options[i].colors)) return saved;
+    }
+    return saved;
+}
+
+function renderUniformOptions(side, options, selectedColors) {
+    const container = document.getElementById('uniforms-' + side + '-options');
+    container.innerHTML = '';
+    options.forEach(function(opt, idx) {
+        const isExtra    = (opt.source === 'extra');
+        const isSelected = _colorsEqual(opt.colors, selectedColors);
+        const radioId    = 'uniform-' + side + '-' + idx;
+        const colors     = opt.colors;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio'; radio.name = 'uniform-' + side;
+        radio.id = radioId; radio.value = JSON.stringify(colors);
+        radio.checked = isSelected;
+        radio.style.cssText = 'flex-shrink:0;width:1.1rem;height:1.1rem;cursor:pointer;';
+        radio.addEventListener('change', function() {
+            if (side === 'home') _uniformHomeSelected = colors;
+            else                 _uniformAwaySelected = colors;
+        });
+
+        const swatch = _buildColorSwatch(colors, isSelected);
+        swatch.style.cursor = 'pointer';
+        swatch.addEventListener('click', function() { radio.click(); });
+
+        row.appendChild(radio);
+        row.appendChild(swatch);
+
+        if (isExtra) {
+            const label = document.createElement('label');
+            label.htmlFor = radioId;
+            label.style.cssText = 'font-size:.85rem;color:#6c757d;cursor:pointer;margin-right:.3rem;';
+            label.textContent = 'Dodatkowy:';
+            row.appendChild(label);
+
+            const inputsWrap = document.createElement('div');
+            inputsWrap.style.cssText = 'display:flex;gap:.3rem;flex-wrap:wrap;';
+            colors.forEach(function(hex, ci) {
+                const inp = document.createElement('input');
+                inp.type = 'color';
+                inp.value = hex;
+                inp.style.cssText = 'width:2.4rem;height:2rem;padding:0;border:1px solid #ced4da;border-radius:4px;cursor:pointer;';
+                inp.addEventListener('input', function() {
+                    const val = inp.value;
+                    opt.colors[ci] = val;
+                    if (side === 'home' && _colorsEqual(_uniformHomeSelected, colors)) _uniformHomeSelected = opt.colors.slice();
+                    if (side === 'away' && _colorsEqual(_uniformAwaySelected, colors)) _uniformAwaySelected = opt.colors.slice();
+                    _rebuildSwatch(swatch, opt.colors, radio.checked);
+                });
+                inputsWrap.appendChild(inp);
+            });
+            row.appendChild(inputsWrap);
+        } else {
+            const label = document.createElement('label');
+            label.htmlFor = radioId;
+            label.style.cssText = 'font-size:.85rem;color:#6c757d;cursor:pointer;';
+            label.textContent = opt.source === 'home' ? 'Strój domowy' : 'Strój wyjazdowy';
+            row.appendChild(label);
+        }
+        container.appendChild(row);
+    });
+}
+
+function _buildColorSwatch(colors, isSelected) {
+    const swatch = document.createElement('div');
+    _fillSwatch(swatch, colors, isSelected);
+    return swatch;
+}
+
+function _fillSwatch(swatch, colors, isSelected) {
+    swatch.innerHTML = '';
+    swatch.style.cssText =
+        'display:flex;width:75px;height:32px;border-radius:5px;overflow:hidden;' +
+        'border:3px solid ' + (isSelected ? '#0d6efd' : '#dee2e6') + ';flex-shrink:0;';
+    const validColors = colors.filter(function(c) { return /^#[0-9a-fA-F]{3,6}$/.test(c); });
+    (validColors.length ? validColors : ['#cccccc']).forEach(function(hex) {
+        const seg = document.createElement('div');
+        seg.style.cssText = 'flex:1;background:' + hex + ';';
+        swatch.appendChild(seg);
+    });
+}
+
+function _rebuildSwatch(swatch, colors, isSelected) {
+    _fillSwatch(swatch, colors, isSelected);
+}
+
+function saveUniforms() {
+    const home = _uniformHomeSelected;
+    const away = _uniformAwaySelected;
+    if (!home && !away) { closeAssignModal(); return; }
+    fetch('/api/assign/uniforms/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ home_colors: home, away_colors: away }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        window.location.reload();
+    })
+    .catch(function() { alert('Błąd komunikacji z serwerem'); });
+}

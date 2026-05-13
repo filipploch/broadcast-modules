@@ -1,0 +1,175 @@
+#substitutions-container {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    bottom: 100px;
+    left: 90px;
+    overflow: hidden;
+}
+ 
+#substitutions {
+    position: absolute;
+    /* height: fit-content; */
+    width: 100%;
+    bottom: 0px;
+    /* animation: showSubstitution 11s; */
+    animation-fill-mode: both;   
+    background-color: rgba(200, 200, 200, 0.8);
+}
+ 
+#substitution-header {
+    height: 40px;
+    width: 100%;
+    background-color: rgba(30, 30, 30, 0.8);
+    font-size: 35px;
+    text-align: center;
+    color: white;
+    font-weight: 900;
+    padding: 0px;
+    margin-bottom: 10px;
+}
+ 
+.substitution-slot {
+  width: 100%;
+  height: 80px;
+  color: black;
+  text-align: center;
+  display: block;
+  padding: 0 15px 15px 15px;
+}
+ 
+.substitution-player {
+    position: relative;
+    font-size: 35px;
+    display: flex;
+    width: max-content;
+    font-weight: bold;
+}
+
+.substitution-row {
+    height: 40px;
+}
+ 
+/* .subst-player-out {
+    animation: moveRowDown 1s;
+    animation-delay: 7s;
+    animation-fill-mode: both;
+} */
+
+.subst-player-out {
+    animation: moveRowDown 1s;
+    animation-delay: 4s;
+    animation-fill-mode: both;
+}
+ 
+.substitution-out-icon { color: red; }
+.substitution-in-icon  { color: green; }
+ 
+.substitution-icon {
+    text-align: center;
+    width: 40px;
+}
+ 
+/* .subst-player-in {
+    animation: moveRowUp 1s;
+    animation-delay: 7s;
+    animation-fill-mode: both;
+} */
+
+.subst-player-in {
+    animation: moveRowUp 1s;
+    animation-delay: 4s;
+    animation-fill-mode: both;
+}
+ 
+.subst-player-number {
+    width: 50px;
+    text-align: right;
+}
+ 
+.subst-player-name {
+    padding: 0px 10px;
+    text-align: left;
+}
+
+@keyframes showSubstitution {
+    0% {bottom: -100%;}
+    7% {bottom: 0;}
+    93%{bottom: 0;}
+    100%{bottom: -100%;}
+}
+
+/* @keyframes showSubstitution
+{
+    0% {width: 0px;
+        border: 2px solid rgba(0, 0, 0, 1);
+        height: 0px;}
+    1% {width: 0px;
+        border: 2px solid rgba(0, 0, 0, 0.96);
+        height: 40px;}
+    4% {width: 0px;
+        border: 2px solid rgba(0, 0, 0, 0.84);
+        height: 40px;}
+    5% {width: 40px;
+        border: 2px solid rgba(0, 0, 0, 0.81);
+        height: 40px;}
+    8% {width: 40px;
+        height: 40px;
+        border: 2px solid rgba(0, 0, 0, 0.66);
+        transform: rotate(0deg)}
+    12% {width: 40px;
+         height: 40px;
+         border: 2px solid rgba(0, 0, 0, 0.5);
+         transform: rotate(360deg)}
+    16% {width: 40px;
+         height: 100%;
+         border: 2px solid rgba(0, 0, 0, 0.33);
+         transform: rotate(360deg)}
+    24% {width: 100%;
+         height: 100%;
+         border: 2px solid rgba(0, 0, 0, 0);
+         transform: rotate(360deg)}
+    80% {width: 100%;
+         height: 100%;
+         border: 2px solid rgba(0, 0, 0, 0);
+         transform: rotate(360deg)}
+    88% {width: 40px;
+         height: 100%;
+         border: 2px solid rgba(0, 0, 0, 0.4);
+         transform: rotate(360deg)}
+    92% {width: 40px;
+         height: 40px;
+         border: 2px solid rgba(0, 0, 0, 0.7);
+         transform: rotate(360deg)}
+    95% {width: 40px;
+         height: 40px;
+         border: 2px solid rgba(0, 0, 0, 0.75);
+         transform: rotate(360deg)}
+    95% {width: 40px;
+         height: 40px;
+         border: 2px solid rgba(0, 0, 0, 0.75);
+         transform: rotate(360deg)}
+    95% {width: 40px;
+         height: 40px;
+         border: 2px solid rgba(0, 0, 0, 0.75);
+         transform: rotate(0deg)}
+    96% {width: 0px;
+         border: 2px solid rgba(0, 0, 0, 0.8);
+         height: 40px;}
+    99% {width: 0px;
+         border: 2px solid rgba(0, 0, 0, 0.85);
+         height: 40px;}
+    100% {width: 0px;
+          border: 2px solid rgba(0, 0, 0, 1);
+     height: 0px;}
+} */
+ 
+@keyframes moveRowDown {
+    0%   { top: 0px; }
+    100% { top: 40px; }
+}
+ 
+@keyframes moveRowUp {
+    0%   { bottom: 0px; }
+    100% { bottom: 40px; }
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mecze{% endblock %} - Futsal NALF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/logos.css') }}">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div id="socket-monitor" class="hidden" style="width: 90vw; background-color: rgb(0, 88, 13); color: white; position: sticky; top: 0;">
+                <button id="close-socket-monitor" onclick="closeSocketMonitor();" type="button">X</button>
+                <div>
+                    <div id="monitor-header"><span id="header-text" class="sm-text"></span><span id="header-name" class="sm-text"></span></div>
+                </div>
+            </div>
+            <nav>
+                <a href="{{ url_for('game_setup') }}">MECZ</a>
+                {% if broadcast_game_id %}
+                    <a href="{{ url_for('edit_game', game_id=broadcast_game_id) }}" class="broadcast-link">📡 Na żywo</a>
+                {% endif %}
+                {% if season %}
+                    {% for league in season.leagues %}
+                        <a href="{{ url_for('league_games', league_id=league.id) }}">{{ league.name }}</a>
+                    {% endfor %}
+                {% endif %}
+                <a href="{{ url_for('common_data') }}">Dane Wspólne</a>
+                <!-- <a href="{{ url_for('list_leagues') }}">Ligi</a>
+                <a href="{{ url_for('list_games') }}" {% if request.endpoint == 'list_games' %}class="active"{% endif %}>Mecze</a>
+                <a href="{{ url_for('list_teams') }}">Zespoły</a> -->
+            </nav>
+        </div>
+    </header>
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    <div id="modal" class="invisible">
+        <div id="modal-body">
+            <div id="modal-header"><button class="small-button header-button" onclick="closeModal();">X</button> </div>
+            {% block modal_content %}{% endblock %}
+        </div>
+    </div>
+    </main>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui/modal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui/logos.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

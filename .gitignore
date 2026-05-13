@@ -5,7 +5,7 @@
 **/__pycache__/
 **/.venv/
 **/.idea/
-instance/*.*
+**/instance/
 *.zip
 *.db
 **/static/images/logos/*
@@ -18,3 +18,10 @@ instance/*.*
 *.mp3
 *.mp4
 *.mkv
+**/app/data/
+*.env
+**/temp/**
+*.png
+*.gif
+**/images/
+**/video/

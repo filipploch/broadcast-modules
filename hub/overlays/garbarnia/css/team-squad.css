@@ -1,0 +1,25 @@
+#away-team-squad-container{
+    color: black;
+    font-size: 60px;
+}
+
+.squad-player-row {
+    /* padding: 10px; */
+    background: #b5b5b5;
+    background: linear-gradient(0deg,rgba(181, 181, 181, 1) 0%, rgba(255, 255, 255, 1) 100%);
+}
+
+.squad-player-number{
+    text-align: right;
+    padding-left: 40px;
+}
+
+.squad-player-name{
+    font-weight: 700;
+    padding: 0 40px;
+}
+
+.squad-player-func{
+    color: deeppink;
+    padding-right: 80px;
+}

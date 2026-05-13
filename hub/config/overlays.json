@@ -1,0 +1,19 @@
+{
+  "overlays": [
+    {
+      "name": "Futsal NALF",
+      "path": "futsal-nalf/overlay.html",
+      "description": "Overlay dla rozgrywek futsalu NALF"
+    },
+    {
+      "name": "Futsal NALF Preview",
+      "path": "futsal-nalf/preview.html",
+      "description": "Overlay dla rozgrywek futsalu NALF"
+    },
+    {
+      "name": "Garbarnia",
+      "path": "garbarnia/overlay.html",
+      "description": "Overlay dla Garbarni Kraków"
+    }
+  ]
+}

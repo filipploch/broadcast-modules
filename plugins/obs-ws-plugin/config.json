@@ -12,7 +12,10 @@
     "reconnect_interval_ms": 5000,
     "max_reconnect_attempts": 0,
     "connection_timeout_ms": 10000,
-    "event_subscriptions": 65
+    "event_subscriptions": 321
+  },
+  "scene_map": {
+    "path": "obs_scene_map.json"
   },
   "logging": {
     "level": "info"

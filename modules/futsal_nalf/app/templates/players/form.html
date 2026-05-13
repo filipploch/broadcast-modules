@@ -1,0 +1,48 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj zawodnika' if player else 'Dodaj zawodnika' }} — {{ team.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj zawodnika' if player else 'Nowy zawodnik' }} — {{ team.name }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="last_name">Nazwisko *</label>
+            <input type="text" id="last_name" name="last_name"
+                   value="{{ player.last_name if player else '' }}"
+                   required maxlength="100" placeholder="np. Kowalski">
+        </div>
+        <div class="form-group">
+            <label for="first_name">Imię *</label>
+            <input type="text" id="first_name" name="first_name"
+                   value="{{ player.first_name if player else '' }}"
+                   required maxlength="100" placeholder="np. Jan">
+        </div>
+        <div class="form-group">
+            <label for="number">Numer koszulki</label>
+            <input type="number" id="number" name="number"
+                   value="{{ player.number if player and player.number is not none else '' }}"
+                   min="1" max="99" placeholder="np. 10">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_goalkeeper"
+                       {{ 'checked' if player and player.is_goalkeeper else '' }}>
+                Bramkarz
+            </label>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_captain"
+                       {{ 'checked' if player and player.is_captain else '' }}>
+                Kapitan
+            </label>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_players', team_id=team.id) }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

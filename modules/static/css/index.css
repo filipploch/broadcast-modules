@@ -1,0 +1,188 @@
+body {
+  margin:0px;
+  padding:0;
+  font-family:"Varela Round",sans-serif;
+}
+
+#container {
+    position: absolute;
+    display: flex;
+    height:264px;
+    width:162px;
+    border:1px solid black;
+    margin:0px;
+    padding:0;
+    background-color:#2b2e38;
+    overflow:hidden;
+}
+
+.module-frame {
+    margin:0px;
+    padding:0px;
+}
+
+.top-bar {
+    position: relative;
+    display: flex;
+    background-color: darkgray;
+}
+
+a {
+    text-decoration: none;
+}
+
+.top-bar-element {
+    font-size: 12px !important;
+    margin: 0;
+    padding: 0;
+    height: 15px;
+}
+
+button.top-bar-element {
+    width: 15px;
+}
+
+#nav-to-game-settings {
+    margin-right: 2px;
+}
+
+#column-controls {
+	position: relative;
+	width: 165px;
+}
+
+.penalty-timer {
+    display: grid;
+    grid-template-columns: 25% 50% 25%;
+}
+
+.penalty-x-button {
+    right: 0px;
+    position: relative;
+    top: 0px;
+    height: 15px;
+    width: 15px;
+    padding: 0;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+
+.penalty-timer-button {
+	height: 40%;
+}
+
+.svg-field {
+    border: 1px solid white;
+}
+
+.events-td-game-time {
+    width: 30px;
+}
+
+.events-td-event-name {
+    width: 25px;
+}
+
+.events-td-player-number {
+    display: inline-block;
+    width: 15px;
+    text-align: right;
+}
+
+.events-td-team-short-name {
+    width: 30px;
+}
+
+.events-td-result {
+    width: 30px;
+}
+
+.events-td-player-name {
+    width: 235px;
+}
+
+.events-td-svg-field {
+    width: 25px;
+}
+
+.filter-event-button {
+    width: calc(100%/7);
+    font-weight: 700;
+    font-size: 10px !important;
+    background-color: #cdfeb5;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#game-events-table{
+    font-size: 12px;
+}
+
+.event-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+}
+
+#game-event-edit-result {
+    display: flex;
+}
+
+.game-event-edit-result-controller-btn {
+    display: block;
+    width: 23px;
+    height: 23px;
+}
+
+#game-event-edit-result-content {
+    width: 50px;
+    text-align: center;
+}
+
+#game-event-current-result {
+    background-color: gray;
+    height: 23px;
+}
+
+#game-event-new-result {
+    background-color: darkgoldenrod;
+    height: 23px;
+}
+
+.cards-container {
+    padding: 2px 1px;
+    background-color: rgb(166, 166, 166);
+}
+
+.cards {
+    display: flex;
+    padding: 0 5px;
+}
+
+.cards-middle-element {
+    background-color: darkgray !important;
+    border-width: 0 !important;
+}
+
+.card {
+    border-width: 0 !important;
+    height: 20px;
+    scale: 0.9;
+    margin: 0 5px;
+}
+
+.yellowCard {
+    background-color: rgb(255, 255, 0) !important;
+}
+
+.redCard {
+    background-color: rgb(255, 0, 0) !important;
+}
+
+#stream-controllers [id$="-icon"] svg,
+#stream-controllers [id$="-plugin-icon"] svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}

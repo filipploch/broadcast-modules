@@ -1,0 +1,21 @@
+
+
+.timer-paused {
+    color: #ffc107 !important;
+}
+
+.timer-running {
+    color: #4CAF50 !important;
+}
+
+.timer-stopped {
+    color: #f44336 !important;
+}
+
+.timer-overtime {
+    color: #ff9800 !important;
+    animation: pulse 1s infinite;
+}
+
+/* Dodaj do timer.css */
+

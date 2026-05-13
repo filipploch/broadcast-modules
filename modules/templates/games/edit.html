@@ -1,0 +1,117 @@
+{% extends "base/base.html" %}
+{% block title %}Edytuj Mecz{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Edytuj Mecz</span>
+        {% if game.periods.count() == 0 %}
+        <a href="{{ url_for('prepare_game_for_broadcast', game_id=game.id) }}" class="btn btn-primary">📡 Przygotuj mecz do transmisji</a>
+        {% else %}
+        <a href="{{ url_for('select_game_for_broadcast', game_id=game.id) }}" class="btn btn-success">✅ Wybierz mecz do transmisji</a>
+        {% endif %}
+    </div>
+    <form method="POST">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="home_team_id">Gospodarz *</label>
+                <select id="home_team_id" name="home_team_id" required readonly>
+                    {% for team in teams %}<option value="{{ team.id }}" {% if team.id == game.home_team_id %}selected{% endif %}>{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="away_team_id">Gość *</label>
+                <select id="away_team_id" name="away_team_id" required readonly>
+                    {% for team in teams %}<option value="{{ team.id }}" {% if team.id == game.away_team_id %}selected{% endif %}>{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="is_home_team_lost_by_wo">Porażka przez WO</label>
+                <input id="is_home_team_lost_by_wo" name="is_home_team_lost_by_wo" type="checkbox"
+                {% if game.is_home_team_lost_by_wo == 1 %} value="1" checked {% else %} value="0" {% endif %}
+                >
+                </input>
+            </div>
+            <div class="form-group">
+                <label for="home_team_goals">Bramki</label>
+                <input type="number" id="home_team_goals" name="home_team_goals" value="{{ game.home_team_goals }}">
+            </div>
+            <div class="form-group">
+                <label for="away_team_goals">Bramki</label>
+                <input type="number" id="away_team_goals" name="away_team_goals" value="{{ game.away_team_goals }}">
+            </div>
+            <div class="form-group">
+                <label for="is_away_team_lost_by_wo">Porażka przez WO</label>
+                <input id="is_away_team_lost_by_wo" name="is_away_team_lost_by_wo" type="checkbox"
+                {% if game.is_away_team_lost_by_wo == 1 %} value="1" checked {% else %} value="0" {% endif %}
+                >
+                </input>
+            </div>
+        </div>
+        
+        <!-- Rzuty karne -->
+        {% if not game.shootout %}
+        <div class="form-group">
+            <button type="button" class="btn btn-primary" onclick="addShootout()">➕ Dodaj rzuty karne</button>
+        </div>
+        {% else %}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="home_team_shootouts">Bramki (rzuty karne - gospodarz)</label>
+                <input type="number" id="home_team_shootouts" name="home_team_shootouts" value="{{ game.shootout.home_team_shootouts }}" min="0">
+            </div>
+            <div class="form-group">
+                <label for="away_team_shootouts">Bramki (rzuty karne - gość)</label>
+                <input type="number" id="away_team_shootouts" name="away_team_shootouts" value="{{ game.shootout.away_team_shootouts }}" min="0">
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="form-group">
+            <label for="stadium_id">Stadion *</label>
+            <select id="stadium_id" name="stadium_id" required>
+                {% for stadium in stadiums %}<option value="{{ stadium.id }}" {% if stadium.id == game.stadium_id %}selected{% endif %}>{{ stadium.name }}, {{ stadium.city }}</option>{% endfor %}
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="round">Kolejka *</label>
+                <input type="number" id="round" name="round" value="{{ game.round }}" required min="1">
+            </div>
+            <div class="form-group">
+                <label for="group_nr">Grupa</label>
+                <input type="number" id="group_nr" name="group_nr" value="{{ game.group_nr }}" min="1" max="10">
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="date">Data</label>
+                <input type="date" id="date" name="date" value="{{ game.date.strftime('%Y-%m-%d') if game.date else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="time">Godzina</label>
+                <input type="time" id="time" name="time" value="{{ game.date.strftime('%H:%M') if game.date else '' }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="foreign_id">Foreign ID</label>
+            <input type="text" id="foreign_id" name="foreign_id" value="{{ game.foreign_id or '' }}" maxlength="500" placeholder="np. external-game-789" style="background: #f8f9fa; cursor: pointer;" ondblclick="enableElementToEdit(this)" readonly>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz Zmiany</button>
+            <a href="{{ url_for('view_game', game_id=game.id) }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function addShootout() {
+    if (confirm('Czy na pewno chcesz dodać rzuty karne do tego meczu?')) {
+        // Redirect to endpoint that will create penalty shootout
+        window.location.href = "{{ url_for('add_shootout', game_id=game.id) }}";
+    }
+}
+</script>
+{% endblock %}
