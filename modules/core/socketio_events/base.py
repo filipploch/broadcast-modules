@@ -380,6 +380,64 @@ def register_events(socketio):
                 'payload': data.get('payload', {}),
             })
 
+    @socketio.on('send_background_to_obs')
+    def handle_send_background_to_obs(data):
+        """Zmienia plik źródła BackgroundImage w scenie STREAM przez obs-ws-plugin."""
+        import os
+        from core.models.base_background_image import get_background_image_model
+        from core.managers import get_hub_client
+        from core.extensions import db as _db
+
+        bg_id = data.get('background_image_id')
+        BG = get_background_image_model()
+        bg = BG.query.get(bg_id)
+        if not bg:
+            return
+
+        abs_path = os.path.join(current_app.static_folder, bg.path)
+
+        BG.query.update({BG.is_active: False})
+        bg.is_active = True
+        _db.session.commit()
+
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send({
+                'from':    current_app.config['MODULE_ID'],
+                'to':      'obs-ws-plugin',
+                'type':    'obs_command',
+                'payload': {
+                    'requestType': 'SetInputSettings',
+                    'requestData': {
+                        'inputName':     'BackgroundImage',
+                        'inputSettings': {'file': abs_path},
+                        'overlay':       False,
+                    }
+                }
+            })
+
+    @socketio.on('send_banner_to_overlay')
+    def handle_send_banner_to_overlay(data):
+        """Pobiera baner z DB i wysyła go do stream-overlay przez hub."""
+        from core.models.base_banner import get_banner_model
+        from core.managers import get_hub_client
+        banner_id = data.get('banner_id')
+        Banner = get_banner_model()
+        banner = Banner.query.get(banner_id)
+        if not banner:
+            return
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send({
+                'from': current_app.config['MODULE_ID'],
+                'to':   'stream-overlay',
+                'type': 'banner_show',
+                'payload': {
+                    'source':              banner.source,
+                    'activation_function': banner.activation_function,
+                },
+            })
+
     # ── Show overlay ──────────────────────────────────────────────────────────
 
     @socketio.on('show_overlay_container')
@@ -577,6 +635,26 @@ def _handle_core_content(content_type, data):
             'date_to':      date_to,
             'leagues':      leagues_data,
             'games':        [g.to_dict() for g in games],
+        }
+
+    elif content_type == 'banners':
+        from core.models.base_banner import get_banner_model
+        Banner = get_banner_model()
+        banners = Banner.query.order_by(Banner.order).all()
+        return {
+            'content_type': 'banners',
+            'banners': [b.to_dict() for b in banners],
+        }
+
+    elif content_type == 'backgrounds':
+        from core.models.base_background_image import get_background_image_model
+        BG = get_background_image_model()
+        backgrounds = BG.query.order_by(BG.order, BG.name).all()
+        active = BG.query.filter_by(is_active=True).first()
+        return {
+            'content_type':      'backgrounds',
+            'backgrounds':       [b.to_dict() for b in backgrounds],
+            'active_background': active.to_dict() if active else None,
         }
 
     return None  # nieznany — przekaż do modułu

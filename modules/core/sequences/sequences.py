@@ -60,15 +60,16 @@ def replay_sequence(context) -> list:
 
     Przepływ:
       t=0ms     → SetSceneItemEnabled(Replay, false) — upewnij się że Replay ukryty
-      t=0ms     → replay_play do replay-plugin — mpv ładuje plik, seekuje, czeka na start
-      t=transition_lead_ms → SetSceneItemEnabled(Replay, true)
-                  transition_lead_ms jest czytane z config.json replay-plugin
-                  i synchronizuje pokazanie/ukrycie źródła Replay z mpv
+      t=0ms     → replay_play do replay-plugin
+                  mpv: loadfile → czeka na załadowanie z dysku → seek → WaitUntilPlaying
+      po 'replay_started' z replay-plugin (mpv ma gotową klatkę, właśnie odpięto pauzę):
+                → SetSceneItemEnabled(Replay, true)
+                  Brak zamrożonej klatki — OBS odkrywa źródło gdy klatka jest już gotowa.
 
       [replay trwa — replay-plugin monitoruje AB-loop]
 
       Po odebraniu 'replay_done' z replay-plugin:
-      t+0ms     → SetSceneItemEnabled(Replay, false)
+                → SetSceneItemEnabled(Replay, false)
                   replay-plugin pauzuje mpv dopiero po transition_lead_ms, więc
                   OBS ukrywa źródło wcześniej niż faktyczny koniec powtórki.
 
@@ -110,10 +111,28 @@ def replay_sequence(context) -> list:
             'delay_ms': 0,
         },
 
-        # 2. Po czasie z config.json włącz widoczność Replay w OBS.
-        #    Ten sam lead jest używany przy końcu: OBS ukrywa źródło po replay_done,
-        #    a replay-plugin pauzuje mpv dopiero po transition_lead_ms.
-        show_source(scene_name, source_name, is_visible=True, delay_ms=transition_lead_ms),
+        # 2. Czekaj na potwierdzenie gotowości od replay-plugin.
+        #    replay_started wysyłany jest przez plugin dopiero po WaitUntilPlaying —
+        #    czyli gdy mpv załadował plik z dysku, zakończył seek i odpina pauzę.
+        #    on_timeout: awaryjne pokazanie po 10s (np. bardzo wolny dysk, błąd IPC).
+        {
+            'wait_for_hub_message': 'replay_started',
+            'timeout_ms':           10_000,
+            'target':  'obs-ws-plugin',
+            'action':  'obs_command_by_name',
+            'payload': {
+                'requestType': 'SetSceneItemEnabled',
+                'sceneName':   scene_name,
+                'sourceName':  source_name,
+                'requestData': {
+                    'sceneName':        scene_name,
+                    'sceneItemEnabled': True,
+                },
+            },
+            'on_timeout': [
+                show_source(scene_name, source_name, is_visible=True, delay_ms=0),
+            ],
+        },
 
         # 3. Czekaj na sygnał zakończenia od replay-plugin
         #    replay-plugin wyśle 'replay_done' po czasie z DB albo po ręcznym end_replay.

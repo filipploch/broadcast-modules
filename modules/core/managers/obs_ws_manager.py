@@ -88,7 +88,6 @@ class ObsWsManager:
         if request_id == 'get-websocket-connection':
             self._emit_to_ui('obs_status', 'connected')
         elif request_id.startswith('get-record-status-'):
-            print(f'OBS_RESPONSE: {msg}')
             request_id = int(request_id.split('get-record-status-')[1])
             try:
                 from core.models.base_settings import get_settings_model
@@ -145,7 +144,7 @@ class ObsWsManager:
         elif request_id.startswith('sync-request-'):
             self._handle_sync_request(payload=payload)
         else:
-            print(f'OBS_X_RESPONSE: {msg}')
+            current_app.logger.warning(f"Unhandled OBS response requestID={request_id}: {msg}")
 
     def _handle_sync_request(self, payload):
         request_id    = payload.get('requestID')

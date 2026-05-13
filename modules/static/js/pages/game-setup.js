@@ -513,6 +513,54 @@ function scrapeSquad() {
         });
 }
 
+function openAddPlayerForm() {
+    document.getElementById('new-player-first-name').value = '';
+    document.getElementById('new-player-last-name').value = '';
+    document.getElementById('new-player-number').value = '';
+    document.getElementById('new-player-goalkeeper').checked = false;
+    document.getElementById('add-player-status').textContent = '';
+    document.getElementById('add-player-form-container').style.display = 'block';
+    document.getElementById('new-player-first-name').focus();
+}
+
+function closeAddPlayerForm() {
+    document.getElementById('add-player-form-container').style.display = 'none';
+}
+
+function submitAddPlayer() {
+    var firstName = document.getElementById('new-player-first-name').value.trim();
+    var lastName  = document.getElementById('new-player-last-name').value.trim();
+    var number    = document.getElementById('new-player-number').value.trim();
+    var isGoalkeeper = document.getElementById('new-player-goalkeeper').checked;
+    var statusEl  = document.getElementById('add-player-status');
+
+    if (!firstName || !lastName) {
+        statusEl.textContent = 'Imię i nazwisko są wymagane.';
+        return;
+    }
+
+    fetch('/api/teams/' + _squadTeamId + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            first_name:    firstName,
+            last_name:     lastName,
+            number:        number ? parseInt(number) : null,
+            is_goalkeeper: isGoalkeeper,
+        }),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (!res.ok) {
+            statusEl.textContent = res.data.error || 'Błąd zapisu.';
+            return;
+        }
+        closeAddPlayerForm();
+        openAssignModal(_contentType);
+    })
+    .catch(function() { statusEl.textContent = 'Błąd połączenia.'; });
+}
+
 // function scrapeSquad() {
 //     if (!_contentType) return;
 //     const statusEl = document.getElementById('modal-scrape-status');

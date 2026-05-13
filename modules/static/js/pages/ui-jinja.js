@@ -42,6 +42,8 @@ const _MONITOR_TAB_DEFS = {
     events:        { label: 'AKCJE',  action: () => showUiMonitorContent('events') },
     substitutions: { label: 'ZMIANY', action: () => showUiMonitorContent('substitutions') },
     games:         { label: 'MECZE',  action: () => showUiMonitorContent('games') },
+    banners:       { label: 'BANERY',    action: () => showUiMonitorContent('banners') },
+    backgrounds:   { label: 'TŁA',       action: () => showUiMonitorContent('backgrounds') },
 };
 
 function buildMonitorControls() {
@@ -1470,6 +1472,10 @@ socket.on('show_ui_monitor_content', data => {
        _buildAddSubstitutionView(data, uiMonitorContent);
     } else if (data.content_type === 'substitution-edit') {
        _buildSubstitutionEditView(data, uiMonitorContent);
+    } else if (data.content_type === 'banners') {
+        _buildBannersView(data, uiMonitorContent);
+    } else if (data.content_type === 'backgrounds') {
+        _buildBackgroundsView(data, uiMonitorContent);
     }
 });
 
@@ -2155,6 +2161,167 @@ function _renderStandingsTab(tabId, data, container) {
     .catch(function() {
         container.innerHTML = '<p style="color:#e74c3c;padding:1rem;text-align:center;">Błąd pobierania tabeli.</p>';
     });
+}
+
+// ── BANERY ────────────────────────────────────────────────────────────────────
+
+function _buildBannersView(data, uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+    uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+
+    var previewContainer = document.createElement('div');
+    previewContainer.id = 'banner-preview-container';
+    previewContainer.style.cssText = 'width:100%; height:30vh; background:#111; overflow:hidden; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #333;';
+    previewContainer.innerHTML = '<span style="color:#555; font-size:11px;">PODGLĄD</span>';
+
+    var listContainer = document.createElement('div');
+    listContainer.id = 'banners-list-container';
+    listContainer.style.cssText = 'height:62vh; overflow-y:auto;';
+
+    var banners = data.banners || [];
+    if (banners.length === 0) {
+        listContainer.innerHTML = '<p style="color:#666; padding:1rem; text-align:center;">Brak banerów</p>';
+    } else {
+        banners.forEach(function(banner) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; padding:4px 6px; border-bottom:1px solid #222; gap:4px;';
+
+            var nameSpan = document.createElement('span');
+            nameSpan.textContent = banner.name;
+            nameSpan.style.cssText = 'flex:1; color:#ccc; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+
+            var previewBtn = document.createElement('button');
+            previewBtn.type = 'button';
+            previewBtn.className = 'event-btn';
+            previewBtn.textContent = 'P';
+            previewBtn.style.cssText = 'background:#333; color:#ccc; font-size:10px;';
+            previewBtn.addEventListener('click', (function(b) { return function() {
+                var preview = document.getElementById('banner-preview-container');
+                if (preview) { preview.innerHTML = b.source; }
+            }; })(banner));
+
+            var sendBtn = document.createElement('button');
+            sendBtn.type = 'button';
+            sendBtn.className = 'event-btn';
+            sendBtn.textContent = 'W';
+            sendBtn.style.cssText = 'background:green; color:white; font-size:10px;';
+            sendBtn.addEventListener('click', (function(b) { return function() {
+                socket.emit('send_banner_to_overlay', { banner_id: b.id });
+            }; })(banner));
+
+            var editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'event-btn';
+            editBtn.textContent = '✏';
+            editBtn.style.cssText = 'background:#555; color:#fff; font-size:10px;';
+            editBtn.addEventListener('click', (function(b) { return function() {
+                showUiMonitorContent('edit_banner', { banner_id: b.id });
+            }; })(banner));
+
+            row.appendChild(nameSpan);
+            row.appendChild(previewBtn);
+            row.appendChild(sendBtn);
+            row.appendChild(editBtn);
+            listContainer.appendChild(row);
+        });
+    }
+
+    uiMonitorContent.appendChild(previewContainer);
+    uiMonitorContent.appendChild(listContainer);
+}
+
+// ── TŁA ───────────────────────────────────────────────────────────────────────
+
+function _buildBackgroundsView(data, uiMonitorContent) {
+    uiMonitorContent.innerHTML = '';
+    uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
+
+    var PREVIEW_H = 80;
+    var PREVIEW_W = Math.round(PREVIEW_H * 16 / 9);
+
+    // Dwa okna podglądu (16:9, 80px high)
+    var previews = document.createElement('div');
+    previews.style.cssText = 'display:flex; gap:8px; padding:8px; background:#111; border-bottom:1px solid #333;';
+
+    function makePreviewBox(label) {
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:3px;';
+        var lbl = document.createElement('span');
+        lbl.textContent = label;
+        lbl.style.cssText = 'color:#666; font-size:9px; text-transform:uppercase;';
+        var box = document.createElement('div');
+        box.style.cssText = `width:${PREVIEW_W}px; height:${PREVIEW_H}px; background:#1a1a1a; border:1px solid #333; overflow:hidden; display:flex; align-items:center; justify-content:center;`;
+        var img = document.createElement('img');
+        img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:none;';
+        box.appendChild(img);
+        wrap.appendChild(lbl);
+        wrap.appendChild(box);
+        return { wrap, img };
+    }
+
+    var left  = makePreviewBox('AKTUALNE');
+    var right = makePreviewBox('WYBRANE');
+    previews.appendChild(left.wrap);
+    previews.appendChild(right.wrap);
+
+    var active = data.active_background;
+    if (active && active.static_url) {
+        left.img.src = active.static_url;
+        left.img.style.display = 'block';
+    }
+
+    // Lista
+    var listContainer = document.createElement('div');
+    listContainer.style.cssText = 'height:calc(100vh - ' + (PREVIEW_H + 60) + 'px); overflow-y:auto;';
+
+    var backgrounds = (data.backgrounds || []).filter(function(b) { return b.is_visible; });
+    if (backgrounds.length === 0) {
+        listContainer.innerHTML = '<p style="color:#666; padding:1rem; text-align:center;">Brak teł</p>';
+    } else {
+        backgrounds.forEach(function(bg) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; padding:4px 6px; border-bottom:1px solid #222; gap:6px; cursor:pointer;';
+            if (active && bg.id === active.id) {
+                row.style.background = '#1a2a1a';
+            }
+
+            var thumb = document.createElement('img');
+            thumb.src = bg.static_url || '';
+            thumb.style.cssText = `width:${Math.round(18 * 16 / 9)}px; height:18px; object-fit:cover; flex-shrink:0; border:1px solid #333;`;
+
+            var nameSpan = document.createElement('span');
+            nameSpan.textContent = bg.name;
+            nameSpan.style.cssText = 'flex:1; color:#ccc; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+            if (bg.description) {
+                row.title = bg.description;
+            }
+
+            var sendBtn = document.createElement('button');
+            sendBtn.type = 'button';
+            sendBtn.className = 'event-btn';
+            sendBtn.textContent = 'W';
+            sendBtn.style.cssText = 'background:green; color:white; font-size:10px; flex-shrink:0;';
+            sendBtn.addEventListener('click', (function(b) { return function(e) {
+                e.stopPropagation();
+                socket.emit('send_background_to_obs', { background_image_id: b.id });
+                left.img.src = b.static_url;
+                left.img.style.display = 'block';
+            }; })(bg));
+
+            row.addEventListener('click', (function(b) { return function() {
+                right.img.src = b.static_url;
+                right.img.style.display = 'block';
+            }; })(bg));
+
+            row.appendChild(thumb);
+            row.appendChild(nameSpan);
+            row.appendChild(sendBtn);
+            listContainer.appendChild(row);
+        });
+    }
+
+    uiMonitorContent.appendChild(previews);
+    uiMonitorContent.appendChild(listContainer);
 }
 
 // ── Podłączenie do socket.on('show_ui_monitor_content') ──────────────────────

@@ -21,3 +21,5 @@ from app.models.game_timer import GameTimer
 from app.models.settings import Settings
 from app.models.shootout import Shootout
 from app.models.shootout_kick import ShootoutKick
+from app.models.banner import Banner
+from app.models.background_image import BackgroundImage

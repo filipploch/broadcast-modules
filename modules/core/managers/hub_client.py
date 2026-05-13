@@ -292,7 +292,7 @@ class HubClient:
                     try:
                         handler(msg)
                     except Exception as e:
-                        print(f"Error in message handler: {e}")
+                        self._log("error", f"Error in message handler: {e}")
 
         except Exception as e:
             self._log("error", f"Error processing message: {e}", exc_info=True)
@@ -347,7 +347,6 @@ class HubClient:
                 game_manager.handle_request_game_data(msg)
 
         elif msg_from == 'recorder-plugin':
-            print(f'RECORDER MSG: {msg}')
             from core.managers import get_recorder_manager
             recorder_manager = get_recorder_manager()
             if msg_type == 'recording_started':
@@ -364,22 +363,18 @@ class HubClient:
         if msg_from == 'obs-ws-plugin':
             from core.managers import get_obs_ws_manager
             obs_ws_manager = get_obs_ws_manager()
-            print(f'OBS RAW MSG: {msg}')
             if msg_type == 'obs_status':
-                print('OBS_STATUS:', msg)
                 obs_ws_manager.on_obs_status(msg)
             elif msg_type == 'obs_response':
                 obs_ws_manager.on_obs_response(msg)
             elif msg_type == 'obs_event':
-                print('OBS_EVENT:', msg)
                 obs_ws_manager.on_obs_event(msg)
             elif msg_type == 'obs_scene_map':
-                # ✅ FIX: route scene map — was previously unhandled (silent drop)
                 obs_ws_manager.on_obs_scene_map(msg)
             elif msg_type == 'obs_error':
-                print('OBS_ERROR:', msg)
+                self._log("error", f"OBS error: {msg}")
             else:
-                print('OBS MSG:', msg)
+                self._log("warning", f"Unhandled OBS message type '{msg_type}'")
 
 
 
@@ -422,8 +417,8 @@ class HubClient:
                     controller_mgr.on_replay_done(payload)
 
             elif msg_type == 'replay_started':
-                # ⭐ NOWE: nowy sygnał z replay-plugin (po LoadAndPlay)
                 if seq_mgr:
+                    seq_mgr.notify_hub_message('replay_started', payload)
                     seq_mgr.emit_to_ui('replay_started', payload)
                 if controller_mgr:
                     controller_mgr.on_replay_started(payload)

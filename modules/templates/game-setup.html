@@ -103,8 +103,32 @@
         <div id="assign-modal-header">
             <h3 id="modal-title" style="margin:0;font-size:1.1rem;">...</h3>
             <button id="scrape-btn" onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
+            <button id="add-player-btn" onclick="openAddPlayerForm()" class="btn btn-primary">➕ Dodaj zawodnika</button>
             <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
             <button onclick="closeAssignModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6c757d;">✕</button>
+        </div>
+        <div id="add-player-form-container" style="display:none; padding:.75rem 1.2rem; border-bottom:1px solid #dee2e6; background:#f8f9fa;">
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                    <label style="font-size:.8rem; display:block; margin-bottom:2px;">Imię *</label>
+                    <input id="new-player-first-name" type="text" class="form-control" placeholder="Imię" style="width:120px;">
+                </div>
+                <div>
+                    <label style="font-size:.8rem; display:block; margin-bottom:2px;">Nazwisko *</label>
+                    <input id="new-player-last-name" type="text" class="form-control" placeholder="Nazwisko" style="width:150px;">
+                </div>
+                <div>
+                    <label style="font-size:.8rem; display:block; margin-bottom:2px;">Numer</label>
+                    <input id="new-player-number" type="number" class="form-control" placeholder="nr" style="width:70px;" min="1" max="99">
+                </div>
+                <div style="display:flex; align-items:center; gap:.3rem; padding-bottom:2px;">
+                    <input id="new-player-goalkeeper" type="checkbox">
+                    <label for="new-player-goalkeeper" style="font-size:.85rem; margin:0;">Bramkarz</label>
+                </div>
+                <button onclick="submitAddPlayer()" class="btn btn-success btn-small">Zapisz</button>
+                <button onclick="closeAddPlayerForm()" class="btn btn-secondary btn-small">Anuluj</button>
+                <span id="add-player-status" style="font-size:.8rem; color:#dc3545;"></span>
+            </div>
         </div>
 
         <!-- Body: standard two-column (non-squad or futsal squad) -->

@@ -183,9 +183,6 @@ class GameManager:
 
         try:
             # Update home team if provided
-            print('-----------------------------------------------')
-            print(f'is_home_team_lost_by_wo: {is_home_team_lost_by_wo}, type{type(is_home_team_lost_by_wo)}')
-            print('-----------------------------------------------')
             if home_team_id is not None and home_team_id != game.home_team_id:
                 home_team = _get_team().query.get(home_team_id)
                 if not home_team:

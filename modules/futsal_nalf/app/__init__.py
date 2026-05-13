@@ -71,7 +71,7 @@ def create_app(config_name='default'):
         from app.socketio_events import specific_socketio_events as specific_events
         specific_routes.register_routes(app)
         specific_events.register_events(socketio)
-        print("REGISTERED ROUTES:", [r.endpoint for r in app.url_map.iter_rules()])
+
 
         @app.context_processor
         def inject_global_context():

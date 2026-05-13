@@ -16,7 +16,6 @@ def _round_nr_to_round_name(_round_nr, _league_name):
             '5': 'Mecz o 3. miejsce',
             '6': 'Finał'
         }
-        print(f'round name: {cup_rounds[str(_round_nr)]} {_cup}')
         return f'{cup_rounds[str(_round_nr)]} {_cup}'
     return ''
 

@@ -44,8 +44,9 @@ const seekTimeout = 3 * time.Second
 // ── MpvIPC ────────────────────────────────────────────────────────────────────
 
 type mpvResponse struct {
-	RequestID int64  `json:"request_id"`
-	Error     string `json:"error"`
+	RequestID int64       `json:"request_id"`
+	Error     string      `json:"error"`
+	Data      interface{} `json:"data"`
 }
 
 type MpvIPC struct {
@@ -264,6 +265,63 @@ func (m *MpvIPC) SendAndWait(command []interface{}, timeout time.Duration) error
 	}
 }
 
+// GetProperty odczytuje właściwość mpv i zwraca jej wartość.
+// Zwraca nil jeśli właściwość jest null/niedostępna (np. time-pos podczas ładowania).
+func (m *MpvIPC) GetProperty(name string, timeout time.Duration) (interface{}, error) {
+	id := m.nextID.Add(1)
+	ch := make(chan mpvResponse, 1)
+
+	m.pendingMu.Lock()
+	m.pending[id] = ch
+	m.pendingMu.Unlock()
+
+	data, err := json.Marshal(map[string]interface{}{
+		"command":    []interface{}{"get_property", name},
+		"request_id": id,
+	})
+	if err != nil {
+		m.pendingMu.Lock()
+		delete(m.pending, id)
+		m.pendingMu.Unlock()
+		return nil, err
+	}
+	data = append(data, '\n')
+
+	m.mu.Lock()
+	if m.handle == 0 || m.handle == INVALID_HANDLE {
+		m.mu.Unlock()
+		m.pendingMu.Lock()
+		delete(m.pending, id)
+		m.pendingMu.Unlock()
+		return nil, fmt.Errorf("mpv IPC not connected")
+	}
+	writeErr := m.writeUnlocked(data)
+	m.mu.Unlock()
+
+	if writeErr != nil {
+		m.pendingMu.Lock()
+		delete(m.pending, id)
+		m.pendingMu.Unlock()
+		return nil, fmt.Errorf("write failed: %w", writeErr)
+	}
+
+	select {
+	case resp, ok := <-ch:
+		if !ok {
+			return nil, fmt.Errorf("channel closed")
+		}
+		if resp.Error != "" && resp.Error != "success" {
+			return nil, fmt.Errorf("mpv error: %s", resp.Error)
+		}
+		return resp.Data, nil
+	case <-time.After(timeout):
+		m.pendingMu.Lock()
+		delete(m.pending, id)
+		m.pendingMu.Unlock()
+		return nil, fmt.Errorf("timeout waiting for property %q", name)
+	}
+}
+
 // writeUnlocked wykonuje WriteFile — wymaga trzymanego m.mu.
 func (m *MpvIPC) writeUnlocked(data []byte) error {
 	if m.handle == 0 || m.handle == INVALID_HANDLE {
@@ -343,23 +401,32 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 	}
 
 	startArg := fmt.Sprintf("start=%.3f", startSec)
-	if err := mc.ipc.send([]interface{}{
+	// SendAndWait zamiast fire-and-forget: czekamy aż mpv potwierdzi przyjęcie
+	// komendy zanim wyślemy speed — eliminuje potrzebę hardkodowanego sleep(300ms).
+	if err := mc.ipc.SendAndWait([]interface{}{
 		"loadfile", videoPath, "replace", 0, startArg,
-	}); err != nil {
+	}, 5*time.Second); err != nil {
 		return fmt.Errorf("loadfile failed: %w", err)
 	}
-	log.Printf("✅ loadfile sent")
-
-	time.Sleep(300 * time.Millisecond)
+	log.Printf("✅ loadfile accepted")
 
 	if err := mc.ipc.send([]interface{}{"set_property", "speed", speed}); err != nil {
 		return fmt.Errorf("set speed failed: %w", err)
 	}
+
+	// Czekaj aż plik zostanie załadowany z dysku i seek zakończony.
+	// time-pos staje się non-null gdy mpv ma gotową klatkę — dopiero wtedy
+	// odpinamy pauzę, żeby replay_started dotarł do backendu z gwarancją
+	// że OBS window capture ma co wyświetlić.
+	if err := mc.WaitUntilPlaying(10 * time.Second); err != nil {
+		log.Printf("⚠️  %v (proceeding anyway)", err)
+	}
+
 	if err := mc.ipc.send([]interface{}{"set_property", "pause", false}); err != nil {
 		return fmt.Errorf("unpause failed: %w", err)
 	}
 
-	log.Printf("✅ LoadAndPlay: done")
+	log.Printf("✅ LoadAndPlay: playing")
 	return nil
 }
 
@@ -425,6 +492,24 @@ func (mc *MpvController) FrameStepBack() error {
 	}
 	log.Printf("⏪  frame back: done")
 	return nil
+}
+
+// WaitUntilPlaying polluje time-pos aż mpv załaduje plik i zakończy seek.
+// time-pos staje się non-null gdy mpv ma gotową klatkę (nawet gdy wciąż pauzuje).
+func (mc *MpvController) WaitUntilPlaying(timeout time.Duration) error {
+	if !mc.isReady() {
+		return fmt.Errorf("mpv IPC not ready")
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		pos, err := mc.ipc.GetProperty("time-pos", 500*time.Millisecond)
+		if err == nil && pos != nil {
+			log.Printf("⏱  mpv time-pos: %v — plik gotowy", pos)
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout (%v): mpv nie załadował pliku", timeout)
 }
 
 func (mc *MpvController) Close() {

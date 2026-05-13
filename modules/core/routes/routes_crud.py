@@ -790,6 +790,25 @@ def register_routes(app, exclude=None, team_manager=None):
         flash('Zawodnik usunięty', 'success')
         return redirect(url_for('list_players', team_id=team_id))
 
+    @app.route('/api/teams/<int:team_id>/players', methods=['POST'])
+    def api_create_player(team_id):
+        data = request.get_json() or {}
+        first_name = data.get('first_name', '').strip()
+        last_name  = data.get('last_name', '').strip()
+        if not first_name or not last_name:
+            return jsonify({'error': 'Imię i nazwisko są wymagane'}), 400
+        player = _player_manager.create_player(
+            first_name=first_name,
+            last_name=last_name,
+            team_id=team_id,
+            number=int(data['number']) if data.get('number') else None,
+            is_goalkeeper=bool(data.get('is_goalkeeper', False)),
+            is_captain=False,
+        )
+        if not player:
+            return jsonify({'error': 'Nie udało się dodać zawodnika'}), 400
+        return jsonify({'player': player.to_dict()}), 201
+
 
     # =========================
     # STADIUM ROUTES
@@ -1004,6 +1023,145 @@ def register_routes(app, exclude=None, team_manager=None):
         flash('Kamera usunięta', 'success')
         return redirect(url_for('list_cameras'))
 
+
+    # =========================
+    # BANNER ROUTES
+    # =========================
+
+    from core.managers.banner_manager import BannerManager as _BannerManager
+    _banner_manager = _BannerManager()
+
+    @app.route('/banners')
+    def list_banners():
+        banners = _banner_manager.get_all_banners()
+        return render_template('banners/list.html', banners=banners)
+
+    @app.route('/banners/create', methods=['GET', 'POST'])
+    def create_banner():
+        if request.method == 'POST':
+            try:
+                _banner_manager.create_banner(
+                    name=request.form['name'].strip(),
+                    source=request.form['source'],
+                    order=int(request.form.get('order', 0)),
+                    is_visible='is_visible' in request.form,
+                    activation_function=request.form.get('activation_function', '').strip() or None,
+                )
+                flash('Baner dodany', 'success')
+                return redirect(url_for('list_banners'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('banners/form.html', banner=None)
+
+    @app.route('/banners/<int:banner_id>/edit', methods=['GET', 'POST'])
+    def edit_banner(banner_id):
+        banner = _banner_manager.get_banner_by_id(banner_id)
+        if not banner:
+            flash('Nie znaleziono banera', 'error')
+            return redirect(url_for('list_banners'))
+        if request.method == 'POST':
+            try:
+                _banner_manager.update_banner(
+                    banner_id=banner_id,
+                    name=request.form['name'].strip(),
+                    source=request.form['source'],
+                    order=int(request.form.get('order', 0)),
+                    is_visible='is_visible' in request.form,
+                    activation_function=request.form.get('activation_function', '').strip() or None,
+                )
+                flash('Baner zaktualizowany', 'success')
+                return redirect(url_for('list_banners'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('banners/form.html', banner=banner)
+
+    @app.route('/banners/<int:banner_id>/delete', methods=['POST'])
+    def delete_banner(banner_id):
+        _banner_manager.delete_banner(banner_id)
+        flash('Baner usunięty', 'success')
+        return redirect(url_for('list_banners'))
+
+    # =========================
+    # BACKGROUND IMAGE ROUTES
+    # =========================
+
+    from core.managers.background_image_manager import BackgroundImageManager as _BGManager
+    _bg_manager = _BGManager()
+
+    @app.route('/background-images')
+    def list_background_images():
+        backgrounds = _bg_manager.get_all()
+        return render_template('background_images/list.html', backgrounds=backgrounds)
+
+    @app.route('/background-images/create', methods=['GET', 'POST'])
+    def create_background_image():
+        if request.method == 'POST':
+            try:
+                file = request.files.get('image_file')
+                if not file or not file.filename:
+                    flash('Wybierz plik graficzny', 'error')
+                    return render_template('background_images/form.html', background=None)
+
+                import os
+                from werkzeug.utils import secure_filename
+                filename = secure_filename(file.filename)
+                bg_images_dir = os.path.join(current_app.static_folder, 'images', 'background-images')
+                os.makedirs(bg_images_dir, exist_ok=True)
+                file.save(os.path.join(bg_images_dir, filename))
+                rel_path = f'images/background-images/{filename}'
+
+                _bg_manager.create(
+                    name=request.form['name'].strip(),
+                    path=rel_path,
+                    order=int(request.form.get('order', 0)),
+                    is_visible='is_visible' in request.form,
+                    description=request.form.get('description', '').strip() or None,
+                )
+                flash('Tło dodane', 'success')
+                return redirect(url_for('list_background_images'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('background_images/form.html', background=None)
+
+    @app.route('/background-images/<int:bg_id>/edit', methods=['GET', 'POST'])
+    def edit_background_image(bg_id):
+        background = _bg_manager.get_by_id(bg_id)
+        if not background:
+            flash('Nie znaleziono tła', 'error')
+            return redirect(url_for('list_background_images'))
+        if request.method == 'POST':
+            try:
+                import os
+                from werkzeug.utils import secure_filename
+                file = request.files.get('image_file')
+                if file and file.filename:
+                    filename = secure_filename(file.filename)
+                    bg_images_dir = os.path.join(current_app.static_folder, 'images', 'background-images')
+                    os.makedirs(bg_images_dir, exist_ok=True)
+                    file.save(os.path.join(bg_images_dir, filename))
+                    rel_path = f'images/background-images/{filename}'
+                else:
+                    rel_path = background.path
+
+                _bg_manager.update(
+                    bg_id=bg_id,
+                    name=request.form['name'].strip(),
+                    path=rel_path,
+                    order=int(request.form.get('order', 0)),
+                    is_visible='is_visible' in request.form,
+                    description=request.form.get('description', '').strip() or None,
+                )
+                flash('Tło zaktualizowane', 'success')
+                return redirect(url_for('list_background_images'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('background_images/form.html', background=background)
+
+    @app.route('/background-images/<int:bg_id>/delete', methods=['POST'])
+    def delete_background_image(bg_id):
+        _bg_manager.delete(bg_id)
+        flash('Tło usunięte', 'success')
+        return redirect(url_for('list_background_images'))
 
     # =========================
     # EVENT ROUTES

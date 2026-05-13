@@ -304,7 +304,6 @@ class TimerManager:
 
     def on_timer_updated(self, msg):
         payload      = msg.get('payload', {})
-        print('on_timer_updated', payload)
         timer_id     = payload.get('timer_id')
         elapsed_time = payload.get('elapsed_time', 0)
         state        = payload.get('state', 'unknown')

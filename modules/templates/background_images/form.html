@@ -1,0 +1,52 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj tło' if background else 'Dodaj tło' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj tło' if background else 'Nowe tło' }}</span>
+    </div>
+    <form method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="name">Nazwa *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ background.name if background else '' }}"
+                   required maxlength="100" placeholder="np. Tło główne">
+        </div>
+        <div class="form-group">
+            <label for="order">Kolejność</label>
+            <input type="number" id="order" name="order"
+                   value="{{ background.order if background else 0 }}"
+                   min="0">
+        </div>
+        <div class="form-group">
+            <label for="description">Opis</label>
+            <textarea id="description" name="description" rows="3"
+                      placeholder="Opcjonalny opis widoczny po najechaniu na element listy">{{ background.description if background else '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_visible"
+                       {{ 'checked' if (not background or background.is_visible) else '' }}>
+                Widoczny
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="image_file">Plik graficzny{% if not background %} *{% endif %}</label>
+            <input type="file" id="image_file" name="image_file"
+                   accept="image/*"
+                   {% if not background %}required{% endif %}>
+            {% if background %}
+            <p style="font-size:12px; color:#888; margin-top:4px;">
+                Aktualny plik: <code>{{ background.path }}</code> — zostaw puste, żeby nie zmieniać.
+            </p>
+            <img src="{{ url_for('static', filename=background.path) }}"
+                 style="max-height:80px; margin-top:8px; object-fit:contain;" alt="{{ background.name }}">
+            {% endif %}
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_background_images') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

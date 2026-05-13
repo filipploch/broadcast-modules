@@ -1,0 +1,48 @@
+{% extends "base/base.html" %}
+{% block title %}Banery{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Banery</span>
+        <div class="actions">
+            <a href="{{ url_for('create_banner') }}" class="btn btn-primary">➕ Dodaj baner</a>
+        </div>
+    </div>
+    {% if banners %}
+    <table>
+        <thead>
+            <tr>
+                <th>Kolejność</th>
+                <th>Nazwa</th>
+                <th>Funkcja aktywacji</th>
+                <th>Widoczny</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for banner in banners %}
+            <tr>
+                <td>{{ banner.order }}</td>
+                <td><strong>{{ banner.name }}</strong></td>
+                <td><code>{{ banner.activation_function or '—' }}</code></td>
+                <td>{{ '✅' if banner.is_visible else '❌' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('edit_banner', banner_id=banner.id) }}" class="btn btn-secondary btn-small">Edytuj</a>
+                        <form action="{{ url_for('delete_banner', banner_id=banner.id) }}" method="POST" style="display:inline;"
+                              onsubmit="return confirm('Usunąć baner {{ banner.name }}?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center; padding:2rem; color:#7f8c8d;">
+        Brak banerów. <a href="{{ url_for('create_banner') }}" style="color:#3498db;">Dodaj pierwszy</a>.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

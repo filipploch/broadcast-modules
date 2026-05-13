@@ -1,0 +1,52 @@
+{% extends "base/base.html" %}
+{% block title %}Tła{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Tła</span>
+        <div class="actions">
+            <a href="{{ url_for('create_background_image') }}" class="btn btn-primary">➕ Dodaj tło</a>
+        </div>
+    </div>
+    {% if backgrounds %}
+    <table>
+        <thead>
+            <tr>
+                <th>Podgląd</th>
+                <th>Kolejność</th>
+                <th>Nazwa</th>
+                <th>Opis</th>
+                <th>Aktywne</th>
+                <th>Widoczne</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bg in backgrounds %}
+            <tr>
+                <td><img src="{{ url_for('static', filename=bg.path) }}" style="height:40px; width:71px; object-fit:cover;" alt="{{ bg.name }}"></td>
+                <td>{{ bg.order }}</td>
+                <td><strong>{{ bg.name }}</strong></td>
+                <td style="max-width:200px; font-size:12px; color:#888;">{{ bg.description or '—' }}</td>
+                <td>{{ '✅' if bg.is_active else '' }}</td>
+                <td>{{ '✅' if bg.is_visible else '❌' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('edit_background_image', bg_id=bg.id) }}" class="btn btn-secondary btn-small">Edytuj</a>
+                        <form action="{{ url_for('delete_background_image', bg_id=bg.id) }}" method="POST" style="display:inline;"
+                              onsubmit="return confirm('Usunąć tło {{ bg.name }}?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center; padding:2rem; color:#7f8c8d;">
+        Brak teł. <a href="{{ url_for('create_background_image') }}" style="color:#3498db;">Dodaj pierwsze</a>.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

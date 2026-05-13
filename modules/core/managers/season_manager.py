@@ -242,7 +242,6 @@ class SeasonManager:
             Season object or None if no seasons exist
         """
         Season = _get_season()
-        print(f'season: {Season.query.order_by(Season.number.desc()).first().name}')
         return Season.query.order_by(Season.number.desc()).first()
 
     def set_as_current(self, season_id):
