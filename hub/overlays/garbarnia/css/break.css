@@ -18,7 +18,7 @@
 #x-container{position:absolute; top:0;display: flex; height: 100%; width: 100%;}
 #home-team-logo-container{visibility:visible; position:absolute; left: 130px; animation: moveHomeTeamLogo 500ms ease-in-out 1500ms both; }
 #away-team-logo-container{visibility:visible; position:absolute; right: 130px; animation: moveAwayTeamLogo 500ms ease-in-out 1500ms both;}
-#break-scorers-container {position: absolute;width: 1330px;height: 550px;left: 295px;bottom: 300px;}
+#break-scorers-container {position: absolute;width: 1330px;height: 550px;left: 295px;bottom: 200px;}
 .team-scorers-container {width: 50%; display: flex; align-items: end;}
 #home-team-scorers-container {justify-content: left;}
 #away-team-scorers-container {justify-content: right;}

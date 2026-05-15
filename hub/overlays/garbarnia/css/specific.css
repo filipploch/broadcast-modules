@@ -14,7 +14,9 @@
 }
 
 .squad-body-right img {
-  width: 250px;
-  height: 250px;
+  width: 200px;
+  height: 200px;
   object-fit: cover;
+  top: 45px;
+  position: absolute;
 }

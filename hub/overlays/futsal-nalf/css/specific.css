@@ -1,20 +1,18 @@
 .specific-colors {
   color: white;
-  background-color: #480f0f;
-  background-image: linear-gradient(to bottom, rgb(72, 54, 28), #2a1b06);
+  background-color: #303093;
+  background-image: linear-gradient(to bottom, #303093, #080862);
 }
 
 .squad-body-right {
-  flex: 1;
-  display: flex;
-  justify-content: end;
-  align-items: normal;
-  padding-top: 75px;
-  padding-right: 150px;
+  flex: 1;                 /* ← równa szerokość */
+  display: flex;           /* ← centrowanie obrazka */
+  justify-content: center;
+  align-items: center;
 }
 
 .squad-body-right img {
-  width: 250px;
-  height: 250px;
-  object-fit: cover;
+  width: 500px;
+  height: 500px;
+  object-fit: cover;       /* opcjonalnie – zachowuje proporcje w razie potrzeby */
 }

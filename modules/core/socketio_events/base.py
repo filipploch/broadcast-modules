@@ -278,6 +278,24 @@ def register_events(socketio):
                 'request_id': 'ui-obs-record-status',
             })
 
+    @socketio.on('get_obs_stream_status')
+    def handle_get_obs_stream_status():
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send_to_plugin('obs-ws-plugin', 'obs_command', {
+                'requestType': 'GetStreamStatus',
+                'requestData': {},
+                'request_id': 'ui-obs-stream-status',
+            })
+
+    @socketio.on('get_camera_recording_status')
+    def handle_get_camera_recording_status():
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if hub_client:
+            hub_client.send_to_plugin('recorder-plugin', 'recording_status', {})
+
     # ── Filters ───────────────────────────────────────────────────────────────
 
     @socketio.on('enable_scene_filter')

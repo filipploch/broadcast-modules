@@ -16,7 +16,7 @@ class RecorderManager:
     def __init__(self, hub_client):
         self.hub_client = hub_client
         self.is_recording = False
-        self.recorder_plugin_id = 'recorder'
+        self.recorder_plugin_id = 'recorder-plugin'
         
     def on_recorder_online(self):
         """Called when recorder plugin comes online"""

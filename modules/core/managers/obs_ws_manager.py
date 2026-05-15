@@ -136,6 +136,11 @@ class ObsWsManager:
                 current_app.logger.error(f'❌ Failed to save game event: {e}')
                 self._emit_to_ui('error', {'message': str(e)})
                 return
+        elif request_id == 'ui-obs-stream-status':
+            response_data = payload.get('responseData', {})
+            output_active = response_data.get('outputActive', False)
+            state = 'active' if output_active else 'disabled'
+            self._emit_to_ui('obs_stream_state', {'state': state})
         elif request_id == 'ui-obs-record-status':
             response_data = payload.get('responseData', {})
             output_active = response_data.get('outputActive', False)

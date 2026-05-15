@@ -197,6 +197,8 @@ socket.on('connect', () => {
     socket.emit('request_initial_data');
     socket.emit('get_camera_assignments');
     socket.emit('get_obs_record_status');
+    socket.emit('get_obs_stream_status');
+    socket.emit('get_camera_recording_status');
     socket.emit('get_source_visibility', { scene_name: 'AUDIO_SOURCES', source_name: 'MICROPHONES' });
 });
 

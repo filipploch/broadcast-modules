@@ -727,7 +727,7 @@
             width:    '1330px',
             height:   '550px',
             left:     '250px',
-            bottom:   '300px',
+            bottom:   '200px',
             display:  'none'   // activateElementsAfterTime('break-content') pokaże po 2500ms
         });
         addClassName(breakScorersContainer, 'break-content');
@@ -778,7 +778,7 @@
             width:          '1330px',
             height:         '170px',
             left:           '250px',
-            bottom:         '100px',
+            bottom:         '10px',
             display:        'flex',
             flexDirection:  'column',
             justifyContent: 'center',
