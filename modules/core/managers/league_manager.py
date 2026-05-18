@@ -54,9 +54,9 @@ class LeagueManager:
         League = _get_league()
         return League.query.get(league_id)
 
-    def create_league(self, season_id, name, games_url, scorers_url, assists_url,
-                      canadian_url, table_url=None, foreign_id=None,
-                      allows_draw=True):
+    def create_league(self, season_id, name, games_url=None, scorers_url=None,
+                      assists_url=None, canadian_url=None, table_url=None,
+                      foreign_id=None, allows_draw=True):
         """
         Create new league
 
@@ -90,17 +90,14 @@ class LeagueManager:
             raise ValueError(f"Liga '{name}' już istnieje w sezonie {season.name}")
 
         try:
-            league = League(
-                season_id=season_id,
-                name=name,
-                allows_draw=allows_draw,
-                games_url=games_url,
-                table_url=table_url,
-                scorers_url=scorers_url,
-                assists_url=assists_url,
-                canadian_url=canadian_url,
-                foreign_id=foreign_id
-            )
+            kwargs = dict(season_id=season_id, name=name, allows_draw=allows_draw,
+                          foreign_id=foreign_id)
+            for field, val in (('games_url', games_url), ('table_url', table_url),
+                               ('scorers_url', scorers_url), ('assists_url', assists_url),
+                               ('canadian_url', canadian_url)):
+                if hasattr(League, field):
+                    kwargs[field] = val
+            league = League(**kwargs)
             db.session.add(league)
             db.session.commit()
 

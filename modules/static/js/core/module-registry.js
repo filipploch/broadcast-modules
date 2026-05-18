@@ -24,4 +24,7 @@ const MODULE_REGISTRY = {
     futsal_nalf: {
         monitorTabs: ['events', 'games', 'banners', 'backgrounds'],
     },
+    turniej: {
+        monitorTabs: ['events', 'games', 'banners', 'backgrounds'],
+    },
 };

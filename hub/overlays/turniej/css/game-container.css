@@ -1,0 +1,17 @@
+#game-transition {
+    position: fixed;  /* Zmień z absolute na fixed */
+    top: 0;
+    left: 0;
+    width: 100%;     /* Dodaj pełną szerokość */
+    height: 100%;    /* Dodaj pełną wysokość */
+    overflow: hidden;
+    z-index: 9999;   /* Dodaj wysoki z-index, aby był nad wszystkim */
+}
+
+#game-transition>img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;  /* Zamiast overflow: hidden, zachowaj proporcje */
+    /* Lub użyj cover jeśli chcesz wypełnić cały ekran */
+    /* object-fit: cover; */
+}

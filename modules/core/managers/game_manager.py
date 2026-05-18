@@ -509,12 +509,22 @@ class GameManager:
 
         settings        = Settings.get_settings()
         current_game_id = settings.current_game_id
-        current_game    = _get_game().query.get(current_game_id).to_dict()
         msg_from        = msg.get('from', '')
 
         hub_client = get_hub_client()
         if not hub_client:
             return
+
+        if not current_game_id:
+            hub_client.send_to_plugin(msg_from, 'no_game_data', {})
+            return
+
+        game_obj = _get_game().query.get(current_game_id)
+        if not game_obj:
+            hub_client.send_to_plugin(msg_from, 'no_game_data', {})
+            return
+
+        current_game = game_obj.to_dict()
 
         # Dane meczu (wynik, drużyny, składy…)
         hub_client.send_to_plugin(msg_from, 'game_data', current_game)

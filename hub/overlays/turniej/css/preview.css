@@ -1,0 +1,169 @@
+body {
+    width: 1920px;
+    height: 1080px;
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Varela Round', sans-serif;
+
+}
+
+.facebook {
+    width: 100%;
+    height: 94%;
+    /*                background-color: blue;*/
+}
+
+.attention {
+    background-color: rgb(22, 24, 156);
+}
+
+.match-hashtag {
+    text-align: center;
+    display: block;
+    font-size: 50px;
+    font-weight: 900;
+    position: relative;
+    /* top: 50%;
+    transform: translateY(50%);
+    transform: rotate(270deg); */
+    color: whitesmoke;
+    text-shadow: 5px 5px 10px rgb(2, 3, 65);
+}
+
+/* .top-bar {
+    padding: 25px 0px 25px 0px;
+    background-color: #46eb34;
+    color: white;
+    text-shadow: 0px 0px 15px black;
+    min-height: 12%;
+    font-size: 55;
+} */
+
+/* #league {
+    position: absolute;
+    top: 4%;
+    left: 13%;
+    font-weight: 800;
+} */
+
+#division {
+    float: left;
+    bottom: 550px;
+    text-align: center;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding-top: 10px;
+    font-size: 70px;
+    color: whitesmoke;
+    transform: rotate(270deg);
+    position: absolute;
+    width: 57%;
+    left: -500px;
+}
+
+#space {
+    height: 30%;
+}
+
+.nalf-logo {
+    position: relative;
+    left: -290px;
+    top: 15px;
+    filter: drop-shadow(0px 20px 20px white);
+}
+
+.nalf-logo > img {
+    width: 40%;
+}
+
+.match-info {
+    float: left;
+    padding-left: 15%;
+    float: left;
+    height: 93%;
+    width: 50%;
+    text-align: center;
+    font-size: 50;
+    bottom: 20%;
+}
+
+.match-teams {
+    /* float: left; */
+    /* background-color: #46eb34; */
+    /* height: 93%;
+    width: 25%; */
+    text-align: center;
+}
+
+.no-facebook {
+    width: 100%;
+    height: 3%;
+    color: white;
+    /* background-color: #46eb34; */
+    font-size: 60px;
+}
+
+
+
+.team-logo {
+    float: left;
+    position: relative;
+    width: 50%;
+    text-align: center;
+}
+
+.logos {
+    position: absolute;
+    bottom: 3%;
+}
+
+.logo {
+    height: auto;
+	width: auto;
+	max-width: 275px;
+	aspect-ratio: 1;
+	// max-height: 275px;
+	filter: drop-shadow(0px 10px 20px gray);
+	padding: 40px 0 0 0;
+}
+
+#logos-img {
+    position: relative;
+    width: 100%;
+}
+
+.team_full_name {
+    color: #00004f;
+    background-color: white;
+    font-weight: 900;
+    font-size: 60px;
+}
+
+.shadow {
+    box-shadow: 0px 10px 20px rgb(16, 0, 75);
+}
+
+.match_date {
+    color: white;
+    background-color: red;
+    font-size: 60px;
+}
+
+.clear_line {
+    opacity: 0;
+    line-height: 1em;
+}
+
+/* .bottom-mbottom-mask {
+    position: absolute;
+    height: 200px;
+    width: 100%;
+    background-color: #46eb34;
+    bottom: 0;
+    left: 0;
+} */
+
+#team_a_full_name {}
+
+#team_b_full_name {}
+

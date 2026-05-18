@@ -1,0 +1,179 @@
+{% extends "base/base.html" %}
+{% block title %}Generator fazy pucharowej{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="card-header">
+    <span>Generator fazy pucharowej — {{ league.name }}</span>
+    <div class="actions">
+      <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">← Powrót do ligi</a>
+    </div>
+  </div>
+
+  {# ── Standings ───────────────────────────────────────────────────────────── #}
+  <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:2rem;">
+
+    <div style="flex:1;min-width:260px;">
+      <h3 style="margin-bottom:.5rem;">Grupa A</h3>
+      {% if standings_a %}
+      <table>
+        <thead><tr><th>#</th><th>Drużyna</th><th>Pkt</th><th>G</th></tr></thead>
+        <tbody>
+          {% for row in standings_a %}
+          <tr {% if loop.index <= 2 %}style="background:#e8f5e9"{% elif loop.index == 3 %}style="background:#fff3cd"{% endif %}>
+            <td>{{ loop.index }}</td>
+            <td>{{ row.team_name }}</td>
+            <td><strong>{{ row.points }}</strong></td>
+            <td>{{ row.goals_scored }}:{{ row.goals_lost }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#7f8c8d;">Brak danych tabeli (Grupa A)</p>
+      {% endif %}
+    </div>
+
+    <div style="flex:1;min-width:260px;">
+      <h3 style="margin-bottom:.5rem;">Grupa B</h3>
+      {% if standings_b %}
+      <table>
+        <thead><tr><th>#</th><th>Drużyna</th><th>Pkt</th><th>G</th></tr></thead>
+        <tbody>
+          {% for row in standings_b %}
+          <tr {% if loop.index <= 2 %}style="background:#e8f5e9"{% elif loop.index == 3 %}style="background:#fff3cd"{% endif %}>
+            <td>{{ loop.index }}</td>
+            <td>{{ row.team_name }}</td>
+            <td><strong>{{ row.points }}</strong></td>
+            <td>{{ row.goals_scored }}:{{ row.goals_lost }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#7f8c8d;">Brak danych tabeli (Grupa B)</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# ── Config form ─────────────────────────────────────────────────────────── #}
+  <div style="background:#f8f9fa;padding:1rem;border-radius:4px;margin-bottom:1.5rem;">
+    <h4 style="margin-bottom:.75rem;">Konfiguracja</h4>
+    <form method="GET" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+        <label for="kl">Liga pucharowa (docelowa)</label>
+        <select id="kl" name="kl" onchange="this.form.submit()">
+          <option value="">-- Wybierz --</option>
+          {% for lg in all_leagues %}
+          <option value="{{ lg.id }}" {% if knockout_league and knockout_league.id == lg.id %}selected{% endif %}>
+            {{ lg.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  </div>
+
+  {% if knockout_league %}
+
+  {# ── Round 1 ─────────────────────────────────────────────────────────────── #}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-header"><span>Runda 1 — Półfinały + o 5. i 7. miejsce</span></div>
+
+    {% if round1_games %}
+    <table>
+      <thead><tr><th>Mecz</th><th>Gospodarz</th><th>Gość</th><th>Wynik</th><th>Status</th></tr></thead>
+      <tbody>
+        {% set labels = {1:'Półfinał A (1A vs 2B)', 2:'Półfinał B (1B vs 2A)', 3:'O 5. miejsce', 4:'O 7. miejsce'} %}
+        {% for g in round1_games %}
+        <tr>
+          <td>{{ labels.get(g.group_nr, 'Mecz gr.' ~ g.group_nr) }}</td>
+          <td>{{ g.home_team.name }}</td>
+          <td>{{ g.away_team.name }}</td>
+          <td>{{ g.home_team_goals }}:{{ g.away_team_goals }}
+            {% if g.shootout %}<small>(k. {{ g.shootout.home_team_shootouts }}:{{ g.shootout.away_team_shootouts }})</small>{% endif %}
+          </td>
+          <td>{{ g.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="padding:1rem;color:#7f8c8d;">Brak meczów rundy 1 w tej lidze.</p>
+    {% endif %}
+
+    {% if can_gen_r1 %}
+    <form method="POST" style="padding:1rem;">
+      <input type="hidden" name="action" value="round1">
+      <input type="hidden" name="knockout_league_id" value="{{ knockout_league.id }}">
+      <div class="form-group" style="margin-bottom:.75rem;">
+        <label for="st1">Stadion</label>
+        <select id="st1" name="stadium_id" required>
+          {% for s in stadiums %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-success">Generuj mecze Rundy 1</button>
+    </form>
+    {% elif not round1_games %}
+    <p style="padding:0 1rem 1rem;color:#e74c3c;">
+      Potrzeba co najmniej 4 drużyn w każdej grupie (Grupa A: {{ standings_a|length }}, Grupa B: {{ standings_b|length }}).
+    </p>
+    {% endif %}
+  </div>
+
+  {# ── Round 2 ─────────────────────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-header"><span>Runda 2 — Finał + o 3. miejsce</span></div>
+
+    {% if round2_games %}
+    <table>
+      <thead><tr><th>Mecz</th><th>Gospodarz</th><th>Gość</th><th>Wynik</th><th>Status</th></tr></thead>
+      <tbody>
+        {% set labels2 = {1:'Finał (1. miejsce)', 2:'O 3. miejsce'} %}
+        {% for g in round2_games %}
+        <tr>
+          <td>{{ labels2.get(g.group_nr, 'Mecz gr.' ~ g.group_nr) }}</td>
+          <td>{{ g.home_team.name }}</td>
+          <td>{{ g.away_team.name }}</td>
+          <td>{{ g.home_team_goals }}:{{ g.away_team_goals }}
+            {% if g.shootout %}<small>(k. {{ g.shootout.home_team_shootouts }}:{{ g.shootout.away_team_shootouts }})</small>{% endif %}
+          </td>
+          <td>{{ g.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="padding:1rem;color:#7f8c8d;">Brak meczów finałowych w tej lidze.</p>
+    {% endif %}
+
+    {% if can_gen_r2 %}
+    <form method="POST" style="padding:1rem;">
+      <input type="hidden" name="action" value="finals">
+      <input type="hidden" name="knockout_league_id" value="{{ knockout_league.id }}">
+      <div class="form-group" style="margin-bottom:.75rem;">
+        <label for="st2">Stadion</label>
+        <select id="st2" name="stadium_id" required>
+          {% for s in stadiums %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-success">Generuj Finał i mecz o 3. miejsce</button>
+    </form>
+    {% elif not round2_games %}
+    <p style="padding:0 1rem 1rem;color:#7f8c8d;">
+      Finał można wygenerować po zakończeniu obu półfinałów.
+    </p>
+    {% endif %}
+  </div>
+
+  {% else %}
+  <p style="color:#7f8c8d;">Wybierz ligę pucharową powyżej, aby zarządzać meczami fazy pucharowej.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

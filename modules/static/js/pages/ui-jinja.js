@@ -824,6 +824,10 @@ function restoreGameEvent(gameEventId) {
     socket.emit('restore_game_event', { 'game_event_id': gameEventId });
 }
 
+socket.on('game_event_added', function(data) {
+    showUiMonitorContent('events', { include_hidden: _showHiddenEvents });
+});
+
 socket.on('game_event_hidden', function(data) {
     showUiMonitorContent('events', { include_hidden: _showHiddenEvents });
 });
@@ -1348,11 +1352,11 @@ socket.on('show_ui_monitor_content', data => {
                 gameEventTableRow.innerHTML = `<td></td><td></td><td></td><td></td><td></td>
                 <td class="period-td" style="color: white;">${gameEvent}</td>`
             }else{
-                if(gameEvent.event_place !== null){
-                    const svgCode = fieldSvgGenerator(gameEvent.event_place, gameEvent.event_color);
+                    const svgCode = gameEvent.event_place !== null
+                        ? fieldSvgGenerator(gameEvent.event_place, gameEvent.event_color)
+                        : '';
                     const playerName = gameEventPlayerNameGenerator(gameEvent);
                     const teamShortName = gameEventTeamShortNameGenerator(gameEvent);
-                    console.log(gameEvent.event_cameras);
                     const replaysPopupBtn = replaysPopupGen(gameEvent);
                     const eventInfoBtn = gameEventInfoBtnGenerator(gameEvent);
                     const eventEditBtn = gameEventEditBtnGenerator(gameEvent);
@@ -1375,7 +1379,6 @@ socket.on('show_ui_monitor_content', data => {
                     <td class="events-td-event-info">${eventInfoBtn}</td>
                     <td class="events-td-event-edit">${eventEditBtn}</td>
                     `;
-                }
             }
             gameEventsTable.appendChild(gameEventTableRow);
         });

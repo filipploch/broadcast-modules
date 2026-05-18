@@ -28,6 +28,7 @@ socket.on('plugins_states', data => {
 
 socket.on('obs_record_state', data => {
     const _obsRecordingIndicator = document.getElementById('obs-recording-indicator');
+    if (!_obsRecordingIndicator) return;
     const _obsRecordingIndicatorIcon = _obsRecordingIndicator.querySelector('img');
     if(data.state === 'changing') {
         removeClassName(_obsRecordingIndicatorIcon, 'filter-green');
@@ -43,6 +44,7 @@ socket.on('obs_record_state', data => {
 
 socket.on('obs_status', status => {
     _obsWsPluginStateIndicator = document.getElementById('obs-ws-state');
+    if (!_obsWsPluginStateIndicator) return;
     _obsWsConnectionIndicator = _obsWsPluginStateIndicator.querySelector('img');
     if(status === 'connected'){
         removeClassName(_obsWsConnectionIndicator, 'filter-red');

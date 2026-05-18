@@ -1,0 +1,40 @@
+{% extends "base/base.html" %}
+{% block title %}Utwórz Ligę{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Utwórz Nową Ligę / Rozgrywki</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="season_id">Sezon *</label>
+            <select id="season_id" name="season_id" required>
+                <option value="">-- Wybierz sezon --</option>
+                {% for season in seasons %}
+                <option value="{{ season.id }}" {% if selected_season_id == season.id %}selected{% endif %}>
+                    {{ season.name }} (Sezon #{{ season.number }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="name">Nazwa Ligi / Rozgrywek *</label>
+            <input type="text" id="name" name="name" required maxlength="50"
+                   placeholder="np. Grupa A, Faza pucharowa">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="allows_draw" value="1" checked>
+                Liga grupowa (remis dozwolony)
+            </label>
+            <small style="display:block;color:#6c757d;margin-top:.25rem;">
+                Odznacz dla rozgrywek pucharowych.
+            </small>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Utwórz Ligę</button>
+            <a href="{{ url_for('list_leagues') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

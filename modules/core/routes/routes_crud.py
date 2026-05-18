@@ -188,11 +188,11 @@ def register_routes(app, exclude=None, team_manager=None):
                 league = league_manager.create_league(
                     season_id=selected_season_id,
                     name=request.form['name'],
-                    games_url=request.form['games_url'],
-                    scorers_url=request.form['scorers_url'],
-                    assists_url=request.form['assists_url'],
-                    canadian_url=request.form['canadian_url'],
-                    table_url=request.form.get('table_url', ''),
+                    games_url=request.form.get('games_url') or None,
+                    scorers_url=request.form.get('scorers_url') or None,
+                    assists_url=request.form.get('assists_url') or None,
+                    canadian_url=request.form.get('canadian_url') or None,
+                    table_url=request.form.get('table_url') or None,
                     allows_draw=('allows_draw' in request.form),
                 )
                 
