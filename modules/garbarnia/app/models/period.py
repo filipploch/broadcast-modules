@@ -8,6 +8,7 @@ class Period(BasePeriodMixin, db.Model):
 
     home_team_red_cards = db.Column(db.Integer, default=0, nullable=False)
     away_team_red_cards = db.Column(db.Integer, default=0, nullable=False)
+    added_time          = db.Column(db.Integer, default=0, nullable=False, server_default='0')
 
     def update_red_cards(self, home_red_cards, away_red_cards):
         self.home_team_red_cards = home_red_cards
@@ -41,4 +42,5 @@ class Period(BasePeriodMixin, db.Model):
         d = super().to_dict()
         d['home_team_red_cards'] = self.home_team_red_cards
         d['away_team_red_cards'] = self.away_team_red_cards
+        d['added_time']          = self.added_time
         return d

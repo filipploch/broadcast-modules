@@ -371,7 +371,7 @@ def register_routes(app):
 
     @app.route('/leagues/<int:league_id>/games/scrape')
     def scrape_games(league_id):
-        """Start scraping games for a league in background thread, return JSON"""
+        """Start scraping games (MZPN HTML) for a league in background thread."""
         from flask import jsonify
         league = league_manager.get_league_by_id(league_id)
         if not league:
@@ -385,6 +385,26 @@ def register_routes(app):
             return jsonify({'status': 'started'}), 202
         except Exception as e:
             logger.error(f"Error starting scraping: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/leagues/<int:league_id>/games/scrape-superscore')
+    def scrape_games_superscore(league_id):
+        """Start scraping games from superscore.live API in background thread."""
+        from flask import jsonify
+        league = league_manager.get_league_by_id(league_id)
+        if not league:
+            return jsonify({'error': 'Nie znaleziono ligi'}), 404
+        if not league.superscore_season_id:
+            return jsonify({'error': 'Liga nie ma skonfigurowanego superscore_season_id'}), 400
+        if game_scraper_manager.is_scraping_in_progress():
+            return jsonify({'error': 'Scrapowanie już trwa'}), 409
+        try:
+            game_scraper_manager.scrape_superscore_async(
+                [league.superscore_season_id], league_name=league.name
+            )
+            return jsonify({'status': 'started'}), 202
+        except Exception as e:
+            logger.error(f"Error starting superscore scraping: {e}")
             return jsonify({'error': str(e)}), 500
     
 

@@ -1770,6 +1770,38 @@ function _buildGamesView(data, container) {
     // Wstaw przycisk na końcu leagueBar
     leagueBar.appendChild(dateToggleBtn);
 
+    var scrapeSuprescoreBtn = document.createElement('button');
+    scrapeSuprescoreBtn.type = 'button';
+    scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
+    scrapeSuprescoreBtn.title = 'Pobierz wyniki z superscore.live';
+    scrapeSuprescoreBtn.style.cssText = 'font-size:10px;cursor:pointer;';
+    scrapeSuprescoreBtn.onclick = function() {
+        var leagueId = _gamesTab.leagueId || 1;
+        scrapeSuprescoreBtn.disabled = true;
+        scrapeSuprescoreBtn.textContent = '⏳';
+        fetch('/leagues/' + leagueId + '/games/scrape-superscore')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.status === 'started') {
+                    scrapeSuprescoreBtn.textContent = '✓';
+                    setTimeout(function() {
+                        scrapeSuprescoreBtn.disabled = false;
+                        scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
+                    }, 3000);
+                } else {
+                    scrapeSuprescoreBtn.disabled = false;
+                    scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
+                    alert(data.error || 'Błąd scrapowania');
+                }
+            })
+            .catch(function(e) {
+                scrapeSuprescoreBtn.disabled = false;
+                scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
+                alert('Błąd: ' + e.message);
+            });
+    };
+    leagueBar.appendChild(scrapeSuprescoreBtn);
+
     // Panel dat — floating, nie przesuwa elementów poniżej
     var dateBar = document.createElement('div');
     dateBar.id = 'games-date-bar';
@@ -1872,7 +1904,8 @@ function _switchGamesTab(tabId, data) {
     tabContent.innerHTML = '';
 
     if (tabId === 'results') {
-        _renderResultsTab(data, tabContent);
+        var resultsData = Object.assign({}, data, { games: _gamesTab.games });
+        _renderResultsTab(resultsData, tabContent);
     } else if (tabId === 'table' || tabId === 'virtual') {
         _renderStandingsTab(tabId, data, tabContent);
     }
@@ -2339,6 +2372,19 @@ socket.on('show_ui_monitor_content', function(data) {
     if (data.content_type !== 'games') return;  // pozostałe typy obsługuje główny handler
     var uiMonitorContent = document.getElementById('ui-monitor-content');
     _buildGamesView(data, uiMonitorContent);
+});
+
+socket.on('scraping_completed', function() {
+    var uiMonitorContent = document.getElementById('ui-monitor-content');
+    if (!uiMonitorContent) return;
+    // Odśwież widok MECZE jeśli jest aktualnie otwarty
+    var leagueBar = document.getElementById('games-league-bar');
+    if (!leagueBar) return;
+    showUiMonitorContent('games', {
+        league_id: _gamesTab.leagueId,
+        date_from:  _gamesTab.dateFrom,
+        date_to:    _gamesTab.dateTo,
+    });
 });
 
 // =============================================================================

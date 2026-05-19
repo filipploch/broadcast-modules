@@ -15,179 +15,27 @@
 
 <body>
 	<div id="container">
-		<div id="column-controls">
-			<div class="top-bar">
-				<button id="nav-to-game-settings" class="top-bar-element wingdings">
-					<a href="/game-period-choice">Û</a>
-				</button>
-			</div>
-
-			<div id="timers-container" class="module-frame">
-				<div id="{{ main_timer.timer_id }}-header" class="main-timer-header"
-					data-state-for="{{ main_timer.timer_id }}">{{ main_timer.timer_id }}</div>
-				<div class="timer-content">
-					<div class="main-timer-display-container">
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', -60000);" class="timer-button"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', -1000);" class="timer-button"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', -100);"
-							class="timer-button ds-element ds-{{ main_timer.timer_id }}-element"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-						<div id="{{ main_timer.timer_id }}-min-display" class="timer-display"
-							data-display-for="{{ main_timer.timer_id }}-min-display">00</div>
-						<div id="{{ main_timer.timer_id }}-sec-display" class="timer-display"
-							data-display-for="{{ main_timer.timer_id }}-sec-display">00</div>
-						<div id="{{ main_timer.timer_id }}-ds-display"
-							class="timer-display ds-element ds-{{ main_timer.timer_id }}-element"
-							data-display-for="{{ main_timer.timer_id }}-ds-display">0</div>
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', 60000);" class="timer-button"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', 1000);" class="timer-button"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-						<button onclick="adjustTimer('{{ main_timer.timer_id }}', 100);"
-							class="timer-button ds-element ds-{{ main_timer.timer_id }}-element"
-							data-timer-id="{{ main_timer.timer_id }}"></button>
-					</div>
-					<div class="timer-controllers-container">
-						<div class="timer-small-controllers">
-							<button id="btn-reset-timer"
-								ondblclick="resetTimer('{{ main_timer.timer_id }}');">0</button>
-							<button></button>
-							<button id="btn-close-timer">X</button>
-						</div>
-						<div class="timer-main-controllers">
-							<button class="timer-main-controller"
-								data-timer-id="{{ main_timer.timer_id }}"
-								data-timer-state="idle"
-								onclick="startTimer('{{ main_timer.timer_id }}');">START</button>
-							<button class="timer-main-controller nodisplayed"
-								data-timer-id="{{ main_timer.timer_id }}"
-								data-timer-state="running"
-								onclick="pauseTimer('{{ main_timer.timer_id }}');">PAUZA</button>
-							<button class="timer-main-controller nodisplayed"
-								data-timer-id="{{ main_timer.timer_id }}"
-								data-timer-state="paused"
-								onclick="resumeTimer('{{ main_timer.timer_id }}');">WZNÓW</button>
-						</div>
-					</div>
-				</div>
-				<button class="thin-wide-button bg_red"
-					onclick="openModal('modal-penalties-timers')">KARY</button>
-				<div id="modal-penalties-timers" class="hidden">
-					<div id="modal-penalties-header">
-						<button class="top-bar-element bg_red"
-							onclick="closeModal('modal-penalties-timers');">X</button>
-					</div>
-					<div id="penalties-timers" class="modal-content reversible">
-						<div id="home-team-penalties-timers-container" data-reverse-anchor
-							class="penalties-timers-container flex1"></div>
-						<div id="away-team-penalties-timers-container"
-							class="penalties-timers-container flex1"></div>
-					</div>
-				</div>
-			</div>
-
-			<div id="game-teams-container" class="module-frame">
-				<div id="game-teams-content">
-					<div class="reversible scoreboard">
-						<button class="flex-item flex1" id="addFoulsHome"
-							onclick="changeGameValue('fouls', 'home', 1)" data-reverse-anchor>+</button>
-						<button class="flex-item flex1" id="addScoreHome"
-							onclick="changeGameValue('score', 'home', 1)">+</button>
-						<button class="flex-item flex1" id="addScoreAway"
-							onclick="changeGameValue('score', 'away', 1)">+</button>
-						<button class="flex-item flex1" id="addFoulsAway"
-							onclick="changeGameValue('fouls', 'away', 1)">+</button>
-					</div>
-					<div class="reversible scoreboard">
-						<label class="flex-item flex1 fouls-label" id="labelFoulsHome" data-reverse-anchor>
-							<span id="foulsHome">{{ period.home_team_fouls or 0 }}</span>
-						</label>
-						<label class="flex-item flex1 goals-label" id="labelScoreHome">
-							<span id="scoreHome">{{ game.home_team_goals or 0 }}</span>
-						</label>
-						<label class="flex-item flex1 goals-label" id="labelScoreAway">
-							<span id="scoreAway">{{ game.away_team_goals or 0 }}</span>
-						</label>
-						<label class="flex-item flex1 fouls-label" id="labelFoulsAway">
-							<span id="foulsAway">{{ period.away_team_fouls or 0 }}</span>
-						</label>
-					</div>
-					<div class="reversible scoreboard">
-						<button class="flex-item flex1" id="substractFoulsHome"
-							onclick="changeGameValue('fouls', 'home', -1)" data-reverse-anchor>-</button>
-						<button class="flex-item flex1" id="substractScoreHome"
-							onclick="changeGameValue('score', 'home', -1)">-</button>
-						<button class="flex-item flex1" id="substractScoreAway"
-							onclick="changeGameValue('score', 'away', -1)">-</button>
-						<button class="flex-item flex1" id="substractFoulsAway"
-							onclick="changeGameValue('fouls', 'away', -1)">-</button>
-					</div>
-					<div class="reversible">
-						<div class="flex-item flex3 data-item data-home"
-							id="teamHomeName" data-reverse-anchor>{{ teams.home.short_name or '' }}</div>
-						<div class="flex-item flex2">
-							<button id="reverse-scoreboard-button"
-								onclick="onReverseButtonClick()"><=></button>
-						</div>
-						<div class="flex-item flex3 data-item data-away"
-							id="teamAwayName">{{ teams.away.short_name or '' }}</div>
-					</div>
-					<div class="reversible cards-container">
-						<div class="cards flex3" data-reverse-anchor data-reverse-anchor>
-							<button class="flex-item flex1 card yellowCard" id="yellowCardHome"
-								onclick="addTeamEvent('home', 'Żółta Kartka');"> </button>
-							<button class="flex-item flex1 card redCard" id="redCardHome"
-								onclick="addTeamEvent('home', 'Czerwona Kartka');"> </button>
-						</div>
-						<div class="flex-item flex2 cards-middle-element"></div>
-						<div class="cards flex3">
-							<button class="flex-item flex1 card yellowCard" id="yellowCardAway"
-								onclick="addTeamEvent('away', 'Żółta Kartka');"> </button>
-							<button class="flex-item flex1 card redCard" id="redCardAway"
-								onclick="addTeamEvent('away', 'Czerwona Kartka');"> </button>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<div id="stream-controllers">
-				<div style="display:flex; width:100%;">
-					<div id="stream-icon" style="width:20%;" ondblclick="onStreamIconDblClick()"></div>
-					<div id="record-icon" style="width:20%;" ondblclick="onRecordIconDblClick()"></div>
-					<div id="cameras-icons" style="width:20%; display:flex; flex-wrap:wrap;">
-						<div id="camera1-icon" style="width:50%;"></div>
-						<div id="camera2-icon" style="width:50%;"></div>
-						<div id="camera3-icon" style="width:50%;"></div>
-						<div id="camera4-icon" style="width:50%;"></div>
-					</div>
-					<div id="microphone-icon" style="width:20%;" ondblclick="onMicrophoneIconDblClick()"></div>
-					<div id="stream-overlay-plugin-icon" style="width:20%;" ondblclick="onStreamOverlayIconDblClick()"></div>
-				</div>
-				<div style="display:flex; width:100%;">
-					<div id="timer-plugin-icon" style="width:12.5%;"></div>
-					<div id="recorder-plugin-icon" style="width:12.5%;"></div>
-					<div id="obs-ws-plugin-icon" style="width:12.5%;"></div>
-					<div id="replay-plugin-icon" style="width:12.5%;"></div>
-					<div id="controller-plugin-icon" style="width:12.5%;"></div>
-				</div>
-			</div>
-		</div>
-
+		<div id="column-controls"></div>
 	</div>
 	<div id="flash-msg-display" style="display: none;"></div>
 
 	<script>
-		var period = {{ period.to_dict() | tojson if period else 'null' }};
-		var game   = {{ game.to_dict()   | tojson if game   else 'null' }};
+		var period            = {{ period.to_dict() | tojson if period else 'null' }};
+		var game              = {{ game.to_dict()   | tojson if game   else 'null' }};
+		var main_timer        = {{ main_timer | tojson if main_timer else 'null' }};
+		var teamHomeShortName = "{{ teams.home.short_name if teams.home else '' }}";
+		var teamAwayShortName = "{{ teams.away.short_name if teams.away else '' }}";
 		const TIMER_DESC  = {{ 'true' if timer_desc else 'false' }};
+		const MODULE_NAME = "{{ module_name }}";
 	</script>
 
 	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 	<script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/core/module-registry.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/pages/index-ui-builder.js') }}"></script>
+	<script>renderIndexUI(MODULE_NAME);</script>
 	<script src="{{ url_for('static', filename='js/pages/index.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/timer-recovery.js') }}"></script>
 	<script>

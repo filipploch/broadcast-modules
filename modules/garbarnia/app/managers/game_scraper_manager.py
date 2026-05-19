@@ -45,7 +45,7 @@ class GameScraperManager:
 
     def scrape_games_async(self, league_urls: List[str], league_name: str = '') -> bool:
         """
-        Uruchom scrapowanie w wątku w tle.
+        Uruchom scrapowanie MZPN (HTML) w wątku w tle.
 
         Args:
             league_urls: Lista URL-i terminarzy
@@ -54,6 +54,30 @@ class GameScraperManager:
         Returns:
             True jeśli wątek wystartował, False jeśli już działa
         """
+        return self._start_scraping_thread(
+            target=self._scrape_worker,
+            args=(current_app._get_current_object(), league_urls, league_name),
+            league_name=league_name,
+        )
+
+    def scrape_superscore_async(self, season_ids: List[str], league_name: str = '') -> bool:
+        """
+        Uruchom scrapowanie z superscore.live API w wątku w tle.
+
+        Args:
+            season_ids:  Lista ID sezonów (np. ['4vDT5gZAVMkCxWuCYl8kzc'])
+            league_name: Czytelna nazwa ligi (do socketio emit)
+
+        Returns:
+            True jeśli wątek wystartował, False jeśli już działa
+        """
+        return self._start_scraping_thread(
+            target=self._scrape_superscore_worker,
+            args=(current_app._get_current_object(), season_ids, league_name),
+            league_name=league_name,
+        )
+
+    def _start_scraping_thread(self, target, args, league_name: str) -> bool:
         with self._scraping_lock:
             if self._scraping_thread and self._scraping_thread.is_alive():
                 logger.warning("Scrapowanie już trwa")
@@ -67,17 +91,16 @@ class GameScraperManager:
                 'error':         None,
             }
 
-            app = current_app._get_current_object()
             self._scraping_thread = threading.Thread(
-                target=self._scrape_worker,
-                args=(app, league_urls, league_name),
+                target=target,
+                args=args,
                 daemon=True,
             )
             self._scraping_thread.start()
 
             from core.extensions import socketio
             socketio.emit('scraping_started', {'name': league_name})
-            logger.info(f"Scrapowanie uruchomione w tle: {len(league_urls)} URL(i)")
+            logger.info(f"Scrapowanie uruchomione w tle ({target.__name__})")
             return True
 
     def get_scraping_status(self) -> Dict:
@@ -94,17 +117,30 @@ class GameScraperManager:
     def is_scraping_in_progress(self) -> bool:
         return self._status['status'] == 'in_progress'
 
+    def get_statistics(self) -> Dict:
+        """Statystyki gier w bazie (do wyświetlenia na liście gier)."""
+        from app.models.game import Game
+        try:
+            return {
+                'total':       Game.query.count(),
+                'finished':    Game.query.filter_by(status=Game.STATUS_FINISHED).count(),
+                'in_progress': Game.query.filter_by(status=Game.STATUS_PENDING).count(),
+                'not_started': Game.query.filter_by(status=Game.STATUS_NOT_STARTED).count(),
+            }
+        except Exception:
+            return {'total': 0, 'finished': 0, 'in_progress': 0, 'not_started': 0}
+
     # ── Wątek roboczy ─────────────────────────────────────────────────────────
 
     def _scrape_worker(self, app, league_urls: List[str], league_name: str):
-        """Wątek w tle — pobiera HTML, przetwarza, zapisuje do bazy."""
+        """Wątek w tle — pobiera HTML (MZPN), przetwarza, zapisuje do bazy."""
         with app.app_context():
             from core.extensions import socketio
             try:
                 from app.managers.scrapers.game_scraper import GameScraper
-                scraper      = GameScraper()
+                scraper       = GameScraper()
                 scraped_games = scraper.scrape_multiple_leagues(league_urls)
-                stats        = self._process_scraped_games(scraped_games)
+                stats         = self._process_scraped_games(scraped_games)
 
                 self._status = {
                     'status':        'completed',
@@ -127,6 +163,45 @@ class GameScraperManager:
 
             except Exception as e:
                 logger.error(f"Błąd scrapowania w wątku: {e}", exc_info=True)
+                self._status = {
+                    'status': 'error', 'total_scraped': 0,
+                    'updated': 0, 'new_pending': 0, 'error': str(e),
+                }
+                socketio.emit('scraping_error', {
+                    'status': 'error', 'name': league_name, 'error': str(e),
+                })
+
+    def _scrape_superscore_worker(self, app, season_ids: List[str], league_name: str):
+        """Wątek w tle — pobiera dane z superscore API, przetwarza, zapisuje do bazy."""
+        with app.app_context():
+            from core.extensions import socketio
+            try:
+                from app.managers.scrapers.superscore_game_scraper import SuperscoreGameScraper
+                scraper       = SuperscoreGameScraper()
+                scraped_games = scraper.scrape_multiple_seasons(season_ids)
+                stats         = self._process_scraped_games(scraped_games)
+
+                self._status = {
+                    'status':        'completed',
+                    'total_scraped': stats['total_scraped'],
+                    'updated':       stats['updated'],
+                    'new_pending':   stats['new_pending'],
+                    'error':         None,
+                }
+                logger.info(
+                    f"Scrapowanie superscore zakończone: {stats['total_scraped']} łącznie, "
+                    f"{stats['updated']} zaktualizowanych, {stats['new_pending']} nowych"
+                )
+                socketio.emit('scraping_completed', {
+                    'status':        'success',
+                    'name':          league_name,
+                    'total_scraped': stats['total_scraped'],
+                    'updated':       stats['updated'],
+                    'new_pending':   stats['new_pending'],
+                })
+
+            except Exception as e:
+                logger.error(f"Błąd scrapowania superscore w wątku: {e}", exc_info=True)
                 self._status = {
                     'status': 'error', 'total_scraped': 0,
                     'updated': 0, 'new_pending': 0, 'error': str(e),
@@ -170,6 +245,7 @@ class GameScraperManager:
         updated_count  = 0
         new_count      = 0
         STATUS_NOT_STARTED = Game.STATUS_NOT_STARTED
+        STATUS_IN_PROGRESS = Game.STATUS_PENDING
         STATUS_FINISHED    = Game.STATUS_FINISHED
 
         for gd in scraped_games:
@@ -183,12 +259,23 @@ class GameScraperManager:
                 )
                 continue
 
-            status          = gd['status']
+            scraper_status  = gd['status']
+            # Mapuj status scrapera (może używać 1=IN_PROGRESS) na stałe modelu
+            if scraper_status == 1:
+                status = STATUS_IN_PROGRESS
+            elif scraper_status == 2:
+                status = STATUS_FINISHED
+            else:
+                status = STATUS_NOT_STARTED
+
             home_goals      = gd['home_team_goals']
             away_goals      = gd['away_team_goals']
             parsed_date     = self._parse_date(gd['date'])
 
             # ── Szukaj istniejącego meczu ─────────────────────────────────
+            # Najpierw próbuj po kolejce + drużynach (dokładne dopasowanie).
+            # Jeśli nie znaleziono (np. scraper zwrócił round=0), szukaj tylko
+            # po drużynach — w sezonie każda para (home, away) jest unikalna.
             existing = Game.query.filter_by(
                 league_id    = league_id,
                 round        = gd['round'],
@@ -196,15 +283,26 @@ class GameScraperManager:
                 away_team_id = away_team.id,
             ).first()
 
+            if existing is None:
+                existing = Game.query.filter_by(
+                    league_id    = league_id,
+                    home_team_id = home_team.id,
+                    away_team_id = away_team.id,
+                ).first()
+                if existing:
+                    logger.debug(
+                        f"Dopasowano po drużynach (round={gd['round']} → db.round={existing.round}): "
+                        f"{gd['home_team_name']} vs {gd['away_team_name']}"
+                    )
+
             if existing:
-                # DB jest aktualniejsza jeśli mecz trwa lub się skończył
-                www_not_started = (status == STATUS_NOT_STARTED)
-                db_more_advanced = (existing.status != STATUS_NOT_STARTED)
-                if www_not_started and db_more_advanced:
+                # Nie cofaj statusu — jeśli DB ma FINISHED a scraper mówi NOT_STARTED,
+                # DB jest aktualniejsza (np. mecz wpisany ręcznie)
+                if existing.status == STATUS_FINISHED and status == STATUS_NOT_STARTED:
                     logger.debug(
                         f"Pomijam kolejka={gd['round']} "
                         f"{gd['home_team_name']} vs {gd['away_team_name']} "
-                        f"— www=NOT_STARTED, db={existing.status}"
+                        f"— www=NOT_STARTED, db=FINISHED"
                     )
                     continue
 
@@ -267,14 +365,28 @@ class GameScraperManager:
         """
         STATUS_FINISHED    = Period.STATUS_FINISHED
         STATUS_NOT_STARTED = Period.STATUS_NOT_STARTED
-        
-        is_finished = (gd['status'] == STATUS_FINISHED)
-        home_ht     = gd['home_ht_goals'] or 0
-        away_ht     = gd['away_ht_goals'] or 0
-        home_2h     = ((gd['home_team_goals'] or 0) - home_ht) if is_finished else 0
-        away_2h     = ((gd['away_team_goals'] or 0) - away_ht) if is_finished else 0
+        STATUS_IN_PROGRESS = Period.STATUS_PENDING
 
+        scraper_status = gd['status']
+        is_finished    = (scraper_status == 2)
+        is_in_progress = (scraper_status == 1)
 
+        home_ht  = gd['home_ht_goals'] or 0
+        away_ht  = gd['away_ht_goals'] or 0
+        home_ft  = gd['home_team_goals'] or 0
+        away_ft  = gd['away_team_goals'] or 0
+        home_2h  = (home_ft - home_ht) if is_finished else 0
+        away_2h  = (away_ft - away_ht) if is_finished else 0
+
+        # Przy meczu w trakcie: jeśli dostępny wynik przerwy → 1. poł. skończona,
+        # brak → 1. poł. w trakcie
+        has_ht_score  = (gd['home_ht_goals'] is not None)
+        p1_status     = (STATUS_FINISHED    if (is_finished or (is_in_progress and has_ht_score))
+                         else STATUS_IN_PROGRESS if is_in_progress
+                         else STATUS_NOT_STARTED)
+        p2_status     = (STATUS_FINISHED    if is_finished
+                         else STATUS_IN_PROGRESS if (is_in_progress and has_ht_score)
+                         else STATUS_NOT_STARTED)
 
         periods_data = [
             {
@@ -283,9 +395,9 @@ class GameScraperManager:
                 'main_timer_name': f'{game.home_team.short_name}x{game.away_team.short_name} p:1',
                 'limit':         2700000,    # 45 min w ms
                 'initial_time':  0,
-                'home_goals':    home_ht if is_finished else 0,
-                'away_goals':    away_ht if is_finished else 0,
-                'status':        STATUS_FINISHED if is_finished else STATUS_NOT_STARTED,
+                'home_goals':    home_ht if (is_finished or is_in_progress) else 0,
+                'away_goals':    away_ht if (is_finished or is_in_progress) else 0,
+                'status':        p1_status,
             },
             {
                 'period_order':  2,
@@ -295,7 +407,7 @@ class GameScraperManager:
                 'initial_time':  2700000,    # offset 45:00 dla overlay
                 'home_goals':    home_2h,
                 'away_goals':    away_2h,
-                'status':        STATUS_FINISHED if is_finished else STATUS_NOT_STARTED,
+                'status':        p2_status,
             },
         ]
 
@@ -356,6 +468,9 @@ class GameScraperManager:
                 teams = Team.query.all()
 
         lookup = {_normalize(t.name): t for t in teams}
+        for t in teams:
+            if t.superscore_name:
+                lookup[_normalize(t.superscore_name)] = t
         logger.debug(f"Zbudowano lookup dla {len(lookup)} drużyn")
         return lookup
 

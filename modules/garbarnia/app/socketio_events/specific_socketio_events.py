@@ -108,7 +108,9 @@ def register_events(socketio):
 
         hub_client = get_hub_client()
         if hub_client and game:
-            hub_client.broadcast_to_class('overlay', 'game_data', game)
+            game_payload = dict(game)
+            game_payload['added_time'] = period.added_time if period else 0
+            hub_client.broadcast_to_class('overlay', 'game_data', game_payload)
 
         if game:
              socketio.emit('initial_data', {

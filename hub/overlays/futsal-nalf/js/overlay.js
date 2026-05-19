@@ -256,21 +256,24 @@
 
     // ── Zamknięcie kontenera ─────────────────────────────────────────────────
 
-    function closeResultsTableContainer(container, onDone) {
+    function closeResultsTableContainer(container, onDone, { skipRowAnimation = false } = {}) {
         let rows = container.querySelectorAll('.results-row');
-        rows.forEach(row => {
-            row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
-        });
+        if (!skipRowAnimation) {
+            rows.forEach(row => {
+                row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
+            });
+        }
         let body = container.querySelector('.results');
         if (body) {
             body.style.setProperty('animation', 'collapseHeight', 'important');
             body.style.animationDuration = '750ms';
-            body.style.animationDelay = '250ms';
+            body.style.animationDelay = skipRowAnimation ? '0ms' : '250ms';
             body.style.animationFillMode = 'both';
         }
+        const cleanupDelay = skipRowAnimation ? 750 : 1000;
         setTimeout(() => {
             container.style.display = 'none';
-            rows.forEach(r => { r.style.animation = ''; });
+            rows.forEach(r => { r.style.animation = ''; r.style.transform = ''; });
             if (body) {
                 body.style.animation = '';
                 body.style.animationDuration = '';
@@ -278,89 +281,37 @@
                 body.style.animationFillMode = '';
             }
             if (onDone) onDone();
-        }, 1000);
+        }, cleanupDelay);
     }
 
     // ── Animacja zamiany pozycji (virtual_table) ──────────────────────────────
 
     function animateTableSwap(container, officialRows, virtualRows) {
-        // Mapa: team_name14 → indeks (0-based) w official
-        const officialPos = {};
-        officialRows.forEach((r, i) => { officialPos[r.team_name14] = i; });
-
-        // Elementy DOM (bez nagłówka)
         const rowEls = Array.from(container.querySelectorAll('.results-row:not(:first-child)'));
-        const rowMap = {};
-        rowEls.forEach(el => { rowMap[el.dataset.teamName14] = el; });
+        const indexMap = {};
+        rowEls.forEach((el, i) => { indexMap[el.dataset.teamName14] = i; });
 
-        // Sprawdź czy cokolwiek się zmieniło
-        const movers = [];
-        virtualRows.forEach((vRow, vIdx) => {
-            const el = rowMap[vRow.team_name14];
-            if (!el) return;
-            if (officialPos[vRow.team_name14] !== vIdx) movers.push(el);
+        virtualRows.forEach((itemB, indexB) => {
+            const indexA = indexMap[itemB.team_name14];
+            if (indexA === undefined) return;
+            const el = rowEls[indexA];
+
+            const ptsEl = el.querySelector('.results-points');
+            if (ptsEl) ptsEl.textContent = itemB.points;
+            const standingEl = el.querySelector('.results-standing');
+            if (standingEl) standingEl.textContent = indexB + 1;
+
+            if (indexA !== indexB) {
+                const translateY = (indexB - indexA) * el.offsetHeight;
+                el.style.animation = 'none';
+                el.style.transform = 'translateY(0px)';
+                void el.offsetWidth;
+                el.style.transform = `translateY(${translateY}px)`;
+                el.classList.remove('promotion', 'degradation');
+                if (indexB < indexA) el.classList.add('promotion');
+                else                  el.classList.add('degradation');
+            }
         });
-        if (movers.length === 0) return;
-
-        // Ustaw początkowy order = pozycja w official (CSS flexbox order)
-        rowEls.forEach(el => {
-            el.style.order = officialPos[el.dataset.teamName14] ?? 0;
-        });
-
-        // Upewnij się że container jest flex
-        container.style.display        = 'flex';
-        container.style.flexDirection  = 'column';
-
-        // Zaktualizuj klasy promotion/degradation, standing, points
-        virtualRows.forEach((vRow, vIdx) => {
-            const el = rowMap[vRow.team_name14];
-            if (!el) return;
-            const oldIdx = officialPos[vRow.team_name14];
-            el.classList.remove('promotion', 'degradation');
-            if (vIdx < oldIdx)      el.classList.add('promotion');
-            else if (vIdx > oldIdx) el.classList.add('degradation');
-            const standing = el.querySelector('.results-standing');
-            const pts      = el.querySelector('.results-points');
-            if (standing) standing.textContent = vIdx + 1;
-            if (pts)      pts.textContent      = vRow.points;
-        });
-
-        // F — zapamiętaj pozycje przy obecnym order (official)
-        container.getBoundingClientRect(); // reflow
-        const firstPos = {};
-        rowEls.forEach(el => {
-            firstPos[el.dataset.teamName14] = el.getBoundingClientRect().top;
-        });
-
-        // L — zmień order na docelowy (virtual)
-        virtualRows.forEach((vRow, vIdx) => {
-            const el = rowMap[vRow.team_name14];
-            if (el) el.style.order = vIdx;
-        });
-
-        // I — reflow, oblicz delty, ustaw translateY do starej pozycji
-        container.getBoundingClientRect();
-        rowEls.forEach(el => {
-            const name  = el.dataset.teamName14;
-            const delta = firstPos[name] - el.getBoundingClientRect().top;
-            el.style.transition = 'none';
-            el.style.transform  = `translateY(${delta}px)`;
-        });
-
-        // P — reflow, uruchom animację
-        container.getBoundingClientRect();
-        rowEls.forEach(el => {
-            el.style.transition = 'transform 1s ease';
-            el.style.transform  = '';
-        });
-
-        // Wyczyść po zakończeniu
-        setTimeout(() => {
-            rowEls.forEach(el => {
-                el.style.transition = '';
-                el.style.transform  = '';
-            });
-        }, 1050);
     }
 
     // ── Główna funkcja wyświetlania ───────────────────────────────────────────
@@ -411,18 +362,18 @@
             });
             container.style.display = 'flex';
 
-            // t=9500ms: animacja zamiany na virtual
+            // t=8000ms: animacja zamiany na virtual
             _resultsTimer2 = setTimeout(() => {
                 _resultsTimer2 = null;
                 container.querySelectorAll('.results').forEach(el => {
                     animateTableSwap(el, official, virtual);
                 });
-            }, 9500);
+            }, 8000);
 
-            // t=20000ms: zamknięcie
+            // t=20000ms: zamknięcie — scaleY bez animacji per wiersz
             _resultsTimer = setTimeout(() => {
                 _resultsTimer = null;
-                closeResultsTableContainer(container, null);
+                closeResultsTableContainer(container, null, { skipRowAnimation: true });
             }, 20000);
         }
     }

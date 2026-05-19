@@ -28,7 +28,7 @@
 
 .results-row{
     display: flex;
-    /* transition: all 1s ease; */
+    transition: transform 1s ease;
     background: linear-gradient(to bottom, #ffffff, #909090);
 }
 .results-team-name14{

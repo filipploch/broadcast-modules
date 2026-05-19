@@ -1268,8 +1268,34 @@ def register_routes(app, exclude=None, team_manager=None):
             return jsonify({'error': 'Nieprawidłowy status (dozwolone: 0, 1, 2)'}), 400
         try:
             game.status = new_status
+            if new_status == 0:
+                game.home_team_goals = None
+                game.away_team_goals = None
             db.session.commit()
             return jsonify({'ok': True, 'game': game.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+
+    @app.route('/api/periods/<int:period_id>/added-time', methods=['PATCH'])
+    def api_update_period_added_time(period_id):
+        Period = _get_period()
+        period = Period.query.get(period_id)
+        if not period:
+            return jsonify({'error': 'Nie znaleziono okresu'}), 404
+        data = request.get_json(silent=True) or {}
+        added_time = data.get('added_time')
+        if added_time is None or not isinstance(added_time, int) or added_time < 0:
+            return jsonify({'error': 'Nieprawidłowa wartość added_time'}), 400
+        try:
+            period.added_time = added_time
+            db.session.commit()
+            from core.managers import get_hub_client
+            hub_client = get_hub_client()
+            if hub_client:
+                hub_client.broadcast_to_class('overlay', 'added_time_updated', {'added_time': added_time})
+            return jsonify({'ok': True, 'added_time': added_time})
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
