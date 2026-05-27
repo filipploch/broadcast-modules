@@ -1,0 +1,12 @@
+.overlay-container-element {
+    color: black;
+    font-size: 35px;
+}
+
+.results-content {
+    width: 60%;
+    left: 20%;
+    position: relative;
+    align-content: center;
+    top: -40px;
+}

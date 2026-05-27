@@ -1,9 +1,8 @@
 var appState = {
     home_team_goals: null,
     away_team_goals: null,
-    home_team_fouls: 0,
-    away_team_fouls: 0,
-    // fouls: { home: 0, away: 0 },
+    home_team_value2: 0,
+    away_team_value2: 0,
     home_penalties: [],
     away_penalties: [],
     teams: { home: [null], away: null },

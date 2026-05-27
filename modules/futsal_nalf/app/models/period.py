@@ -25,3 +25,11 @@ class Period(BasePeriodMixin, db.Model):
         if 0 <= new_val <= 5:
             self.away_team_fouls = new_val
             self.updated_at = datetime.utcnow()
+
+    def to_dict(self):
+        d = super().to_dict()
+        d['home_team_fouls']  = self.home_team_fouls
+        d['away_team_fouls']  = self.away_team_fouls
+        d['home_team_value2'] = self.home_team_fouls
+        d['away_team_value2'] = self.away_team_fouls
+        return d

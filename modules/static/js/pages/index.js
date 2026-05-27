@@ -19,8 +19,8 @@ var socket = (typeof socket !== 'undefined') ? socket : io();
 
 var homeScoreLabel = document.getElementById('scoreHome');
 var awayScoreLabel = document.getElementById('scoreAway');
-var homeFoulsLabel = document.getElementById('foulsHome');
-var awayFoulsLabel = document.getElementById('foulsAway');
+var homeFoulsLabel = document.getElementById('value2Home');
+var awayFoulsLabel = document.getElementById('value2Away');
 
 // ============================================================================
 // CAMERA ICONS
@@ -207,12 +207,12 @@ socket.on('disconnect', () => {
 });
 
 socket.on('initial_data', (data) => {
-    appState.home_team_goals  = data.home_team_goals;
-    appState.home_team_fouls  = data.home_team_fouls;
-    appState.home_penalties   = data.home_penalties;
-    appState.away_team_goals  = data.away_team_goals;
-    appState.away_team_fouls  = data.away_team_fouls;
-    appState.away_penalties   = data.away_penalties;
+    appState.home_team_goals   = data.home_team_goals;
+    appState.home_team_value2  = data.home_team_value2;
+    appState.home_penalties    = data.home_penalties;
+    appState.away_team_goals   = data.away_team_goals;
+    appState.away_team_value2  = data.away_team_value2;
+    appState.away_penalties    = data.away_penalties;
     appState.mainTimer        = data.main_timer;
     appState.isReversed       = data.is_reversed;
     appState.isReordering     = false;
@@ -222,7 +222,6 @@ socket.on('initial_data', (data) => {
         window.initialTime = appState.mainTimer.initial_time;
         updateTimerDisplay(appState.mainTimer);
     }
-    updateTimerDisplay(appState.mainTimer);
     fillPenaltiesTimersContainer(appState.home_penalties, 'home');
     fillPenaltiesTimersContainer(appState.away_penalties, 'away');
 });
@@ -540,6 +539,24 @@ socket.on('limit_reached', (data) => {
     }
 });
 
+socket.on('timer_created', (data) => {
+    if (data.timer_id && !data.timer_id.startsWith('penalty_')) {
+        appState.mainTimer = data;
+        if (data.initial_time !== undefined) window.initialTime = data.initial_time;
+        updateTimerDisplay(data);
+        updateTimerState(data.timer_id, data.state);
+    }
+});
+
+socket.on('timer_ensured', (data) => {
+    if (data.timer_id && !data.timer_id.startsWith('penalty_')) {
+        appState.mainTimer = data;
+        if (data.initial_time !== undefined) window.initialTime = data.initial_time;
+        updateTimerDisplay(data);
+        updateTimerState(data.timer_id, data.state);
+    }
+});
+
 /**
  * Handle timer created event (for penalties added during period)
  */
@@ -612,10 +629,10 @@ socket.on('game_state_update', (data) => {
         homeScoreLabel.textContent = data.home_team_goals;
     if (data.away_team_goals !== undefined && awayScoreLabel)
         awayScoreLabel.textContent = data.away_team_goals;
-    if (data.home_team_fouls !== undefined && homeFoulsLabel)
-        homeFoulsLabel.textContent = data.home_team_fouls;
-    if (data.away_team_fouls !== undefined && awayFoulsLabel)
-        awayFoulsLabel.textContent = data.away_team_fouls;
+    if (data.home_team_value2 !== undefined && homeFoulsLabel)
+        homeFoulsLabel.textContent = data.home_team_value2;
+    if (data.away_team_value2 !== undefined && awayFoulsLabel)
+        awayFoulsLabel.textContent = data.away_team_value2;
 });
 
 socket.on('penalty_timer_update', (timerData) => {
@@ -886,8 +903,8 @@ socket.on('scoreboard_data', (data) => {
     let gameData = data['payload'];
     homeScoreLabel.innerText = gameData['home_team_goals'];
     awayScoreLabel.innerText = gameData['away_team_goals'];
-    homeFoulsLabel.innerText = gameData['home_team_fouls'];
-    awayFoulsLabel.innerText = gameData['away_team_fouls'];
+    homeFoulsLabel.innerText = gameData['home_team_value2'];
+    awayFoulsLabel.innerText = gameData['away_team_value2'];
 })
 
 socket.on('away_penalty_timer_created', (data) => {

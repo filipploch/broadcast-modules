@@ -4,14 +4,14 @@
   background-image: linear-gradient(to bottom, #303093, #080862);
 }
 
-.squad-body-right {
+.info-body-right {
   flex: 1;                 /* ← równa szerokość */
   display: flex;           /* ← centrowanie obrazka */
   justify-content: center;
   align-items: center;
 }
 
-.squad-body-right img {
+.info-body-right img {
   width: 500px;
   height: 500px;
   object-fit: cover;       /* opcjonalnie – zachowuje proporcje w razie potrzeby */

@@ -114,16 +114,16 @@ def register_events(socketio):
 
         if game:
              socketio.emit('initial_data', {
-                'home_team_goals':     game['home_team_goals'],
-                'away_team_goals':     game['away_team_goals'],
-                'home_team_red_cards': game['home_team_red_cards'],
-                'away_team_red_cards': game['away_team_red_cards'],
-                'home_team_uniform':   game['home_team_uniform'],
-                'away_team_uniform':   game['away_team_uniform'],
-                'home_penalties':      penalties['home'],
-                'away_penalties':      penalties['away'],
-                'main_timer':          main_gt.to_dict() if main_gt else None,
-                'is_reversed':         is_reversed,
+                'home_team_goals':   game['home_team_goals'],
+                'away_team_goals':   game['away_team_goals'],
+                'home_team_value2':  game['home_team_red_cards'],
+                'away_team_value2':  game['away_team_red_cards'],
+                'home_team_uniform': game['home_team_uniform'],
+                'away_team_uniform': game['away_team_uniform'],
+                'home_penalties':    penalties['home'],
+                'away_penalties':    penalties['away'],
+                'main_timer':        main_gt.to_dict() if main_gt else None,
+                'is_reversed':       is_reversed,
             })
         else:
             from app.models.shootout import Shootout
@@ -258,16 +258,16 @@ def register_events(socketio):
         period = None
         if value_type == 'score':
             period = period_manager.increment_period_goal(current_period_id, team_type, value)
-        elif value_type == 'red_cards':
+        elif value_type == 'value2':
             period = period_manager.increment_period_red_card(current_period_id, team_type, value)
 
         if period:
             game = Game.query.get(period.game_id)
             payload = {
-                'home_team_goals':     game.home_team_goals,
-                'home_team_red_cards': game.home_team_red_cards,
-                'away_team_goals':     game.away_team_goals,
-                'away_team_red_cards': game.away_team_red_cards,
+                'home_team_goals':  game.home_team_goals,
+                'home_team_value2': game.home_team_red_cards,
+                'away_team_goals':  game.away_team_goals,
+                'away_team_value2': game.away_team_red_cards,
             }
             hub_client = get_hub_client()
             if hub_client:
@@ -348,10 +348,10 @@ def register_events(socketio):
                 from core.extensions import socketio as _sio
                 game_now = Game.query.get(period.game_id)
                 payload = {
-                    'home_team_goals':     game_now.home_team_goals,
-                    'home_team_red_cards': game_now.home_team_red_cards,
-                    'away_team_goals':     game_now.away_team_goals,
-                    'away_team_red_cards': game_now.away_team_red_cards,
+                    'home_team_goals':  game_now.home_team_goals,
+                    'home_team_value2': game_now.home_team_red_cards,
+                    'away_team_goals':  game_now.away_team_goals,
+                    'away_team_value2': game_now.away_team_red_cards,
                 }
                 hc = get_hub_client()
                 if hc:
@@ -518,10 +518,10 @@ def register_events(socketio):
                 if period:
                     game_now = Game.query.get(period.game_id)
                     payload = {
-                        'home_team_goals':     game_now.home_team_goals,
-                        'home_team_red_cards': game_now.home_team_red_cards,
-                        'away_team_goals':     game_now.away_team_goals,
-                        'away_team_red_cards': game_now.away_team_red_cards,
+                        'home_team_goals':  game_now.home_team_goals,
+                        'home_team_value2': game_now.home_team_red_cards,
+                        'away_team_goals':  game_now.away_team_goals,
+                        'away_team_value2': game_now.away_team_red_cards,
                     }
                     hc = get_hub_client()
                     if hc:
@@ -555,10 +555,10 @@ def register_events(socketio):
                 if period:
                     game_now = Game.query.get(period.game_id)
                     payload = {
-                        'home_team_goals':     game_now.home_team_goals,
-                        'home_team_red_cards': game_now.home_team_red_cards,
-                        'away_team_goals':     game_now.away_team_goals,
-                        'away_team_red_cards': game_now.away_team_red_cards,
+                        'home_team_goals':  game_now.home_team_goals,
+                        'home_team_value2': game_now.home_team_red_cards,
+                        'away_team_goals':  game_now.away_team_goals,
+                        'away_team_value2': game_now.away_team_red_cards,
                     }
                     hc = get_hub_client()
                     if hc:

@@ -2494,8 +2494,16 @@ function _sendResultsToOverlay(games) {
 function _mapStandingsRow(row) {
     return {
         team_name14:     row.team_name_14 || row.team_name || '',
+        team_name:       row.team_name       || '',
+        team_short_name: row.team_short_name || '',
         points:          row.points,
         goal_difference: row.goal_difference,
+        games:           row.games,
+        wins:            row.wins,
+        draws:           row.draws,
+        loses:           row.loses,
+        goals_scored:    row.goals_scored,
+        goals_lost:      row.goals_lost,
     };
 }
 

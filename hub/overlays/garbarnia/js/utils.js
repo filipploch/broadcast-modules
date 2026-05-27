@@ -76,3 +76,15 @@ function formatGameTimeDisplay(gameTimeS, periodEndS) {
     }
     return Math.ceil(gameTimeS / 60) + "'";
 }
+
+function makePolygonTilt(elementHeight, elementWidth, side='both'){
+  const tiltFactor = 19/38;
+  const tiltShift = elementHeight * tiltFactor;
+  if (side === 'left') {
+    return `polygon(0 0, 100% 0, ${100 - tiltShift/elementWidth*100}% 100%, 0% 100%)`;
+  } else if (side === 'right') {
+    return `polygon(${tiltShift/elementWidth*100}% 0, 100% 0, 100% 100%, 0% 100%)`;
+  } else {
+    return `polygon(${tiltShift/elementWidth*100}% 0, 100% 0, ${100 - tiltShift/elementWidth*100}% 100%, 0% 100%)`;
+  }
+}

@@ -20,8 +20,8 @@ var socket = (typeof socket !== 'undefined') ? socket : io();
 
 var homeScoreLabel = document.getElementById('labelScoreHome');
 var awayScoreLabel = document.getElementById('labelScoreAway');
-var homeFoulsLabel = document.getElementById('labelFoulsHome');
-var awayFoulsLabel = document.getElementById('labelFoulsAway');
+var homeFoulsLabel = document.getElementById('labelValue2Home');
+var awayFoulsLabel = document.getElementById('labelValue2Away');
 
 
 
@@ -354,8 +354,8 @@ socket.on('game_data', (data) => {
     let gameData = data['payload'];
     homeScoreLabel.innerText = gameData['home_team_goals'];
     awayScoreLabel.innerText = gameData['away_team_goals'];
-    homeFoulsLabel.innerText = gameData['home_team_fouls'];
-    awayFoulsLabel.innerText = gameData['away_team_fouls'];
+    homeFoulsLabel.innerText = gameData['home_team_value2'];
+    awayFoulsLabel.innerText = gameData['away_team_value2'];
 })
 
 /**

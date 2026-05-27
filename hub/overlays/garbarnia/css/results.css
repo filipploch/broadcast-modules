@@ -14,16 +14,15 @@
     background: linear-gradient(to bottom, #3434347c, #17171778) !important;
     color: white;
     text-align: center;
-    width: 380px;
     display: block;
 }
 
-#table-header{
-    background: linear-gradient(to bottom, #3434347c, #17171778) !important;
-    color: white;
-    text-align: center;
-    display: block;
-    width: 380px;
+#table-header {
+  background: linear-gradient(to bottom, #3434347c, #17171778) !important;
+  color: white;
+  text-align: center;
+  display: block;
+  align-self: center;
 }
 
 .results-row{
@@ -84,4 +83,112 @@
 }
 .degradation{
     background: linear-gradient(to bottom, #fda8a8af, #ff3a3aa8) !important;
+}
+
+/* ── Tryb poziomy (inside game-container) ──────────────────────────────── */
+.results--horizontal {
+    flex-direction: column;
+    width: 100%;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.results-header--horizontal {
+    text-align: center;
+    width: 100%;
+    background: linear-gradient(to bottom, #3434347c, #17171778);
+    color: white;
+    display: block;
+}
+
+.results-cells-row {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 2px;
+}
+
+.results-grid {
+    display: grid;
+    grid-auto-flow: row;
+    row-gap: 3px;
+}
+
+/* ── Tabela pełna (results-container / table-container) ──────────────────── */
+.results-table-row {
+    display: flex;
+    align-items: center;
+    transition: transform 1s ease;
+}
+
+.results-table-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6.5px;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.results-table-name {
+    flex: 1;
+    flex-shrink: 1;
+    justify-content: flex-start;
+    text-align: left;
+    padding-left: 10px;
+}
+
+.results-table-indicator {
+  background: linear-gradient(to bottom, #ffffff, #909090);
+  width: 15px !important;
+  height: 82%;
+  margin: 0;
+  position: absolute;
+  right: 0px;
+  clip-path: polygon(33% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.results-table-indicator.promotion {
+    background: linear-gradient(to bottom, #baffbeb0, #20fa48a8) !important;
+}
+
+.results-table-indicator.degradation {
+    background: linear-gradient(to bottom, #fda8a8af, #ff3a3aa8) !important;
+}
+
+.results-cell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(to bottom, #ffffff, #909090);
+    overflow: hidden;
+    transition: transform 1s ease;
+    padding: 2px 0;
+    box-sizing: border-box;
+}
+
+.results-cell-standing {
+    font-size: 0.65em;
+    color: #555;
+    line-height: 1;
+}
+
+.results-cell-name {
+    font-size: 0.6em;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    padding: 0 2px;
+    box-sizing: border-box;
+}
+
+.results-cell-points {
+    font-weight: bold;
+    font-size: 0.9em;
 }

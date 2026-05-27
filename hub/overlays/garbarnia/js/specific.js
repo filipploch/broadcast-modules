@@ -70,22 +70,35 @@ window.addEventListener('load', function () {
 
         function buildCoachRow(element, rotateElementNr) {
             var row = document.createElement('div');
-            if(coach === null) return row; 
-            row.classList.add(
+            if(coach === null) return row;
+            let coachTitle = document.createElement('div');
+            coachTitle.classList.add(
+                'squad-player-row',
+                'specific-colors-reversed',
+                'rotate-show-element',
+                'rotate-show-element' + rotateElementNr,
+                'animated-element',
+                'coach-row'
+            );
+            coachTitle.innerHTML = 'trener';
+            let coachContent = document.createElement('div');
+
+            coachContent.classList.add(
                 'squad-player-row',
                 'specific-colors',
                 'rotate-show-element',
-                'rotate-show-element' + rotateElementNr,
-                'animated-element'
+                'rotate-show-element' + parseInt(rotateElementNr+1),
+                'animated-element',
+                'coach-row'
             );
-            row.dataset.animationOrder = '3';
-            console.log('coach: ', coach);
+            coachContent.dataset.animationOrder = '3';
             if(coach[0] !== null){
-                row.innerHTML = '<span class="squad-player-number"> trener </span>' +
-                    '<span class="squad-coach-name">' + coach + '</span>';
+                coachContent.innerHTML = coach;
             }else{
                 row.style.display = 'none';
             }
+            row.appendChild(coachTitle);
+            row.appendChild(coachContent);
             return row;
         }
 
@@ -105,6 +118,25 @@ window.addEventListener('load', function () {
         buildSection(starters,    'starters',   0);
         buildSection(substitutes, 'substitutes', starters.length);
         buildCoachSection(_arr);
+
+        // Tymczasowo wstaw squadContent do body — cały kontekst CSS (.starters > div itp.) zachowany
+        squadContent.style.position   = 'absolute';
+        squadContent.style.visibility = 'hidden';
+        document.body.appendChild(squadContent);
+        var _firstRow = squadContent.querySelector('.squad-player-row');
+        if (_firstRow) {
+            var _h = _firstRow.offsetHeight;
+            var _w = _firstRow.offsetWidth;
+            if (_h > 0 && _w > 0) {
+                var _polygon = makePolygonTilt(_h, _w, 'both');
+                squadContent.querySelectorAll('.squad-player-row').forEach(function(row) {
+                    row.style.clipPath = _polygon;
+                });
+            }
+        }
+        document.body.removeChild(squadContent);
+        squadContent.style.position   = '';
+        squadContent.style.visibility = '';
 
         return squadContent;
     };

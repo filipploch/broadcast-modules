@@ -14,16 +14,15 @@
     background: linear-gradient(to bottom, #3434347c, #17171778) !important;
     color: white;
     text-align: center;
-    width: 380px;
     display: block;
 }
 
-#table-header{
+#table-header {
     background: linear-gradient(to bottom, #3434347c, #17171778) !important;
     color: white;
     text-align: center;
     display: block;
-    width: 380px;
+    align-self: center;
 }
 
 .results-row{
@@ -66,12 +65,13 @@
     max-width: 10%;
 }
 .results-standing{
-    width: 10%;
+    width: 6%;
     text-align: right;
-    padding: 0 5px;
+    padding-left: 1%;
 }
 .results-name14{
     width: 70%;
+    padding-left: 1.5%;
 }
 .results-points{
     width: 10%;
@@ -84,4 +84,85 @@
 }
 .degradation{
     background: linear-gradient(to bottom, #fda8a8af, #ff3a3aa8) !important;
+}
+
+/* ── Tryb poziomy (inside game-container) ──────────────────────────────── */
+.results--horizontal {
+    flex-direction: column;
+    width: 100%;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.results-header--horizontal {
+    text-align: center;
+    width: 100%;
+    background: linear-gradient(to bottom, #3434347c, #17171778);
+    color: white;
+    display: block;
+}
+
+.results-cells-row {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 2px;
+}
+
+.results-grid {
+    display: grid;
+    grid-auto-flow: row;
+    row-gap: 3px;
+}
+
+.results-cell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(to bottom, #ffffff, #909090);
+    overflow: hidden;
+    transition: transform 1s ease;
+    padding: 2px 0;
+    box-sizing: border-box;
+}
+
+.results-cell-standing {
+    font-size: 0.65em;
+    color: #555;
+    line-height: 1;
+}
+
+.results-cell-name {
+    font-size: 0.6em;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    padding: 0 2px;
+    box-sizing: border-box;
+}
+
+.results-cell-points {
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+/* Tryb pełnoekranowy — rozszerzone kolumny tabeli */
+.results-name14--wide {
+    width: 35%;
+    padding-left: 1.5%;
+}
+.results-stat {
+    width: 7%;
+    text-align: center;
+    padding: 0 2px;
+}
+.results-row--subheader {
+    background: linear-gradient(to bottom, #3434347c, #17171778) !important;
+    color: white;
+    font-size: 0.75em;
 }

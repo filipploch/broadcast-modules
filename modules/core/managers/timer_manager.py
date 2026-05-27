@@ -586,7 +586,10 @@ class TimerManager:
         timer_id       = payload.get('timer_id')
         elapsed_time   = payload.get('elapsed_time', 0)
         state          = payload.get('state', GameTimer.STATE_LIMIT_REACHED)
-        pause_at_limit = payload.get('pause_at_limit', True)
+        timer_cached   = self.get_timer_state(timer_id) or {}
+        pause_at_limit = timer_cached.get('metadata', {}).get(
+            'pause_at_limit', payload.get('pause_at_limit', True)
+        )
 
         gt = self.get_db_timer(timer_id)
         if gt is None:
@@ -610,8 +613,11 @@ class TimerManager:
             penalties = self._get_penalties_dict(gt.game_id)
             self._emit_to_ui('reload_penalty_timers', {'penalties': penalties})
             self._broadcast_penalty_state(gt.game_id)
+            if not pause_at_limit:
+                self.resume_timer(timer_id)
         else:
             db.session.commit()
+            self._broadcast_penalty_state(gt.game_id)
 
         if pause_at_limit:
             self._emit_to_ui(msg.get('type'), {

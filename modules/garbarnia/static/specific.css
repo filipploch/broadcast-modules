@@ -4,7 +4,7 @@
   background-image: linear-gradient(to bottom, rgb(72, 54, 28), #2a1b06);
 }
 
-.squad-body-right {
+.info-body-right {
   flex: 1;
   display: flex;
   justify-content: end;
@@ -13,7 +13,7 @@
   padding-right: 150px;
 }
 
-.squad-body-right img {
+.info-body-right img {
   width: 250px;
   height: 250px;
   object-fit: cover;

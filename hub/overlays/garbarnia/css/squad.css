@@ -50,6 +50,7 @@ body {
 
 .start-content {
     animation: fadeIn 500ms both;
+    padding: 70px 0 60px 0;
 }
 
 #start-home-team-logo {
@@ -104,7 +105,7 @@ body {
   margin-top: 20px;
 }
 
-.squad-team-name {
+.main-head-text {
   font-weight: 700;
 }
 
@@ -112,35 +113,65 @@ body {
   /* opcjonalne style */
 }
 
-.squad-body {
+.info-body {
   display: flex;
   flex: 1;
-  background-color: rgba(34, 34, 34, 0.7);
+  /* background-color: rgba(34, 34, 34, 0.7); */
   transform-origin: top;
-  animation: expandHeight 1000ms ease-out 1000ms both;
+  /* animation: expandHeight 1000ms ease-out 1000ms both; */
+}
+
+.starters{
+    font-size: 35px;
+    position: absolute;
+    left: 65px;
+    z-index: 999;
+    bottom: 200px;
+}
+
+.starters>div{
+    height: 50px;
 }
 
 .substitutes {
   position: absolute;
-  right: 130px;
+  right: 65px;
   z-index: 999;
-  bottom: 70px;
+  bottom: 200px;
+  font-size: 30px;
+}
+
+.coach-row {
+  padding: 3px 0px !important;
+  font-size: 35px !important;
+  margin: 0 !important;
+  justify-content: center !important;
+  width: auto !important;
+  font-weight: 700 !important;
 }
 
 .coach {
-  bottom: 0;
-  position: relative;
-  padding-top: 52px;
+  bottom: 50px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  width: 500px;
+  font-size: 35px;
+}
+
+.coach>div{
+  padding: 10px;
 }
 
 .start-body {
-  display: flex;
+  /* display: flex; */
   flex-direction: column;
   flex: 1;
-  background-color: rgba(34, 34, 34, 0.7);
+  /* background-color: rgba(34, 34, 34, 0.7); */
   transform-origin: top;
-  animation: expandHeight 1000ms ease-out 500ms both;
-  height: 850px;
+  /* animation: expandHeight 1000ms ease-out 500ms both; */
+  height: 980px;
 }
 
 @keyframes expandHeight {
@@ -165,11 +196,20 @@ body {
   }
 }
 
-.squad-body-left {
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.info-body-left {
   flex: 1;                 /* ← równa szerokość */
   display: flex;
   align-items: center;
-  padding-left: 130px;
+  padding-left: 65px;
 }
 
 
@@ -181,11 +221,14 @@ body {
 }
 
 .squad-player-row {
-	display: flex;
-	font-size: 35px;
-  width: 700px;
-  padding: 5px 0;
+  display: flex;
+
+  width: 100%;
+  padding-left: 10px;
+  margin-bottom: 5px;
 }
+
+
 
 .squad-player-row>span {
 	display: inline-block;
@@ -216,6 +259,11 @@ body {
 
 .squad-team-logo {
   animation: fadeIn 1000ms both;
+  width: 200px;
+  height: 200px;
+  right: 810px;
+  position: absolute;
+  top: 65px;
 }
 
 #start-bottom-container {

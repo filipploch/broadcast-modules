@@ -120,6 +120,17 @@ def register_events(socketio):
         timer_id = data.get('timer_id')
         if tm.remove_timer(timer_id):
             socketio.emit('timer_removed', {'timer_id': timer_id})
+            if timer_id and (timer_id.startswith('penalty_home') or
+                             timer_id.startswith('penalty_away')):
+                from core.models.base_game_timer import get_game_timer_model
+                from core.extensions import db
+                GameTimer = get_game_timer_model()
+                gt = GameTimer.query.filter_by(plugin_timer_id=timer_id).first()
+                if gt:
+                    game_id = gt.game_id
+                    db.session.delete(gt)
+                    db.session.commit()
+                    tm._broadcast_penalty_state(game_id)
         else:
             socketio.emit('error', {'message': f'Failed to remove timer: {timer_id}'})
 

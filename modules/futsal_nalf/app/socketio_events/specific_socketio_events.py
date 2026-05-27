@@ -110,8 +110,8 @@ def register_events(socketio):
              socketio.emit('initial_data', {
                 'home_team_goals':   game['home_team_goals'],
                 'away_team_goals':   game['away_team_goals'],
-                'home_team_fouls':   game['home_team_fouls'],
-                'away_team_fouls':   game['away_team_fouls'],
+                'home_team_value2':  game['home_team_fouls'],
+                'away_team_value2':  game['away_team_fouls'],
                 'home_team_uniform': game['home_team_uniform'],
                 'away_team_uniform': game['away_team_uniform'],
                 'home_penalties':    penalties['home'],
@@ -252,16 +252,16 @@ def register_events(socketio):
         period = None
         if value_type == 'score':
             period = period_manager.increment_period_goal(current_period_id, team_type, value)
-        elif value_type == 'fouls':
+        elif value_type == 'value2':
             period = period_manager.increment_period_foul(current_period_id, team_type, value)
 
         if period:
             game = Game.query.get(period.game_id)
             payload = {
-                'home_team_goals': game.home_team_goals,
-                'home_team_fouls': period.home_team_fouls,
-                'away_team_goals': game.away_team_goals,
-                'away_team_fouls': period.away_team_fouls,
+                'home_team_goals':  game.home_team_goals,
+                'home_team_value2': period.home_team_fouls,
+                'away_team_goals':  game.away_team_goals,
+                'away_team_value2': period.away_team_fouls,
             }
             hub_client = get_hub_client()
             if hub_client:
@@ -340,10 +340,10 @@ def register_events(socketio):
                 from core.extensions import socketio as _sio
                 game_now = Game.query.get(period_goal.game_id)
                 payload = {
-                    'home_team_goals': game_now.home_team_goals,
-                    'home_team_fouls': period_goal.home_team_fouls,
-                    'away_team_goals': game_now.away_team_goals,
-                    'away_team_fouls': period_goal.away_team_fouls,
+                    'home_team_goals':  game_now.home_team_goals,
+                    'home_team_value2': period_goal.home_team_fouls,
+                    'away_team_goals':  game_now.away_team_goals,
+                    'away_team_value2': period_goal.away_team_fouls,
                 }
                 hc = get_hub_client()
                 if hc:
@@ -463,10 +463,10 @@ def register_events(socketio):
                 if period:
                     game_now = Game.query.get(period.game_id)
                     payload = {
-                        'home_team_goals': game_now.home_team_goals,
-                        'home_team_fouls': period.home_team_fouls,
-                        'away_team_goals': game_now.away_team_goals,
-                        'away_team_fouls': period.away_team_fouls,
+                        'home_team_goals':  game_now.home_team_goals,
+                        'home_team_value2': period.home_team_fouls,
+                        'away_team_goals':  game_now.away_team_goals,
+                        'away_team_value2': period.away_team_fouls,
                     }
                     hc = get_hub_client()
                     if hc:
@@ -500,10 +500,10 @@ def register_events(socketio):
                 if period:
                     game_now = Game.query.get(period.game_id)
                     payload = {
-                        'home_team_goals': game_now.home_team_goals,
-                        'home_team_fouls': period.home_team_fouls,
-                        'away_team_goals': game_now.away_team_goals,
-                        'away_team_fouls': period.away_team_fouls,
+                        'home_team_goals':  game_now.home_team_goals,
+                        'home_team_value2': period.home_team_fouls,
+                        'away_team_goals':  game_now.away_team_goals,
+                        'away_team_value2': period.away_team_fouls,
                     }
                     hc = get_hub_client()
                     if hc:

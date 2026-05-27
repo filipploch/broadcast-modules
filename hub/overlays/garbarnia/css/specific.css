@@ -4,7 +4,13 @@
   background-image: linear-gradient(to bottom, rgb(72, 54, 28), #2a1b06);
 }
 
-.squad-body-right {
+.specific-colors-reversed {
+  color: #2a1b06;
+  background-color: #480f0f;
+  background-image: linear-gradient(to bottom, rgb(255, 255, 255), #9c9c9c);
+}
+
+.info-body-right {
   flex: 1;
   display: flex;
   justify-content: end;
@@ -13,7 +19,7 @@
   padding-right: 150px;
 }
 
-.squad-body-right img {
+.info-body-right img {
   width: 200px;
   height: 200px;
   object-fit: cover;

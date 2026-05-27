@@ -104,7 +104,7 @@ body {
   margin-top: 20px;
 }
 
-.squad-team-name {
+.main-head-text {
   font-weight: 700;
 }
 
@@ -112,7 +112,7 @@ body {
   /* opcjonalne style */
 }
 
-.squad-body {
+.info-body {
   display: flex;
   flex: 1;
   background-color: rgba(34, 34, 34, 0.7);
@@ -165,7 +165,16 @@ body {
   }
 }
 
-.squad-body-left {
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.info-body-left {
   flex: 1;                 /* ← równa szerokość */
   display: flex;
   align-items: center;

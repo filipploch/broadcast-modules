@@ -86,8 +86,8 @@ function _buildTimersContainer(timerId, { withPenalties, withAddedTime } = {}) {
 }
 
 function _buildGameTeamsContainer() {
-    const foulsHome  = (window.period && window.period.home_team_fouls) || 0;
-    const foulsAway  = (window.period && window.period.away_team_fouls) || 0;
+    const value2Home = (window.period && window.period.home_team_value2) || 0;
+    const value2Away = (window.period && window.period.away_team_value2) || 0;
     const goalsHome  = (window.game   && window.game.home_team_goals)   || 0;
     const goalsAway  = (window.game   && window.game.away_team_goals)   || 0;
     const nameHome   = window.teamHomeShortName || '';
@@ -97,18 +97,18 @@ function _buildGameTeamsContainer() {
 <div id="game-teams-container" class="module-frame">
     <div id="game-teams-content">
         <div class="reversible scoreboard">
-            <button class="flex-item flex1" id="addFoulsHome"
-                onclick="changeGameValue('fouls', 'home', 1)" data-reverse-anchor>+</button>
+            <button class="flex-item flex1" id="addValue2Home"
+                onclick="changeGameValue('value2', 'home', 1)" data-reverse-anchor>+</button>
             <button class="flex-item flex1" id="addScoreHome"
                 onclick="changeGameValue('score', 'home', 1)">+</button>
             <button class="flex-item flex1" id="addScoreAway"
                 onclick="changeGameValue('score', 'away', 1)">+</button>
-            <button class="flex-item flex1" id="addFoulsAway"
-                onclick="changeGameValue('fouls', 'away', 1)">+</button>
+            <button class="flex-item flex1" id="addValue2Away"
+                onclick="changeGameValue('value2', 'away', 1)">+</button>
         </div>
         <div class="reversible scoreboard">
-            <label class="flex-item flex1 fouls-label" id="labelFoulsHome" data-reverse-anchor>
-                <span id="foulsHome">${foulsHome}</span>
+            <label class="flex-item flex1 fouls-label" id="labelValue2Home" data-reverse-anchor>
+                <span id="value2Home">${value2Home}</span>
             </label>
             <label class="flex-item flex1 goals-label" id="labelScoreHome">
                 <span id="scoreHome">${goalsHome}</span>
@@ -116,19 +116,19 @@ function _buildGameTeamsContainer() {
             <label class="flex-item flex1 goals-label" id="labelScoreAway">
                 <span id="scoreAway">${goalsAway}</span>
             </label>
-            <label class="flex-item flex1 fouls-label" id="labelFoulsAway">
-                <span id="foulsAway">${foulsAway}</span>
+            <label class="flex-item flex1 fouls-label" id="labelValue2Away">
+                <span id="value2Away">${value2Away}</span>
             </label>
         </div>
         <div class="reversible scoreboard">
-            <button class="flex-item flex1" id="substractFoulsHome"
-                onclick="changeGameValue('fouls', 'home', -1)" data-reverse-anchor>-</button>
+            <button class="flex-item flex1" id="substractValue2Home"
+                onclick="changeGameValue('value2', 'home', -1)" data-reverse-anchor>-</button>
             <button class="flex-item flex1" id="substractScoreHome"
                 onclick="changeGameValue('score', 'home', -1)">-</button>
             <button class="flex-item flex1" id="substractScoreAway"
                 onclick="changeGameValue('score', 'away', -1)">-</button>
-            <button class="flex-item flex1" id="substractFoulsAway"
-                onclick="changeGameValue('fouls', 'away', -1)">-</button>
+            <button class="flex-item flex1" id="substractValue2Away"
+                onclick="changeGameValue('value2', 'away', -1)">-</button>
         </div>
         <div class="reversible">
             <div class="flex-item flex3 data-item data-home"

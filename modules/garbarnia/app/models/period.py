@@ -42,5 +42,7 @@ class Period(BasePeriodMixin, db.Model):
         d = super().to_dict()
         d['home_team_red_cards'] = self.home_team_red_cards
         d['away_team_red_cards'] = self.away_team_red_cards
+        d['home_team_value2']    = self.home_team_red_cards
+        d['away_team_value2']    = self.away_team_red_cards
         d['added_time']          = self.added_time
         return d
