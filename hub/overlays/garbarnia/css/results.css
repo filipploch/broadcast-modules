@@ -131,6 +131,7 @@
   text-align: center;
   white-space: nowrap;
   flex-shrink: 0;
+  width: 86px !important;
 }
 
 .results-table-name {
@@ -139,6 +140,7 @@
     justify-content: flex-start;
     text-align: left;
     padding-left: 10px;
+    width: 200px !important;
 }
 
 .results-table-indicator {
@@ -147,8 +149,8 @@
   height: 82%;
   margin: 0;
   position: absolute;
-  right: 0px;
-  clip-path: polygon(33% 0, 100% 0, 100% 100%, 0 100%);
+  left: 0px;
+  clip-path: polygon(33% 0, 100% 0, 67% 100%, 0 100%);
 }
 
 .results-table-indicator.promotion {

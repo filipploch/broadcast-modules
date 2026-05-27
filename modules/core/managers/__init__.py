@@ -22,6 +22,7 @@ _controller_manager    = None  # ⭐ NOWY: integracja USB controllera
 _initialization_lock   = threading.Lock()
 _initialized           = False
 _timer_manager_class   = None  # moduł może ustawić przed initialize_core_managers
+_period_manager_class  = None  # moduł może ustawić przed initialize_core_managers
 
 
 
@@ -115,6 +116,13 @@ def get_timer_manager():
             cls = TimerManager
         _timer_manager = cls(get_hub_client())
     return _timer_manager
+
+
+def get_period_manager():
+    if _period_manager_class is not None:
+        return _period_manager_class()
+    from core.managers.period_manager import PeriodManager
+    return PeriodManager()
 
 
 def get_recorder_manager():

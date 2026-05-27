@@ -491,26 +491,26 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/games/<int:game_id>/prepare-broadcast')
     def prepare_game_for_broadcast(game_id):
         """Prepare game for broadcast by creating default periods"""
-        from core.managers.period_manager import PeriodManager
-        
+        from core.managers import get_period_manager
+
         game = game_manager.get_game_by_id(game_id)
-        
+
         if not game:
             flash('Nie znaleziono meczu', 'error')
             return redirect(url_for('list_games'))
-        
+
         # Check if game already has periods
         if game.periods.count() > 0:
             flash('Mecz ma już utworzone okresy', 'warning')
             return redirect(url_for('game_period_choice'))
-        
+
         camera_manager = CameraManager()
         main_camera = camera_manager.get_camera_by_id(1)
         if main_camera:
             game_camera_manager = GameCameraManager()
             game_camera_manager.assign_camera_to_game(game_id=game.id, camera_id=main_camera.id, hdmi_input=1, location='Główna')
 
-        period_manager = PeriodManager()
+        period_manager = get_period_manager()
         
         try:
             periods = period_manager.create_default_periods(game_id=game_id)
@@ -1628,14 +1628,14 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/period/<int:period_id>/finish')
     def finish_period(period_id):
         """Finish a period and return to broadcast control"""
-        from core.managers.period_manager import PeriodManager
-    
-        period_manager = PeriodManager()
+        from core.managers import get_period_manager
+
+        period_manager = get_period_manager()
         period = period_manager.get_period_by_id(period_id)
         Settings = _get_settings()
         Game = _get_game()
         Period = _get_period()
-    
+
         if not period:
             flash('Nie znaleziono okresu', 'error')
             return redirect(url_for('game_period_choice'))
@@ -1673,16 +1673,16 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/period/<int:period_id>/reset-status')
     def reset_period_status(period_id):
         """Reset period status to NOT_STARTED (for error correction)"""
-        from core.managers.period_manager import PeriodManager
-    
-        period_manager = PeriodManager()
+        from core.managers import get_period_manager
+
+        period_manager = get_period_manager()
         period = period_manager.get_period_by_id(period_id)
         Period = _get_period()
-    
+
         if not period:
             flash('Nie znaleziono okresu', 'error')
             return redirect(url_for('game_period_choice'))
-    
+
         try:
             period_manager.set_period_status(period_id, Period.STATUS_NOT_STARTED)
             flash(f'Zresetowano status okresu: {period.description}', 'success')
@@ -1697,14 +1697,12 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/period/<int:period_id>/start')
     def start_period(period_id):
         """Start a period and redirect to UI dashboard"""
-        from core.managers.period_manager import PeriodManager
-    
-        from core.managers import get_timer_manager
+        from core.managers import get_period_manager, get_timer_manager
 
         Game = _get_game()
         Period = _get_period()
         Settings = _get_settings()
-        period_manager = PeriodManager()
+        period_manager = get_period_manager()
         period = period_manager.get_period_by_id(period_id)
 
         if not period:

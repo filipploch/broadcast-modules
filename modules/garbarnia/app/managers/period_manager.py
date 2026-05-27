@@ -4,7 +4,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+HALF_DURATION_MS = 40 * 60 * 1000  # 40 minutes per half
+
+
 class PeriodManager(_CorePM):
+    def create_default_periods(self, game_id: int):
+        """Garbarnia: 2 × 40 min, pause_at_limit=False (timer continues past limit)."""
+        periods = []
+        for order, desc in [(1, '1. połowa'), (2, '2. połowa')]:
+            p = self.create_period(
+                game_id=game_id,
+                period_order=order,
+                description=desc,
+                limit=HALF_DURATION_MS,
+                pause_at_limit=False,
+            )
+            p.update_timer_name()
+            db.session.commit()
+            periods.append(p)
+        logger.info(f'Created default 2 periods (pause_at_limit=False) for game {game_id}')
+        return periods
+
     def update_period_red_cards(self, period_id: int, home_red_cards: int, away_red_cards: int,
                                 auto_sync: bool = True):
         period = self.get_period_by_id(period_id)

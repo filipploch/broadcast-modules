@@ -484,7 +484,20 @@ class TimerManager:
         # przy starcie okresu period_manager.start_period() już woła Settings.update_main_timer(),
         # ale robimy to tu ponownie żeby zagwarantować spójność po asynchronicznym potwierdzeniu
         # z pluginu (on_timer_created może nadejść z opóźnieniem po zmianie period_id w settings).
-        pause_at_limit = metadata.get('pause_at_limit', True)
+        # Plugin responses (timer_created / timer_ensured) don't echo pause_at_limit
+        # back, so metadata is always {}. Read the authoritative value from the DB
+        # period; fall back to metadata for timers not linked to a period.
+        pause_at_limit = metadata.get('pause_at_limit')
+        if pause_at_limit is None and period_id is not None:
+            try:
+                from core.models.base_period import get_period_model
+                period_obj = get_period_model().query.get(period_id)
+                if period_obj is not None:
+                    pause_at_limit = period_obj.pause_at_limit
+            except Exception:
+                pass
+        if pause_at_limit is None:
+            pause_at_limit = True
         main_timer_data = {
             'timer_id':      timer_id,
             'timer_type':    'independent',

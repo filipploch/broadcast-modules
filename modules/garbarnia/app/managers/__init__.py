@@ -10,6 +10,7 @@ from core.managers import (
     shutdown_core_managers,
     get_hub_client,
     get_timer_manager,
+    get_period_manager,
     get_recorder_manager,
     get_obs_ws_manager,
     get_sequence_manager,
@@ -24,7 +25,9 @@ _game_manager = None
 def initialize_all_managers(app):
     import core.managers as _core_mgrs
     from app.managers.timer_manager import TimerManager
+    from app.managers.period_manager import PeriodManager
     _core_mgrs._timer_manager_class = TimerManager
+    _core_mgrs._period_manager_class = PeriodManager
     """
     Inicjalizuje wszystkie managery: najpierw core, potem futsal-specifyczne.
     Wywoływana z app/__init__.py w wątku tła.
