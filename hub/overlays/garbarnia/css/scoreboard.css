@@ -1,3 +1,12 @@
+@keyframes redCardSlideIn {
+    0%   { top: 0px; }
+    100% { top: -30px; }
+}
+@keyframes redCardSlideOut {
+    0%   { top: -30px; }
+    100% { top: 0px; }
+}
+
 #scoreboard-container {
     position: fixed;
     top: 50px;
@@ -202,16 +211,16 @@
     background-color: red;
     color: white;
     font-size: 25px;
-    width: 30px;
+    width: 50px;
     height: 30px;
+    top: 0px;
+    z-index: -1;
 }
 #home-team-red-cards {
     left: 55px;
-    top: -30px;
 }
 #away-team-red-cards {
     left: 265px;
-    top: -30px;
 }
 
 #scoreboard-space {

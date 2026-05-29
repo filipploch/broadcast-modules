@@ -1723,12 +1723,36 @@ function createTeamSquad(_arr, _logo) {
 }
 
 function updateRedCardsElement(_redCards, _element) {
-    if (_redCards > 0) {
+    const wasVisible = _element.style.display === 'flex';
+    const isVisible  = _redCards > 0;
+
+    if (isVisible) {
+        _element.textContent = _redCards > 1 ? String(_redCards) : '';
+    }
+
+    if (isVisible === wasVisible) return;
+
+    if (_element._rcHandler) {
+        _element.removeEventListener('animationend', _element._rcHandler);
+        _element._rcHandler = null;
+    }
+    _element.style.animation = '';
+
+    if (isVisible) {
+        _element.style.top = '0px';
         _element.style.display = 'flex';
-        _element.textContent = _redCards > 1 ? _redCards : '';
+        void _element.offsetWidth;
+        _element.style.animation = 'redCardSlideIn 400ms ease forwards';
     } else {
-        _element.style.display = 'none';
         _element.textContent = '';
+        _element._rcHandler = function () {
+            _element.removeEventListener('animationend', _element._rcHandler);
+            _element._rcHandler = null;
+            _element.style.display = 'none';
+            _element.style.animation = '';
+        };
+        _element.addEventListener('animationend', _element._rcHandler);
+        _element.style.animation = 'redCardSlideOut 400ms ease forwards';
     }
 }
 
@@ -2056,7 +2080,7 @@ function showAddedTime(added_time) {
     const addedTimeDisplay = document.getElementById('added-time-display');
     const addedTimeLabel = document.getElementById('added-time-label');
 
-    addedTimeLabel.innerText = `+${added_time}'`;
+    addedTimeLabel.innerText = added_time > 0 ? `+${added_time}'` : '';
 
     if (currentAddedTime === 0 && added_time > 0) {
         addedTimeDisplay.style.animation = 'none';

@@ -64,6 +64,11 @@ function renderScoreboard(){
     awayTeamRedCards.classList.add('team-red-cards', 'position-absolute');
     redCardsContainer.appendChild(awayTeamRedCards);
     scoreboardContainer.appendChild(redCardsContainer);
+    const _rcStyle = getComputedStyle(homeTeamRedCards);
+    const _rcH = parseFloat(_rcStyle.height);
+    const _rcW = parseFloat(_rcStyle.width);
+    homeTeamRedCards.style.clipPath = makePolygonTilt(_rcH, _rcW, 'both');
+    awayTeamRedCards.style.clipPath = makePolygonTilt(_rcH, _rcW, 'both');
     scoreboardContainer.appendChild(mainScoreboardContainer);
 
 }

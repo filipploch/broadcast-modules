@@ -136,7 +136,7 @@
 }
 
 .results-cell-name {
-    font-size: 0.6em;
+    font-size: 1em;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -165,4 +165,8 @@
     background: linear-gradient(to bottom, #3434347c, #17171778) !important;
     color: white;
     font-size: 0.75em;
+}
+
+.pending {
+	font-style: italic;
 }
