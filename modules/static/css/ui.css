@@ -158,6 +158,9 @@ button.top-bar-element {
 #game-event-edit-result-content {
     width: 50px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    background-color: darkgoldenrod;
 }
 
 #game-event-current-result {
@@ -168,6 +171,8 @@ button.top-bar-element {
 #game-event-new-result {
     background-color: darkgoldenrod;
     height: 23px;
+    align-self: center;
+    /* width: 100%; */
 }
 
 .cards-container {

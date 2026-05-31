@@ -274,6 +274,7 @@ socket.on('error', (data) => {
 // Keep in sync when the other page triggers a reverse
 socket.on('scoreboard_reversed', function(data) {
     applyReversedState(data.is_reversed);
+    refreshEditResultDisplay();
 });
 
 
@@ -631,8 +632,8 @@ function eventEditGameFieldGenerator(_eventCellID, cols = FIELD_COLS, rows = FIE
 
 function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
     let html = `
-    <div id="game-event-edit-result">
-        <div id="game-event-edit-result-home-team-controllers">
+    <div id="game-event-edit-result" class="reversible">
+        <div id="game-event-edit-result-home-team-controllers" data-reverse-anchor>
             <button type="button"
                 class="game-event-edit-result-controller-btn"
                 onclick="changeGameEventResult('home', 1);"
@@ -643,11 +644,12 @@ function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
             >-</button>
         </div>
         <div id="game-event-edit-result-content">
-            <div id="game-event-current-result">${_homeTeamGoals}:${_awayTeamGoals}</div>
-            <div id="game-event-new-result">
-                <span id="game-event-home-team-new-result">
-                    ${_homeTeamGoals}</span>:<span id="game-event-away-team-new-result">${_awayTeamGoals}
-                </span>
+            <div id="game-event-current-result"
+                data-home-goals="${_homeTeamGoals}"
+                data-away-goals="${_awayTeamGoals}"
+            >${_homeTeamGoals}:${_awayTeamGoals}</div>
+            <div id="game-event-new-result" class="reversible">
+                <span id="game-event-home-team-new-result" data-reverse-anchor>${_homeTeamGoals}</span><span class="result-separator">:</span><span id="game-event-away-team-new-result">${_awayTeamGoals}</span>
             </div>
         </div>
         <div id="game-event-edit-result-away-team-controllers">
@@ -664,6 +666,14 @@ function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
     `;
 
     return html;
+}
+
+function refreshEditResultDisplay() {
+    const el = document.getElementById('game-event-current-result');
+    if (!el) return;
+    const h = el.dataset.homeGoals;
+    const a = el.dataset.awayGoals;
+    el.textContent = appState.isReversed ? `${a}:${h}` : `${h}:${a}`;
 }
 
 function changeGameEventResult(teamType, value) {
@@ -1446,6 +1456,8 @@ socket.on('show_ui_monitor_content', data => {
         eventEditContainer.append(eventEditRightColumn);
         eventEditRightColumn.append(teamSelect);
         eventEditGameFieldListeners();
+        applyReversedState(isScoreboardReversed);
+        refreshEditResultDisplay();
         uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
     } else if(data.content_type === 'get_event_squad') {
         const gameEvent = data.game_event;

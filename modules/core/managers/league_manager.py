@@ -119,7 +119,7 @@ class LeagueManager:
 
     def update_league(self, league_id, name=None, games_url=None, table_url=None,
                       scorers_url=None, assists_url=None, canadian_url=None,
-                      foreign_id=None, allows_draw=None):
+                      foreign_id=None, allows_draw=None, play_dictionary_id=None):
         """
         Update league
 
@@ -171,6 +171,8 @@ class LeagueManager:
                 league.canadian_url = canadian_url
             if foreign_id is not None:
                 league.foreign_id = foreign_id
+            if play_dictionary_id is not None:
+                league.play_dictionary_id = play_dictionary_id or None
 
             db.session.commit()
             logger.info(f"Updated league: {league}")

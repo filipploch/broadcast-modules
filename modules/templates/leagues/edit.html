@@ -48,40 +48,53 @@
         
         <div class="form-group">
             <label for="scorers_url">
-                URL Tabeli Strzelców *
+                URL Tabeli Strzelców
             </label>
-            <input 
-                type="url" 
-                id="scorers_url" 
-                name="scorers_url" 
-                value="{{ league.scorers_url }}"
-                required>
+            <input
+                type="url"
+                id="scorers_url"
+                name="scorers_url"
+                value="{{ league.scorers_url or '' }}">
         </div>
-        
+
         <div class="form-group">
             <label for="assists_url">
-                URL Tabeli Asystentów *
+                URL Tabeli Asystentów
             </label>
-            <input 
-                type="url" 
-                id="assists_url" 
-                name="assists_url" 
-                value="{{ league.assists_url }}"
-                required>
+            <input
+                type="url"
+                id="assists_url"
+                name="assists_url"
+                value="{{ league.assists_url or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="canadian_url">
+                URL Klasyfikacji Kanadyjskiej
+            </label>
+            <input
+                type="url"
+                id="canadian_url"
+                name="canadian_url"
+                value="{{ league.canadian_url or '' }}">
         </div>
         
         <div class="form-group">
-            <label for="canadian_url">
-                URL Klasyfikacji Kanadyjskiej *
+            <label for="play_dictionary_id">
+                Play Dictionary ID (laczynaspilka.pl)
             </label>
-            <input 
-                type="url" 
-                id="canadian_url" 
-                name="canadian_url" 
-                value="{{ league.canadian_url }}"
-                required>
+            <input
+                type="text"
+                id="play_dictionary_id"
+                name="play_dictionary_id"
+                value="{{ league.play_dictionary_id or '' }}"
+                maxlength="100"
+                placeholder="np. f40fdfb8-9104-4691-ad1d-099511583470">
+            <small style="display:block;color:#6c757d;margin-top:.25rem;">
+                UUID sezonu rozgrywek z laczynaspilka.pl (parametr ?playDictionary= w URL). Wymagany do automatycznego scrapowania składów.
+            </small>
         </div>
-        
+
         <div class="form-group">
             <label for="foreign_id">
                 Foreign ID

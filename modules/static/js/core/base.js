@@ -69,3 +69,11 @@ function startPlayerScraping(teamID) {
     fetch(`/teams/${teamID}/scrape-players`)
         .catch(err => console.error('Player scraping request failed:', err));
 }
+
+function copyTeamUrlToClipboard(btn, url) {
+    navigator.clipboard.writeText(url).then(function() {
+        const original = btn.textContent;
+        btn.textContent = '✓ skopiowano';
+        setTimeout(function() { btn.textContent = original; }, 2000);
+    });
+}

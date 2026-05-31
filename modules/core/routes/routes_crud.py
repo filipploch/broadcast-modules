@@ -230,6 +230,7 @@ def register_routes(app, exclude=None, team_manager=None):
                     assists_url=request.form.get('assists_url'),
                     canadian_url=request.form.get('canadian_url'),
                     allows_draw=('allows_draw' in request.form),
+                    play_dictionary_id=request.form.get('play_dictionary_id'),
                 )
                 
                 flash(f'Zaktualizowano ligę: {league.name}', 'success')

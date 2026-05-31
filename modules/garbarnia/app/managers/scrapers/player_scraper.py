@@ -131,4 +131,3 @@ class PlayerScraper:
 
         logger.info(f"Sparsowano {len(players)} zawodników z {html_path.name}")
         return players
-

@@ -15,3 +15,5 @@ class League(BaseLeagueMixin, db.Model):
     assists_url           = db.Column(db.String(500), nullable=True)
     canadian_url          = db.Column(db.String(500), nullable=True)
     superscore_season_id  = db.Column(db.String(100), nullable=True)
+    # UUID used as ?playDictionary= query param on laczynaspilka.pl team pages
+    play_dictionary_id    = db.Column(db.String(100), nullable=True)

@@ -2,6 +2,21 @@
 import logging
 import threading
 
+
+def _migrate_leagues_table(db):
+    """Add columns introduced after initial schema creation (SQLite-compatible)."""
+    with db.engine.connect() as conn:
+        from sqlalchemy import text
+        new_columns = [
+            ("play_dictionary_id", "VARCHAR(100)"),
+        ]
+        for col_name, col_type in new_columns:
+            try:
+                conn.execute(text(f"ALTER TABLE leagues ADD COLUMN {col_name} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
 from flask import Flask
 from pathlib import Path
 
@@ -41,6 +56,8 @@ def create_app(config_name='default'):
         )
         db.create_all()
         app.logger.info("✅ Database tables created/verified")
+        _migrate_leagues_table(db)
+        app.logger.info("✅ Leagues table migration checked")
 
     with app.app_context():
         from core.routes import broadcast as core_broadcast

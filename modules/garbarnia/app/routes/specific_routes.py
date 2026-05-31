@@ -138,14 +138,19 @@ def register_routes(app):
                 'number':       p.number,
             } for p in all_players if p.id not in assigned_ids]
  
+            laczynaspilka_url = (
+                f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team.foreign_id}'
+                if team.foreign_id else None
+            )
             return jsonify({
-                'title':        f"Skład: {team.name}",
-                'content_type': content_type,
-                'team_id':      team_id,
-                'starters':     [_pg_dict(pg) for pg in starters],
-                'substitutes':  [_pg_dict(pg) for pg in substitutes],
-                'available':    available,
-                'max_starters': 11,
+                'title':              f"Skład: {team.name}",
+                'content_type':       content_type,
+                'team_id':            team_id,
+                'laczynaspilka_url':  laczynaspilka_url,
+                'starters':           [_pg_dict(pg) for pg in starters],
+                'substitutes':        [_pg_dict(pg) for pg in substitutes],
+                'available':          available,
+                'max_starters':       11,
             })
 
         # ── referees ─────────────────────────────────────────────────────────────

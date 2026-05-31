@@ -51,6 +51,9 @@ function openAssignModal(contentType) {
             if (data.error) { alert(data.error); closeAssignModal(); return; }
             document.getElementById('modal-title').textContent = data.title;
             if (data.team_id) _squadTeamId = data.team_id;
+            _squadTeamUrl = data.laczynaspilka_url || null;
+            const copyBtn = document.getElementById('copy-team-url-btn');
+            if (copyBtn) copyBtn.style.display = _squadTeamUrl ? 'inline-flex' : 'none';
 
             if (_useThreeCol()) {
                 _starters    = data.starters    || [];
@@ -246,6 +249,9 @@ function _renderThreeSide(containerId, items, side) {
         return _buildThreeCard(item, side, idx);
     }).join('');
 }
+
+// laczynaspilka.pl URL dla aktualnie otwartego składu (null gdy brak foreign_id)
+let _squadTeamUrl = null;
 
 // pg_id zawodnika aktualnie w trybie edycji; null = nikt
 let _editingPgId = null;
@@ -479,6 +485,16 @@ function onTypeChange(sel) {
 function onHdmiChange(sel) {
     _assigned[parseInt(sel.dataset.idx)].hdmi_input = parseInt(sel.value);
     renderLists();
+}
+
+function copyTeamUrl() {
+    if (!_squadTeamUrl) return;
+    navigator.clipboard.writeText(_squadTeamUrl).then(function() {
+        const btn = document.getElementById('copy-team-url-btn');
+        const original = btn.textContent;
+        btn.textContent = '✓ skopiowano';
+        setTimeout(function() { btn.textContent = original; }, 2000);
+    });
 }
 
 function scrapeSquad() {

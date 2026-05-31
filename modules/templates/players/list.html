@@ -5,9 +5,14 @@
     <div class="card-header">
         <span>Zawodnicy — {{ team.name }}</span>
         <div class="actions">
-            {% if team.team_url %}
-            <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})">
+            {% if team.team_url or team.foreign_id %}
+            <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})" title="Pobierz zawodników z pliku HTML (SingleFile)">
                 Pobierz zawodników
+            </button>
+            {% endif %}
+            {% if team.foreign_id %}
+            <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team.foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
+                📋 Kopiuj URL
             </button>
             {% endif %}
             <a href="{{ url_for('create_player', team_id=team.id) }}" class="btn btn-primary">➕ Dodaj ręcznie</a>
