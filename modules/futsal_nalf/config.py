@@ -33,6 +33,7 @@ class Config:
     SPECIFIC_JS_FILE = f'modules/{MODULE_NAME}/static/specific.js'
     SPECIFIC_CSS_FILE = f'modules/{MODULE_NAME}/static/specific.css'
 
+    HAS_PENALTY_TIMERS = True
     MEDIA_CURSOR = None
 
 

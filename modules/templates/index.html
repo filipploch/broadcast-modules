@@ -10,53 +10,178 @@
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/penalty-timer-modal.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/reversible-elements.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/scoreboard.css') }}">
-	<title>Kontrola timera</title>
+	<title>Kontrola transmisji</title>
+	<style>
+		html, body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
+		#two-col-root { display: flex; height: 100vh; overflow: hidden; user-select: none; }
+
+		/* ── Lewa kolumna: timer control ── */
+		/* #container w index.css ma position:absolute i width:162px,
+		   więc left-col musi mieć jawną szerokość bo inaczej flex ją
+		   zwija do 0 i prawa kolumna nie ma miejsca. */
+		#left-col {
+			position: relative;
+			width: 165px;
+			flex-shrink: 0;
+			height: 100vh;
+			overflow: hidden;
+		}
+		#left-frame {
+			display: none;
+			position: absolute;
+			top: 0; left: 0;
+			width: 100%; height: 100%;
+			border: none;
+			z-index: 10;
+			background: #fff;
+		}
+
+		/* ── Prawa kolumna: ui-jinja + opcjonalny game-setup ── */
+		#right-col {
+			position: relative;
+			flex: 1;
+			height: 100vh;
+			overflow: hidden;
+		}
+		#ui-frame {
+			display: block;
+			width: 100%; height: 100%;
+			border: none;
+		}
+		#right-frame {
+			display: none;
+			position: absolute;
+			top: 0; left: 0;
+			width: 100%; height: 100%;
+			border: none;
+			z-index: 10;
+			background: #fff;
+		}
+	</style>
 </head>
 
 <body>
-	<div id="container">
-		<div id="column-controls"></div>
+<div id="two-col-root">
+
+	<!-- ── Lewa kolumna: timer control ── -->
+	<div id="left-col">
+		<div id="container">
+			<div id="column-controls"></div>
+		</div>
+		<div id="flash-msg-display" style="display:none;"></div>
+		<!-- Frame nakładka: wybór okresu -->
+		<iframe id="left-frame" src="/game-period-choice"></iframe>
 	</div>
-	<div id="flash-msg-display" style="display: none;"></div>
 
-	<script>
-		var period            = {{ period.to_dict() | tojson if period else 'null' }};
-		var game              = {{ game.to_dict()   | tojson if game   else 'null' }};
-		var main_timer        = {{ main_timer | tojson if main_timer else 'null' }};
-		var teamHomeShortName = "{{ teams.home.short_name if teams.home else '' }}";
-		var teamAwayShortName = "{{ teams.away.short_name if teams.away else '' }}";
-		const TIMER_DESC  = {{ 'true' if timer_desc else 'false' }};
-		const MODULE_NAME = "{{ module_name }}";
-	</script>
+	<!-- ── Prawa kolumna: UI transmisji + opcjonalny game-setup ── -->
+	<div id="right-col">
+		<iframe id="ui-frame" src="{{ '/ui-shootout' if is_shootout_active else '/ui' }}"></iframe>
+		<!-- Frame nakładka: game-setup (ładowany dynamicznie przy kliknięciu ⚙) -->
+		<iframe id="right-frame" src=""></iframe>
+	</div>
 
-	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-	<script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/core/module-registry.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/pages/index-ui-builder.js') }}"></script>
-	<script>renderIndexUI(MODULE_NAME);</script>
-	<script src="{{ url_for('static', filename='js/pages/index.js') }}"></script>
-	<script src="{{ url_for('static', filename='js/plugins/timer-recovery.js') }}"></script>
-	<script>
-		const _SVG_BASE = "{{ url_for('static', filename='images/ui/') }}";
-		[
-			'stream-icon', 'record-icon',
-			'microphone-icon', 'stream-overlay-plugin-icon',
-			'timer-plugin-icon', 'recorder-plugin-icon', 'obs-ws-plugin-icon',
-			'replay-plugin-icon', 'controller-plugin-icon',
-		].forEach(id => loadSvgIntoContainer(id, _SVG_BASE + id + '.svg'));
+</div>
 
-		const _CAMERA_SVG_MAP = {
-			'camera1-icon': 'handycam1-icon.svg',
-			'camera2-icon': 'gopro2-icon.svg',
-			'camera3-icon': 'gopro3-icon.svg',
-			'camera4-icon': 'gopro4-icon.svg',
-		};
-		Object.entries(_CAMERA_SVG_MAP).forEach(([id, svgFile]) =>
-			loadSvgIntoContainer(id, _SVG_BASE + svgFile, () => _applyOneCameraIconColor(id))
-		);
-	</script>
+<!-- ── Dane dla JS ── -->
+<script>
+	var period            = {{ period.to_dict() | tojson if period else 'null' }};
+	var game              = {{ game.to_dict()   | tojson if game   else 'null' }};
+	var main_timer        = {{ main_timer | tojson if main_timer else 'null' }};
+	var teamHomeShortName = "{{ teams.home.short_name if teams.home else '' }}";
+	var teamAwayShortName = "{{ teams.away.short_name if teams.away else '' }}";
+	const TIMER_DESC          = {{ 'true' if timer_desc else 'false' }};
+	const MODULE_NAME         = "{{ module_name }}";
+	const HAS_PENALTY_TIMERS  = {{ 'true' if has_penalty_timers else 'false' }};
+	const PERIOD_CAN_START    = {{ 'true' if period_can_start else 'false' }};
+</script>
+
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/core/data.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/module-registry.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pages/index-ui-builder.js') }}"></script>
+<script>renderIndexUI(MODULE_NAME);</script>
+<script src="{{ url_for('static', filename='js/pages/index.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plugins/timer-recovery.js') }}"></script>
+<script>
+	const _SVG_BASE = "{{ url_for('static', filename='images/ui/') }}";
+	[
+		'stream-icon', 'record-icon',
+		'microphone-icon', 'stream-overlay-plugin-icon',
+		'timer-plugin-icon', 'recorder-plugin-icon', 'obs-ws-plugin-icon',
+		'replay-plugin-icon', 'controller-plugin-icon',
+	].forEach(id => loadSvgIntoContainer(id, _SVG_BASE + id + '.svg',
+		() => _applyOnePluginIconColor(id)));
+
+	const _CAMERA_SVG_MAP = {
+		'camera1-icon': 'handycam1-icon.svg',
+		'camera2-icon': 'gopro2-icon.svg',
+		'camera3-icon': 'gopro3-icon.svg',
+		'camera4-icon': 'gopro4-icon.svg',
+	};
+	Object.entries(_CAMERA_SVG_MAP).forEach(([id, svgFile]) =>
+		loadSvgIntoContainer(id, _SVG_BASE + svgFile, () => _applyOneCameraIconColor(id))
+	);
+
+	// ── Sterowanie ramkami ─────────────────────────────────────────────────
+	function toggleLeftFrame() {
+		const f = document.getElementById('left-frame');
+		f.style.display = f.style.display === 'none' ? 'block' : 'none';
+	}
+
+	function showRightFrame() {
+		const f = document.getElementById('right-frame');
+		f.src = '/game-setup?in_frame=1';
+		f.style.display = 'block';
+	}
+
+	function hideRightFrame() {
+		const f = document.getElementById('right-frame');
+		f.style.display = 'none';
+		f.src = '';
+	}
+
+	function hideLeftFrame() {
+		document.getElementById('left-frame').style.display = 'none';
+	}
+
+	// ── Przełączanie ui-frame przy shootout ───────────────────────────────
+	const _uiFrame = document.getElementById('ui-frame');
+
+	function _switchToShootout() {
+		if (!_uiFrame.src.endsWith('/ui-shootout'))
+			_uiFrame.src = '/ui-shootout';
+	}
+	function _switchToUI() {
+		if (!_uiFrame.src.endsWith('/ui'))
+			_uiFrame.src = '/ui';
+	}
+
+	// ── Socket.IO — zdarzenia shootout (reużyj socketa z index.js) ──────
+	// index.js tworzy window.socket przez: var socket = (typeof socket !== 'undefined') ? socket : io()
+	socket.on('shootout_started',  _switchToShootout);
+	socket.on('shootout_finished', _switchToUI);
+
+	// ── Odbieranie wiadomości z ramek ─────────────────────────────────────
+	window.addEventListener('message', function(e) {
+		if (!e.data || !e.data.action) return;
+		switch (e.data.action) {
+			case 'show-right-frame':
+				showRightFrame();
+				break;
+			case 'hide-right-frame':
+				hideRightFrame();
+				break;
+			case 'hide-left-frame':
+				hideLeftFrame();
+				// przy chowaniu lewej ramki sprawdź czy shootout aktywny
+				if (e.data.shootoutActive) _switchToShootout();
+				else _switchToUI();
+				break;
+		}
+	});
+</script>
 </body>
 
 </html>

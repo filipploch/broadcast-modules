@@ -168,12 +168,10 @@ function colorizeSvgBody(_svgContainerId, color) {
 
 function colorizeSvgBackground(_svgContainerId, color) {
     const svg = document.querySelector(`#${_svgContainerId} svg`);
-    if (!svg) { console.warn(`[colorizeSvgBackground] no svg in #${_svgContainerId}`); return; }
+    if (!svg) return;
     const el = svg.querySelector('#svg-background');
-    if (!el) { console.warn(`[colorizeSvgBackground] no #svg-background in #${_svgContainerId}`); return; }
-    const parsed = parseColor(color);
-    console.log(`[colorizeSvgBackground] #${_svgContainerId} fill → ${parsed}`);
-    el.style.fill = parsed;
+    if (!el) return;
+    el.style.fill = parseColor(color);
 }
 
 function setMultiColorBackground(elementId, colors) {

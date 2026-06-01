@@ -17,6 +17,11 @@
 
 var socket = (typeof socket !== 'undefined') ? socket : io();
 
+// Flaga pochodzi z config.py modułu (HAS_PENALTY_TIMERS) → wstrzyknięta przez
+// context_processor → index.html jako stała JS. Gdy false, wywołania
+// fillPenaltiesTimersContainer() są pomijane (ui-modal.js nie jest wtedy ładowane).
+const _hasPenalties = (typeof HAS_PENALTY_TIMERS !== 'undefined') && HAS_PENALTY_TIMERS;
+
 var homeScoreLabel = document.getElementById('scoreHome');
 var awayScoreLabel = document.getElementById('scoreAway');
 var homeFoulsLabel = document.getElementById('value2Home');
@@ -179,12 +184,21 @@ const _PLUGIN_ICON_MAP = {
     'stream-overlay-plugin-icon': 'stream-overlay',
 };
 
+let _pluginStates = {};
+
+function _applyOnePluginIconColor(iconId) {
+    const pluginId = _PLUGIN_ICON_MAP[iconId];
+    if (!pluginId) return;
+    const state = _pluginStates[pluginId];
+    if (!state) return;
+    colorizeSvgBackground(iconId, state.is_active  ? 'black'   : '#666666');
+    colorizeSvgBody(iconId,       state.is_healthy ? '#00FF00' : '#cccccc');
+}
+
 socket.on('plugins_states', (data) => {
-    for (const [iconId, pluginId] of Object.entries(_PLUGIN_ICON_MAP)) {
-        const state = data[pluginId];
-        if (!state) continue;
-        colorizeSvgBackground(iconId, state.is_active  ? 'black'   : '#666666');
-        colorizeSvgBody(iconId,       state.is_healthy ? '#00FF00' : '#cccccc');
+    _pluginStates = data;
+    for (const iconId of Object.keys(_PLUGIN_ICON_MAP)) {
+        _applyOnePluginIconColor(iconId);
     }
 });
 
@@ -222,12 +236,15 @@ socket.on('initial_data', (data) => {
         window.initialTime = appState.mainTimer.initial_time;
         updateTimerDisplay(appState.mainTimer);
     }
-    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
-    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    if (_hasPenalties) {
+        fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+        fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    }
 });
 
 function fillIndexWithShootoutContent() {
     let columnControls = document.querySelector('#column-controls');
+    if (!columnControls) return;
     columnControls.innerHTML = '';
     columnControls.innerHTML = `
     <div class="top-bar">
@@ -256,9 +273,10 @@ socket.on('shootout_initial_data', (data) => {
     fillIndexWithShootoutContent();
 });
 
-// Redirect to period choice when broadcast game changes
+// Przeładuj stronę gdy zmienił się mecz transmisji — nowe dane period
+// zostaną wczytane przez Jinja przy odświeżeniu zamiast nawigować z dala.
 socket.on('game_changed', function() {
-    window.location.href = '/game-period-choice';
+    window.location.reload();
 });
 
 function startRecording(){
@@ -648,17 +666,21 @@ socket.on('penalty_timer_added', (data) => {
     const team = data.team_type;
     if (team === 'home') appState.home_penalties.push(data);
     else                 appState.away_penalties.push(data);
-    fillPenaltiesTimersContainer(
-        team === 'home' ? appState.home_penalties : appState.away_penalties,
-        team
-    );
+    if (_hasPenalties) {
+        fillPenaltiesTimersContainer(
+            team === 'home' ? appState.home_penalties : appState.away_penalties,
+            team
+        );
+    }
 });
 
 socket.on('penalty_timer_removed', (data) => {
     appState.home_penalties = appState.home_penalties.filter(p => p.timer_id !== data.timer_id);
     appState.away_penalties = appState.away_penalties.filter(p => p.timer_id !== data.timer_id);
-    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
-    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    if (_hasPenalties) {
+        fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+        fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    }
 });
 
 // ============================================================================
@@ -692,6 +714,70 @@ function resumeTimer(timerId) {
 
 function resetTimer(timerId) {
     socket.emit('reset_timer', { timer_id: timerId });
+}
+
+function onStartPeriodClick(timerId) {
+    if (!window.period || !window.period.id) return;
+    fetch(`/api/period/${window.period.id}/start`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                window.period.status = 1;
+                // Zmień onclick przycisku na startTimer dla kolejnych kliknięć
+                document.querySelectorAll(
+                    '.timer-main-controller[data-timer-state="idle"]'
+                ).forEach(btn => {
+                    btn.removeAttribute('disabled');
+                    btn.onclick = () => startTimer(timerId);
+                });
+                // Uruchom odliczanie — do czasu HTTP round-trip plugin zdąży
+                // przetworzyć ensure_timer, więc start_timer trafi na istniejący timer
+                startTimer(timerId);
+            } else {
+                alert(`Błąd uruchamiania okresu: ${data.error || 'Nieznany błąd'}`);
+            }
+        })
+        .catch(err => alert(`Błąd uruchamiania okresu: ${err}`));
+}
+
+function _showPeriodChoiceFrame() {
+    const f = document.getElementById('left-frame');
+    f.contentWindow.location.reload();
+    f.style.display = 'block';
+}
+
+function onResetPeriodDblClick(timerId) {
+    if (!window.period || !window.period.id) return;
+    fetch(`/api/period/${window.period.id}/reset`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                resetTimer(timerId);
+            } else {
+                alert(`Błąd resetu okresu: ${data.error || 'Nieznany błąd'}`);
+                _showPeriodChoiceFrame();
+            }
+        })
+        .catch(err => {
+            alert(`Błąd resetu okresu: ${err}`);
+            _showPeriodChoiceFrame();
+        });
+}
+
+function onFinishPeriodDblClick() {
+    if (!window.period || !window.period.id) return;
+    fetch(`/api/period/${window.period.id}/finish`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) {
+                alert(`Błąd kończenia okresu: ${data.error || 'Nieznany błąd'}`);
+            }
+            _showPeriodChoiceFrame();
+        })
+        .catch(err => {
+            alert(`Błąd kończenia okresu: ${err}`);
+            _showPeriodChoiceFrame();
+        });
 }
 
 function adjustTimer(timerId, delta, isPenalty = false) {
@@ -895,8 +981,10 @@ socket.on('reload_penalty_timers', (data) => {
     appState.home_penalties = data.penalties['home'];
     appState.away_penalties = data.penalties['away'];
 
-    fillPenaltiesTimersContainer(appState.home_penalties, 'home');
-    fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    if (_hasPenalties) {
+        fillPenaltiesTimersContainer(appState.home_penalties, 'home');
+        fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    }
 });
 
 socket.on('scoreboard_data', (data) => {

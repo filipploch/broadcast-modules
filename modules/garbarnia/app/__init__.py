@@ -85,16 +85,18 @@ def create_app(config_name='default'):
                 season = Season.query.get(settings.current_season_id) \
                          if settings.current_season_id else None
                 return {
-                    'broadcast_game_id': settings.current_game_id,
-                    'season':            season,
-                    'module_name':       app.config.get('MODULE_NAME', ''),
-                    'timer_desc':        app.config.get('TIMER_DESC', False),
+                    'broadcast_game_id':  settings.current_game_id,
+                    'season':             season,
+                    'module_name':        app.config.get('MODULE_NAME', ''),
+                    'timer_desc':         app.config.get('TIMER_DESC', False),
+                    'has_penalty_timers': app.config.get('HAS_PENALTY_TIMERS', False),
                 }
             except Exception:
                 return {
-                    'broadcast_game_id': None,
-                    'season':            None,
-                    'module_name':       app.config.get('MODULE_NAME', ''),
+                    'broadcast_game_id':  None,
+                    'season':             None,
+                    'module_name':        app.config.get('MODULE_NAME', ''),
+                    'has_penalty_timers': app.config.get('HAS_PENALTY_TIMERS', False),
                 }
 
     def init_managers():

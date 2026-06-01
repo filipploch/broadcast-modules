@@ -108,13 +108,16 @@ function showContainer(_data) {
         // activateElementsAfterTime('break-content', 2500, 'flex');
     } else if (containerType === 'results') {
         expandResultsContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
+        delayTime += prepareToOpenContainer(openContainer, targetContainer);
+        activateElementsAfterTime('results-content', delayTime, 'flex');
     } else if (containerType === 'table') {
         expandTableContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
+        delayTime += prepareToOpenContainer(openContainer, targetContainer);
+        activateElementsAfterTime('results-content', delayTime, 'flex');
     } else if (containerType === 'virtual-table') {
         expandVirtualTableContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
+        delayTime += prepareToOpenContainer(openContainer, targetContainer);
+        activateElementsAfterTime('results-content', delayTime, 'flex');
     } else {
         prepareToOpenContainer(openContainer, targetContainer);
     }
@@ -218,6 +221,7 @@ var _resultsTimer2 = null;  // timer animacji zamiany (virtual_table)
 
 function buildResultsContent(resultsEl, games) {
     resultsEl.innerHTML = '';
+    resultsEl.classList.add('full-table');
 
     let header = document.createElement('div');
     header.id = 'results-header';
@@ -228,7 +232,7 @@ function buildResultsContent(resultsEl, games) {
     games.forEach((game, index) => {
         let row = document.createElement('div');
         const statusClass = game.status === 2 ? 'finished' : 'pending';
-        row.className = `results-row rotate-show-element${index + 1} ${statusClass}`;
+        row.className = `results-row specific-colors rotate-show-element${index + 1} ${statusClass}`;
 
         let homeName = document.createElement('div');
         homeName.className = 'results-home-team-name14 results-team-name14';
@@ -257,6 +261,32 @@ function buildResultsContent(resultsEl, games) {
         row.appendChild(awayName);
         resultsEl.appendChild(row);
     });
+
+    resultsEl.style.position   = 'absolute';
+    resultsEl.style.visibility = 'hidden';
+    resultsEl.style.width      = document.body.offsetWidth + 'px';
+    document.body.appendChild(resultsEl);
+
+    const firstDataRow = resultsEl.querySelector('.results-row:not(:first-child)');
+    if (firstDataRow) {
+        const _h = firstDataRow.offsetHeight;
+        const _w = firstDataRow.offsetWidth;
+        if (_h > 0 && _w > 0) {
+            const _polygon = makePolygonTilt(_h, _w, 'both');
+            resultsEl.querySelectorAll('.results-row').forEach(row => {
+                row.style.clipPath = _polygon;
+            });
+        }
+    }
+
+    resultsEl.style.top       = '50%';
+    resultsEl.style.left      = '50%';
+    resultsEl.style.transform = 'translate(-50%, -50%)';
+
+    document.body.removeChild(resultsEl);
+    resultsEl.style.visibility = '';
+    resultsEl.style.width      = '';
+    // position stays 'absolute' — positioned relative to infoBody (100% w/h)
 }
 
 function buildTableContent(resultsEl, rows, headerText) {
@@ -631,7 +661,7 @@ function _closeResultsBase(container) {
     });
     const body = container.querySelector('.results');
     if (body) {
-        body.style.setProperty('animation', 'collapseHeight', 'important');
+        body.style.setProperty('animation', 'collapseHeightCentered', 'important');
         body.style.animationDuration = '750ms';
         body.style.animationDelay = '250ms';
         body.style.animationFillMode = 'both';
@@ -644,9 +674,15 @@ function closeResultsContainer(container) {
 
 function closeTableContainer(container) {
     hideContentBackground(container);
+    container.querySelectorAll('.results-table-row').forEach(row => {
+        row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
+    });
     const body = container.querySelector('.results');
     if (body) {
-        body.style.setProperty('animation', 'fadeOut 500ms ease both', 'important');
+        body.style.setProperty('animation', 'collapseHeightCentered', 'important');
+        body.style.animationDuration = '750ms';
+        body.style.animationDelay = '250ms';
+        body.style.animationFillMode = 'both';
     }
 }
 
@@ -1451,7 +1487,9 @@ function expandResultsContainer(_data) {
     addClassName(infoBody, 'info-body');
     addClassName(infoBody, 'animated-element');
     infoBody.dataset.animationOrder = '2';
-    infoBody.style.position = 'relative';
+    infoBody.style.position = 'absolute';
+    infoBody.style.width = '100%';
+    infoBody.style.height = '100%';
     infoBody.style.zIndex = '1';
     const resultsEl = document.createElement('div');
     addClassName(resultsEl, 'results');
@@ -1459,6 +1497,7 @@ function expandResultsContainer(_data) {
     addClassName(resultsEl, 'animated-element');
     resultsEl.dataset.animationOrder = '3';
     buildResultsContent(resultsEl, (_data && _data.games) || []);
+    resultsEl.style.display = 'none';
     infoBody.appendChild(resultsEl);
     container.appendChild(infoBody);
 }
@@ -1481,6 +1520,7 @@ function _expandFullTableContainer(containerId, rows, virtual, withVirtualSwap) 
     addClassName(resultsEl, 'animated-element');
     resultsEl.dataset.animationOrder = '3';
     buildFullTableContent(resultsEl, rows);
+    resultsEl.style.display = 'none';
     infoBody.appendChild(resultsEl);
     container.appendChild(infoBody);
     if (withVirtualSwap) {
@@ -1513,6 +1553,7 @@ function expandVirtualTableContainer(_data) {
 function buildFullTableContent(resultsEl, rows) {
     resultsEl.innerHTML = '';
     resultsEl.style.flexDirection = 'column';
+    resultsEl.classList.add('full-table');
 
     const headerLabels = ['', '', 'M', 'Z', 'R', 'P', 'G+', 'G-', '+/-', 'Pkt', ''];
     const headerRow = document.createElement('div');
@@ -1520,7 +1561,7 @@ function buildFullTableContent(resultsEl, rows) {
     headerLabels.forEach((label, i) => {
         const cell = document.createElement('div');
         cell.className = i === 1
-            ? 'results-table-cell results-table-name'
+            ? 'results-table-cell results-table-name results-table-name-header'
             : 'results-table-cell';
         cell.textContent = label;
         headerRow.appendChild(cell);
@@ -1534,21 +1575,22 @@ function buildFullTableContent(resultsEl, rows) {
 
         const gd = (row.goal_difference > 0 ? '+' : '') + row.goal_difference;
         [
-            { text: index + 1,          name: false },
-            { text: row.team_name14,    name: true  },
-            { text: row.games    ?? '', name: false },
-            { text: row.wins     ?? '', name: false },
-            { text: row.draws    ?? '', name: false },
-            { text: row.loses    ?? '', name: false },
-            { text: row.goals_scored ?? '', name: false },
-            { text: row.goals_lost   ?? '', name: false },
-            { text: gd,                name: false },
-            { text: row.points,        name: false },
-        ].forEach(({ text, name }) => {
+            { text: index + 1,          specificClassName: 'results-table-standing' },
+            { text: row.team_name14,    specificClassName: 'results-table-name' },
+            { text: row.games    ?? '', specificClassName: null },
+            { text: row.wins     ?? '', specificClassName: null },
+            { text: row.draws    ?? '', specificClassName: null },
+            { text: row.loses    ?? '', specificClassName: null },
+            { text: row.goals_scored ?? '', specificClassName: null },
+            { text: row.goals_lost   ?? '', specificClassName: null },
+            { text: gd,                specificClassName: null },
+            { text: row.points,        specificClassName: null },
+        ].forEach(({ text, specificClassName }) => {
             const cell = document.createElement('div');
-            cell.className = name
-                ? 'results-table-cell results-table-name'
-                : 'results-table-cell';
+            cell.className = 'results-table-cell';
+            if (specificClassName) {
+                cell.classList.add(specificClassName);
+            }
             cell.textContent = text;
             el.appendChild(cell);
         });
@@ -1594,13 +1636,9 @@ function buildFullTableContent(resultsEl, rows) {
         }
     }
 
-    // Golden ratio vertical positioning: top_margin / bottom_margin = 1/φ
-    const tableH  = resultsEl.offsetHeight;
-    const screenH = document.body.offsetHeight;
-    const topPos  = Math.max(0, (screenH - tableH) / (1 + 1.618));
-    resultsEl.style.top       = topPos + 'px';
+    resultsEl.style.top       = '50%';
     resultsEl.style.left      = '50%';
-    resultsEl.style.transform = 'translateX(-50%)';
+    resultsEl.style.transform = 'translate(-50%, -50%)';
 
     document.body.removeChild(resultsEl);
     resultsEl.style.visibility = '';

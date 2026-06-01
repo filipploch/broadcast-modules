@@ -86,7 +86,9 @@
         <a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary">✏️ Edytuj mecz</a>
         <a href="{{ url_for('list_games') }}" class="btn btn-secondary">📋 Lista meczy</a>
         <a href="{{ url_for('game_period_choice') }}" class="btn btn-primary">🕹️ Wybór okresu</a>
-        {% if settings.current_period_id %}
+        {% if in_frame %}
+        <button class="btn btn-primary" onclick="window.parent.postMessage({action:'hide-right-frame'},'*')">🎮 Przejdź do UI</button>
+        {% elif settings.current_period_id %}
         <a href="{{ url_for('ui_dashboard') }}" class="btn btn-primary">🎮 Przejdź do UI</a>
         {% endif %}
     </div>

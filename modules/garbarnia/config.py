@@ -40,6 +40,7 @@ class Config:
     RETURN_CHANGES = False
 
     TIMER_DESC = False
+    HAS_PENALTY_TIMERS = False
 
     MEDIA_CURSOR = None
 

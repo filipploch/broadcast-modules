@@ -529,6 +529,7 @@ def register_routes(app, exclude=None, team_manager=None):
     def select_game_for_broadcast(game_id):
         """Select game as current broadcast game"""
         Settings = _get_settings()
+        Period = _get_period()
 
         game = game_manager.get_game_by_id(game_id)
 
@@ -550,6 +551,53 @@ def register_routes(app, exclude=None, team_manager=None):
             Settings.set_current_shootout(None)
             Settings.set_current_game(game_id)
 
+            # Auto-dobór okresu: aktywny → pierwszy nierozpoczęty → ostatni zakończony
+            periods = Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
+            selected_period = None
+
+            for p in periods:
+                if p.status == Period.STATUS_PENDING:
+                    selected_period = p
+                    break
+
+            if not selected_period:
+                for p in periods:
+                    if p.status == Period.STATUS_NOT_STARTED:
+                        selected_period = p
+                        break
+
+            if not selected_period:
+                finished = [p for p in periods if p.status == Period.STATUS_FINISHED]
+                if finished:
+                    selected_period = finished[-1]
+
+            if selected_period:
+                Settings.set_current_period(selected_period.id)
+
+                # Przywróć referencję timera dla każdego stanu okresu —
+                # clear_timers() skasowało ją, a index potrzebuje prawidłowego
+                # timer_id. Dla PENDING: stan 'running' (timer działa w pluginie,
+                # WebSocket zsynchronizuje elapsed_time). Dla pozostałych: 'idle'.
+                if selected_period.main_timer_name:
+                    timer_state = (
+                        'running'
+                        if selected_period.status == Period.STATUS_PENDING
+                        else 'idle'
+                    )
+                    Settings.update_main_timer({
+                        'timer_id':       selected_period.main_timer_name,
+                        'timer_type':     'independent',
+                        'initial_time':   selected_period.initial_time,
+                        'limit':          selected_period.limit,
+                        'pause_at_limit': selected_period.pause_at_limit,
+                        'state':          timer_state,
+                        'metadata': {
+                            'description': selected_period.description,
+                            'period':      selected_period.period_order,
+                            'timer_class': 'main',
+                        },
+                    })
+
             flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
 
             # Notify UI clients (index.html, game-period-choice.html) via Flask-SocketIO
@@ -562,7 +610,7 @@ def register_routes(app, exclude=None, team_manager=None):
             if hub_client:
                 hub_client.broadcast_to_class('overlay', 'reload', {'reason': 'game_changed'})
 
-            return redirect(url_for('game_setup'))
+            return redirect(url_for('index'))
         except Exception as e:
             logger.error(f"Error selecting game for broadcast: {e}")
             flash(f'Błąd podczas wyboru meczu: {str(e)}', 'error')
@@ -1347,11 +1395,71 @@ def register_routes(app, exclude=None, team_manager=None):
             current_timers = settings.get_current_timers()
             main_timer = current_timers.get('main')
 
+        # Fallback: brak current_period_id, ale mecz jest wybrany.
+        # Stosuje tę samą logikę co select_game_for_broadcast:
+        # aktywny → pierwszy nierozpoczęty → ostatni zakończony.
+        if game is None and settings.current_game_id:
+            game = Game.query.get(settings.current_game_id)
+            if game:
+                teams = {
+                    'home': Team.query.get(game.home_team_id),
+                    'away': Team.query.get(game.away_team_id),
+                }
+                _all_periods = Period.query.filter_by(
+                    game_id=game.id
+                ).order_by(Period.period_order).all()
+
+                period = next(
+                    (p for p in _all_periods if p.status == Period.STATUS_PENDING), None
+                )
+                if not period:
+                    period = next(
+                        (p for p in _all_periods if p.status == Period.STATUS_NOT_STARTED), None
+                    )
+                if not period:
+                    _finished = [p for p in _all_periods if p.status == Period.STATUS_FINISHED]
+                    if _finished:
+                        period = _finished[-1]
+
+                if period and period.main_timer_name and main_timer is None:
+                    _timer_state = (
+                        'running' if period.status == Period.STATUS_PENDING else 'idle'
+                    )
+                    main_timer = {
+                        'timer_id':       period.main_timer_name,
+                        'timer_type':     'independent',
+                        'initial_time':   period.initial_time,
+                        'limit':          period.limit,
+                        'pause_at_limit': period.pause_at_limit,
+                        'state':          _timer_state,
+                        'metadata': {
+                            'description': period.description,
+                            'period':      period.period_order,
+                            'timer_class': 'main',
+                        },
+                    }
+
+        is_shootout_active = bool(getattr(settings, 'current_shootout_id', None))
+
+        period_can_start = False
+        if period and period.status == Period.STATUS_NOT_STARTED:
+            if period.period_order == 1:
+                period_can_start = True
+            else:
+                prev_periods = Period.query.filter_by(
+                    game_id=period.game_id
+                ).filter(Period.period_order < period.period_order).all()
+                period_can_start = all(
+                    p.status == Period.STATUS_FINISHED for p in prev_periods
+                )
+
         return render_template('index.html',
                                period=period,
                                game=game,
                                main_timer=main_timer,
-                               teams=teams)
+                               teams=teams,
+                               is_shootout_active=is_shootout_active,
+                               period_can_start=period_can_start)
 
 
 
@@ -1670,6 +1778,104 @@ def register_routes(app, exclude=None, team_manager=None):
             return redirect(url_for('game_period_choice'))
 
 
+
+    @app.route('/api/period/<int:period_id>/start', methods=['POST'])
+    def api_start_period(period_id):
+        """API: Start period from UI (dblclick START on NOT_STARTED period)."""
+        from core.managers import get_period_manager
+        Period = _get_period()
+        Game = _get_game()
+        Settings = _get_settings()
+        period_manager = get_period_manager()
+        period = period_manager.get_period_by_id(period_id)
+        if not period:
+            return jsonify({'error': 'Nie znaleziono okresu'}), 404
+
+        if period.period_order > 1:
+            prev_periods = Period.query.filter_by(game_id=period.game_id).filter(
+                Period.period_order < period.period_order
+            ).all()
+            if not all(p.status == Period.STATUS_FINISHED for p in prev_periods):
+                return jsonify({'error': 'Poprzedni okres nie został zakończony'}), 400
+
+        try:
+            # current_period_id musi być ustawiony przed start_period
+            # (on_timer_created odczytuje go przy potwierdzeniu z pluginu)
+            Settings.set_current_period(period_id)
+            period_manager.start_period(period_id)
+
+            # Jeśli wynik meczu jest null, inicjalizuj do 0 i rozgłoś
+            game = Game.query.get(period.game_id)
+            if game:
+                score_changed = False
+                if game.home_team_goals is None:
+                    game.home_team_goals = 0
+                    score_changed = True
+                if game.away_team_goals is None:
+                    game.away_team_goals = 0
+                    score_changed = True
+                if score_changed:
+                    db.session.commit()
+                    from core.extensions import socketio
+                    payload = {
+                        'home_team_goals':  game.home_team_goals,
+                        'home_team_value2': getattr(game, 'home_team_red_cards', 0),
+                        'away_team_goals':  game.away_team_goals,
+                        'away_team_value2': getattr(game, 'away_team_red_cards', 0),
+                    }
+                    socketio.emit('scoreboard_data', {'payload': payload})
+                    from core.managers import get_hub_client
+                    hub_client = get_hub_client()
+                    if hub_client:
+                        hub_client.broadcast_to_class('game_data_receiver',
+                                                      'scoreboard_data', payload)
+
+            return jsonify({'ok': True})
+        except Exception as e:
+            logger.error(f"API error starting period {period_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/period/<int:period_id>/reset', methods=['POST'])
+    def api_reset_period(period_id):
+        """API: Reset period status to NOT_STARTED (wywołane z UI przez dblclick)."""
+        from core.managers import get_period_manager
+        Period = _get_period()
+        period_manager = get_period_manager()
+        period = period_manager.get_period_by_id(period_id)
+        if not period:
+            return jsonify({'error': 'Nie znaleziono okresu'}), 404
+        try:
+            period_manager.set_period_status(period_id, Period.STATUS_NOT_STARTED)
+            return jsonify({'ok': True})
+        except Exception as e:
+            logger.error(f"API error resetting period {period_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/period/<int:period_id>/finish', methods=['POST'])
+    def api_finish_period(period_id):
+        """API: Finish period (wywołane z UI przez dblclick)."""
+        from core.managers import get_period_manager
+        Period = _get_period()
+        Game = _get_game()
+        period_manager = get_period_manager()
+        period = period_manager.get_period_by_id(period_id)
+        if not period:
+            return jsonify({'error': 'Nie znaleziono okresu'}), 404
+        try:
+            period_manager.finish_period(period_id)
+            # Nie czyścimy current_period_id — wskazanie na zakończony period
+            # pozwala index() i socket handlerowi poprawnie załadować dane meczu.
+            # current_period_id zostanie nadpisane przy starcie kolejnego periodu.
+            game = Game.query.get(period.game_id)
+            if game:
+                all_periods = game.get_periods_list()
+                if all(p.status == Period.STATUS_FINISHED for p in all_periods):
+                    game.set_finished()
+                    db.session.commit()
+            return jsonify({'ok': True})
+        except Exception as e:
+            logger.error(f"API error finishing period {period_id}: {e}")
+            return jsonify({'error': str(e)}), 500
 
     @app.route('/period/<int:period_id>/reset-status')
     def reset_period_status(period_id):

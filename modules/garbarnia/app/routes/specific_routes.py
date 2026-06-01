@@ -450,12 +450,14 @@ def register_routes(app):
                 assigned['commentators'] = GameCommentatorManager().get_commentators_for_game(game.id)
                 assigned['cameras']      = GameCameraManager().get_cameras_for_game(game.id)
 
+        in_frame = request.args.get('in_frame', '0') == '1'
         return render_template('game-setup.html',
                             game=game,
                             periods=periods,
                             shootout=shootout,
                             settings=settings,
-                            assigned=assigned)
+                            assigned=assigned,
+                            in_frame=in_frame)
     
     @app.route('/games/')
     def list_games():

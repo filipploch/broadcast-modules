@@ -1,9 +1,33 @@
+function _buildStartButton(timerId) {
+    const periodStatus = window.period ? window.period.status : null;
+    const canStart = (typeof PERIOD_CAN_START !== 'undefined') && PERIOD_CAN_START;
+
+    if (periodStatus === 0) {
+        // NOT_STARTED: aktywny lub zablokowany w zależności od kolejności periodów
+        if (canStart) {
+            return `<button class="timer-main-controller"
+                    data-timer-id="${timerId}"
+                    data-timer-state="idle"
+                    onclick="onStartPeriodClick('${timerId}');">START</button>`;
+        } else {
+            return `<button class="timer-main-controller"
+                    data-timer-id="${timerId}"
+                    data-timer-state="idle"
+                    disabled>START</button>`;
+        }
+    }
+    // PENDING / FINISHED / brak periodu — standardowy startTimer
+    return `<button class="timer-main-controller"
+                    data-timer-id="${timerId}"
+                    data-timer-state="idle"
+                    onclick="startTimer('${timerId}');">START</button>`;
+}
+
 function _buildTopBar() {
     return `
 <div class="top-bar">
-    <button id="nav-to-game-settings" class="top-bar-element wingdings">
-        <a href="/game-period-choice">Û</a>
-    </button>
+    <button id="nav-to-game-settings" class="top-bar-element wingdings"
+            onclick="toggleLeftFrame()">Û</button>
 </div>`;
 }
 
@@ -61,16 +85,14 @@ function _buildTimersContainer(timerId, { withPenalties, withAddedTime } = {}) {
         </div>
         <div class="timer-controllers-container">
             <div class="timer-small-controllers">
-                <button id="btn-reset-timer"
-                    ondblclick="resetTimer('${timerId}');">0</button>
+                <button id="btn-reset-period"
+                    ondblclick="onResetPeriodDblClick('${timerId}');">0</button>
                 <button></button>
-                <button id="btn-close-timer">X</button>
+                <button id="btn-finish-period"
+                    ondblclick="onFinishPeriodDblClick();">X</button>
             </div>
             <div class="timer-main-controllers">
-                <button class="timer-main-controller"
-                    data-timer-id="${timerId}"
-                    data-timer-state="idle"
-                    onclick="startTimer('${timerId}');">START</button>
+                ${_buildStartButton(timerId)}
                 <button class="timer-main-controller nodisplayed"
                     data-timer-id="${timerId}"
                     data-timer-state="running"

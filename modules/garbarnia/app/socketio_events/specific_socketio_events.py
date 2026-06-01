@@ -125,24 +125,23 @@ def register_events(socketio):
                 'main_timer':        main_gt.to_dict() if main_gt else None,
                 'is_reversed':       is_reversed,
             })
-        else:
+        elif settings.current_shootout_id:
             from app.models.shootout import Shootout
             game_obj = Game.query.get(settings.current_game_id) if settings.current_game_id else None
             game = game_obj.to_dict() if game_obj else None
 
-            shootout_obj = Shootout.query.get(settings.current_shootout_id) if settings.current_shootout_id else None
+            shootout_obj = Shootout.query.get(settings.current_shootout_id)
             _data = {
-                'home_team_short_name': game['home_team_short_name'],
-                'away_team_short_name': game['away_team_short_name'],
+                'home_team_short_name': game['home_team_short_name'] if game else '',
+                'away_team_short_name': game['away_team_short_name'] if game else '',
             }
             if shootout_obj:
-                shootout = shootout_obj.to_dict() if shootout_obj else None
+                shootout = shootout_obj.to_dict()
                 _data.update({
                     'home_team_shootouts': shootout['home_team_shootouts'],
                     'away_team_shootouts': shootout['away_team_shootouts'],
-                    'score_string': shootout['score_string']
+                    'score_string':        shootout['score_string'],
                 })
-
             socketio.emit('shootout_initial_data', _data)
 
     @socketio.on('add_team_event')

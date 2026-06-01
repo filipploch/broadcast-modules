@@ -26,9 +26,8 @@
 		<div style="width:222px; height: 100vh;">
 
 			<div class="top-bar">
-				<button id="nav-to-period-control" class="top-bar-element wingdings">
-					<a href="/game-setup">⚙</a>
-				</button>
+				<button id="nav-to-period-control" class="top-bar-element wingdings"
+						onclick="_navToGameSetup()">⚙</button>
 			</div>
 
 
@@ -140,6 +139,15 @@
 	<script src="{{ url_for('static', filename='js/pages/events-controllers.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/replay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/servo-utils.js') }}"></script>
+	<script>
+	function _navToGameSetup() {
+		if (window.self !== window.top) {
+			window.parent.postMessage({ action: 'show-right-frame' }, '*');
+		} else {
+			window.location.href = '/game-setup';
+		}
+	}
+	</script>
 </body>
 
 </html>
