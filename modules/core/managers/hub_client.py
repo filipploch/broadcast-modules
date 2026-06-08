@@ -333,6 +333,11 @@ class HubClient:
         elif msg_type == 'plugin_offline':
             plugin_id = payload.get('plugin_id')
             self._log("warning", f"Plugin offline: {plugin_id}")
+            if plugin_id and plugin_id.startswith('cam-head-'):
+                from core.managers import get_servo_manager
+                servo_manager = get_servo_manager()
+                if servo_manager:
+                    servo_manager.on_head_offline(plugin_id)
 
         elif msg_type == 'health_status':
             from core.managers import get_plugin_manager
@@ -462,6 +467,23 @@ class HubClient:
                 self._log("warning",
                           f"[controller] message {msg_type} dropped — manager not initialized")
 
+        if msg_from.startswith('cam-head-'):
+            if msg_type == 'servo_status':
+                from core.managers import get_servo_manager
+                servo_manager = get_servo_manager()
+                if servo_manager:
+                    servo_manager.on_servo_status(msg)
+            elif msg_type == 'gopro_status':
+                from core.managers import get_gopro_manager
+                gopro_manager = get_gopro_manager()
+                if gopro_manager:
+                    gopro_manager.on_gopro_status(msg)
+            elif msg_type == 'gopro_result':
+                from core.managers import get_gopro_manager
+                gopro_manager = get_gopro_manager()
+                if gopro_manager:
+                    gopro_manager.on_gopro_result(msg)
+
     def _on_error(self, ws, error):
         """Handle WebSocket error - RUNS IN WEBSOCKET THREAD"""
         self._log("error", f"WebSocket error: {error}")
@@ -569,6 +591,15 @@ class HubClient:
 
         if plugin_id == 'obs-ws-plugin':
             self._request_obs_scene_map()
+
+        if plugin_id.startswith('cam-head-'):
+            from core.managers import get_servo_manager, get_gopro_manager
+            servo_manager = get_servo_manager()
+            if servo_manager:
+                servo_manager.on_head_online(plugin_id)
+            gopro_manager = get_gopro_manager()
+            if gopro_manager:
+                gopro_manager.on_head_online(plugin_id)
 
     def _request_obs_scene_map(self):
         """Prosi obs-ws-plugin o przesłanie aktualnej mapy scen."""

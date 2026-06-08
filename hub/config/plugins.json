@@ -89,5 +89,20 @@
     "startup_delay_ms": 1500,
     "health_check_interval": 10,
     "is_critical": false
+  },
+  "cam-head-1": {
+    "id": "cam-head-1",
+    "name": "Camera Head 1",
+    "type": "external",
+    "discovery_mode": "reverse",
+    "discovery_hostname": "cam-head-1.local",
+    "discovery_port": 9999,
+    "auto_start": true,
+    "restart_on_crash": false,
+    "max_restarts": 0,
+    "health_check_interval": 15,
+    "heartbeat_timeout": 30,
+    "is_critical": false,
+    "description": "ESP32 camera head — MG90S pan/tilt + GoPro Hero 4 bridge"
   }
 }

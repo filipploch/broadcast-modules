@@ -19,6 +19,8 @@ _current_game_manager  = None
 _game_event_manager    = None
 _replay_export_manager = None
 _controller_manager    = None  # ⭐ NOWY: integracja USB controllera
+_servo_manager         = None  # pan/tilt MG90S servo heads
+_gopro_manager         = None  # GoPro Hero 4 bridge
 _initialization_lock   = threading.Lock()
 _initialized           = False
 _timer_manager_class   = None  # moduł może ustawić przed initialize_core_managers
@@ -42,7 +44,7 @@ def initialize_core_managers(app):
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
            _replay_export_manager, _game_event_manager, _controller_manager, \
-           _initialized
+           _servo_manager, _gopro_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -192,6 +194,24 @@ def get_controller_manager():
     return _controller_manager
 
 
+def get_servo_manager():
+    global _servo_manager
+    if _servo_manager is None:
+        from core.managers.servo_manager import ServoManager
+        _servo_manager = ServoManager(get_hub_client())
+        current_app.logger.info("✅ Servo Manager initialized (lazy)")
+    return _servo_manager
+
+
+def get_gopro_manager():
+    global _gopro_manager
+    if _gopro_manager is None:
+        from core.managers.gopro_manager import GoProManager
+        _gopro_manager = GoProManager(get_hub_client())
+        current_app.logger.info("✅ GoPro Manager initialized (lazy)")
+    return _gopro_manager
+
+
 def shutdown_core_managers():
     """Rozłącza hub i zeruje wszystkie singletony."""
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
@@ -213,6 +233,8 @@ def shutdown_core_managers():
     _replay_export_manager = None
     _game_event_manager    = None
     _controller_manager    = None
+    _servo_manager         = None
+    _gopro_manager         = None
     _initialized           = False
 
     current_app.logger.info("✅ Core managers shutdown complete")

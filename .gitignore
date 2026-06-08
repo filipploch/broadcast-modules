@@ -26,3 +26,4 @@
 *.gif
 **/images/
 **/video/
+config.h
