@@ -27,29 +27,15 @@ def create_app(config_name='default'):
     )
 
     # Rozszerzenia — używamy instancji z core
-    from core.extensions import db, socketio
+    from core.extensions import db, socketio, migrate
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
+    migrate.init_app(app, db, compare_type=False, render_as_batch=True)
 
-    # Tworzenie tabel — importy modeli muszą być przed db.create_all()
+    # Rejestracja modeli — muszą być zaimportowane zanim Flask-Migrate
+    # wykryje schemat. Samo zaimportowanie pakietu app.models rejestruje wszystkie klasy.
     with app.app_context():
-        # Modele core (wspólne tabele)
-        # Modele core — tabele współdzielone (bez tych które moduł nadpisuje)
-        from app.models import (
-            Season, Stadium,
-            Camera, Commentator, Referee,
-            Event, EventCamera,
-            GameEvent, GameCamera, GameCommentator, GameReferee,
-        )
-        # Modele futsal-nalf — nadpisują lub rozszerzają klasy bazowe core
-        from app.models import (
-            Settings, Period, GamePlayer, GameTimer,
-            League, LeagueTeam, Team, Game, Player,
-            Shootout, ShootoutKick,
-        )
-
-        db.create_all()
-        app.logger.info("✅ Database tables created/verified")
+        from . import models  # noqa: F401 — rejestruje wszystkie modele w SQLAlchemy
 
     # Rejestracja tras i zdarzeń SocketIO
     with app.app_context():

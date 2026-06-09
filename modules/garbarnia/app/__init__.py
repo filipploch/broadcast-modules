@@ -2,21 +2,6 @@
 import logging
 import threading
 
-
-def _migrate_leagues_table(db):
-    """Add columns introduced after initial schema creation (SQLite-compatible)."""
-    with db.engine.connect() as conn:
-        from sqlalchemy import text
-        new_columns = [
-            ("play_dictionary_id", "VARCHAR(100)"),
-        ]
-        for col_name, col_type in new_columns:
-            try:
-                conn.execute(text(f"ALTER TABLE leagues ADD COLUMN {col_name} {col_type}"))
-                conn.commit()
-            except Exception:
-                pass  # column already exists
-
 from flask import Flask
 from pathlib import Path
 
@@ -39,25 +24,13 @@ def create_app(config_name='default'):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    from core.extensions import db, socketio
+    from core.extensions import db, socketio, migrate
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
+    migrate.init_app(app, db, compare_type=False, render_as_batch=True)
 
     with app.app_context():
-
-        from app.models import (
-            Season, Stadium,
-            Camera, Commentator, Referee,
-            Event, EventCamera,
-            GameEvent, GameCamera, GameCommentator, GameReferee,
-            Settings, Period, GamePlayer, GameTimer,
-            League, LeagueTeam, Team, Game, Player,
-            Shootout, ShootoutKick,
-        )
-        db.create_all()
-        app.logger.info("✅ Database tables created/verified")
-        _migrate_leagues_table(db)
-        app.logger.info("✅ Leagues table migration checked")
+        from . import models  # noqa: F401 — rejestruje wszystkie modele w SQLAlchemy
 
     with app.app_context():
         from core.routes import broadcast as core_broadcast
