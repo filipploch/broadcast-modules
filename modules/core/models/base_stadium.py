@@ -1,16 +1,26 @@
-"""Stadium model - Football stadiums"""
+"""Stadium model - venues for any sport discipline."""
 from core.extensions import db
 from datetime import datetime
 from sqlalchemy.orm import declared_attr
 
 
 class BaseStadiumMixin:
-    """Football stadium"""
+    """Sports venue — stadium, arena, ski slope, karting circuit, etc."""
+
+    ZONE_SCHEME_FIELD_GRID    = 'FIELD_GRID'
+    ZONE_SCHEME_TRACK_LINEAR  = 'TRACK_LINEAR'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), nullable=False)
     city = db.Column(db.String(50), nullable=False, index=True)
+    # FIELD_GRID: siatka A1–O9 (boisko); TRACK_LINEAR: liniowa lista stref (trasa/tor)
+    zone_scheme = db.Column(
+        db.String(20),
+        nullable=False,
+        default=ZONE_SCHEME_FIELD_GRID,
+        server_default=ZONE_SCHEME_FIELD_GRID,
+    )
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -21,38 +31,38 @@ class BaseStadiumMixin:
     def games(cls):
         return db.relationship('Game', backref='stadium', lazy='dynamic')
 
-    # Composite unique constraint: name + city must be unique
     @db.declared_attr
     def __table_args__(cls):
         return (
-        db.UniqueConstraint('name', 'city', name='uix_stadium_name_city')
-,
-    )
+            db.UniqueConstraint('name', 'city', name='uix_stadium_name_city'),
+            db.CheckConstraint(
+                "zone_scheme IN ('FIELD_GRID', 'TRACK_LINEAR')",
+                name='check_stadium_zone_scheme',
+            ),
+        )
 
     def __repr__(self):
         return f'<Stadium {self.name}, {self.city}>'
 
     @property
     def full_address(self):
-        """Get full formatted address"""
         return f"{self.address}, {self.city}"
 
     @property
     def total_games(self):
-        """Get total number of games played at this stadium"""
         return self.games.count()
 
     def to_dict(self):
-        """Convert to dictionary"""
         return {
             'id': self.id,
             'name': self.name,
             'address': self.address,
             'city': self.city,
+            'zone_scheme': self.zone_scheme,
             'full_address': self.full_address,
             'total_games': self.total_games,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 def get_stadium_model():

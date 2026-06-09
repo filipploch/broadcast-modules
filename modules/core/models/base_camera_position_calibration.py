@@ -1,4 +1,4 @@
-"""CameraPositionCalibration — kalibracja pan/tilt dla pary (pozycja, komórka boiska)."""
+"""CameraPositionCalibration — kalibracja pan/tilt dla pary (pozycja, strefa)."""
 from core.extensions import db
 from datetime import datetime
 from sqlalchemy.orm import declared_attr
@@ -7,12 +7,14 @@ from sqlalchemy.orm import declared_attr
 class BaseCameraPositionCalibrationMixin:
     """
     Wartości pan i tilt dla głowicy stojącej w konkretnym miejscu (position_id),
-    skierowanej w konkretną komórkę boiska (cell_code A1–O9).
+    skierowanej w konkretną strefę (zone_code).
 
-    Kalibracja jest jednorazowa per stadion — te same wartości są używane
-    dla każdego meczu rozgrywanego na danym stadionie.
+    Kalibracja jest jednorazowa per obiekt — te same wartości są używane
+    dla każdego zdarzenia (meczu, wyścigu) na danym obiekcie.
 
-    Siatkę boiska tworzy 135 komórek: kolumny A–O (15) × wiersze 1–9 (9).
+    Schemat stref zależy od zone_scheme obiektu:
+      FIELD_GRID   — siatka A1–O9 (boisko futsalu / piłki nożnej)
+      TRACK_LINEAR — dowolne kody stref liniowych, np. "G01"–"G30" (narty, karting, rafting)
     """
 
     id          = db.Column(db.Integer, primary_key=True)
@@ -22,10 +24,10 @@ class BaseCameraPositionCalibrationMixin:
         nullable=False,
         index=True,
     )
-    # Kod komórki boiska: "A1"–"O9"
-    cell_code   = db.Column(db.String(3), nullable=False)
+    # Identyfikator strefy: "A1"–"O9" dla FIELD_GRID, dowolny String dla TRACK_LINEAR
+    zone_code   = db.Column(db.String(30), nullable=False)
     pan         = db.Column(db.Integer, nullable=False)   # 0–180
-    tilt        = db.Column(db.Integer, nullable=False)   # 0–90
+    tilt        = db.Column(db.Integer, nullable=False)   # 0–180 (180 umożliwia montaż poniżej trasy)
 
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at  = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -33,22 +35,22 @@ class BaseCameraPositionCalibrationMixin:
     @declared_attr
     def __table_args__(cls):
         return (
-            db.UniqueConstraint('position_id', 'cell_code', name='uix_calibration_position_cell'),
+            db.UniqueConstraint('position_id', 'zone_code', name='uix_calibration_position_zone'),
             db.CheckConstraint('pan  >= 0 AND pan  <= 180', name='check_calibration_pan_range'),
-            db.CheckConstraint('tilt >= 0 AND tilt <= 90',  name='check_calibration_tilt_range'),
+            db.CheckConstraint('tilt >= 0 AND tilt <= 180', name='check_calibration_tilt_range'),
         )
 
     def __repr__(self):
         return (
             f'<CameraPositionCalibration position_id={self.position_id} '
-            f'cell={self.cell_code} pan={self.pan} tilt={self.tilt}>'
+            f'zone={self.zone_code} pan={self.pan} tilt={self.tilt}>'
         )
 
     def to_dict(self) -> dict:
         return {
             'id':          self.id,
             'position_id': self.position_id,
-            'cell_code':   self.cell_code,
+            'zone_code':   self.zone_code,
             'pan':         self.pan,
             'tilt':        self.tilt,
         }

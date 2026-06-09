@@ -27,3 +27,4 @@
 **/images/
 **/video/
 config.h
+**/migrations/**

@@ -43,12 +43,12 @@ class BaseGameGoProSetupMixin:
             db.UniqueConstraint('game_id', 'cam_head_id',  name='uix_gopro_setup_game_device'),
         )
 
-    def get_aim(self, cell_code: str) -> tuple[int, int] | None:
+    def get_aim(self, zone_code: str) -> tuple[int, int] | None:
         """
-        Zwraca (pan, tilt) dla podanej komórki boiska na podstawie kalibracji pozycji.
+        Zwraca (pan, tilt) dla podanej strefy na podstawie kalibracji pozycji.
         Shortcut do position.get_aim() — None jeśli pozycja lub kalibracja nie istnieje.
         """
-        return self.position.get_aim(cell_code) if self.position else None
+        return self.position.get_aim(zone_code) if self.position else None
 
     def __repr__(self):
         return (

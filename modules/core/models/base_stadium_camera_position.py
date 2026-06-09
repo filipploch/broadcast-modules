@@ -9,8 +9,8 @@ class BaseStadiumCameraPositionMixin:
     Fizyczne miejsce, w którym można zamontować głowicę pan/tilt z kamerą GoPro.
 
     Każdy stadion ma własny zestaw pozycji (np. "Narożnik NE", "Za bramką Południe").
-    Do każdej pozycji przypisana jest kalibracja pan/tilt dla komórek boiska A1–O9
-    (tabela camera_position_calibrations).
+    Do każdej pozycji przypisana jest kalibracja pan/tilt dla stref obiektu
+    (tabela camera_position_calibrations). Schemat stref określa pole zone_scheme w stadiums.
 
     Podczas planowania transmisji operator wskazuje, które pozycje są obsadzone
     i którym urządzeniem cam-head (tabela game_gopro_setups).
@@ -49,9 +49,9 @@ class BaseStadiumCameraPositionMixin:
             db.UniqueConstraint('stadium_id', 'name', name='uix_stadium_camera_position'),
         )
 
-    def get_aim(self, cell_code: str) -> tuple[int, int] | None:
-        """Zwraca (pan, tilt) dla podanej komórki boiska, lub None jeśli brak kalibracji."""
-        cal = self.calibrations.filter_by(cell_code=cell_code).first()
+    def get_aim(self, zone_code: str) -> tuple[int, int] | None:
+        """Zwraca (pan, tilt) dla podanej strefy, lub None jeśli brak kalibracji."""
+        cal = self.calibrations.filter_by(zone_code=zone_code).first()
         return (cal.pan, cal.tilt) if cal else None
 
     def __repr__(self):
