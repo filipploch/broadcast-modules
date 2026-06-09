@@ -28,84 +28,90 @@
 			<div class="top-bar">
 				<button id="nav-to-period-control" class="top-bar-element wingdings"
 						onclick="_navToGameSetup()">⚙</button>
+				<button id="toggle-calibration-btn" class="top-bar-element"
+						onclick="_toggleCalibrationView()" title="Kalibracja głowic">⊕</button>
 			</div>
 
 
+			<div id="game-controllers-container" class="controllers-container">
+				<div id="overlay-switchers-container">
+					<div id="overlay-off" class="overlay-switcher"
+						ondblclick="showOverlay('empty-container')"
+						style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
+					<div id="overlay-start-stream" class="overlay-switcher screen-container"
+						ondblclick="showOverlay('start-container')"
+						style="background-image: url({{ url_for('static', filename='images/ui/start.png') }})"></div>
+					<div id="overlay-break-stream" class="overlay-switcher screen-container"
+						ondblclick="showBreakScene()"
+						style="background-image: url({{ url_for('static', filename='images/ui/half-time.png') }})"></div>
+					<div id="overlay-lineup-team-a" class="overlay-switcher screen-container"
+						ondblclick="showOverlay('home-team-squad-container')"
+						style="background-image: url({{ url_for('static', filename='images/ui/team-a-lineup.png') }})"></div>
+					<div id="overlay-lineup-team-b" class="overlay-switcher screen-container"
+						ondblclick="showOverlay('away-team-squad-container')"
+						style="background-image: url({{ url_for('static', filename='images/ui/team-b-lineup.png') }})"></div>
+					<div id="overlay-game" class="overlay-switcher screen-container"
+						ondblclick="showGameScene()"
+						style="background-image: url({{ url_for('static', filename='images/ui/game.png') }})"></div>
+					<div id="scale-screen" class="overlay-switcher screen-container"
+						ondblclick="scaleScreen()"
+						style="background-image: url({{ url_for('static', filename='images/ui/scale.png') }})"></div>
+				</div>
 
-			<div id="overlay-switchers-container">
-				<div id="overlay-off" class="overlay-switcher"
-					ondblclick="showOverlay('empty-container')"
-					style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
-				<div id="overlay-start-stream" class="overlay-switcher screen-container"
-					ondblclick="showOverlay('start-container')"
-					style="background-image: url({{ url_for('static', filename='images/ui/start.png') }})"></div>
-				<div id="overlay-break-stream" class="overlay-switcher screen-container"
-					ondblclick="showBreakScene()"
-					style="background-image: url({{ url_for('static', filename='images/ui/half-time.png') }})"></div>
-				<div id="overlay-lineup-team-a" class="overlay-switcher screen-container"
-					ondblclick="showOverlay('home-team-squad-container')"
-					style="background-image: url({{ url_for('static', filename='images/ui/team-a-lineup.png') }})"></div>
-				<div id="overlay-lineup-team-b" class="overlay-switcher screen-container"
-					ondblclick="showOverlay('away-team-squad-container')"
-					style="background-image: url({{ url_for('static', filename='images/ui/team-b-lineup.png') }})"></div>
-				<div id="overlay-game" class="overlay-switcher screen-container"
-					ondblclick="showGameScene()"
-					style="background-image: url({{ url_for('static', filename='images/ui/game.png') }})"></div>
-				<div id="scale-screen" class="overlay-switcher screen-container"
-					ondblclick="scaleScreen()"
-					style="background-image: url({{ url_for('static', filename='images/ui/scale.png') }})"></div>
-			</div>
-
-			<div id="events-controllers-container">
-				<div id="reversible-events-controllers-container" class="reversible" data-reverse-anchor>
-					<div id="home-side-events-controllers-container" data-reverse-anchor
-					class="side-events-controllers-container" data-reverse-anchor>
-						<div id="home-save-controller" class="event-controller save-controller"
-							onclick="addTeamEvent('home', 'Obrona');"
-							style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
-						<div id="away-goal-controller" class="event-controller goal-controller"
-							onclick="addTeamEvent('away', 'Bramka');"
-							style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
-						<div id="away-miss-controller" class="event-controller miss-controller"
-							onclick="addTeamEvent('away', 'Pudło');"
-							style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+				<div id="events-controllers-container">
+					<div id="reversible-events-controllers-container" class="reversible" data-reverse-anchor>
+						<div id="home-side-events-controllers-container" data-reverse-anchor
+						class="side-events-controllers-container" data-reverse-anchor>
+							<div id="home-save-controller" class="event-controller save-controller"
+								onclick="addTeamEvent('home', 'Obrona');"
+								style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+							<div id="away-goal-controller" class="event-controller goal-controller"
+								onclick="addTeamEvent('away', 'Bramka');"
+								style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+							<div id="away-miss-controller" class="event-controller miss-controller"
+								onclick="addTeamEvent('away', 'Pudło');"
+								style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+						</div>
+						<div id="game-field" class="game-field-selector">
+							<!-- komórki generowane przez gameFieldGenerator() w events-controllers.js -->
+						</div>
+						<div id="away-side-events-controllers-container" class="side-events-controllers-container">
+							<div id="away-save-controller" class="event-controller save-controller"
+								onclick="addTeamEvent('away', 'Obrona');"
+								style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
+							<div id="home-goal-controller" class="event-controller goal-controller"
+								onclick="addTeamEvent('home', 'Bramka');"
+								style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
+							<div id="home-miss-controller" class="event-controller miss-controller"
+								onclick="addTeamEvent('home', 'Pudło');"
+								style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+						</div>
 					</div>
-					<div id="game-field" class="game-field-selector">
-						<!-- komórki generowane przez gameFieldGenerator() w events-controllers.js -->
-					</div>
-					<div id="away-side-events-controllers-container" class="side-events-controllers-container">
-						<div id="away-save-controller" class="event-controller save-controller"
-							onclick="addTeamEvent('away', 'Obrona');"
-							style="background-image: url({{ url_for('static', filename='images/ui/save.png') }})"></div>
-						<div id="home-goal-controller" class="event-controller goal-controller"
-							onclick="addTeamEvent('home', 'Bramka');"
-							style="background-image: url({{ url_for('static', filename='images/ui/goal.png') }})"></div>
-						<div id="home-miss-controller" class="event-controller miss-controller"
-							onclick="addTeamEvent('home', 'Pudło');"
-							style="background-image: url({{ url_for('static', filename='images/ui/miss.png') }})"></div>
+					<div id="bottom-events-controllers-container">
+						<div id="hahaha-controller" class="event-controller"
+							onclick="addNoReplayEvent('HAHAHA')"
+							style="background-image: url({{ url_for('static', filename='images/ui/hahaha.png') }})"></div>
+						<div id="hidded-events-controllers-container" class="hidden">
+							<div id="var-controller" class="event-controller"
+								onclick="addFieldEvent('VAR');"
+								style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
+							<div id="foul-controller" class="event-controller"
+								onclick="addFieldEvent('Faul');"
+								style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
+							<div id="cancel-btn" class="event-controller"
+								onclick="unselectAllGameFieldCells();"
+								style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
+						</div>
+						<div id="bum-controller" class="event-controller"
+							onclick="addNoReplayEvent('Bum')"
+							style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
 					</div>
 				</div>
-				<div id="bottom-events-controllers-container">
-					<div id="hahaha-controller" class="event-controller"
-						onclick="addNoReplayEvent('HAHAHA')"
-						style="background-image: url({{ url_for('static', filename='images/ui/hahaha.png') }})"></div>
-					<div id="hidded-events-controllers-container" class="hidden">
-						<div id="var-controller" class="event-controller"
-							onclick="addFieldEvent('VAR');"
-							style="background-image: url({{ url_for('static', filename='images/ui/var.png') }})"></div>
-						<div id="foul-controller" class="event-controller"
-							onclick="addFieldEvent('Faul');"
-							style="background-image: url({{ url_for('static', filename='images/ui/foul.png') }})"></div>
-						<div id="cancel-btn" class="event-controller"
-							onclick="unselectAllGameFieldCells();"
-							style="background-image: url({{ url_for('static', filename='images/ui/cancel.png') }})"></div>
-					</div>
-					<div id="bum-controller" class="event-controller"
-						onclick="addNoReplayEvent('Bum')"
-						style="background-image: url({{ url_for('static', filename='images/ui/bum.png') }})"></div>
-				</div>
 			</div>
-
+			<div id="calibration-controllers-container" class="controllers-container" style="display: none;">
+				<div id="gopro-settings-container"></div>
+				<div id="cam-head-calibration-container"></div>
+			</div>
 		</div>
 
 		<!-- ── Monitor zdarzeń ───────────────────────────────────────────── -->
@@ -139,12 +145,38 @@
 	<script src="{{ url_for('static', filename='js/pages/events-controllers.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/replay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/servo-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/cam-head-ui.js') }}"></script>
 	<script>
 	function _navToGameSetup() {
 		if (window.self !== window.top) {
 			window.parent.postMessage({ action: 'show-right-frame' }, '*');
 		} else {
 			window.location.href = '/game-setup';
+		}
+	}
+
+	var _calibrationLoaded = false;
+
+	function _toggleCalibrationView() {
+		var gameCtrl  = document.getElementById('game-controllers-container');
+		var calCtrl   = document.getElementById('calibration-controllers-container');
+		var btn       = document.getElementById('toggle-calibration-btn');
+		var isCalOpen = calCtrl.style.display !== 'none';
+
+		if (isCalOpen) {
+			calCtrl.style.display  = 'none';
+			gameCtrl.style.display = '';
+			btn.style.color        = '';
+		} else {
+			gameCtrl.style.display = 'none';
+			calCtrl.style.display  = '';
+			btn.style.color        = 'rgba(220,38,38,0.9)';
+
+			if (!_calibrationLoaded && game && game.stadium && game.stadium.id) {
+				var targetEl = document.getElementById('cam-head-calibration-container');
+				loadCamHeadCalibrationUI(game.stadium.id, targetEl);
+				_calibrationLoaded = true;
+			}
 		}
 	}
 	</script>

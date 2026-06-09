@@ -206,3 +206,18 @@ def register_routes(app, exclude=None):
             "game": game_data,
             "is_reversed": is_reversed
         })
+
+    @app.route('/api/stadium-camera-positions')
+    def api_stadium_camera_positions():
+        stadium_id = request.args.get('stadium_id', type=int)
+        if not stadium_id:
+            return jsonify([])
+        from core.models.base_stadium_camera_position import get_stadium_camera_position_model
+        StadiumCameraPosition = get_stadium_camera_position_model()
+        positions = (
+            StadiumCameraPosition.query
+            .filter_by(stadium_id=stadium_id)
+            .order_by(StadiumCameraPosition.sort_order)
+            .all()
+        )
+        return jsonify([p.to_dict() for p in positions])

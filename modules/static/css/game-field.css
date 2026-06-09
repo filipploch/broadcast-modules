@@ -10,10 +10,11 @@
     --cell-h: 11px;
 }
 
-#game-field {
+#game-field,
+#cam-head-game-field {
     width: 160px;
     height: 100px;
-    background-size: contain;
+    background-size: 100% 100%;
 }
 
 .game-field-cell {
@@ -32,4 +33,39 @@
 
 .current-game-field-cell {
     background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ── Camera position buttons ────────────────────────────────────────── */
+
+.cam-position-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 25px;
+    height: 25px;
+    margin: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.cam-position-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.cam-position-btn.active {
+    background-color: rgba(220, 38, 38, 0.6);
+    border-color: rgba(220, 38, 38, 0.9);
+}
+
+.cam-position-code {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.85);
+    pointer-events: none;
 }
