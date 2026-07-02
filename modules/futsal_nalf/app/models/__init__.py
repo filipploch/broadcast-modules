@@ -14,6 +14,7 @@ from app.models.game_event import GameEvent
 from app.models.commentator import Commentator
 from app.models.game_commentator import GameCommentator
 from app.models.game_referee import GameReferee
+from app.models.cam_head import CamHead
 from app.models.camera import Camera
 from app.models.referee import Referee
 from app.models.game_player import GamePlayer

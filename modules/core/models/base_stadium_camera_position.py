@@ -43,9 +43,16 @@ class BaseStadiumCameraPositionMixin:
     name        = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
     sort_order  = db.Column(db.Integer, nullable=False, default=0)
+    # Domyślna kamera dla tej pozycji — sugestia dla operatora przy przypisywaniu kamer do meczu.
+    # NULL oznacza brak przypisania; zmiana kamery nie wymaga modyfikacji pozycji.
+    default_camera_id = db.Column(db.Integer, db.ForeignKey('cameras.id'), nullable=True)
 
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at  = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @declared_attr
+    def default_camera(cls):
+        return db.relationship('Camera', foreign_keys='[StadiumCameraPosition.default_camera_id]')
 
     @declared_attr
     def calibrations(cls):
@@ -82,14 +89,25 @@ class BaseStadiumCameraPositionMixin:
         return f'<StadiumCameraPosition stadium_id={self.stadium_id} code={self.code!r} name="{self.name}">'
 
     def to_dict(self) -> dict:
+        cam = self.default_camera
+        cam_head = cam.cam_head if cam else None
+        has_calib = (
+            self.calibrations.filter_by(camera_id=cam.id).count() > 0
+            if cam else False
+        )
         return {
-            'id':          self.id,
-            'stadium_id':  self.stadium_id,
-            'zone_scheme': self.zone_scheme,
-            'code':        self.code,
-            'name':        self.name,
-            'description': self.description,
-            'sort_order':  self.sort_order,
+            'id':                  self.id,
+            'stadium_id':          self.stadium_id,
+            'zone_scheme':         self.zone_scheme,
+            'code':                self.code,
+            'name':                self.name,
+            'description':         self.description,
+            'sort_order':          self.sort_order,
+            'default_camera_id':   self.default_camera_id,
+            'default_camera_name': cam.name if cam else None,
+            'cam_head_id':         cam_head.id if cam_head else None,
+            'cam_head_name':       (cam_head.name or cam_head.head_id) if cam_head else None,
+            'has_calibration':     has_calib,
         }
 
 

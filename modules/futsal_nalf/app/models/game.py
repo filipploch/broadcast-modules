@@ -147,8 +147,9 @@ class Game(BaseGameMixin, db.Model):
 
     def to_dict(self):
         d = super().to_dict()
-        d['home_team_fouls']         = self.home_team_fouls
-        d['away_team_fouls']         = self.away_team_fouls
+        current_period = self.get_current_period()
+        d['home_team_fouls']         = current_period.home_team_fouls if current_period else 0
+        d['away_team_fouls']         = current_period.away_team_fouls if current_period else 0
         d['is_home_team_lost_by_wo'] = self.is_home_team_lost_by_wo
         d['is_away_team_lost_by_wo'] = self.is_away_team_lost_by_wo
         d['is_walkover']             = self.is_walkover

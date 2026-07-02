@@ -47,8 +47,10 @@ class BaseGameCameraMixin:
     id = db.Column(db.Integer, primary_key=True)
 
     # Foreign keys
-    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
-    camera_id = db.Column(db.Integer, db.ForeignKey('cameras.id'), nullable=False, index=True)
+    game_id     = db.Column(db.Integer, db.ForeignKey('games.id'),     nullable=False, index=True)
+    camera_id   = db.Column(db.Integer, db.ForeignKey('cameras.id'),   nullable=False, index=True)
+    # Pozycja na obiekcie, na której stoi kamera w tym meczu (nullable — można przypisać później)
+    position_id = db.Column(db.Integer, db.ForeignKey('stadium_camera_positions.id'), nullable=True)
 
     # Opis słowny miejsca ustawienia kamery (np. "Za bramką północną", "Trybuny główne")
     location = db.Column(db.String(200), nullable=False)
@@ -58,12 +60,17 @@ class BaseGameCameraMixin:
     # Mapowanie hdmi_input → /dev/cameraN zdefiniowane w HDMI_TO_DEVICE.
     hdmi_input = db.Column(db.Integer, nullable=False)
 
-    # Czy kamera jest motoryczna (zdalna zmiana ujęcia)
+    # Czy kamera jest motoryczna (zdalna zmiana ujęcia).
+    # Pochodna camera.is_motorized — utrzymywana jako pole denormalizowane dla szybkich zapytań.
     is_motorized = db.Column(db.Boolean, default=False, nullable=False)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @db.declared_attr
+    def position(cls):
+        return db.relationship('StadiumCameraPosition', foreign_keys='[GameCamera.position_id]')
 
     @db.declared_attr
     def __table_args__(cls):
@@ -105,8 +112,9 @@ class BaseGameCameraMixin:
             'device_name': self.device_name,
             'is_main_camera': self.is_main_camera,
             'is_motorized': self.is_motorized,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'position_id':  self.position_id,
+            'created_at':   self.created_at.isoformat() if self.created_at else None,
+            'updated_at':   self.updated_at.isoformat() if self.updated_at else None,
         }
 
 def get_game_camera_model():

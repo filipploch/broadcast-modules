@@ -10,12 +10,12 @@
  * Required libraries (Arduino Library Manager):
  *   arduinoWebSockets  by Markus Sattler
  *   ArduinoJson        by Benoit Blanchon  (v6)
- *   ESP32Servo         by Kevin Harrington
  *
  * Built-in ESP32 libraries (no install needed):
  *   WiFi, ESPmDNS, HTTPClient
  *   BLEDevice/BLEServer/BLEUtils/BLE2902
  *   Preferences
+ *   LEDC (servo PWM — no external library needed)
  *
  * Multi-file sketch — Arduino IDE concatenates all .ino files in this order:
  *   cam_head.ino      — globals, setup, loop, hub/servo logic  (this file)
@@ -30,8 +30,8 @@
 #include <WebSocketsServer.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
-#include <ESP32Servo.h>
 #include <HTTPClient.h>
+#include "driver/gpio.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -104,8 +104,31 @@ unsigned long lastWifiCheck = 0;
 
 // ─── Servo ───────────────────────────────────────────────────────────────────
 
-Servo panServo;
-Servo tiltServo;
+// Servo PWM via esp_timer + gpio_set_level.
+// LEDC routing is broken in ESP32 Arduino Core 3.x when WiFi+BLE are active.
+// gpio_set_level works correctly — confirmed by manual pulse test.
+#define SERVO_MIN_US  544
+#define SERVO_MAX_US  2400
+
+// Two independent hardware-timer ISRs at 50 Hz, offset by 10 ms.
+// hw_timer fires from a hardware interrupt — no FreeRTOS scheduling jitter.
+static hw_timer_t        *_panTimer   = nullptr;
+static hw_timer_t        *_tiltTimer  = nullptr;
+static volatile uint32_t  _panUs      = 1500;
+static volatile uint32_t  _tiltUs     = 1500;
+static bool               _servoReady = false;
+
+static void IRAM_ATTR _panISR() {
+    gpio_set_level((gpio_num_t)PAN_SERVO_PIN, 1);
+    esp_rom_delay_us(_panUs);
+    gpio_set_level((gpio_num_t)PAN_SERVO_PIN, 0);
+}
+
+static void IRAM_ATTR _tiltISR() {
+    gpio_set_level((gpio_num_t)TILT_SERVO_PIN, 1);
+    esp_rom_delay_us(_tiltUs);
+    gpio_set_level((gpio_num_t)TILT_SERVO_PIN, 0);
+}
 
 int currentPan  = PAN_CENTER;
 int currentTilt = TILT_CENTER;
@@ -171,11 +194,11 @@ void sendServoStatus() {
 // ─── Servo Control ───────────────────────────────────────────────────────────
 
 void moveTo(int pan, int tilt) {
-    if (!servoEnabled()) return;
+    if (!servoEnabled() || !_servoReady) return;
     pan  = constrain(pan,  PAN_MIN_DEG,  PAN_MAX_DEG);
     tilt = constrain(tilt, TILT_MIN_DEG, TILT_MAX_DEG);
-    panServo.write(pan);
-    tiltServo.write(tilt);
+    _panUs  = (uint32_t)map(pan,  0, 180, SERVO_MIN_US, SERVO_MAX_US);
+    _tiltUs = (uint32_t)map(tilt, 0, 180, SERVO_MIN_US, SERVO_MAX_US);
     currentPan  = pan;
     currentTilt = tilt;
     Serial.printf("[servo] pan=%d tilt=%d\n", pan, tilt);
@@ -288,16 +311,6 @@ void setup() {
     Serial.printf("[boot] Mode: %d (%s)\n", currentMode,
         currentMode == 1 ? "SERVO" : currentMode == 2 ? "GOPRO" : "FULL");
 
-    if (servoEnabled()) {
-        panServo.setPeriodHertz(50);
-        tiltServo.setPeriodHertz(50);
-        panServo.attach(PAN_SERVO_PIN,  SERVO_MIN_US, SERVO_MAX_US);
-        tiltServo.attach(TILT_SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
-        panServo.write(PAN_CENTER);
-        tiltServo.write(TILT_CENTER);
-        Serial.println("[servo] Initialized — centered");
-    }
-
     loadNetworksFromFlash();
     if (networkCount == 0) {
         addNetwork(WIFI_DEFAULT_SSID, WIFI_DEFAULT_PASSWORD);
@@ -319,6 +332,34 @@ void setup() {
     if (goProEnabled()) setupGopro();
 
     setupBle();
+
+    // Servo init last — after WiFi+BLE are fully up.
+    // Uses esp_timer + gpio_set_level (LEDC routing broken in Core 3.x with WiFi+BLE).
+    if (servoEnabled()) {
+        gpio_set_direction((gpio_num_t)PAN_SERVO_PIN,  GPIO_MODE_OUTPUT);
+        gpio_set_direction((gpio_num_t)TILT_SERVO_PIN, GPIO_MODE_OUTPUT);
+        gpio_set_level((gpio_num_t)PAN_SERVO_PIN,  0);
+        gpio_set_level((gpio_num_t)TILT_SERVO_PIN, 0);
+
+        _panUs  = (uint32_t)map(PAN_CENTER,  0, 180, SERVO_MIN_US, SERVO_MAX_US);
+        _tiltUs = (uint32_t)map(TILT_CENTER, 0, 180, SERVO_MIN_US, SERVO_MAX_US);
+
+        // 1 MHz counter (1 µs resolution), alarm at 20 000 ticks = 20 ms = 50 Hz
+        _panTimer  = timerBegin(1000000);
+        _tiltTimer = timerBegin(1000000);
+        if (_panTimer && _tiltTimer) {
+            timerAttachInterrupt(_panTimer,  &_panISR);
+            timerAttachInterrupt(_tiltTimer, &_tiltISR);
+            timerAlarm(_panTimer,  20000, true, 0);
+            delay(10);                          // 10 ms phase offset
+            timerAlarm(_tiltTimer, 20000, true, 0);
+            _servoReady = true;
+            Serial.printf("[servo] hw-timer ok: pan GPIO%d tilt GPIO%d center=%luus\n",
+                PAN_SERVO_PIN, TILT_SERVO_PIN, _panUs);
+        } else {
+            Serial.println("[servo] hw-timer FAILED");
+        }
+    }
 
     Serial.println("[boot] Ready");
 }

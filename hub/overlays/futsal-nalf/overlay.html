@@ -6,7 +6,7 @@
     <title>Timer Overlay - Futsal NALF</title>
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/main.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/classes.css">
-    <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard.css">
+
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/timer.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-hide-element-keyframes.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/animation-rotate-show-element-keyframes.css">
@@ -20,46 +20,44 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/results.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/specific.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/overlay-container.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard-new.css">
 </head>
 <body>
     <div id="empty-container" style="display: none;"></div>
     <div id="game-container" class="overlay-container game-container" style="display: none;">
         <div id="scoreboard-container">
-            <div id="top-scoreboard-container" class="scoreboard-row">
-                <div></div>
-                <div id="home-team-fouls" class="team-fouls"></div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div id="away-team-fouls" class="team-fouls"></div>
-            </div>
-            <div id="main-scoreboard-container" class="scoreboard-row">
-                <div id="main-timer-display" class="specific-colors"></div>
-                <div class="team-box">
-                    <div id="home-team-shortname" class="team-name home-team-shortname"></div>
-                    <div id="home-team-uniform" class="team-uniform home-team-uniform"></div>
+            <div id="top-scoreboard">
+                <div id="home-team-fouls-container" class="fouls-container">
+                    <div id="home-team-fouls" class="team-fouls"></div>
                 </div>
-                <div id="home-team-score" class="team-score home-team-score"> </div>
-                <div></div>
-                <div id="away-team-score" class="team-score away-team-score"> </div>
-                <div class="team-box">
-                    <div id="away-team-shortname" class="team-name away-team-shortname">TEB</div>
-                    <div id="away-team-uniform" class="team-uniform away-team-uniform"></div>
+                <div id="main-timer-display"></div>
+                <div id="away-team-fouls-container" class="fouls-container">
+                    <div id="away-team-fouls" class="team-fouls"></div>
                 </div>
             </div>
-            <div id="bottom-scoreboard-container" class="scoreboard-row">
-                <div></div>
-                <div id="home-team-penalty-timer-container" class="penalty-timer-container">
-                    <!-- <div class="penalty-timer">0:22</div>
-                    <div class="penalty-timer">0:22</div> -->
+            <div id="main-scoreboard">
+                <div id="home-container">
+                    <div class="team-box">
+                        <div id="home-team-uniform" class="team-uniform home-team-uniform"></div>
+                        <div id="home-team-shortname" class="team-name home-team-shortname"></div>
+                    </div>
+                    <div id="home-team-score" class="team-score home-team-score"></div>
                 </div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div id="away-team-penalty-timer-container" class="penalty-timer-container">
-                    <!-- <div class="penalty-timer">0:22</div>
-                    <div class="penalty-timer">0:22</div> -->
+                <div id="nalf-logo">
+                    <img id="nalf-logo-img" class="logo-img" src="">
                 </div>
+                <div id="away-container">
+                    <div id="away-team-score" class="team-score away-team-score"></div>
+                    <div class="team-box">
+                        <div id="away-team-uniform" class="team-uniform away-team-uniform"></div>
+                        <div id="away-team-shortname" class="team-name away-team-shortname"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="bottom-scoreboard">
+                <div id="home-team-penalty-timer-container" class="penalty-timer-container"></div>
+                <div id="season-id"></div>
+                <div id="away-team-penalty-timer-container" class="penalty-timer-container"></div>
             </div>
         </div>
         <div id="animationArea"><span style="color: rgba(255,255,255,0)">.</span></div>
@@ -103,6 +101,7 @@
     <div id="table-container" class="table-container info-container overlay-container" style="display: none;"></div>
     <div id="virtual-table-container" class="virtual-table-container table-container info-container overlay-container" style="display: none;"></div>
     <div id="shootout-container" class="shootout-container overlay-container" style="display: none;"></div>
+    <script src="/overlays/futsal-nalf/js/scoreboard.js"></script>
     <script src="/overlays/futsal-nalf/js/utils.js"></script>
     <script src="/overlays/futsal-nalf/js/squad.js"></script>
     <script type="application/javascript" src="/overlays/futsal-nalf/js/animate-word.js"></script>

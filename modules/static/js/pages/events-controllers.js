@@ -7,44 +7,6 @@ var selectedCellID = null;
 var allGameFieldCells = null;  // inicjowane po wygenerowaniu DOM
 var hiddedEventsControllersContainer = document.getElementById('hidded-events-controllers-container');
 
-// ── Generowanie siatki #game-field ───────────────────────────────────────────
-
-/**
- * Generuje komórki siatki boiska w kontenerze #game-field.
- * Każda komórka: onclick=setCameraPosition, ondblclick=selectGameFieldCell.
- * @param {number} cols - liczba kolumn
- * @param {number} rows - liczba wierszy
- */
-function gameFieldGenerator(cols = _FIELD_COLS, rows = _FIELD_ROWS) {
-    const container = document.getElementById('game-field');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    for (let row = 1; row <= rows; row++) {
-        const rowEl = document.createElement('div');
-        rowEl.className = 'game-field-row';
-        rowEl.style.display = 'flex';
-
-        for (let col = 0; col < cols; col++) {
-            const letter = String.fromCharCode(65 + col);  // A, B, C, …, O
-            const cellId = letter + row;
-
-            const cell = document.createElement('div');
-            cell.id = cellId;
-            cell.className = 'game-field-cell';
-            cell.ondblclick = function () { selectGameFieldCell(this); };
-            cell.onclick    = function () { setCameraPosition(this); };
-
-            rowEl.appendChild(cell);
-        }
-        container.appendChild(rowEl);
-    }
-
-    // Odśwież referencje po wygenerowaniu komórek
-    allGameFieldCells = document.querySelectorAll('.game-field-cell');
-    attachGameFieldHoverListeners();
-}
 
 // ── Hover ─────────────────────────────────────────────────────────────────────
 function attachGameFieldHoverListeners() {
@@ -145,12 +107,8 @@ function addNoReplayEvent(_event) {
     unselectAllGameFieldCells();
 }
 
-socket.on('team_event_added', (data) => {
-    let _team = data.team_type;
-    let _event = data.event_name;
-    addTeamEvent(_team, _event);
-})
-
 // ── Init ──────────────────────────────────────────────────────────────────────
-gameFieldGenerator();
+gameFieldGenerator('game-field', _FIELD_COLS, _FIELD_ROWS);
+allGameFieldCells = document.querySelectorAll('.game-field-cell');
+attachGameFieldHoverListeners();
 

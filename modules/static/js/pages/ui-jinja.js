@@ -484,15 +484,6 @@ function fieldSvgGenerator(cellId, color) {
     return fieldSvgStr(MODULE_NAME, x, y, '#' + color);
 }
 
-function buildGameFieldBackground() {
-    const el = document.getElementById('game-field');
-    if (!el) return;
-    const svg = fieldSvgStr(MODULE_NAME, null, null, null);
-    el.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-    el.style.backgroundSize = '100% 100%';
-}
-buildGameFieldBackground();
-
 var _showHiddenEvents = false;
 
 function filterEvents(_element, _className) {
@@ -602,33 +593,6 @@ function toggleGameFieldCell(selectedCell) {
     }
 }
 
-function eventEditGameFieldGenerator(_eventCellID, cols = FIELD_COLS, rows = FIELD_ROWS) {
-    let _cellId = ''
-    const bgSvg = fieldSvgStr(MODULE_NAME, null, null, null);
-    const bgStyle = `background-image:url('data:image/svg+xml,${encodeURIComponent(bgSvg)}');background-size:100% 100%`;
-    let html = `<div id="event-edit-game-field"
-    class="game-field-selector" style="${bgStyle}" data-cell-id="none">`;
-    for (let row = 1; row <= rows; row++) {
-        html += `<div class="game-field-row" style="display: flex;">`;
-        for (let col = 0; col < cols; col++) {
-            let eventCellID = _eventCellID;
-            const letter = String.fromCharCode(65 + col);
-            const cellId = letter + row;
-            let _class = '';
-            if(cellId === eventCellID) {
-                _class = 'selected-game-field-cell current-game-field-cell';
-                _cellId = cellId;
-            }
-            html += `<div ondblclick="toggleGameFieldCell(this);"
-            data-cell-id="${cellId}" class="event-edit-game-field-cell ${_class}"></div>`;
-        }
-        html += `</div>`;
-    }
-    html += `</div>`;
-    let currentGameEventData = document.getElementById('current-game-event-data');
-    currentGameEventData.dataset.cellId = _cellId;
-    return html.replace('data-cell-id="none"', `data-cell-id="${_cellId}"`);
-}
 
 function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
     let html = `
@@ -777,20 +741,6 @@ function eventEditTeamsSquadSelectGenerator(_gameEvent, _teamSquad) {
         });
     }
     return squadSelect;
-}
-
-function eventEditGameFieldListeners(){
-    document.querySelectorAll('.event-edit-game-field-cell').forEach(element => {
-        element.addEventListener('mouseover', () => {
-            element.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
-        });
-    });
-
-    document.querySelectorAll('.event-edit-game-field-cell').forEach(element => {
-        element.addEventListener('mouseout', () => {
-            element.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-        });
-    });
 }
 
 function updateGameEvent(_contentType = '') {
@@ -1435,17 +1385,21 @@ socket.on('show_ui_monitor_content', data => {
         eventEditContainer.innerHTML = '';
         let eventEditLeftColumn = document.createElement('div');
         eventEditLeftColumn.style.width = '160px';
-        eventEditLeftColumn.innerHTML = eventEditGameFieldGenerator(gameEvent.event_place);
-        eventEditLeftColumn.innerHTML += eventEditGameResultGenerator(gameEvent.home_team_goals, gameEvent.away_team_goals);
+        const fieldEl = document.createElement('div');
+        fieldEl.id = 'event-edit-game-field';
+        fieldEl.className = 'game-field-selector';
+        eventEditLeftColumn.appendChild(fieldEl);
+        gameFieldGenerator(fieldEl, FIELD_COLS, FIELD_ROWS, gameEvent.event_place);
+        eventEditLeftColumn.insertAdjacentHTML('beforeend', eventEditGameResultGenerator(gameEvent.home_team_goals, gameEvent.away_team_goals));
         const _visibilityBtn = gameEvent.is_visible
             ? `<button type="button" class="flex1" style="font-size:10px;font-weight:700;color:red;" ondblclick="hideGameEvent(${gameEvent.id})">UKRYJ</button>`
             : `<button type="button" class="flex1" style="font-size:10px;font-weight:700;" ondblclick="restoreGameEvent(${gameEvent.id})">WRÓĆ</button>`;
-        eventEditLeftColumn.innerHTML += `
+        eventEditLeftColumn.insertAdjacentHTML('beforeend', `
         <div style="display: flex;">
             ${_visibilityBtn}
             <button type="button" class="flex1" style="font-size:10px;font-weight:700;" onclick="updateGameEvent()">ZACHOWAJ</button>
             <button type="button" class="flex1" style="font-size:10px;font-weight:700;" onclick="updateGameEvent('events')">OK</button>
-        </div>`;
+        </div>`);
         let eventEditRightColumn = document.createElement('div');
         eventEditRightColumn.id = 'event-edit-right-column';
         eventEditRightColumn.style.width = '260px';
@@ -1455,7 +1409,6 @@ socket.on('show_ui_monitor_content', data => {
         eventEditContainer.append(eventEditLeftColumn);
         eventEditContainer.append(eventEditRightColumn);
         eventEditRightColumn.append(teamSelect);
-        eventEditGameFieldListeners();
         applyReversedState(isScoreboardReversed);
         refreshEditResultDisplay();
         uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';

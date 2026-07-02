@@ -217,6 +217,74 @@ function changeGameValue(valueType, teamType, value) {
    socket.emit('change_game_value', {value_type: valueType, team_type: teamType, value: value});
 }
 
+function gameFieldGenerator(containerEl = 'game-field', cols = 15, rows = 9, _eventCellID = null) {
+    const container = typeof containerEl === 'string'
+        ? document.getElementById(containerEl)
+        : containerEl;
+    if (!container) return;
+
+    if (typeof fieldSvgStr === 'function') {
+        const svg = fieldSvgStr(MODULE_NAME, null, null, null);
+        container.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+        container.style.backgroundSize  = '100% 100%';
+    }
+
+    container.innerHTML = '';
+    let _resolvedCellId = '';
+
+    for (let row = 1; row <= rows; row++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'game-field-row';
+        rowEl.style.display = 'flex';
+
+        for (let col = 0; col < cols; col++) {
+            const letter = String.fromCharCode(65 + col);
+            const cellId = letter + row;
+            const cell = document.createElement('div');
+
+            switch (container.id) {
+                case 'game-field':
+                    cell.id         = cellId;
+                    cell.className  = 'game-field-cell';
+                    cell.onclick    = function () { setCameraPosition(this); };
+                    cell.ondblclick = function () { selectGameFieldCell(this); };
+                    break;
+                case 'event-edit-game-field':
+                    cell.className      = 'event-edit-game-field-cell';
+                    cell.dataset.cellId = cellId;
+                    if (cellId === _eventCellID) {
+                        cell.classList.add('selected-game-field-cell', 'current-game-field-cell');
+                        _resolvedCellId = cellId;
+                    }
+                    cell.ondblclick = function () { toggleGameFieldCell(this); };
+                    break;
+                case 'cam-head-game-field':
+                    cell.className      = 'game-field-cell';
+                    cell.dataset.cellId = cellId;
+                    cell.ondblclick     = function () {
+                        if (typeof _onCalibrationCellDblClick === 'function')
+                            _onCalibrationCellDblClick(this);
+                    };
+                    break;
+                default:
+                    cell.className = 'game-field-cell';
+                    break;
+            }
+            cell.addEventListener('mouseover', function () { this.style.backgroundColor = 'rgba(0,0,0,0.3)'; });
+            cell.addEventListener('mouseout',  function () { this.style.backgroundColor = 'rgba(0,0,0,0)'; });
+
+            rowEl.appendChild(cell);
+        }
+        container.appendChild(rowEl);
+    }
+
+    if (container.id === 'event-edit-game-field') {
+        container.dataset.cellId = _resolvedCellId;
+        const cgd = document.getElementById('current-game-event-data');
+        if (cgd) cgd.dataset.cellId = _resolvedCellId;
+    }
+}
+
 function scaleScreen(){
     if(SCALE_DOWN){
         SCALE_DOWN = false;

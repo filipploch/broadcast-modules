@@ -16,13 +16,37 @@
             <label for="brand">Marka *</label>
             <input type="text" id="brand" name="brand"
                    value="{{ camera.brand if camera else '' }}"
-                   required maxlength="50" placeholder="np. Sony">
+                   required maxlength="50" placeholder="np. GoPro">
         </div>
         <div class="form-group">
             <label for="model">Model *</label>
             <input type="text" id="model" name="model"
                    value="{{ camera.model if camera else '' }}"
-                   required maxlength="100" placeholder="np. FX3">
+                   required maxlength="100" placeholder="np. Hero 12">
+        </div>
+        <div class="form-group">
+            <label for="cam_head_id">Głowica pan/tilt</label>
+            <select id="cam_head_id" name="cam_head_id">
+                <option value="">— brak (kamera stacjonarna) —</option>
+                {% for ch in cam_heads %}
+                <option value="{{ ch.id }}"
+                    {% if camera and camera.cam_head_id == ch.id %}selected{% endif %}>
+                    {{ ch.name or ch.head_id }} ({{ ch.head_id }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="gopro_ssid">GoPro WiFi SSID</label>
+            <input type="text" id="gopro_ssid" name="gopro_ssid"
+                   value="{{ camera.gopro_ssid if camera and camera.gopro_ssid else '' }}"
+                   maxlength="100" placeholder="np. GP24680123">
+        </div>
+        <div class="form-group">
+            <label for="gopro_password">GoPro WiFi hasło</label>
+            <input type="password" id="gopro_password" name="gopro_password"
+                   value="{{ camera.gopro_password if camera and camera.gopro_password else '' }}"
+                   maxlength="100" placeholder="hasło WiFi kamery">
         </div>
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Zapisz</button>

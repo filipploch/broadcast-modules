@@ -1,0 +1,415 @@
+/* ════════════════════════════════════════════════════════════════
+   SCOREBOARD-NEW.CSS — Nowy design scoreboard dla futsal-nalf
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Główny kontener ─────────────────────────────────────────── */
+
+#scoreboard-container {
+    position: fixed;
+    top: 30px;
+    right: 90px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: ui-monospace, monospace;
+    font-weight: bold;
+    filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.5));
+    width: 340px;
+    transform: scale(1.3);
+}
+
+/* ── Main scoreboard ─────────────────────────────────────────── */
+
+#main-scoreboard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 340px;
+    height: 45px;
+    overflow: visible;
+    position: absolute;
+    z-index: 2;
+    top: 30px;
+}
+
+#main-scoreboard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, #3c54bd 0%, #1d3499 100%);
+    border-radius: 10px;
+    clip-path: inset(0 50%);   /* stan początkowy — ukryty */
+    z-index: -1;
+}
+
+/* ── Home / Away containers ──────────────────────────────────── */
+
+#home-container,
+#away-container {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    overflow: hidden;
+    width: 0;                  /* stan początkowy — ukryty */
+}
+
+#home-container { justify-content: flex-start; }
+#away-container { justify-content: flex-end; }
+
+/* ── Logo ────────────────────────────────────────────────────── */
+
+#nalf-logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 0 0 auto;
+    width: 32px;
+    height: 55px;              /* przerasta rodzica — efekt wystającego logo */
+    position: relative;
+    z-index: 10;
+    transform: scale(0);       /* stan początkowy — ukryty */
+}
+
+.logo-img {
+    height: 100%;
+    width: auto;
+    object-fit: contain;
+    border-radius: 7px;
+    box-sizing: border-box;
+    margin: 0 3px;
+}
+
+/* ── Team box ────────────────────────────────────────────────── */
+
+.team-box {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    height: 80%;
+    width: 80px;
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1px solid gray;
+    margin: 0 3.5px;
+}
+
+/* ── Team uniform ────────────────────────────────────────────── */
+
+.team-uniform {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.team-uniform-element {
+    height: 100%;
+    flex: 1;
+}
+
+/* ── Team name ───────────────────────────────────────────────── */
+
+.team-name {
+    width: calc(100% - 9px);
+    height: calc(100% - 9px);
+    margin: 3.5px;
+    background-color: black;
+    color: white;
+    font-size: 30px;
+    font-weight: 700;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    border-radius: 4px;
+    border: 1px solid gray;
+}
+
+/* ── Team score ──────────────────────────────────────────────── */
+
+.team-score {
+    font-size: 40px;
+    color: white;
+    font-weight: 700;
+    width: 59px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── Top scoreboard ──────────────────────────────────────────── */
+
+#top-scoreboard {
+    display: flex;
+    width: 340px;
+    z-index: 1;
+    opacity: 0;                /* stan początkowy — ukryty */
+    height: 35px;
+    top: 0;
+    position: absolute;
+}
+
+#main-timer-display {
+    flex: 2;
+    background: linear-gradient(180deg, #dddddd 0%, #c8c8c8 100%);
+    font-size: 27px;
+    color: black;
+    text-align: center;
+    border-radius: 10px 10px 0 0;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: monospace;
+}
+
+.fouls-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 1.1;
+    margin: 0 3.5px;
+    padding-top: 1px;
+}
+
+/* ── Faule — badge (liczba na czerwonym tle) ─────────────────── */
+
+.team-fouls {
+    background-color: red;
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    width: 33%;
+    border-radius: 4px;
+    font-size: 30px;
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    transform: translateY(35px);        /* stan początkowy — ukryty pod main-scoreboard */
+    transition: transform 0.35s ease-out;
+}
+
+/* ── Bottom scoreboard ───────────────────────────────────────── */
+
+#bottom-scoreboard {
+    display: flex;
+    width: 340px;
+    z-index: 1;
+    opacity: 0;                /* stan początkowy — ukryty */
+    height: 35px;
+    position: absolute;
+    top: 75px;
+}
+
+.penalty-timer-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1.1;
+    margin: 1px 3.5px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1px;
+}
+
+.penalty-timer {
+    background-color: red;
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    font-size: 17px;
+    width: 90%;
+    height: 15px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#season-id {
+    flex: 2;
+    background: linear-gradient(180deg, #c3c3c3 0%, #afafaf 100%);
+    color: black;
+    text-align: center;
+    border-radius: 0 0 10px 10px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-weight: 700;
+    height: 30px;
+}
+
+/* ── Animation area (GOOOOL) ─────────────────────────────────── */
+
+#animationArea {
+    position: absolute !important;
+    top: 27px;
+    right: 30px;
+    padding: 0;
+    margin: 0;
+    font-family: 'Arial Black';
+    font-weight: 700;
+}
+
+.char-box-0 {
+    color: white;
+    background: linear-gradient(to bottom, #0300d2, #020070);
+}
+
+.char-box-1 {
+    color: #020070;
+    background: linear-gradient(to bottom, #ffffff, #909090);
+}
+
+/* ── Penalty timer animations ────────────────────────────────── */
+
+@keyframes showPenaltyTimer {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hidePenaltyTimer {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-10px); }
+}
+
+@keyframes updatePenaltyTimer {
+    from { background-color: rgba(255, 255, 255, 0.3); }
+    to   { background-color: transparent; }
+}
+
+.show-penalty-timer { animation: showPenaltyTimer 0.3s ease forwards; }
+.hide-penalty-timer { animation: hidePenaltyTimer 0.3s ease forwards; }
+.timer-updated      { animation: updatePenaltyTimer 0.2s ease; }
+
+/* ════════════════════════════════════════════════════════════════
+   ANIMACJE SCOREBOARD — sb-show / sb-hide
+   Wzorzec: klasa na #scoreboard-container, selektory potomne,
+   animation-delay zamiast animationend chaining.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Keyframes — wejście ─────────────────────────────────────── */
+
+@keyframes sbMainShow {
+    from { clip-path: inset(0 50%); }
+    to   { clip-path: inset(0 0%); }
+}
+
+@keyframes sbLogoShow {
+    0%   { transform: scale(0); }
+    80%  { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+@keyframes sbHomeShow {
+    from { width: 0; }
+    to   { width: 159px; }
+}
+
+@keyframes sbAwayShow {
+    from { width: 0; }
+    to   { width: 160px; }
+}
+
+@keyframes sbTopShow {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes sbBottomShow {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Keyframes — wyjście ─────────────────────────────────────── */
+
+@keyframes sbMainHide {
+    from { clip-path: inset(0 0%); }
+    to   { clip-path: inset(0 50%); }
+}
+
+@keyframes sbLogoHide {
+    from { transform: scale(1); }
+    to   { transform: scale(0); }
+}
+
+@keyframes sbHomeHide {
+    from { width: 159px; }
+    to   { width: 0; }
+}
+
+@keyframes sbAwayHide {
+    from { width: 160px; }
+    to   { width: 0; }
+}
+
+@keyframes sbTopHide {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+@keyframes sbBottomHide {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+
+/* ── sb-show ─────────────────────────────────────────────────── */
+
+#scoreboard-container.sb-show #main-scoreboard::before {
+    animation: sbMainShow 0.4s ease-out 0ms both;
+}
+
+#scoreboard-container.sb-show #nalf-logo {
+    animation: sbLogoShow 0.4s ease-out 100ms both;
+}
+
+#scoreboard-container.sb-show #home-container {
+    animation: sbHomeShow 0.35s ease-out 350ms both;
+}
+
+#scoreboard-container.sb-show #away-container {
+    animation: sbAwayShow 0.35s ease-out 350ms both;
+}
+
+#scoreboard-container.sb-show #top-scoreboard {
+    animation: sbTopShow 0.3s ease-out 650ms both;
+}
+
+#scoreboard-container.sb-show #bottom-scoreboard {
+    animation: sbBottomShow 0.3s ease-out 650ms both;
+}
+
+/* ── sb-hide ─────────────────────────────────────────────────── */
+
+#scoreboard-container.sb-hide #top-scoreboard {
+    animation: sbTopHide 0.25s ease-in 0ms both;
+}
+
+#scoreboard-container.sb-hide #bottom-scoreboard {
+    animation: sbBottomHide 0.25s ease-in 0ms both;
+}
+
+#scoreboard-container.sb-hide #home-container {
+    animation: sbHomeHide 0.3s ease-in 200ms both;
+}
+
+#scoreboard-container.sb-hide #away-container {
+    animation: sbAwayHide 0.3s ease-in 200ms both;
+}
+
+#scoreboard-container.sb-hide #nalf-logo {
+    animation: sbLogoHide 0.3s ease-in 300ms both;
+}
+
+#scoreboard-container.sb-hide #main-scoreboard::before {
+    animation: sbMainHide 0.4s ease-in 300ms both;
+}

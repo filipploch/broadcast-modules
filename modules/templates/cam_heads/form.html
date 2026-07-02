@@ -1,0 +1,27 @@
+{% extends "base/base.html" %}
+{% block title %}{{ 'Edytuj głowicę' if cam_head else 'Dodaj głowicę' }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>{{ 'Edytuj głowicę' if cam_head else 'Nowa głowica pan/tilt' }}</span>
+    </div>
+    <form method="POST">
+        <div class="form-group">
+            <label for="head_id">Head ID * <small style="color:#7f8c8d;">(identyfikator z firmware ESP32)</small></label>
+            <input type="text" id="head_id" name="head_id"
+                   value="{{ cam_head.head_id if cam_head else '' }}"
+                   required maxlength="50" placeholder="np. cam-head-01">
+        </div>
+        <div class="form-group">
+            <label for="name">Nazwa <small style="color:#7f8c8d;">(opcjonalna, czytelna)</small></label>
+            <input type="text" id="name" name="name"
+                   value="{{ cam_head.name if cam_head and cam_head.name else '' }}"
+                   maxlength="100" placeholder="np. Głowica lewa">
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            <a href="{{ url_for('list_cam_heads') }}" class="btn btn-secondary">Anuluj</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

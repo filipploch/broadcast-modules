@@ -99,6 +99,7 @@ bool connectToNetwork(int idx) {
 
 bool connectToAnyNetwork() {
     if (networkCount == 0) return false;
+    if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true);
     delay(200);
@@ -127,10 +128,26 @@ bool connectToAnyNetwork() {
     return false;
 }
 
+static unsigned long _wifiLostSince = 0;
+
 void maintainWifi() {
     if (millis() - lastWifiCheck < WIFI_CHECK_INTERVAL_MS) return;
     lastWifiCheck = millis();
-    if (WiFi.status() == WL_CONNECTED) return;
+
+    if (WiFi.status() == WL_CONNECTED) {
+        _wifiLostSince = 0;
+        return;
+    }
+
+    // Wait for confirmed outage before triggering reconnect.
+    // ESP32 WiFi+BLE coexistence can cause transient non-WL_CONNECTED reads.
+    if (_wifiLostSince == 0) {
+        _wifiLostSince = millis();
+        Serial.println("[wifi] Status not connected — will verify next interval");
+        return;
+    }
+
+    _wifiLostSince = 0;
     Serial.println("[wifi] Lost — reconnecting...");
     if (connectToAnyNetwork()) MDNS.begin(MDNS_HOSTNAME);
 }

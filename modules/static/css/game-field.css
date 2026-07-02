@@ -69,3 +69,43 @@
     color: rgba(255, 255, 255, 0.85);
     pointer-events: none;
 }
+
+#calibration-controllers-container {
+    bottom: 0;
+    position: absolute;
+    background-color: dimgrey;
+}
+
+#extra-controllers-container {
+    position: relative;
+    flex: 1;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#servo-controller {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+}
+
+#servo-controller canvas {
+    display: block;
+}
+
+.on-edit {
+    background-color: rgba(220, 38, 38, 0.6) !important;
+    color: white !important;
+}
+
+.calibrated-zone {
+    background-color: rgba(56, 211, 159, 0.45) !important;
+}
+
+.calibrated-zone:hover {
+    background-color: rgba(56, 211, 159, 0.7) !important;
+}

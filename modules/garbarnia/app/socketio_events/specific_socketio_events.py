@@ -144,11 +144,6 @@ def register_events(socketio):
                 })
             socketio.emit('shootout_initial_data', _data)
 
-    @socketio.on('add_team_event')
-    def handle_add_team_event(data):
-        team_type = data.get('team_type')
-        event_name = data.get('event_name')
-        socketio.emit('team_event_added', {'team_type': team_type, 'event_name': event_name})
 
 
     # =============================================================================

@@ -119,9 +119,13 @@
 			<div id="ui-monitor-controlls" style="display: flex;"></div>
 			<div id="ui-monitor-content" data-is-events-update-blocked="false"></div>
 		</div>
-		<div id="replay-controller">
-			<div id="replay-pause-element" class="replay-element"><img src="{{ url_for('static', filename='images/pause-icon.svg') }}"></div>
-			<div id="replay-resume-element" class="replay-element"><img src="{{ url_for('static', filename='images/play-icon.svg') }}"></div>
+		<div id="extra-controllers-container">
+			<div id="replay-controller">
+				<div id="replay-pause-element" class="replay-element"><img src="{{ url_for('static', filename='images/pause-icon.svg') }}"></div>
+				<div id="replay-resume-element" class="replay-element"><img src="{{ url_for('static', filename='images/play-icon.svg') }}"></div>
+			</div>
+			<div id="servo-controller" style="display: none;">
+			</div>
 		</div>
 
 	</div>
@@ -144,6 +148,7 @@
 	<script src="{{ url_for('static', filename='js/plugins/overlay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/pages/events-controllers.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/replay-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/vendor/joy.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/servo-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/cam-head-ui.js') }}"></script>
 	<script>
@@ -167,6 +172,7 @@
 			calCtrl.style.display  = 'none';
 			gameCtrl.style.display = '';
 			btn.style.color        = '';
+			closeCamPositionEdit();
 		} else {
 			gameCtrl.style.display = 'none';
 			calCtrl.style.display  = '';

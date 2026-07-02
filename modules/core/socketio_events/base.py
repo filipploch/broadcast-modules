@@ -61,6 +61,12 @@ def register_events(socketio):
         from flask_socketio import emit
         logger.info('Client connected')
         socketio.emit('connected', {'status': 'ok'})
+        from core.managers import get_servo_manager
+        sm = get_servo_manager()
+        if sm:
+            for head in sm.get_heads():
+                if head.get('online'):
+                    emit('servo_head_online', {'head_id': head['head_id']})
 
     @socketio.on('disconnect')
     def handle_disconnect():
@@ -482,6 +488,27 @@ def register_events(socketio):
                 'type': step['action'],
                 'payload': step['payload']
             })
+
+    # ── Servo (cam-head) ──────────────────────────────────────────────────────
+
+    @socketio.on('get_servo_heads')
+    def handle_get_servo_heads():
+        from flask_socketio import emit
+        from core.managers import get_servo_manager
+        sm = get_servo_manager()
+        if sm:
+            for head in sm.get_heads():
+                if head.get('online'):
+                    emit('servo_head_online', {'head_id': head['head_id']})
+
+    @socketio.on('servo_set_pan_tilt')
+    def handle_servo_set_pan_tilt(data):
+        from core.managers import get_servo_manager
+        head_id = data.get('head_id')
+        pan     = data.get('pan')
+        tilt    = data.get('tilt')
+        if head_id and pan is not None and tilt is not None:
+            get_servo_manager().set_pan_tilt(head_id, int(pan), int(tilt))
 
     @socketio.on('replay_control')
     def handle_replay_control(data):

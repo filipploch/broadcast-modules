@@ -1026,6 +1026,11 @@ def register_routes(app, exclude=None, team_manager=None):
 
     _camera_manager_crud = CameraManager()
 
+    def _get_cam_heads_for_form():
+        from core.models.base_cam_head import get_cam_head_model
+        CamHead = get_cam_head_model()
+        return CamHead.query.order_by(CamHead.name).all()
+
     @app.route('/cameras')
     def list_cameras():
         cameras = _camera_manager_crud.get_all_cameras()
@@ -1035,16 +1040,20 @@ def register_routes(app, exclude=None, team_manager=None):
     def create_camera():
         if request.method == 'POST':
             try:
+                raw_head = request.form.get('cam_head_id', '').strip()
                 _camera_manager_crud.create_camera(
                     name=request.form['name'].strip(),
                     brand=request.form['brand'].strip(),
                     model=request.form['model'].strip(),
+                    cam_head_id=int(raw_head) if raw_head else None,
+                    gopro_ssid=request.form.get('gopro_ssid', '').strip() or None,
+                    gopro_password=request.form.get('gopro_password', '').strip() or None,
                 )
                 flash('Kamera dodana', 'success')
                 return redirect(url_for('list_cameras'))
             except Exception as e:
                 flash(f'Błąd: {e}', 'error')
-        return render_template('cameras/form.html', camera=None)
+        return render_template('cameras/form.html', camera=None, cam_heads=_get_cam_heads_for_form())
 
     @app.route('/cameras/<int:camera_id>/edit', methods=['GET', 'POST'])
     def edit_camera(camera_id):
@@ -1054,23 +1063,87 @@ def register_routes(app, exclude=None, team_manager=None):
             return redirect(url_for('list_cameras'))
         if request.method == 'POST':
             try:
+                raw_head = request.form.get('cam_head_id', '').strip()
                 _camera_manager_crud.update_camera(
                     camera_id=camera_id,
                     name=request.form['name'].strip(),
                     brand=request.form['brand'].strip(),
                     model=request.form['model'].strip(),
+                    cam_head_id=int(raw_head) if raw_head else None,
+                    clear_cam_head=(not raw_head),
+                    gopro_ssid=request.form.get('gopro_ssid', '').strip(),
+                    gopro_password=request.form.get('gopro_password', '').strip(),
                 )
                 flash('Kamera zaktualizowana', 'success')
                 return redirect(url_for('list_cameras'))
             except Exception as e:
                 flash(f'Błąd: {e}', 'error')
-        return render_template('cameras/form.html', camera=camera)
+        return render_template('cameras/form.html', camera=camera, cam_heads=_get_cam_heads_for_form())
 
     @app.route('/cameras/<int:camera_id>/delete', methods=['POST'])
     def delete_camera(camera_id):
         _camera_manager_crud.delete_camera(camera_id)
         flash('Kamera usunięta', 'success')
         return redirect(url_for('list_cameras'))
+
+    # =========================
+    # CAM HEAD ROUTES
+    # =========================
+
+    def _get_cam_head_by_id(head_id):
+        from core.models.base_cam_head import get_cam_head_model
+        return get_cam_head_model().query.get(head_id)
+
+    @app.route('/cam-heads')
+    def list_cam_heads():
+        from core.models.base_cam_head import get_cam_head_model
+        CamHead = get_cam_head_model()
+        cam_heads = CamHead.query.order_by(CamHead.name).all()
+        return render_template('cam_heads/list.html', cam_heads=cam_heads)
+
+    @app.route('/cam-heads/create', methods=['GET', 'POST'])
+    def create_cam_head():
+        if request.method == 'POST':
+            try:
+                from core.models.base_cam_head import get_cam_head_model
+                CamHead = get_cam_head_model()
+                ch = CamHead(
+                    head_id=request.form['head_id'].strip(),
+                    name=request.form.get('name', '').strip() or None,
+                )
+                db.session.add(ch)
+                db.session.commit()
+                flash('Głowica dodana', 'success')
+                return redirect(url_for('list_cam_heads'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('cam_heads/form.html', cam_head=None)
+
+    @app.route('/cam-heads/<int:head_id>/edit', methods=['GET', 'POST'])
+    def edit_cam_head(head_id):
+        ch = _get_cam_head_by_id(head_id)
+        if not ch:
+            flash('Nie znaleziono głowicy', 'error')
+            return redirect(url_for('list_cam_heads'))
+        if request.method == 'POST':
+            try:
+                ch.head_id = request.form['head_id'].strip()
+                ch.name = request.form.get('name', '').strip() or None
+                db.session.commit()
+                flash('Głowica zaktualizowana', 'success')
+                return redirect(url_for('list_cam_heads'))
+            except Exception as e:
+                flash(f'Błąd: {e}', 'error')
+        return render_template('cam_heads/form.html', cam_head=ch)
+
+    @app.route('/cam-heads/<int:head_id>/delete', methods=['POST'])
+    def delete_cam_head(head_id):
+        ch = _get_cam_head_by_id(head_id)
+        if ch:
+            db.session.delete(ch)
+            db.session.commit()
+        flash('Głowica usunięta', 'success')
+        return redirect(url_for('list_cam_heads'))
 
 
     # =========================

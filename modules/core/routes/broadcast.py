@@ -221,3 +221,73 @@ def register_routes(app, exclude=None):
             .all()
         )
         return jsonify([p.to_dict() for p in positions])
+
+    @app.route('/api/stadium-camera-positions/<int:position_id>', methods=['PATCH'])
+    def api_update_stadium_camera_position(position_id):
+        from core.models.base_stadium_camera_position import get_stadium_camera_position_model
+        pos = get_stadium_camera_position_model().query.get_or_404(position_id)
+        data = request.get_json(silent=True) or {}
+        if 'default_camera_id' in data:
+            pos.default_camera_id = data['default_camera_id']
+        db.session.commit()
+        return jsonify(pos.to_dict())
+
+    @app.route('/api/cameras')
+    def api_cameras():
+        from core.models.base_camera import get_camera_model
+        cams = get_camera_model().query.order_by('name').all()
+        return jsonify([c.to_dict() for c in cams])
+
+    @app.route('/api/cameras/<int:camera_id>', methods=['PATCH'])
+    def api_update_camera_field(camera_id):
+        from core.models.base_camera import get_camera_model
+        cam = get_camera_model().query.get_or_404(camera_id)
+        data = request.get_json(silent=True) or {}
+        if 'cam_head_id' in data:
+            cam.cam_head_id = data['cam_head_id']
+        db.session.commit()
+        return jsonify(cam.to_dict())
+
+    @app.route('/api/cam-heads')
+    def api_cam_heads():
+        from core.models.base_cam_head import get_cam_head_model
+        heads = get_cam_head_model().query.order_by('name').all()
+        return jsonify([h.to_dict() for h in heads])
+
+    @app.route('/api/camera-position-calibrations')
+    def api_camera_position_calibrations():
+        position_id = request.args.get('position_id', type=int)
+        camera_id   = request.args.get('camera_id',   type=int)
+        if not position_id:
+            return jsonify([])
+        from core.models.base_camera_position_calibration import get_camera_position_calibration_model
+        Cal = get_camera_position_calibration_model()
+        q = Cal.query.filter_by(position_id=position_id, camera_id=camera_id)
+        return jsonify([c.to_dict() for c in q.all()])
+
+    @app.route('/api/camera-position-calibrations', methods=['PUT'])
+    def api_upsert_camera_position_calibration():
+        data        = request.get_json(silent=True) or {}
+        position_id = data.get('position_id')
+        camera_id   = data.get('camera_id')
+        zone_code   = data.get('zone_code')
+        pan         = data.get('pan')
+        tilt        = data.get('tilt')
+        if position_id is None or zone_code is None or pan is None or tilt is None:
+            return jsonify({'error': 'Missing required fields'}), 400
+        from core.models.base_camera_position_calibration import get_camera_position_calibration_model
+        Cal = get_camera_position_calibration_model()
+        cal = Cal.query.filter_by(
+            position_id=position_id,
+            camera_id=camera_id,
+            zone_code=zone_code,
+        ).first()
+        if cal:
+            cal.pan  = pan
+            cal.tilt = tilt
+        else:
+            cal = Cal(position_id=position_id, camera_id=camera_id,
+                      zone_code=zone_code, pan=pan, tilt=tilt)
+            db.session.add(cal)
+        db.session.commit()
+        return jsonify(cal.to_dict())

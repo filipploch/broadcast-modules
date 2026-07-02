@@ -1,5 +1,90 @@
 {% extends "base/base.html" %}
 {% block title %}{{ 'Edytuj stadion' if stadium else 'Dodaj stadion' }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/game-field.css') }}">
+<style>
+    #cam-calibration-modal {
+        display: flex;
+        height: calc(95vh - 27px);
+        background-color: #1a1a2e;
+    }
+    #cam-calibration-left {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+    }
+    #cam-calibration-top {
+        padding: 0.5rem;
+        border-bottom: 1px solid #333;
+        min-height: 48px;
+    }
+    #cam-head-calibration-container {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: dimgrey;
+        overflow: auto;
+    }
+    #cam-calibration-info {
+        width: 220px;
+        flex-shrink: 0;
+        background-color: #0d1117;
+        padding: 1rem 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        color: #cdd9e5;
+        border-left: 1px solid #30363d;
+        border-right: 1px solid #30363d;
+        overflow-y: auto;
+    }
+    #cam-calib-position-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #58a6ff;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #21262d;
+    }
+    .calib-info-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+    .calib-info-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #8b949e;
+    }
+    .calib-info-value {
+        font-size: 0.85rem;
+        color: #e6edf3;
+    }
+    .calib-select {
+        width: 100%;
+        background-color: #161b22;
+        color: #e6edf3;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.8rem;
+    }
+    .calib-select:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+    #cam-calibration-right {
+        position: relative;
+        width: 340px;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card">
     <div class="card-header">
@@ -25,9 +110,73 @@
                    required maxlength="50" placeholder="np. Warszawa">
         </div>
         <div class="actions">
+            {% if stadium %}
+            <button type="button" class="btn btn-primary" onclick="openCalibrationModal()">📷 Kalibracja kamer</button>
+            {% endif %}
             <button type="submit" class="btn btn-success">✅ Zapisz</button>
             <a href="{{ url_for('list_stadiums') }}" class="btn btn-secondary">Anuluj</a>
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block modal_content %}
+{% if stadium %}
+<div id="cam-calibration-modal" class="modal-content invisible">
+    <div id="cam-calibration-left">
+        <div id="cam-calibration-top"></div>
+        <div id="cam-head-calibration-container"></div>
+    </div>
+    <div id="cam-calibration-info">
+        <div id="cam-calib-position-name">—</div>
+        <div class="calib-info-row">
+            <span class="calib-info-label">Kamera</span>
+            <select id="cam-calib-camera-select" class="calib-select" disabled>
+                <option value="">— brak —</option>
+            </select>
+        </div>
+        <div class="calib-info-row">
+            <span class="calib-info-label">Głowica</span>
+            <select id="cam-calib-head-select" class="calib-select" disabled>
+                <option value="">— brak —</option>
+            </select>
+        </div>
+        <div class="calib-info-row">
+            <span class="calib-info-label">Strefa boiska</span>
+            <span class="calib-info-value" id="cam-calib-has-calib">—</span>
+        </div>
+    </div>
+    <div id="cam-calibration-right">
+        <div id="servo-controller" style="display:none;"></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if stadium %}
+<script>const MODULE_NAME = "{{ module_name }}";</script>
+<script src="{{ url_for('static', filename='js/core/module-registry.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vendor/joy.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plugins/cam-head-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plugins/servo-utils.js') }}"></script>
+<script>
+    var _calibrationLoaded = false;
+
+    function openCalibrationModal() {
+        openModal('cam-calibration-modal');
+        if (!_calibrationLoaded) {
+            var targetEl = document.getElementById('cam-head-calibration-container');
+            loadCamHeadCalibrationUI({{ stadium.id }}, targetEl);
+            _calibrationLoaded = true;
+        }
+    }
+
+    var _origCloseModal = closeModal;
+    function closeModal(id) {
+        if (typeof destroyServoJoystick === 'function') destroyServoJoystick();
+        _origCloseModal(id);
+    }
+</script>
+{% endif %}
 {% endblock %}

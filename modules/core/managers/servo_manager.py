@@ -13,7 +13,7 @@ class ServoManager:
     # ── Plugin lifecycle ──────────────────────────────────────────────────────
 
     def on_head_online(self, head_id: str):
-        self._heads.setdefault(head_id, {'pan': 90, 'tilt': 45, 'online': False})
+        self._heads.setdefault(head_id, {'pan': 90, 'tilt': 90, 'online': False})
         self._heads[head_id]['online'] = True
         current_app.logger.info(f"[servo] Head online: {head_id}")
         self.hub_client.send_to_plugin(head_id, 'get_status', {})
@@ -47,8 +47,8 @@ class ServoManager:
     def on_servo_status(self, msg: dict):
         payload = msg.get('payload', {})
         head_id = payload.get('id') or msg.get('from', '')
-        pan     = payload.get('pan', 90)
-        tilt    = payload.get('tilt', 45)
+        pan     = payload.get('pan', 99)
+        tilt    = payload.get('tilt', 79)
         if head_id in self._heads:
             self._heads[head_id].update({'pan': pan, 'tilt': tilt})
         self._emit('servo_status', {'head_id': head_id, 'pan': pan, 'tilt': tilt})

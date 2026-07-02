@@ -10,8 +10,7 @@ let registered = false;
 
 var homeTeamScoreElement = document.getElementById('home-team-score');
 var awayTeamScoreElement = document.getElementById('away-team-score');
-var homeTeamFoulsElement = document.getElementById('home-team-fouls');
-var awayTeamFoulsElement = document.getElementById('away-team-fouls');
+// homeTeamFoulsElement / awayTeamFoulsElement pobierane lazy w updateFoulsElement (scoreboard.js)
 
 function showTransition() {
     let gameContainer = document.querySelector('#game-container');
@@ -136,6 +135,9 @@ function prepareToOpenContainer(callback, param) {
 
 function openContainer(container) {
     container.style.display = 'flex';
+    if (getContainerType(container) === 'game') {
+        showScoreboard();
+    }
 }
 
 function closeContainer(_container) {
@@ -145,6 +147,11 @@ function closeContainer(_container) {
 
     console.log(`containerType: ${containerType}`);
     switch (containerType) {
+        case 'game':
+            hideScoreboard();
+            animationDuration = 1400;
+            setTimeout(() => closeDefaultContainer(container), 400);
+            break;
         case 'squad':
             closeSquadContainer(container);
             console.log('closeSquadContainer()');
@@ -178,7 +185,6 @@ function closeContainer(_container) {
 
     // Wyczyść animacje po ich zakończeniu
     setTimeout(() => {
-        // Usuń tymczasowe animacje
         clearAnimations(container);
         container.style.display = 'none';
     }, animationDuration);
@@ -1113,21 +1119,7 @@ function createTeamSquad(_arr, _logo) {
     return squadContent;
 }
 
-function updateFoulsElement(_fouls, _foulsElement) {
-    if (_fouls === '' || _fouls === null) {
-        _foulsElement.textContent = '';
-    } else if (parseInt(_fouls) !== 'undefined' && _fouls >= 0 && _fouls < 6) {
-        _foulsElement.textContent = '●'.repeat(_fouls);
-        _foulsElement.style.color = 'yellow';
-        if (_fouls > 4) {
-            _foulsElement.style.color = 'red';
-        } else if (_fouls < 4) {
-            _foulsElement.style.color = 'white';
-        } else {
-
-        }
-    }
-}
+// updateFoulsElement zdefiniowana w scoreboard.js (FOULS_DISPLAY_MODE: badge/dots)
 
 function updateUniformElements(_uniform, _uniformEelements) {
     let uniform = JSON.parse(_uniform);
@@ -1138,7 +1130,6 @@ function updateUniformElements(_uniform, _uniformEelements) {
             let colorElement = document.createElement('div');
             addClassName(colorElement, 'team-uniform-element');
             colorElement.style.backgroundColor = color;
-            colorElement.innerHTML = '.';
             element.appendChild(colorElement);
         });
     });
@@ -1152,10 +1143,10 @@ function updateScoreboard(data) {
         awayTeamScoreElement.textContent = (data.away_team_goals === null || data.away_team_goals === '') ? 0 : data.away_team_goals;
     }
     if (typeof data.home_team_value2 != "undefined") {
-        updateFoulsElement(data.home_team_value2, homeTeamFoulsElement);
+        updateFoulsElement(data.home_team_value2, document.getElementById('home-team-fouls'));
     }
     if (typeof data.away_team_value2 != "undefined") {
-        updateFoulsElement(data.away_team_value2, awayTeamFoulsElement);
+        updateFoulsElement(data.away_team_value2, document.getElementById('away-team-fouls'));
     }
 }
 
@@ -1360,11 +1351,11 @@ ws.onmessage = (event) => {
         }
 
         if (typeof data.home_team_fouls != "undefined") {
-            updateFoulsElement(data.home_team_fouls, homeTeamFoulsElement);
+            updateFoulsElement(data.home_team_fouls, document.getElementById('home-team-fouls'));
         }
 
         if (typeof data.away_team_fouls != "undefined") {
-            updateFoulsElement(data.away_team_fouls, awayTeamFoulsElement);
+            updateFoulsElement(data.away_team_fouls, document.getElementById('away-team-fouls'));
         }
 
         if (typeof data.home_team_uniform != "undefined") {
@@ -1375,7 +1366,20 @@ ws.onmessage = (event) => {
             updateUniformElements(data.away_team_uniform, 'away-team-uniform');
         }
 
-
+        const seasonEl = document.getElementById('season-id');
+        if (seasonEl) {
+            seasonEl.innerHTML = '';
+            if (data.league_name) {
+                const league = document.createElement('div');
+                league.textContent = data.league_name;
+                seasonEl.appendChild(league);
+            }
+            if (data.round_name) {
+                const round = document.createElement('div');
+                round.textContent = data.round_name;
+                seasonEl.appendChild(round);
+            }
+        }
 
     }
 

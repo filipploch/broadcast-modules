@@ -1,0 +1,54 @@
+{% extends "base/base.html" %}
+{% block title %}Głowice pan/tilt{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Głowice pan/tilt</span>
+        <div class="actions">
+            <a href="{{ url_for('create_cam_head') }}" class="btn btn-primary">➕ Dodaj głowicę</a>
+        </div>
+    </div>
+    {% if cam_heads %}
+    <table>
+        <thead>
+            <tr>
+                <th>Head ID</th>
+                <th>Nazwa</th>
+                <th>Sparowana kamera</th>
+                <th>Ostatnio widziana</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ch in cam_heads %}
+            <tr>
+                <td><code>{{ ch.head_id }}</code></td>
+                <td>{{ ch.name or '—' }}</td>
+                <td>
+                    {% if ch.camera %}
+                        {{ ch.camera.name }} ({{ ch.camera.brand }} {{ ch.camera.model }})
+                    {% else %}
+                        <span style="color:#7f8c8d;">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ ch.last_seen.strftime('%Y-%m-%d %H:%M') if ch.last_seen else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('edit_cam_head', head_id=ch.id) }}" class="btn btn-secondary btn-small">Edytuj</a>
+                        <form action="{{ url_for('delete_cam_head', head_id=ch.id) }}" method="POST" style="display:inline;"
+                              onsubmit="return confirm('Usunąć głowicę {{ ch.head_id }}?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak głowic. <a href="{{ url_for('create_cam_head') }}" style="color:#3498db;">Dodaj pierwszą</a>.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

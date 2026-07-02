@@ -814,7 +814,11 @@ function onReverseButtonClick() {
 
 
 function addTeamEvent(teamType, eventName) {
-    socket.emit('add_team_event', { team_type: teamType, event_name: eventName });
+    socket.emit('add_game_event_to_db', {
+        team_type:        teamType,
+        event_type:       eventName,
+        selected_cell_id: null,
+    });
 }
 
 /**
