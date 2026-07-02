@@ -1,6 +1,7 @@
 """BaseGameMixin — abstrakcyjna klasa bazowa dla modeli meczu we wszystkich modułach."""
 from core.extensions import db
 from datetime import datetime
+from core.utils.socketio_events_utils import _round_nr_to_round_name
 
 def _get_game_player():
     from core.models.base_game_player import get_game_player_model
@@ -491,6 +492,9 @@ class BaseGameMixin:
             'league_id': self.league_id,
             'league_name': self.league.name if self.league else None,
             'allows_draw': self.league.allows_draw if self.league else True,
+            'season_number': self.league.season.number if (self.league and self.league.season) else None,
+            'season_name': self.league.season.name if (self.league and self.league.season) else None,
+            'round_name': _round_nr_to_round_name(self.round, self.league.name if self.league else None),
             'group_nr': self.group_nr,
             'stadium': {
                 'id': self.stadium_id,

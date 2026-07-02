@@ -110,6 +110,8 @@ function showContainer(_data) {
     } else if (containerType === 'virtual-table') {
         expandVirtualTableContainer(_data);
         prepareToOpenContainer(openContainer, targetContainer);
+    } else if (containerType === 'game') {
+        prepareToOpenContainer(openContainer, targetContainer);
     } else {
         prepareToOpenContainer(openContainer, targetContainer);
     }
@@ -1366,20 +1368,7 @@ ws.onmessage = (event) => {
             updateUniformElements(data.away_team_uniform, 'away-team-uniform');
         }
 
-        const seasonEl = document.getElementById('season-id');
-        if (seasonEl) {
-            seasonEl.innerHTML = '';
-            if (data.league_name) {
-                const league = document.createElement('div');
-                league.textContent = data.league_name;
-                seasonEl.appendChild(league);
-            }
-            if (data.round_name) {
-                const round = document.createElement('div');
-                round.textContent = data.round_name;
-                seasonEl.appendChild(round);
-            }
-        }
+        updateGameInfo(data);
 
     }
 

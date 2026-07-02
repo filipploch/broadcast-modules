@@ -223,16 +223,16 @@
     color: white;
     font-weight: 700;
     text-align: center;
-    font-size: 17px;
+    font-size: 25px;
     width: 90%;
-    height: 15px;
+    height: 25px;
     border-radius: 4px;
     display: flex;
     justify-content: center;
     align-items: center;
 }
 
-#season-id {
+#scoreboard-game-info {
     flex: 2;
     background: linear-gradient(180deg, #c3c3c3 0%, #afafaf 100%);
     color: black;
@@ -242,9 +242,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
+    flex-direction: row;
     font-weight: 700;
     height: 30px;
+    position: relative;
+    overflow: hidden;
+}
+
+.scoreboard-game-info-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(100%);
+}
+
+#scoreboard-league-info,
+#scoreboard-round-info {
+    text-transform: uppercase;
 }
 
 /* ── Animation area (GOOOOL) ─────────────────────────────────── */

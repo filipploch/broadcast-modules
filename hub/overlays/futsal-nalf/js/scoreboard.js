@@ -94,3 +94,83 @@ function updateFoulsElement(count, el) {
         updateFoulsAsDots(count, el);
     }
 }
+
+/* ── Game info slideshow ─────────────────────────────────────── */
+
+const GAME_INFO_SLIDE_IDS = [
+    'scoreboard-season-info',
+    'scoreboard-league-info',
+    'scoreboard-round-info',
+];
+
+let _gameInfoSlideIndex = 0;
+let _gameInfoSlideTimer = null;
+
+function renderSeasonName(seasonNumber) {
+    if (seasonNumber == null) return '';
+    return 'NALFx' + seasonNumber;
+}
+
+function renderRoundName(roundName) {
+    if (!roundName) return '';
+    if (roundName.includes('Mecz o 3. miejsce')) return 'MAŁY FINAŁ';
+    if (roundName.includes('Puchar')) return roundName.replace(' Pucharu Ligi', '');
+    if (roundName.includes('Dywizji')) return roundName.slice(0, -10);
+    return '';
+}
+
+function updateGameInfo(data) {
+    const leagueEl = document.getElementById('scoreboard-league-info');
+    const seasonEl = document.getElementById('scoreboard-season-info');
+    const roundEl  = document.getElementById('scoreboard-round-info');
+    if (!leagueEl || !seasonEl || !roundEl) return;
+
+    leagueEl.textContent = data.league_name ?? '';
+    seasonEl.textContent = renderSeasonName(data.season_number);
+    roundEl.textContent  = renderRoundName(data.round_name);
+
+    _startGameInfoSlideshow();
+}
+
+const GAME_INFO_SLIDE_DURATION_MS = 400;
+
+function _startGameInfoSlideshow() {
+    if (_gameInfoSlideTimer) clearInterval(_gameInfoSlideTimer);
+
+    GAME_INFO_SLIDE_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.transition = 'none'; el.style.transform = 'translateX(100%)'; }
+    });
+    const first = document.getElementById(GAME_INFO_SLIDE_IDS[0]);
+    if (first) first.style.transform = 'translateX(0)';
+    _gameInfoSlideIndex = 0;
+
+    _gameInfoSlideTimer = setInterval(() => {
+        const nextIndex = (_gameInfoSlideIndex + 1) % GAME_INFO_SLIDE_IDS.length;
+        _advanceGameInfoSlide(nextIndex);
+    }, 5000);
+}
+
+function _advanceGameInfoSlide(nextIndex) {
+    const prevIndex = _gameInfoSlideIndex;
+    const prevEl = document.getElementById(GAME_INFO_SLIDE_IDS[prevIndex]);
+    const nextEl = document.getElementById(GAME_INFO_SLIDE_IDS[nextIndex]);
+    if (!prevEl || !nextEl) return;
+
+    nextEl.style.transition = 'none';
+    nextEl.style.transform = 'translateX(100%)';
+    void nextEl.offsetWidth;
+
+    const t = `transform ${GAME_INFO_SLIDE_DURATION_MS}ms ease`;
+    prevEl.style.transition = t;
+    prevEl.style.transform = 'translateX(-100%)';
+    nextEl.style.transition = t;
+    nextEl.style.transform = 'translateX(0)';
+
+    _gameInfoSlideIndex = nextIndex;
+
+    setTimeout(() => {
+        prevEl.style.transition = 'none';
+        prevEl.style.transform = 'translateX(100%)';
+    }, GAME_INFO_SLIDE_DURATION_MS + 50);
+}
