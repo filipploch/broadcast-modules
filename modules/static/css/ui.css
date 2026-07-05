@@ -164,12 +164,10 @@ button.top-bar-element {
 }
 
 #game-event-current-result {
-    background-color: gray;
     height: 23px;
 }
 
 #game-event-new-result {
-    background-color: darkgoldenrod;
     height: 23px;
     align-self: center;
     /* width: 100%; */

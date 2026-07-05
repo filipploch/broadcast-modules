@@ -34,6 +34,10 @@ def _get_game_event():
 
 logger = logging.getLogger(__name__)
 
+# Sentinel odróżniający "nie podano" od jawnego None (potrzebne dla
+# team_id/player_id, które muszą dać się jawnie wyzerować w bazie).
+_NOT_SET = object()
+
 
 # ---------------------------------------------------------------------------
 # Data transfer objects
@@ -303,7 +307,7 @@ class GameEventManager:
 
     def update_game_event(self, game_event_id: int, event_id: int = None, game_time: int = None,
                         replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
-                        event_place: str = None, team_id: int = None, player_id: int = None,
+                        event_place: str = None, team_id=_NOT_SET, player_id=_NOT_SET,
                         home_team_goals: int = None, away_team_goals: int = None,
                         is_visible: bool = None):
         """
@@ -316,8 +320,8 @@ class GameEventManager:
             replay_end_time: New wall-clock recording time in milliseconds (optional)
             video_path: New path to the video file (optional)
             event_place: New location on the field (optional)
-            team_id: New team ID (optional)
-            player_id: New player ID (optional)
+            team_id: New team ID (optional). Pass None explicitly to clear it (BRAK).
+            player_id: New player ID (optional). Pass None explicitly to clear it.
             home_team_goals: Score snapshot — home team (optional, from UI)
             away_team_goals: Score snapshot — away team (optional, from UI)
 
@@ -348,9 +352,9 @@ class GameEventManager:
                 game_event.video_path = video_path
             if event_place is not None:
                 game_event.event_place = event_place
-            if team_id is not None:
+            if team_id is not _NOT_SET:
                 game_event.team_id = team_id
-            if player_id is not None:
+            if player_id is not _NOT_SET:
                 game_event.player_id = player_id
             if home_team_goals is not None:
                 game_event.home_team_goals = home_team_goals

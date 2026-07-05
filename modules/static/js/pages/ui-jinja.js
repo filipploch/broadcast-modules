@@ -435,9 +435,13 @@ function openGameEventEditForm(gameEventID){
 }
 
 function getGameEventSquadByEventType(_gameEventId, _newEventTypeId) {
+    let newGameEventData = document.getElementById('new-game-event-data');
+    let teamIdRaw = newGameEventData.dataset.teamId;
+    let teamId = (teamIdRaw === 'null' || teamIdRaw === '') ? null : parseInt(teamIdRaw);
     const payload = {
         'game_event_id': _gameEventId,
-        'new_event_type_id': _newEventTypeId
+        'new_event_type_id': _newEventTypeId,
+        'new_team_id': teamId
     }
     showUiMonitorContent('get_event_squad', payload);
 }
@@ -608,11 +612,11 @@ function eventEditGameResultGenerator(_homeTeamGoals, _awayTeamGoals) {
             >-</button>
         </div>
         <div id="game-event-edit-result-content">
-            <div id="game-event-current-result"
+            <div id="game-event-current-result" class="current-selection"
                 data-home-goals="${_homeTeamGoals}"
                 data-away-goals="${_awayTeamGoals}"
             >${_homeTeamGoals}:${_awayTeamGoals}</div>
-            <div id="game-event-new-result" class="reversible">
+            <div id="game-event-new-result" class="reversible new-selection">
                 <span id="game-event-home-team-new-result" data-reverse-anchor>${_homeTeamGoals}</span><span class="result-separator">:</span><span id="game-event-away-team-new-result">${_awayTeamGoals}</span>
             </div>
         </div>
@@ -782,6 +786,24 @@ function hideGameEvent(gameEventId) {
 
 function restoreGameEvent(gameEventId) {
     socket.emit('restore_game_event', { 'game_event_id': gameEventId });
+}
+
+function selectEventTeam(button) {
+    if (button.disabled) return;
+    const container = document.getElementById('event-team-selector');
+    container.querySelectorAll('button').forEach(btn => btn.classList.remove('new-selection'));
+    if (!button.classList.contains('current-selection')) {
+        button.classList.add('new-selection');
+    }
+    let newGameEventData = document.getElementById('new-game-event-data');
+    let gameEventId = parseInt(newGameEventData.dataset.gameEventId);
+    let eventTypeId = parseInt(newGameEventData.dataset.eventTypeId);
+    let teamId = button.dataset.teamId === '' ? null : parseInt(button.dataset.teamId);
+    showUiMonitorContent('get_event_squad', {
+        'game_event_id': gameEventId,
+        'new_event_type_id': eventTypeId,
+        'new_team_id': teamId
+    });
 }
 
 socket.on('game_event_hidden', function(data) {
@@ -1350,7 +1372,7 @@ socket.on('show_ui_monitor_content', data => {
         uiMonitorContent.innerHTML = '';
         let gameEventDataContainer = document.createElement('div');
         gameEventDataContainer.innerHTML = `
-        <div id="current-game-event-data" style="background-color: gray;"
+        <div id="current-game-event-data" class="current-selection"
             data-event-type-id="${gameEvent.event_id}"
             data-game-event-id="${gameEvent.id}"
             data-cell-id="${gameEvent.event_place}"
@@ -1362,7 +1384,7 @@ socket.on('show_ui_monitor_content', data => {
             <span id="edit-event-current-team-short-name">(${gameEvent.team_short_name ?? ''})</span>
             <span id="edit-event-current-player">${gameEvent.player_number ?? ''} ${gameEvent.player_name ?? ''}</span>
         </div>
-        <div id="new-game-event-data" style="background-color: darkgoldenrod;"
+        <div id="new-game-event-data" class="new-selection"
             data-event-type-id="${gameEvent.event_id}"
             data-game-event-id="${gameEvent.id}"
             data-cell-id="${gameEvent.event_place}"
@@ -1385,6 +1407,26 @@ socket.on('show_ui_monitor_content', data => {
         eventEditContainer.innerHTML = '';
         let eventEditLeftColumn = document.createElement('div');
         eventEditLeftColumn.style.width = '160px';
+        let eventTeamSelector = document.createElement('div');
+        eventTeamSelector.id = 'event-team-selector';
+        eventTeamSelector.className = 'reversible';
+        eventTeamSelector.style.display = 'flex';
+        const _homeTeamId = data.home_team_id;
+        const _awayTeamId = data.away_team_id;
+        const _currentEventTeamId = gameEvent.team_id;
+        const _noneDisabled = gameEvent.is_reported ? 'disabled' : '';
+        eventTeamSelector.innerHTML = `
+            <button type="button" style="flex: 1;" data-team-id="${_homeTeamId ?? ''}" data-reverse-anchor
+                class="${_currentEventTeamId === _homeTeamId ? 'current-selection' : ''}"
+                onclick="selectEventTeam(this)">${data.home_team_short_name ?? ''}</button>
+            <button type="button" style="flex: 1;" data-team-id="" ${_noneDisabled}
+                class="${_currentEventTeamId === null ? 'current-selection' : ''}"
+                onclick="selectEventTeam(this)">BRAK</button>
+            <button type="button" style="flex: 1;" data-team-id="${_awayTeamId ?? ''}"
+                class="${_currentEventTeamId === _awayTeamId ? 'current-selection' : ''}"
+                onclick="selectEventTeam(this)">${data.away_team_short_name ?? ''}</button>
+        `;
+        eventEditLeftColumn.appendChild(eventTeamSelector);
         const fieldEl = document.createElement('div');
         fieldEl.id = 'event-edit-game-field';
         fieldEl.className = 'game-field-selector';
@@ -1430,6 +1472,14 @@ socket.on('show_ui_monitor_content', data => {
         if(teamSquad !== null){
             teamSelect = eventEditTeamsSquadSelectGenerator(gameEvent, teamSquad);
             eventEditRightColumn.append(teamSelect);
+        } else {
+            newGameEventData.dataset.selectedPlayerId = 'null';
+            document.getElementById('edit-event-new-player').innerHTML = '';
+        }
+        let eventTeamSelector = document.getElementById('event-team-selector');
+        if (eventTeamSelector) {
+            let noneButton = eventTeamSelector.querySelector('button[data-team-id=""]');
+            if (noneButton) noneButton.disabled = !!gameEvent.is_reported;
         }
     } else if (data.content_type === 'substitutions') {
        _buildSubstitutionsView(data, uiMonitorContent);

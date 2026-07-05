@@ -473,8 +473,16 @@ def register_events(socketio):
     @socketio.on('update_game_event')
     def handle_update_game_event(data):
         # from core.managers.game_event_manager import GameEventManager
+        from app.models.game import Game
+        from core.extensions import socketio as _sio
 
-        gem     = GameEventManager()
+        gem         = GameEventManager()
+        game_event  = gem.get_game_event_by_id(data.get('game_event_id'))
+        if not game_event:
+            return
+        old_team_id = game_event.team_id
+        new_team_id = data.get('team_id')
+
         success = gem.update_game_event(
             game_event_id=data.get('game_event_id'),
             event_id=data.get('event_id'),
@@ -483,11 +491,47 @@ def register_events(socketio):
             replay_start_time=data.get('replay_start_time'),
             video_path=data.get('video_path'),
             event_place=data.get('event_place'),
-            team_id=data.get('team_id'),
+            team_id=new_team_id,
             player_id=data.get('player_id'),
             home_team_goals=data.get('home_team_goals'),
             away_team_goals=data.get('away_team_goals'),
         )
+
+        # Zmiana drużyny dla bramki/bramki samobójczej wymaga korekty wyniku.
+        if (success and success.event and success.event.filter_class == 'goal'
+                and old_team_id is not None and new_team_id is not None
+                and old_team_id != new_team_id):
+            game = Game.query.get(success.game_id)
+            if game:
+                old_team = 'home' if old_team_id == game.home_team_id else 'away'
+                new_team = 'home' if new_team_id == game.home_team_id else 'away'
+                pm = PeriodManager()
+                pm.increment_period_goal(success.period_id, old_team, -1)
+                period = pm.increment_period_goal(success.period_id, new_team, 1)
+
+                # Skoryguj też snapshot wyniku zapisany na tym zdarzeniu
+                # (zasila #game-event-edit-result w UI edycji).
+                snapshot_home = int(success.home_team_goals or 0) + (1 if new_team == 'home' else 0) - (1 if old_team == 'home' else 0)
+                snapshot_away = int(success.away_team_goals or 0) + (1 if new_team == 'away' else 0) - (1 if old_team == 'away' else 0)
+                success = gem.update_game_event(
+                    game_event_id=success.id,
+                    home_team_goals=snapshot_home,
+                    away_team_goals=snapshot_away,
+                )
+
+                if period:
+                    game_now = Game.query.get(period.game_id)
+                    payload = {
+                        'home_team_goals':  game_now.home_team_goals,
+                        'home_team_value2': game_now.home_team_red_cards,
+                        'away_team_goals':  game_now.away_team_goals,
+                        'away_team_value2': game_now.away_team_red_cards,
+                    }
+                    hc = get_hub_client()
+                    if hc:
+                        hc.broadcast_to_class('game_data_receiver', 'scoreboard_data', payload)
+                    _sio.emit('scoreboard_data', {'payload': payload})
+
         if success:
             socketio.emit('game_event_updated', {
                 'game_event_id': success.id,
