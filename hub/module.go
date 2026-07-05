@@ -52,21 +52,14 @@ func (m *Module) ReadPump() {
 		return nil
 	})
 
-	log.Printf("🔵 ReadPump started for connection") // ← DODAJ
-
 	for {
-		log.Printf("🔵 Waiting for message...") // ← DODAJ
-
 		_, message, err := m.Connection.ReadMessage()
 		if err != nil {
-			log.Printf("🔴 ReadMessage error: %v", err) // ← DODAJ
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error from %s: %v", m.ID, err)
 			}
 			break
 		}
-
-		log.Printf("🟢 Message received! Length: %d bytes", len(message)) // ← DODAJ
 
 		msg, err := FromJSON(message)
 		if err != nil {
@@ -74,29 +67,18 @@ func (m *Module) ReadPump() {
 			continue
 		}
 
-		// NIE nadpisuj From jeśli module jeszcze nie ma ID
 		if m.ID != "" {
 			msg.From = m.ID
 		}
-		// Dla wiadomości register, From będzie z payload (plugin_id)
-
-		log.Printf("🟡 Parsed: type=%s, from_field=%s", msg.Type, msg.From) // ← DODAJ
 
 		msg.From = m.ID
 
-		log.Printf("🟡 After setting From: type=%s, from=%s", msg.Type, msg.From) // ← DODAJ
-
 		if m.handleSystemMessage(msg) {
-			log.Printf("🔴 Handled by system, skipping route") // ← DODAJ
 			continue
 		}
 
-		log.Printf("🟢 Sending to Route channel...") // ← DODAJ
 		m.Hub.Route <- msg
-		log.Printf("✅ Sent to Route!") // ← DODAJ
 	}
-
-	log.Printf("🔴 ReadPump exiting") // ← DODAJ
 }
 
 func (m *Module) WritePump() {

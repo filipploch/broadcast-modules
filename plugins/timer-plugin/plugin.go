@@ -204,8 +204,8 @@ func (p *Plugin) buildTimerConfig(msg *Message, timerID string) TimerConfig {
 		OnStart: func(_ time.Duration, id string) {
 			p.broadcastTimerStarted(id, id, 0)
 		},
-		OnSecondTick: func(_ time.Duration, id string) {
-			p.broadcastTimerUpdated(id, id, 0)
+		OnSecondTick: func(elapsedTime time.Duration, id string) {
+			p.broadcastTimerUpdated(id, id, elapsedTime)
 		},
 		OnPause: func(_ time.Duration, id string) {
 			p.broadcastTimerPaused(id, id, 0)
@@ -617,7 +617,7 @@ func (p *Plugin) broadcastTimerStarted(internalID, externalID string, _ time.Dur
 	}()
 }
 
-func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, _ time.Duration) {
+func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, elapsedTime time.Duration) {
 	timerInfo, err := p.manager.GetState(internalID)
 	if err != nil {
 		return
@@ -626,19 +626,24 @@ func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, _ time.Dur
 	if timerInfo.Limit > 0 {
 		limitMs = timerInfo.Limit.Milliseconds()
 	}
+	// Use the passed elapsedTime when non-zero (from OnSecondTick, already rounded to the
+	// second boundary). Fall back to real elapsed for direct calls (e.g. post-start sync).
+	reported := elapsedTime
+	if reported == 0 {
+		reported = timerInfo.ElapsedTime
+	}
 	p.hubClient.Send(&Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_updated",
 		Payload: map[string]interface{}{
 			"timer_id":     externalID,
-			"elapsed_time": timerInfo.ElapsedTime.Milliseconds(),
+			"elapsed_time": reported.Milliseconds(),
 			"initial_time": timerInfo.InitialTime.Milliseconds(),
 			"limit":        limitMs,
 			"state":        string(timerInfo.State),
 		},
 	})
-	// log.Printf("📤 [TICK] %s: %dms", externalID, timerInfo.ElapsedTime.Milliseconds())
 }
 
 func (p *Plugin) broadcastTimerPaused(internalID, externalID string, _ time.Duration) {

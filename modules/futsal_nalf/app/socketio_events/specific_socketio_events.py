@@ -220,6 +220,7 @@ def register_events(socketio):
             initial_time=0,
             limit=duration_minutes * 60_000,
             pause_at_limit=True,
+            update_interval_ms=1000,
             metadata={
                 'team': team, 'team_name': team_name,
                 'timer_class': 'penalty', 'duration_minutes': duration_minutes,

@@ -82,7 +82,6 @@ func (h *Hub) Run() {
 			h.handleUnregister(module)
 
 		case message := <-h.Route:
-			log.Printf("🔀 Message received in Route channel: type=%s", message.Type) // ← DODAJ TO
 			h.handleMessage(message)
 
 		case <-h.shutdown:
@@ -157,11 +156,8 @@ func (h *Hub) handleUnregister(module *Module) {
 
 // handleMessage routes messages based on type
 func (h *Hub) handleMessage(msg *Message) {
-	log.Printf("📬 Incoming: type=%s from=%s", msg.Type, msg.From)
-
 	switch msg.Type {
 	case "register":
-		log.Printf("🔍 DEBUG: Calling handleRegister for: %s", msg.From) // ← DODAJ
 		h.handleRegister(msg)
 	case "heartbeat":
 		h.handleHeartbeat(msg)
@@ -182,7 +178,6 @@ func (h *Hub) handleMessage(msg *Message) {
 
 // handleRegister processes registration messages
 func (h *Hub) handleRegister(msg *Message) {
-	log.Printf("🔍 DEBUG: handleRegister called, payload: %+v", msg.Payload) // ← DODAJ na początku
 	// Extract registration data
 	componentType, _ := msg.Payload["component_type"].(string)
 	pluginID, hasPluginID := msg.Payload["plugin_id"].(string)
@@ -717,7 +712,6 @@ func (h *Hub) routeMessage(msg *Message) {
 
 // ✅ ORIGINAL: Broadcast to all modules with specific capability (class)
 func (h *Hub) broadcastToClass(msg *Message, className string) {
-	log.Println("BROADCAST TO CLASS STARTED!!!", className, "|", msg)
 	count := 0
 	data, err := msg.ToJSON()
 	if err != nil {

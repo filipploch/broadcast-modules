@@ -137,6 +137,8 @@ def register_events(socketio):
                     db.session.delete(gt)
                     db.session.commit()
                     tm._broadcast_penalty_state(game_id)
+                    penalties = tm._get_penalties_dict(game_id)
+                    socketio.emit('reload_penalty_timers', {'penalties': penalties})
         else:
             socketio.emit('error', {'message': f'Failed to remove timer: {timer_id}'})
 

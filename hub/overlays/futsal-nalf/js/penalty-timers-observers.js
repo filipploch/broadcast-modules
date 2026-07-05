@@ -113,6 +113,26 @@
         }, 300);
     }
 
+    /**
+     * Chowa element DOM wygasłej kary (czas = 0), ale nie usuwa kary z Map.
+     * Kara pozostaje w Map i musi być ręcznie usunięta przez operatora.
+     * @param {Object} pen
+     */
+    function hideExpiredPenaltyElement(pen) {
+        pen.elementRemoved = true;  // ustaw flagę zanim animacja się skończy
+        if (!pen.element) return;
+        const { element, container } = pen;
+        element.classList.add('hide-penalty-timer');
+        setTimeout(() => {
+            if (element.parentNode === container) {
+                container.removeChild(element);
+            }
+            pen.element   = null;
+            pen.container = null;
+        }, 300);
+        console.log(`[PenaltyTimers] Kara id=${pen.id} wygasła — ukryto element (kara nie usunięta)`);
+    }
+
     // -------------------------------------------------------------------------
     // Publiczne API
     // -------------------------------------------------------------------------
@@ -154,6 +174,7 @@
                     state:           p.state,
                     element:         null,
                     container:       null,
+                    elementRemoved:  false,
                 });
                 console.log(`[PenaltyTimers] Zarejestrowano karę id=${id} (${p.team})`);
             }
@@ -176,6 +197,7 @@
     function tickMain(mainElapsedMs) {
         penalties.forEach(pen => {
             if (pen.state === 'removed') return;
+            if (pen.elementRemoved) return;  // wygasła — element już ukryty, czeka na usunięcie operatora
 
             const remainingMs = calcRemaining(pen, mainElapsedMs);
 
@@ -189,9 +211,9 @@
 
             pen.element.textContent = formatMs(remainingMs);
 
-            // Kara dobiegła końca — ukryj (backend wyśle penalty_state bez niej)
+            // Kara dobiegła końca — ukryj element, ale nie usuwaj kary z Map
             if (remainingMs === 0) {
-                pen.element.classList.add('penalty-timer--expired');
+                hideExpiredPenaltyElement(pen);
             }
         });
     }
