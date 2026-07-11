@@ -82,7 +82,10 @@ class TeamScraperManager:
             raise ValueError("Liga nie ma skonfigurowanego superscore_season_id (Dane scrapera: Superscore)")
 
         scraper_id = _superscore_scraper_id()
-        scraped_teams = SuperscoreTeamScraper().scrape_teams(league.superscore_season_id)
+        try:
+            scraped_teams = SuperscoreTeamScraper().scrape_teams(league.superscore_season_id)
+        except RuntimeError as e:
+            raise ValueError(str(e)) from e
 
         already_resolved = {
             row.foreign_id for row in TeamForeignId.query.filter_by(scraper_id=scraper_id).all()

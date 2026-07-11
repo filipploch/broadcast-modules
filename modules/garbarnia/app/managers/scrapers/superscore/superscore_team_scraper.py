@@ -43,18 +43,33 @@ class SuperscoreTeamScraper:
             Lista słowników {'name': str, 'foreign_id': str, 'short_code': str|None}
             (foreign_id = 'slug/hash', short_code = trzyliterowy skrót z superscore —
             może różnić się od short_name już zapisanego w bazie przez inny scraper)
+
+        Raises:
+            RuntimeError: błąd sieciowy albo API zwróciło pustą/niepoprawną
+                odpowiedź (np. błędny season_id) — sygnalizowane jawnie zamiast
+                cichego zwrócenia pustej listy, żeby nie wyglądało to jak
+                "wszystko już dopasowane".
         """
         params = {'season-id': season_id, 'with-upcoming': 'yes'}
         try:
             resp = self.session.get(_API_BASE, params=params, timeout=15)
             resp.raise_for_status()
-            data = resp.json()
         except requests.RequestException as e:
             logger.error(f"Błąd pobierania drużyn z superscore API: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"Nieoczekiwany błąd scrapowania drużyn superscore: {e}", exc_info=True)
-            return []
+            raise RuntimeError(f"Błąd pobierania danych z superscore API: {e}") from e
+
+        if not resp.content:
+            logger.error(f"Superscore API zwróciło pustą odpowiedź (status {resp.status_code}) dla season_id={season_id!r}")
+            raise RuntimeError(
+                f"Superscore API zwróciło pustą odpowiedź (status {resp.status_code}) — "
+                f"sprawdź, czy Superscore Season ID '{season_id}' jest poprawny."
+            )
+
+        try:
+            data = resp.json()
+        except ValueError as e:
+            logger.error(f"Superscore API zwróciło dane w nieoczekiwanym formacie: {e}")
+            raise RuntimeError(f"Superscore API zwróciło dane w nieoczekiwanym formacie: {e}") from e
 
         events = data.get('events') or []
         teams_by_foreign_id = {}

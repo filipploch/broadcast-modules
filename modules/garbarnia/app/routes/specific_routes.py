@@ -416,11 +416,11 @@ def register_routes(app):
             count = team_scraper_manager.scrape_league_teams_from_superscore(league_id)
         except ValueError as e:
             flash(str(e), 'error')
-            return redirect(url_for('view_league', league_id=league_id))
+            return redirect(url_for('league_teams', league_id=league_id))
         except Exception as e:
             logger.error(f"Error scraping league teams from superscore: {e}", exc_info=True)
             flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
-            return redirect(url_for('view_league', league_id=league_id))
+            return redirect(url_for('league_teams', league_id=league_id))
 
         if count:
             flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
