@@ -80,7 +80,7 @@ class GameScraperManager:
         with app.app_context():
             from core.extensions import socketio
             try:
-                from app.managers.scrapers import GameScraper
+                from app.managers.scrapers.nalffutsal import GameScraper
 
                 scraper = GameScraper()
                 logger.info("Scraping started in thread")

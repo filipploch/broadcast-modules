@@ -1,0 +1,1 @@
+from app.managers.scrapers.superscore.superscore_game_scraper import SuperscoreGameScraper

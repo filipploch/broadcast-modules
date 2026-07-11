@@ -137,7 +137,7 @@ class GameScraperManager:
         with app.app_context():
             from core.extensions import socketio
             try:
-                from app.managers.scrapers.game_scraper import GameScraper
+                from app.managers.scrapers.malopolskizpn.game_scraper import GameScraper
                 scraper       = GameScraper()
                 scraped_games = scraper.scrape_multiple_leagues(league_urls)
                 stats         = self._process_scraped_games(scraped_games)
@@ -176,7 +176,7 @@ class GameScraperManager:
         with app.app_context():
             from core.extensions import socketio
             try:
-                from app.managers.scrapers.superscore_game_scraper import SuperscoreGameScraper
+                from app.managers.scrapers.superscore.superscore_game_scraper import SuperscoreGameScraper
                 scraper       = SuperscoreGameScraper()
                 scraped_games = scraper.scrape_multiple_seasons(season_ids)
                 stats         = self._process_scraped_games(scraped_games)

@@ -76,7 +76,7 @@ class TeamScraperManager:
         with app.app_context():
             from core.extensions import socketio
             try:
-                from app.managers.scrapers import TeamScraper
+                from app.managers.scrapers.nalffutsal import TeamScraper
 
                 scraper = TeamScraper()
                 logger.info("Team scraping started in thread")

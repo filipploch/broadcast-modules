@@ -83,7 +83,7 @@ class PlayerScraperManager:
             from core.extensions import socketio
             team = Team.query.get(team_id)
             try:
-                from app.managers.scrapers import PlayerScraper
+                from app.managers.scrapers.nalffutsal import PlayerScraper
 
                 scraper = PlayerScraper()
                 scraped_players = scraper.scrape_players(team.team_url)

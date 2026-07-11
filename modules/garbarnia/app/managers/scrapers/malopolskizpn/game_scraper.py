@@ -1,6 +1,6 @@
 """MZPN Game Scraper — scraping terminarza/wyników z malopolskizpn.pl
 
-Analogiczna struktura do modules/futsal_nalf/app/managers/scrapers/game_scraper.py.
+Analogiczna struktura do modules/futsal_nalf/app/managers/scrapers/nalffutsal/game_scraper.py.
 
 URL terminarza: https://malopolskizpn.pl/rozgrywki/2025-2026/seniorzy/iv_liga/?view=schedule
 

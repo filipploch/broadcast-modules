@@ -34,7 +34,7 @@ class PlayerScraperManager:
         if not team or not team.foreign_id:
             return False
         temp_dir = sys.path[0] + current_app.config['TEMP_DIR']
-        from app.managers.scrapers import PlayerScraper
+        from app.managers.scrapers.malopolskizpn import PlayerScraper
         return PlayerScraper().find_html_file_for_team(temp_dir, team.foreign_id) is not None
 
     # =========================
@@ -94,7 +94,7 @@ class PlayerScraperManager:
             team = Team.query.get(team_id)
             temp_dir = sys.path[0] + app.config['TEMP_DIR']
             try:
-                from app.managers.scrapers import PlayerScraper
+                from app.managers.scrapers.malopolskizpn import PlayerScraper
 
                 scraper = PlayerScraper()
                 scraped_players = scraper.scrape_players(temp_dir, team.foreign_id)
