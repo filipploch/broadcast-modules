@@ -12,6 +12,10 @@ def _get_team():
     from core.models.base_team import get_team_model
     return get_team_model()
 
+def _get_team_foreign_id():
+    from core.models.base_team_foreign_id import get_team_foreign_id_model
+    return get_team_foreign_id_model()
+
 class TeamManager:
     """Manager for Team CRUD operations and scraping workflow"""
     
@@ -62,17 +66,27 @@ class TeamManager:
         """Get team by team_url (unique identifier)"""
         Team = _get_team()
         return Team.query.filter_by(name=name).first()
-    
+
+    def get_team_by_foreign_id(self, scraper_id, foreign_id):
+        """Get team mapped to foreign_id for a given scraper"""
+        TeamForeignId = _get_team_foreign_id()
+        local_id = TeamForeignId.get_local_id(scraper_id, foreign_id)
+        return self.get_team_by_id(local_id) if local_id else None
+
+    def set_team_foreign_id(self, team_id, scraper_id, foreign_id):
+        """Create/update the (scraper, team) -> foreign_id mapping"""
+        TeamForeignId = _get_team_foreign_id()
+        return TeamForeignId.set_foreign_id(scraper_id, team_id, foreign_id)
+
     def create_team(self, name, name_14, short_name,
                 logo_path='static/images/logos/default.png',
-                foreign_id=None, uniform=None):
+                uniform=None):
         Team = _get_team()
         team = Team(
             name=name, name_14=name_14,
             short_name=short_name.upper(),
             # Usunięto: team_url=team_url,
             logo_path=logo_path,
-            foreign_id=foreign_id,
             uniform=json.dumps(uniform) if uniform else None,
         )
         db.session.add(team)

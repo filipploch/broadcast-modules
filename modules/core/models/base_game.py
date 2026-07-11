@@ -7,6 +7,10 @@ def _get_game_player():
     from core.models.base_game_player import get_game_player_model
     return get_game_player_model()
 
+def _get_game_foreign_id():
+    from core.models.base_game_foreign_id import get_game_foreign_id_model
+    return get_game_foreign_id_model()
+
 class BaseGameMixin:
     """Football game/match"""
 
@@ -19,7 +23,6 @@ class BaseGameMixin:
     WALKOVER_SCORE = 3
 
     id = db.Column(db.Integer, primary_key=True)
-    foreign_id = db.Column(db.String(500), nullable=True)
 
     # Teams
     @db.declared_attr
@@ -101,6 +104,18 @@ class BaseGameMixin:
 
     def __repr__(self):
         return f'<Game {self.id}: {self.home_team.short_name if self.home_team else "?"} vs {self.away_team.short_name if self.away_team else "?"}>'
+
+    def get_foreign_id(self, scraper_id):
+        """Zwraca foreign_id tego meczu dla danego scrapera, albo None."""
+        return _get_game_foreign_id().get_foreign_id(scraper_id, self.id)
+
+    def set_foreign_id(self, scraper_id, foreign_id):
+        """Zapisuje/aktualizuje foreign_id tego meczu dla danego scrapera."""
+        return _get_game_foreign_id().set_foreign_id(scraper_id, self.id, foreign_id)
+
+    def get_foreign_ids(self):
+        """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących ten mecz."""
+        return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
 
     @property
     def is_walkover(self):
@@ -466,7 +481,7 @@ class BaseGameMixin:
         """Convert to dictionary"""
         return {
             'id': self.id,
-            'foreign_id': self.foreign_id,
+            'foreign_ids': self.get_foreign_ids(),
             'home_team_id': self.home_team_id,
             'home_team_name': self.home_team.name if self.home_team else None,
             'home_team_name_14': self.home_team.name_14 if self.home_team else None,

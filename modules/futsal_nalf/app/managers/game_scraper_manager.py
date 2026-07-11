@@ -4,6 +4,7 @@ from flask import session, current_app
 from core.extensions import db
 from app.models.team import Team
 from app.models.game import Game
+from app.models.scraper import Scraper
 from app.managers.team_manager import TeamManager
 from app.managers import GameManager
 from datetime import datetime
@@ -14,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 team_manager = TeamManager()
 game_manager = GameManager()
+
+
+def _get_scraper_id():
+    scraper = Scraper.get_by_folder('nalffutsal')
+    if not scraper:
+        raise RuntimeError("Scraper 'nalffutsal' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 class GameScraperManager:
@@ -172,6 +180,7 @@ class GameScraperManager:
         date_format = '%Y-%m-%d %H:%M:%S%z'
         updated_count = 0
         new_games = []
+        scraper_id = _get_scraper_id()
 
         for game_data in scraped_games:
             foreign_id = game_data['foreign_id']
@@ -194,7 +203,7 @@ class GameScraperManager:
             parsed_date = datetime.strptime(game_data['date'].replace('T', ' '), date_format)
             round_nr = game_data['round']
 
-            existing_game = game_manager.get_game_by_foreign_id(foreign_id)
+            existing_game = game_manager.get_game_by_foreign_id(scraper_id, foreign_id)
 
             if existing_game:
                 # Skip update if www says Not Started but DB has a more advanced status
@@ -237,7 +246,6 @@ class GameScraperManager:
 
             else:
                 game = Game()
-                game.foreign_id = foreign_id
                 game.home_team_id = home_team_id
                 game.away_team_id = away_team_id
                 game.home_team_goals = home_team_goals
@@ -248,6 +256,8 @@ class GameScraperManager:
                 game.date = parsed_date
                 game.round = round_nr
                 db.session.add(game)
+                db.session.flush()  # game.id dostępne przed commit
+                game.set_foreign_id(scraper_id, foreign_id)
                 new_games.append(game_data)
                 logger.info(f"New game added foreign_id={foreign_id}")
 

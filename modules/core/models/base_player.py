@@ -7,11 +7,14 @@ is_youth w piłce nożnej) dodawane są w klasie Player konkretnego modułu.
 from core.extensions import db
 from datetime import datetime
 
+def _get_player_foreign_id():
+    from core.models.base_player_foreign_id import get_player_foreign_id_model
+    return get_player_foreign_id_model()
+
 
 class BasePlayerMixin:
 
     id         = db.Column(db.Integer, primary_key=True)
-    foreign_id = db.Column(db.String(500), nullable=True)
 
     first_name = db.Column(db.String(100), nullable=False)
     last_name  = db.Column(db.String(100), nullable=False)
@@ -55,10 +58,22 @@ class BasePlayerMixin:
         """Bazowa wersja — moduł może nadpisać żeby dodać wskaźniki (C), (GK) itd."""
         return self.full_name
 
+    def get_foreign_id(self, scraper_id):
+        """Zwraca foreign_id tego zawodnika dla danego scrapera, albo None."""
+        return _get_player_foreign_id().get_foreign_id(scraper_id, self.id)
+
+    def set_foreign_id(self, scraper_id, foreign_id):
+        """Zapisuje/aktualizuje foreign_id tego zawodnika dla danego scrapera."""
+        return _get_player_foreign_id().set_foreign_id(scraper_id, self.id, foreign_id)
+
+    def get_foreign_ids(self):
+        """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących tego zawodnika."""
+        return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
+
     def to_dict(self):
         return {
             'id':         self.id,
-            'foreign_id': self.foreign_id,
+            'foreign_ids': self.get_foreign_ids(),
             'first_name': self.first_name,
             'last_name':  self.last_name,
             'number':     self.number,

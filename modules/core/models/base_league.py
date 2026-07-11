@@ -3,17 +3,20 @@ from core.extensions import db
 from datetime import datetime
 from sqlalchemy.orm import declared_attr
 
+def _get_league_foreign_id():
+    from core.models.base_league_foreign_id import get_league_foreign_id_model
+    return get_league_foreign_id_model()
+
 
 class BaseLeagueMixin:
     """Football league (e.g., Dywizja A, Dywizja B, Puchar Ligi)"""
-    
+
 
     id = db.Column(db.Integer, primary_key=True)
     @declared_attr
     def season_id(cls):
         return db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=False, index=True)
     name = db.Column(db.String(50), nullable=False)
-    foreign_id = db.Column(db.String(500), nullable=True)
 
     # URLs to external resources
 
@@ -44,6 +47,18 @@ class BaseLeagueMixin:
     def __repr__(self):
         return f'<League {self.name} (BaseSeasonMixin {self.season_id})>'
 
+    def get_foreign_id(self, scraper_id):
+        """Zwraca foreign_id tej ligi dla danego scrapera, albo None."""
+        return _get_league_foreign_id().get_foreign_id(scraper_id, self.id)
+
+    def set_foreign_id(self, scraper_id, foreign_id):
+        """Zapisuje/aktualizuje foreign_id tej ligi dla danego scrapera."""
+        return _get_league_foreign_id().set_foreign_id(scraper_id, self.id, foreign_id)
+
+    def get_foreign_ids(self):
+        """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących tę ligę."""
+        return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
+
     @property
     def total_teams(self):
         """Get total number of teams in this league"""
@@ -68,7 +83,7 @@ class BaseLeagueMixin:
             'season_id': self.season_id,
             'season_name': self.season.name if self.season else None,
             'name': self.name,
-            'foreign_id': self.foreign_id,
+            'foreign_ids': self.get_foreign_ids(),
             'games_url': self.games_url,
             'table_url': self.table_url,
             'scorers_url': self.scorers_url,

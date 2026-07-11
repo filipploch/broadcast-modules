@@ -15,11 +15,16 @@ def _get_team():
     return get_team_model()
 
 
+def _get_player_foreign_id():
+    from core.models.base_player_foreign_id import get_player_foreign_id_model
+    return get_player_foreign_id_model()
+
+
 class PlayerManager:
 
     def create_player(self, first_name: str, last_name: str, team_id: int,
                       number: int = None, is_goalkeeper: bool = False,
-                      is_captain: bool = False, foreign_id: str = None):
+                      is_captain: bool = False):
         Team = _get_team()
         team = Team.query.get(team_id)
         if not team:
@@ -34,7 +39,6 @@ class PlayerManager:
                 number=number,
                 is_goalkeeper=is_goalkeeper,
                 is_captain=is_captain,
-                foreign_id=foreign_id,
             )
             db.session.add(player)
             db.session.commit()
@@ -61,14 +65,21 @@ class PlayerManager:
         Player = _get_player()
         return Player.query.get(player_id)
 
-    def get_player_by_foreign_id(self, foreign_id: str):
-        Player = _get_player()
-        return Player.query.filter_by(foreign_id=foreign_id).first()
+    def get_player_by_foreign_id(self, scraper_id, foreign_id: str):
+        """Get player mapped to foreign_id for a given scraper"""
+        PlayerForeignId = _get_player_foreign_id()
+        local_id = PlayerForeignId.get_local_id(scraper_id, foreign_id)
+        return self.get_player_by_id(local_id) if local_id else None
+
+    def set_player_foreign_id(self, player_id, scraper_id, foreign_id):
+        """Create/update the (scraper, player) -> foreign_id mapping"""
+        PlayerForeignId = _get_player_foreign_id()
+        return PlayerForeignId.set_foreign_id(scraper_id, player_id, foreign_id)
 
     def update_player(self, player_id: int, first_name: str = None,
                       last_name: str = None, team_id: int = None,
                       number: int = None, is_goalkeeper: bool = None,
-                      is_captain: bool = None, foreign_id: str = None):
+                      is_captain: bool = None):
         player = self.get_player_by_id(player_id)
         if not player:
             logger.warning(f"Player with ID {player_id} not found")
@@ -91,8 +102,6 @@ class PlayerManager:
                 player.is_goalkeeper = is_goalkeeper
             if is_captain is not None:
                 player.is_captain = is_captain
-            if foreign_id is not None:
-                player.foreign_id = foreign_id
 
             db.session.commit()
             logger.info(f"Updated player ID {player_id}")

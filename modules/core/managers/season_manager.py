@@ -19,11 +19,26 @@ def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
 
+def _get_season_foreign_id():
+    from core.models.base_season_foreign_id import get_season_foreign_id_model
+    return get_season_foreign_id_model()
+
 logger = logging.getLogger(__name__)
 
 
 class SeasonManager:
     """Manages CRUD operations for seasons"""
+
+    def get_season_by_foreign_id(self, scraper_id, foreign_id):
+        """Get season mapped to foreign_id for a given scraper"""
+        SeasonForeignId = _get_season_foreign_id()
+        local_id = SeasonForeignId.get_local_id(scraper_id, foreign_id)
+        return self.get_season_by_id(local_id) if local_id else None
+
+    def set_season_foreign_id(self, season_id, scraper_id, foreign_id):
+        """Create/update the (scraper, season) -> foreign_id mapping"""
+        SeasonForeignId = _get_season_foreign_id()
+        return SeasonForeignId.set_foreign_id(scraper_id, season_id, foreign_id)
 
     def get_all_seasons(self):
         """Get all seasons ordered by number (newest first)"""
@@ -40,14 +55,13 @@ class SeasonManager:
         Season = _get_season()
         return Season.query.filter_by(number=number).first()
 
-    def create_season(self, number, name, foreign_id=None):
+    def create_season(self, number, name):
         """
         Create new season
 
         Args:
             number: Season number (must be unique)
             name: Season name (e.g., "Jesień 2025")
-            foreign_id: Optional external ID for integration
 
         Returns:
             Season object or None if error
@@ -70,7 +84,6 @@ class SeasonManager:
             season = Season(
                 number=number,
                 name=name,
-                foreign_id=foreign_id
             )
             db.session.add(season)
             db.session.commit()
@@ -88,7 +101,7 @@ class SeasonManager:
             logger.error(f"Error creating season: {e}")
             return None
 
-    def update_season(self, season_id, number=None, name=None, foreign_id=None):
+    def update_season(self, season_id, number=None, name=None):
         """
         Update season
 
@@ -96,7 +109,6 @@ class SeasonManager:
             season_id: Season ID
             number: New season number (optional)
             name: New season name (optional)
-            foreign_id: New foreign ID (optional)
 
         Returns:
             Updated Season object or None if error
@@ -131,10 +143,6 @@ class SeasonManager:
                 if existing:
                     raise ValueError(f"Sezon o nazwie '{name}' już istnieje")
                 season.name = name
-
-            # Update foreign_id if provided
-            if foreign_id is not None:
-                season.foreign_id = foreign_id
 
             db.session.commit()
             logger.info(f"Updated season: {season}")

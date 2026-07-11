@@ -447,7 +447,9 @@ class GameScraperManager:
         """
         from app.models.settings import Settings
         from app.models.team import Team
+        from app.models.team_foreign_id import TeamForeignId
         from app.models.league_team import LeagueTeam
+        from app.models.scraper import Scraper
 
         settings = Settings.get_settings()
         if not settings.current_game_id:
@@ -468,9 +470,22 @@ class GameScraperManager:
                 teams = Team.query.all()
 
         lookup = {_normalize(t.name): t for t in teams}
-        for t in teams:
-            if t.superscore_name:
-                lookup[_normalize(t.superscore_name)] = t
+
+        superscore_scraper = Scraper.get_by_folder('superscore')
+        if superscore_scraper:
+            team_ids = {t.id for t in teams}
+            superscore_names = (
+                TeamForeignId.query
+                .filter(
+                    TeamForeignId.scraper_id == superscore_scraper.id,
+                    TeamForeignId.team_id.in_(team_ids),
+                )
+                .all()
+            )
+            teams_by_id = {t.id: t for t in teams}
+            for row in superscore_names:
+                lookup[_normalize(row.foreign_id)] = teams_by_id[row.team_id]
+
         logger.debug(f"Zbudowano lookup dla {len(lookup)} drużyn")
         return lookup
 

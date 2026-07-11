@@ -20,7 +20,9 @@ def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
 
-
+def _get_season_foreign_id():
+    from core.models.base_season_foreign_id import get_season_foreign_id_model
+    return get_season_foreign_id_model()
 
 
 class BaseSeasonMixin:
@@ -29,7 +31,6 @@ class BaseSeasonMixin:
     id = db.Column(db.Integer, primary_key=True)
     number = db.Column(db.Integer, unique=True, nullable=False, index=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    foreign_id = db.Column(db.String(500), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -42,6 +43,18 @@ class BaseSeasonMixin:
 
     def __repr__(self):
         return f'<Season {self.number}: {self.name}>'
+
+    def get_foreign_id(self, scraper_id):
+        """Zwraca foreign_id tego sezonu dla danego scrapera, albo None."""
+        return _get_season_foreign_id().get_foreign_id(scraper_id, self.id)
+
+    def set_foreign_id(self, scraper_id, foreign_id):
+        """Zapisuje/aktualizuje foreign_id tego sezonu dla danego scrapera."""
+        return _get_season_foreign_id().set_foreign_id(scraper_id, self.id, foreign_id)
+
+    def get_foreign_ids(self):
+        """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących ten sezon."""
+        return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
 
     @property
     def total_leagues(self):
@@ -68,7 +81,7 @@ class BaseSeasonMixin:
             'id': self.id,
             'number': self.number,
             'name': self.name,
-            'foreign_id': self.foreign_id,
+            'foreign_ids': self.get_foreign_ids(),
             'total_leagues': self.total_leagues,
             'total_games': self.total_games,
             'created_at': self.created_at.isoformat() if self.created_at else None,

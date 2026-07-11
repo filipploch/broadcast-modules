@@ -27,11 +27,26 @@ def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
 
+def _get_league_foreign_id():
+    from core.models.base_league_foreign_id import get_league_foreign_id_model
+    return get_league_foreign_id_model()
+
 logger = logging.getLogger(__name__)
 
 
 class LeagueManager:
     """Manages CRUD operations for leagues"""
+
+    def get_league_by_foreign_id(self, scraper_id, foreign_id):
+        """Get league mapped to foreign_id for a given scraper"""
+        LeagueForeignId = _get_league_foreign_id()
+        local_id = LeagueForeignId.get_local_id(scraper_id, foreign_id)
+        return self.get_league_by_id(local_id) if local_id else None
+
+    def set_league_foreign_id(self, league_id, scraper_id, foreign_id):
+        """Create/update the (scraper, league) -> foreign_id mapping"""
+        LeagueForeignId = _get_league_foreign_id()
+        return LeagueForeignId.set_foreign_id(scraper_id, league_id, foreign_id)
 
     def get_all_leagues(self, season_id=None):
         """
@@ -55,7 +70,7 @@ class LeagueManager:
         return League.query.get(league_id)
 
     def create_league(self, season_id, name, games_url, scorers_url, assists_url,
-                      canadian_url, table_url=None, foreign_id=None,
+                      canadian_url, table_url=None,
                       allows_draw=True):
         """
         Create new league
@@ -99,7 +114,6 @@ class LeagueManager:
                 scorers_url=scorers_url,
                 assists_url=assists_url,
                 canadian_url=canadian_url,
-                foreign_id=foreign_id
             )
             db.session.add(league)
             db.session.commit()
@@ -119,7 +133,7 @@ class LeagueManager:
 
     def update_league(self, league_id, name=None, games_url=None, table_url=None,
                       scorers_url=None, assists_url=None, canadian_url=None,
-                      foreign_id=None, allows_draw=None, play_dictionary_id=None):
+                      allows_draw=None, play_dictionary_id=None):
         """
         Update league
 
@@ -169,8 +183,6 @@ class LeagueManager:
                 league.assists_url = assists_url
             if canadian_url is not None:
                 league.canadian_url = canadian_url
-            if foreign_id is not None:
-                league.foreign_id = foreign_id
             if play_dictionary_id is not None:
                 league.play_dictionary_id = play_dictionary_id or None
 

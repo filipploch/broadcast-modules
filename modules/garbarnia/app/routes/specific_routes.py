@@ -20,6 +20,7 @@ from app.managers import (
 # from app.managers.player_scraper_manager import PlayerScraperManager
 from app.models.period import Period
 from app.models.settings import Settings
+from app.models.scraper import Scraper
 import logging
 import os
 
@@ -31,6 +32,13 @@ team_scraper_manager   = TeamScraperManager()
 player_scraper_manager = PlayerScraperManager()
 game_scraper_manager   = GameScraperManager()
 league_manager         = LeagueManager()
+
+
+def _laczynaspilka_scraper_id():
+    scraper = Scraper.get_by_folder('laczynaspilka')
+    if not scraper:
+        raise RuntimeError("Scraper 'laczynaspilka' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 def register_routes(app):
@@ -138,9 +146,10 @@ def register_routes(app):
                 'number':       p.number,
             } for p in all_players if p.id not in assigned_ids]
  
+            team_laczynaspilka_id = team.get_foreign_id(_laczynaspilka_scraper_id())
             laczynaspilka_url = (
-                f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team.foreign_id}'
-                if team.foreign_id else None
+                f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team_laczynaspilka_id}'
+                if team_laczynaspilka_id else None
             )
             return jsonify({
                 'title':              f"Skład: {team.name}",
@@ -303,11 +312,12 @@ def register_routes(app):
         if not team:
             return jsonify({'error': 'Nie znaleziono drużyny'}), 404
 
-        if not team.foreign_id:
+        team_laczynaspilka_id = team.get_foreign_id(_laczynaspilka_scraper_id())
+        if not team_laczynaspilka_id:
             return jsonify({'error': 'Drużyna nie ma skonfigurowanego foreign_id'}), 400
 
         if not player_scraper_manager.check_file_exists(team_id):
-            url = f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team.foreign_id}'
+            url = f'https://www.laczynaspilka.pl/rozgrywki/druzyna/{team_laczynaspilka_id}'
             return jsonify({
                 'error': 'file_missing',
                 'team_name': team.name,

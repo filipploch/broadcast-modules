@@ -3,7 +3,9 @@ from typing import Dict, List, Optional
 from flask import current_app
 from core.extensions import db
 from app.models.player import Player
+from app.models.player_foreign_id import PlayerForeignId
 from app.models.team import Team
+from app.models.scraper import Scraper
 from app.managers import PlayerManager
 import threading
 import logging
@@ -11,6 +13,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 player_manager = PlayerManager()
+
+
+def _get_scraper_id():
+    scraper = Scraper.get_by_folder('nalffutsal')
+    if not scraper:
+        raise RuntimeError("Scraper 'nalffutsal' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 class PlayerScraperManager:
@@ -153,12 +162,13 @@ class PlayerScraperManager:
         """
         added = 0
         updated = 0
+        scraper_id = _get_scraper_id()
 
         scraped_foreign_ids = {p['foreign_id'] for p in scraped_players}
 
         for player_data in scraped_players:
             foreign_id = player_data['foreign_id']
-            existing = player_manager.get_player_by_foreign_id(foreign_id)
+            existing = player_manager.get_player_by_foreign_id(scraper_id, foreign_id)
 
             if existing:
                 changes = {}
@@ -181,7 +191,6 @@ class PlayerScraperManager:
                     logger.debug(f"No changes for player foreign_id={foreign_id}")
             else:
                 new_player = Player(
-                    foreign_id=foreign_id,
                     first_name=player_data['first_name'],
                     last_name=player_data['last_name'],
                     team_id=team.id,
@@ -190,21 +199,28 @@ class PlayerScraperManager:
                     number=None,
                 )
                 db.session.add(new_player)
+                db.session.flush()  # new_player.id dostępne przed commit
+                new_player.set_foreign_id(scraper_id, foreign_id)
                 logger.info(f"Added player {player_data['first_name']} {player_data['last_name']} to {team.name}")
                 added += 1
 
         # Detach players who are no longer on this team's scraped roster
         # Only applies to players WITH a foreign_id (scraped), not manually added ones
-        departed = Player.query.filter(
-            Player.team_id == team.id,
-            Player.foreign_id.isnot(None),
-            Player.foreign_id.notin_(scraped_foreign_ids)
-        ).all()
+        departed = (
+            Player.query
+            .join(PlayerForeignId, PlayerForeignId.player_id == Player.id)
+            .filter(
+                Player.team_id == team.id,
+                PlayerForeignId.scraper_id == scraper_id,
+                PlayerForeignId.foreign_id.notin_(scraped_foreign_ids),
+            )
+            .all()
+        )
 
         for player in departed:
             player.team_id = None
             logger.info(
-                f"Player {player.full_name} (foreign_id={player.foreign_id}) "
+                f"Player {player.full_name} (foreign_id={player.get_foreign_id(scraper_id)}) "
                 f"no longer in {team.name} roster — detached from team"
             )
 

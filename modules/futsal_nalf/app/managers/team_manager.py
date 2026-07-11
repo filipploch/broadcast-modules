@@ -18,11 +18,11 @@ class TeamManager(_CoreTeamManager):
 
     def create_team(self, name, name_14, short_name,
                     team_url=None, logo_path='static/images/logos/default.png',
-                    foreign_id=None, uniform=None):
+                    uniform=None):
         """Nadpisuje metodę core — dodaje parametr team_url."""
         team = super().create_team(
             name=name, name_14=name_14, short_name=short_name,
-            logo_path=logo_path, foreign_id=foreign_id, uniform=uniform,
+            logo_path=logo_path, uniform=uniform,
         )
         if team_url is not None:
             team.team_url = team_url

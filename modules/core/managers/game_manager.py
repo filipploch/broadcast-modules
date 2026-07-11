@@ -23,6 +23,10 @@ def _get_stadium():
     from core.models.base_stadium import get_stadium_model
     return get_stadium_model()
 
+def _get_game_foreign_id():
+    from core.models.base_game_foreign_id import get_game_foreign_id_model
+    return get_game_foreign_id_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +89,19 @@ class GameManager:
         """Get game by ID"""
         return _get_game().query.get(game_id)
     
-    def get_game_by_foreign_id(self, foreign_id):
-        return _get_game().query.filter_by(foreign_id=foreign_id).first()
+    def get_game_by_foreign_id(self, scraper_id, foreign_id):
+        """Get game mapped to foreign_id for a given scraper"""
+        GameForeignId = _get_game_foreign_id()
+        local_id = GameForeignId.get_local_id(scraper_id, foreign_id)
+        return self.get_game_by_id(local_id) if local_id else None
+
+    def set_game_foreign_id(self, game_id, scraper_id, foreign_id):
+        """Create/update the (scraper, game) -> foreign_id mapping"""
+        GameForeignId = _get_game_foreign_id()
+        return GameForeignId.set_foreign_id(scraper_id, game_id, foreign_id)
 
     def create_game(self, home_team_id, away_team_id, league_id, stadium_id,
-                     round_number, group_nr=1, date=None, foreign_id=None):
+                     round_number, group_nr=1, date=None):
         """
         Create new game
 
@@ -141,7 +153,6 @@ class GameManager:
                 group_nr=group_nr,
                 date=date,
                 status=Game.STATUS_NOT_STARTED,
-                foreign_id=foreign_id
             )
             db.session.add(game)
             db.session.commit()
@@ -157,8 +168,7 @@ class GameManager:
     def update_game(self, game_id, home_team_id=None, away_team_id=None,
                     home_team_goals=None, away_team_goals=None,
                     is_home_team_lost_by_wo=None, is_away_team_lost_by_wo=None,
-                     stadium_id=None, date=None, round_number=None, group_nr=None,
-                     foreign_id=None):
+                     stadium_id=None, date=None, round_number=None, group_nr=None):
         """
         Update game details
 
@@ -224,8 +234,6 @@ class GameManager:
                 game.round = round_number
             if group_nr is not None:
                 game.group_nr = group_nr
-            if foreign_id is not None:
-                game.foreign_id = foreign_id
 
             db.session.commit()
             logger.info(f"Updated game: {game}")

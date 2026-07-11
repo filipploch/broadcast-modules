@@ -3,7 +3,9 @@ from typing import Dict, List, Optional
 from flask import current_app
 from core.extensions import db
 from app.models.player import Player
+from app.models.player_foreign_id import PlayerForeignId
 from app.models.team import Team
+from app.models.scraper import Scraper
 from core.managers.player_manager import PlayerManager
 import threading
 import logging
@@ -12,6 +14,13 @@ import sys
 logger = logging.getLogger(__name__)
 
 player_manager = PlayerManager()
+
+
+def _get_scraper_id():
+    scraper = Scraper.get_by_folder('laczynaspilka')
+    if not scraper:
+        raise RuntimeError("Scraper 'laczynaspilka' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 class PlayerScraperManager:
@@ -31,11 +40,12 @@ class PlayerScraperManager:
     def check_file_exists(self, team_id: int) -> bool:
         """Sprawdza czy plik HTML dla drużyny istnieje w katalogu temp."""
         team = Team.query.get(team_id)
-        if not team or not team.foreign_id:
+        team_foreign_id = team.get_foreign_id(_get_scraper_id()) if team else None
+        if not team_foreign_id:
             return False
         temp_dir = sys.path[0] + current_app.config['TEMP_DIR']
         from app.managers.scrapers.laczynaspilka import PlayerScraper
-        return PlayerScraper().find_html_file_for_team(temp_dir, team.foreign_id) is not None
+        return PlayerScraper().find_html_file_for_team(temp_dir, team_foreign_id) is not None
 
     # =========================
     # Scraping Workflow (Threaded)
@@ -55,7 +65,7 @@ class PlayerScraperManager:
         if not team:
             logger.error(f"Team ID {team_id} not found")
             return False
-        if not team.foreign_id:
+        if not team.get_foreign_id(_get_scraper_id()):
             logger.error(f"Team {team.name} has no foreign_id configured")
             return False
 
@@ -92,14 +102,15 @@ class PlayerScraperManager:
         with app.app_context():
             from core.extensions import socketio
             team = Team.query.get(team_id)
+            team_foreign_id = team.get_foreign_id(_get_scraper_id())
             temp_dir = sys.path[0] + app.config['TEMP_DIR']
             try:
                 from app.managers.scrapers.laczynaspilka import PlayerScraper
 
                 scraper = PlayerScraper()
-                scraped_players = scraper.scrape_players(temp_dir, team.foreign_id)
+                scraped_players = scraper.scrape_players(temp_dir, team_foreign_id)
                 stats = self._process_scraped_players(scraped_players, team)
-                html_path = scraper.find_html_file_for_team(temp_dir, team.foreign_id)
+                html_path = scraper.find_html_file_for_team(temp_dir, team_foreign_id)
                 if html_path and html_path.exists():
                     html_path.unlink()
                     logger.info(f"Usunięto plik HTML po scrapowaniu: {html_path.name}")
@@ -167,12 +178,13 @@ class PlayerScraperManager:
         """
         added = 0
         updated = 0
+        scraper_id = _get_scraper_id()
 
         scraped_foreign_ids = {p['foreign_id'] for p in scraped_players}
 
         for player_data in scraped_players:
             foreign_id = player_data['foreign_id']
-            existing = player_manager.get_player_by_foreign_id(foreign_id)
+            existing = player_manager.get_player_by_foreign_id(scraper_id, foreign_id)
 
             if existing:
                 changes = {}
@@ -197,7 +209,6 @@ class PlayerScraperManager:
                     logger.debug(f"No changes for player foreign_id={foreign_id}")
             else:
                 new_player = Player(
-                    foreign_id=foreign_id,
                     first_name=player_data['first_name'],
                     last_name=player_data['last_name'],
                     team_id=team.id,
@@ -206,21 +217,28 @@ class PlayerScraperManager:
                     number=player_data['number'],
                 )
                 db.session.add(new_player)
+                db.session.flush()  # new_player.id dostępne przed commit
+                new_player.set_foreign_id(scraper_id, foreign_id)
                 logger.info(f"Added player {player_data['first_name']} {player_data['last_name']} to {team.name}")
                 added += 1
 
         # Detach players who are no longer on this team's scraped roster
         # Only applies to players WITH a foreign_id (scraped), not manually added ones
-        departed = Player.query.filter(
-            Player.team_id == team.id,
-            Player.foreign_id.isnot(None),
-            Player.foreign_id.notin_(scraped_foreign_ids)
-        ).all()
+        departed = (
+            Player.query
+            .join(PlayerForeignId, PlayerForeignId.player_id == Player.id)
+            .filter(
+                Player.team_id == team.id,
+                PlayerForeignId.scraper_id == scraper_id,
+                PlayerForeignId.foreign_id.notin_(scraped_foreign_ids),
+            )
+            .all()
+        )
 
         for player in departed:
             player.team_id = None
             logger.info(
-                f"Player {player.full_name} (foreign_id={player.foreign_id}) "
+                f"Player {player.full_name} (foreign_id={player.get_foreign_id(scraper_id)}) "
                 f"no longer in {team.name} roster — detached from team"
             )
 

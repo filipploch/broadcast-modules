@@ -11,6 +11,10 @@ def _get_league():
     from core.models.base_league import get_league_model
     return get_league_model()
 
+def _get_team_foreign_id():
+    from core.models.base_team_foreign_id import get_team_foreign_id_model
+    return get_team_foreign_id_model()
+
 
 class BaseTeamMixin:
     """Football team"""
@@ -20,7 +24,6 @@ class BaseTeamMixin:
     name_14 = db.Column(db.String(14), nullable=False)  # Shortened name (max 14 chars)
     short_name = db.Column(db.String(3), nullable=False, index=True)  # 3-letter abbreviation
     logo_path = db.Column(db.String(500), default='static/images/logos/default.png')
-    foreign_id = db.Column(db.String(500), nullable=True)
     uniform = db.Column(db.Text, nullable=True)  # JSON: {"home": ["#111111", ...], "away": ["#222222", ...]}
 
     # Timestamps
@@ -87,6 +90,18 @@ class BaseTeamMixin:
 
         return home_query.union(away_query).order_by(Game.date).all()
 
+    def get_foreign_id(self, scraper_id):
+        """Zwraca foreign_id tej drużyny dla danego scrapera, albo None."""
+        return _get_team_foreign_id().get_foreign_id(scraper_id, self.id)
+
+    def set_foreign_id(self, scraper_id, foreign_id):
+        """Zapisuje/aktualizuje foreign_id tej drużyny dla danego scrapera."""
+        return _get_team_foreign_id().set_foreign_id(scraper_id, self.id, foreign_id)
+
+    def get_foreign_ids(self):
+        """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących tę drużynę."""
+        return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
+
     def to_dict(self):
         """Convert to dictionary"""
         return {
@@ -96,7 +111,7 @@ class BaseTeamMixin:
             'short_name': self.short_name,
             # 'team_url': self.team_url,
             'logo_path': self.logo_path,
-            'foreign_id': self.foreign_id,
+            'foreign_ids': self.get_foreign_ids(),
             'uniform': self.get_uniform(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None

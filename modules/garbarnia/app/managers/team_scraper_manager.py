@@ -3,6 +3,7 @@ from typing import List, Dict, Optional
 from flask import session
 from core.extensions import db
 from app.models.team import Team
+from app.models.scraper import Scraper
 from core.managers.team_manager import TeamManager
 import threading
 import logging
@@ -10,6 +11,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 team_manager = TeamManager()
+
+
+def _get_scraper_id():
+    scraper = Scraper.get_by_folder('laczynaspilka')
+    if not scraper:
+        raise RuntimeError("Scraper 'laczynaspilka' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 class TeamScraperManager:
@@ -159,8 +167,9 @@ class TeamScraperManager:
             short_name=short_name,
             team_url=team_url,
             logo_path=logo_path,
-            foreign_id=foreign_id
         )
+        if foreign_id:
+            team_manager.set_team_foreign_id(team.id, _get_scraper_id(), foreign_id)
 
         self.remove_pending_team(team_url)
         return team

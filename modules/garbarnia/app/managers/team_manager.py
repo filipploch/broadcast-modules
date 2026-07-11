@@ -14,11 +14,11 @@ class TeamManager(_CoreTeamManager):
 
     def create_team(self, name: str, name_14: str, short_name: str,
                 logo_path: str = 'static/images/logos/default.png',
-                foreign_id: str = None, coach: str = None, uniform: dict = None):
+                coach: str = None, uniform: dict = None):
         """Nadpisuje metodę core — dodaje parametr coach."""
         team = super().create_team(
             name=name, name_14=name_14, short_name=short_name,
-            logo_path=logo_path, foreign_id=foreign_id, uniform=uniform,
+            logo_path=logo_path, uniform=uniform,
         )
         if coach is not None:
             team.coach = coach
