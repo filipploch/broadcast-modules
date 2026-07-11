@@ -69,6 +69,12 @@ class TeamScraperManager:
         dopasowania w PendingTeamMatch. Nic nie zapisuje bezpośrednio do Team/
         LeagueTeam — to wymaga potwierdzenia przez resolve_pending_team_match().
 
+        Drużyna już dopasowana wcześniej (ma wpis w TeamForeignId dla tego
+        scrapera) nie trafia ponownie do przeglądu, ale jeśli nie jest jeszcze
+        przypisana do TEJ ligi (np. dopasowano ją wcześniej przy okazji innej
+        ligi), zostaje do niej dopisana automatycznie — to już potwierdzony
+        match, więc nie wymaga ponownej decyzji admina.
+
         Returns:
             Liczba wpisów oczekujących utworzonych/odświeżonych.
 
@@ -88,13 +94,19 @@ class TeamScraperManager:
             raise ValueError(str(e)) from e
 
         already_resolved = {
-            row.foreign_id for row in TeamForeignId.query.filter_by(scraper_id=scraper_id).all()
+            row.foreign_id: row.team_id
+            for row in TeamForeignId.query.filter_by(scraper_id=scraper_id).all()
         }
         all_teams = Team.query.order_by(Team.name).all()
+        league_team_ids = {lt.team_id for lt in league.get_teams()}
 
         count = 0
         for scraped in scraped_teams:
-            if scraped['foreign_id'] in already_resolved:
+            resolved_team_id = already_resolved.get(scraped['foreign_id'])
+            if resolved_team_id is not None:
+                if resolved_team_id not in league_team_ids:
+                    league_manager.add_team_to_league(league.id, resolved_team_id, group_nr=1)
+                    league_team_ids.add(resolved_team_id)
                 continue  # już dopasowane w poprzednim uruchomieniu
 
             best_team, score = _best_match(scraped['name'], all_teams)
