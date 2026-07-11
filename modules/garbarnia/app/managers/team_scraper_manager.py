@@ -100,6 +100,7 @@ class TeamScraperManager:
                 scraper_id=scraper_id,
                 scraped_name=scraped['name'],
                 scraped_foreign_id=scraped['foreign_id'],
+                scraped_short_name=scraped.get('short_code'),
                 suggested_team_id=best_team.id if best_team else None,
                 similarity_score=score,
             )
@@ -111,11 +112,17 @@ class TeamScraperManager:
         return PendingTeamMatch.get_for_league(league_id)
 
     def resolve_pending_team_match(self, pending_id: int, existing_team_id: Optional[int] = None,
-                                   name_14: Optional[str] = None, short_name: Optional[str] = None) -> Team:
+                                   name_14: Optional[str] = None, short_name: Optional[str] = None,
+                                   short_name_choice: Optional[str] = None) -> Team:
         """
         Zatwierdź kandydata: połącz z istniejącą drużyną (existing_team_id) albo
         utwórz nową (name_14 + short_name wymagane w tym wariancie). Dopisuje
         drużynę do ligi jeśli jeszcze w niej nie jest.
+
+        Jeśli drużyna już ma w bazie short_name inny niż pobrany przez scraper
+        (np. wpisany ręcznie albo ustawiony przez inny scraper), wymaga
+        jednoznacznej decyzji przez short_name_choice ('existing' albo
+        'scraped') zamiast domyślnie wybierać jedną z wartości.
         """
         pending = PendingTeamMatch.query.get(pending_id)
         if not pending:
@@ -125,6 +132,17 @@ class TeamScraperManager:
             team = team_manager.get_team_by_id(existing_team_id)
             if not team:
                 raise ValueError("Nie znaleziono wskazanej drużyny")
+
+            if (pending.scraped_short_name and team.short_name
+                    and pending.scraped_short_name != team.short_name):
+                if short_name_choice not in ('existing', 'scraped'):
+                    raise ValueError(
+                        f"Drużyna ma w bazie short_name '{team.short_name}', a scraper pobrał "
+                        f"'{pending.scraped_short_name}' — wskaż, który zachować."
+                    )
+                if short_name_choice == 'scraped':
+                    team.short_name = pending.scraped_short_name
+                    db.session.commit()
         else:
             if not name_14 or not short_name:
                 raise ValueError("Nowa drużyna wymaga podania nazwy skróconej i skrótu 3-literowego")

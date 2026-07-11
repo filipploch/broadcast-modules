@@ -33,18 +33,35 @@
                 </td>
                 <td>
                     <form method="POST" action="{{ url_for('resolve_pending_team_match', pending_id=item.id) }}" class="pending-match-form">
-                        <select name="existing_team_id" class="pending-team-select" onchange="togglePendingNewTeamFields(this)">
+                        <input type="hidden" class="pending-scraped-short-name" value="{{ item.scraped_short_name or '' }}">
+                        <select name="existing_team_id" class="pending-team-select" onchange="handlePendingTeamSelect(this)">
                             <option value="">➕ Nowa drużyna</option>
                             {% for team in all_teams %}
-                            <option value="{{ team.id }}" {% if item.suggested_team_id == team.id %}selected{% endif %}>
+                            <option value="{{ team.id }}" data-short-name="{{ team.short_name }}"
+                                {% if item.suggested_team_id == team.id %}selected{% endif %}>
                                 {{ team.name }}{% if item.suggested_team_id == team.id %} ⭐{% endif %}
                             </option>
                             {% endfor %}
                         </select>
-                        <div class="pending-new-team-fields" style="{% if item.suggested_team_id %}display:none;{% endif %}margin-top:.5rem;display:flex;gap:.5rem;">
-                            <input type="text" name="name_14" maxlength="14" placeholder="Nazwa skrócona (14 zn.)" value="{{ item.scraped_name[:14] }}">
-                            <input type="text" name="short_name" maxlength="3" minlength="3" placeholder="TLA" style="text-transform:uppercase;width:5rem;" value="{{ item.scraped_name[:3] | upper }}">
+
+                        <div class="pending-new-team-fields"
+                             style="margin-top:.5rem;gap:.5rem;{% if item.suggested_team_id %}display:none;{% else %}display:flex;{% endif %}">
+                            <input type="text" name="name_14" maxlength="14" placeholder="Nazwa skrócona (14 zn.)"
+                                   value="{{ item.scraped_name[:14] }}">
+                            <input type="text" name="short_name" maxlength="3" minlength="3" placeholder="TLA"
+                                   style="text-transform:uppercase;width:5rem;"
+                                   value="{{ item.scraped_short_name or (item.scraped_name[:3] | upper) }}">
                         </div>
+
+                        <div class="pending-short-name-conflict" style="display:none;margin-top:.5rem;background:#fff3cd;padding:.5rem;border-radius:4px;">
+                            <small>Rozbieżny skrót drużyny — który zachować?</small><br>
+                            <label><input type="radio" name="short_name_choice" value="existing" checked>
+                                obecny w bazie: <strong class="conflict-existing-value"></strong></label>
+                            &nbsp;
+                            <label><input type="radio" name="short_name_choice" value="scraped">
+                                z superscore: <strong class="conflict-scraped-value"></strong></label>
+                        </div>
+
                         <div class="actions" style="margin-top:.5rem;">
                             <button type="submit" class="btn btn-success btn-small">✅ Zatwierdź</button>
                         </div>
@@ -71,5 +88,25 @@ function togglePendingNewTeamFields(select) {
     const fields = select.closest('form').querySelector('.pending-new-team-fields');
     fields.style.display = select.value ? 'none' : 'flex';
 }
+
+function handlePendingTeamSelect(select) {
+    togglePendingNewTeamFields(select);
+
+    const form = select.closest('form');
+    const scrapedShortName = form.querySelector('.pending-scraped-short-name').value;
+    const conflictBox = form.querySelector('.pending-short-name-conflict');
+    const selectedOption = select.options[select.selectedIndex];
+    const existingShortName = (select.value && selectedOption) ? selectedOption.dataset.shortName : null;
+
+    if (select.value && scrapedShortName && existingShortName && existingShortName !== scrapedShortName) {
+        conflictBox.style.display = 'block';
+        conflictBox.querySelector('.conflict-existing-value').textContent = existingShortName;
+        conflictBox.querySelector('.conflict-scraped-value').textContent = scrapedShortName;
+    } else {
+        conflictBox.style.display = 'none';
+    }
+}
+
+document.querySelectorAll('.pending-team-select').forEach(handlePendingTeamSelect);
 </script>
 {% endblock %}

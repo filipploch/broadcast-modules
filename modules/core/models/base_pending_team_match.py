@@ -25,6 +25,7 @@ class BasePendingTeamMatchMixin:
 
     scraped_name       = db.Column(db.String(200), nullable=False)
     scraped_foreign_id = db.Column(db.String(500), nullable=False)
+    scraped_short_name = db.Column(db.String(10), nullable=True)
 
     @declared_attr
     def suggested_team_id(cls):
@@ -64,6 +65,7 @@ class BasePendingTeamMatchMixin:
             'scraper_id':          self.scraper_id,
             'scraped_name':        self.scraped_name,
             'scraped_foreign_id':  self.scraped_foreign_id,
+            'scraped_short_name':  self.scraped_short_name,
             'suggested_team_id':   self.suggested_team_id,
             'suggested_team_name': self.suggested_team.name if self.suggested_team else None,
             'similarity_score':    self.similarity_score,
@@ -71,13 +73,14 @@ class BasePendingTeamMatchMixin:
 
     @classmethod
     def upsert(cls, league_id, scraper_id, scraped_name, scraped_foreign_id,
-               suggested_team_id=None, similarity_score=None):
+               suggested_team_id=None, similarity_score=None, scraped_short_name=None):
         """Utwórz albo odśwież (przy ponownym scrapowaniu) wiersz oczekujący."""
         row = cls.query.filter_by(
             scraper_id=scraper_id, league_id=league_id, scraped_foreign_id=scraped_foreign_id
         ).first()
         if row:
             row.scraped_name = scraped_name
+            row.scraped_short_name = scraped_short_name
             row.suggested_team_id = suggested_team_id
             row.similarity_score = similarity_score
             row.updated_at = datetime.utcnow()
@@ -85,6 +88,7 @@ class BasePendingTeamMatchMixin:
             row = cls(
                 league_id=league_id, scraper_id=scraper_id,
                 scraped_name=scraped_name, scraped_foreign_id=scraped_foreign_id,
+                scraped_short_name=scraped_short_name,
                 suggested_team_id=suggested_team_id, similarity_score=similarity_score,
             )
             db.session.add(row)

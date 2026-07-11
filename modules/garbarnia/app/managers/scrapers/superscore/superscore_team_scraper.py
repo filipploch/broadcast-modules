@@ -40,7 +40,9 @@ class SuperscoreTeamScraper:
             season_id: ID sezonu z superscore.live (np. '4vDT5gZAVMkCxWuCYl8kzc')
 
         Returns:
-            Lista słowników {'name': str, 'foreign_id': str} (foreign_id = 'slug/hash')
+            Lista słowników {'name': str, 'foreign_id': str, 'short_code': str|None}
+            (foreign_id = 'slug/hash', short_code = trzyliterowy skrót z superscore —
+            może różnić się od short_name już zapisanego w bazie przez inny scraper)
         """
         params = {'season-id': season_id, 'with-upcoming': 'yes'}
         try:
@@ -85,4 +87,11 @@ class SuperscoreTeamScraper:
         if not slug or not team_hash:
             return None
 
-        return {'name': name.strip(), 'foreign_id': f'{slug}/{team_hash}'}
+        short_code = (team.get('short_code') or {}).get('value')
+        short_code = short_code.strip()[:3].upper() if short_code else None
+
+        return {
+            'name': name.strip(),
+            'foreign_id': f'{slug}/{team_hash}',
+            'short_code': short_code,
+        }

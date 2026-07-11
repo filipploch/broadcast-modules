@@ -463,6 +463,7 @@ def register_routes(app):
                 existing_team_id=int(existing_team_id) if existing_team_id else None,
                 name_14=request.form.get('name_14'),
                 short_name=request.form.get('short_name'),
+                short_name_choice=request.form.get('short_name_choice'),
             )
             flash(f'Dopasowano: {team.name}', 'success')
         except ValueError as e:
