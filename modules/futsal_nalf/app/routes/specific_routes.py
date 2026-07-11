@@ -265,12 +265,10 @@ def register_routes(app):
         """List all teams in database"""
         teams = team_manager.get_all_teams()
         stats = team_scraper_manager.get_statistics()
-        scraping_status = team_scraper_manager.get_scraping_status()
 
         return render_template('teams/list.html',
                                teams=teams,
-                               stats=stats,
-                               scraping_status=scraping_status)
+                               stats=stats)
 
 
 
@@ -291,31 +289,6 @@ def register_routes(app):
     # ASSIGNMENT API
     # =========================
 
-
-    @app.route('/teams/pending')
-    def pending_teams():
-        """List pending teams from scraping that need completion"""
-        pending = team_scraper_manager.get_pending_teams()
-        logos = team_manager.get_all_logos()
-
-        if not pending:
-            flash('Brak zespołów do uzupełnienia', 'info')
-            return redirect(url_for('list_teams'))
-
-        return render_template('teams/pending.html', pending_teams=pending, logos=logos)
-
-    @app.route('/api/teams/scraping/status')
-    def api_teams_scrape_status():
-        """API: Get scraping status"""
-        status = team_scraper_manager.get_scraping_status()
-        return jsonify(status)
-
-
-
-    @app.route('/api/teams/stats')
-    def api_stats():
-        """API: Get team statistics"""
-        return jsonify(team_scraper_manager.get_statistics())
 
     @app.route('/api/leagues/<int:league_id>/standings')
     @app.route('/api/leagues/<int:league_id>/standings/group/<int:group_nr>')

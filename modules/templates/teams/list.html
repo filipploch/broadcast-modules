@@ -8,25 +8,12 @@
         <h3>{{ stats.total_teams }}</h3>
         <p>Zespołów w bazie</p>
     </div>
-
-    {% if stats.pending_teams > 0 %}
-    <a href="{{ url_for('pending_teams') }}" {% if request.endpoint == 'pending_teams' %}class="active"{% endif %}>
-        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-            <h3>{{ stats.pending_teams }}</h3>
-            <p>Do uzupełnienia</p>
-        </div>
-    </a>
-    
-    {% endif %}
 </div>
 
 <div class="card">
     <div class="card-header">
         <span>Wszystkie Zespoły</span>
         <div class="actions">
-            <button class="btn btn-success" onclick="startTeamScraping()">
-                🔍 Scrapuj nowe zespoły
-            </button>
             <a href="{{ url_for('create_team') }}" class="btn btn-primary">
                 ➕ Dodaj ręcznie
             </a>
@@ -83,17 +70,9 @@
     </table>
     {% else %}
     <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
-        Brak zespołów w bazie danych. 
-        <a href="{{ url_for('scrape_teams') }}" style="color: #3498db;">Rozpocznij scrapowanie</a>
+        Brak zespołów w bazie danych.
+        <a href="{{ url_for('create_team') }}" style="color: #3498db;">Dodaj ręcznie</a>
     </p>
     {% endif %}
 </div>
-{% endblock %}
-{% block extra_js %}
-<script>
-function startTeamScraping() {
-    fetch('/teams/scrape')
-        .catch(err => console.error('Team scraping request failed:', err));
-}
-</script>
 {% endblock %}
