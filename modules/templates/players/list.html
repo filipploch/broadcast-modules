@@ -5,13 +5,13 @@
     <div class="card-header">
         <span>Zawodnicy — {{ team.name }}</span>
         <div class="actions">
-            {% if team.team_url or team.foreign_id %}
+            {% if team.team_url or team_scraper_foreign_id %}
             <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})" title="Pobierz zawodników z pliku HTML (SingleFile)">
                 Pobierz zawodników
             </button>
             {% endif %}
-            {% if team.foreign_id %}
-            <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team.foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
+            {% if player_scraper and player_scraper.folder == 'laczynaspilka' and team_scraper_foreign_id %}
+            <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team_scraper_foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
                 📋 Kopiuj URL
             </button>
             {% endif %}
@@ -36,7 +36,7 @@
                 <td>{{ player.number if player.number is not none else '—' }}</td>
                 <td>
                     <strong>{{ player.last_name }}</strong> {{ player.first_name }}
-                    {% if not player.foreign_id %}
+                    {% if not player.get_foreign_ids() %}
                     <span style="font-size:0.75rem;color:#7f8c8d;" title="Dodany ręcznie">✏️</span>
                     {% endif %}
                 </td>

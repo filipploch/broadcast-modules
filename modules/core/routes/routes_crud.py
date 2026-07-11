@@ -47,6 +47,10 @@ def _get_scraper():
     from core.models.base_scraper import get_scraper_model
     return get_scraper_model()
 
+def _get_active_scraper_config():
+    from core.models.base_active_scraper_config import get_active_scraper_config_model
+    return get_active_scraper_config_model()
+
 def _get_league_scraper_url():
     from core.models.base_league_scraper_url import get_league_scraper_url_model
     return get_league_scraper_url_model()
@@ -81,6 +85,26 @@ def _apply_league_scraper_data(league, form):
 
         foreign_id = (fields.get('foreign_id') or '').strip()
         league.set_foreign_id(scraper_id, foreign_id)
+
+def _apply_entity_foreign_id(entity, form):
+    """Parsuje pole 'scraper_foreign_ids' (JSON: {scraper_id: foreign_id}) z formularza
+    modala i zapisuje przez entity.set_foreign_id(). Puste/uszkodzone dane pomijane."""
+    raw = form.get('scraper_foreign_ids')
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("Nieprawidłowy JSON w scraper_foreign_ids — pomijam")
+        return
+    if not isinstance(data, dict):
+        return
+    for scraper_id_raw, foreign_id in data.items():
+        try:
+            scraper_id = int(scraper_id_raw)
+        except (TypeError, ValueError):
+            continue
+        entity.set_foreign_id(scraper_id, (foreign_id or '').strip())
 
 
 # =========================
@@ -117,34 +141,41 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/seasons/create', methods=['GET', 'POST'])
     def create_season():
         """Create new season"""
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 season = season_manager.create_season(
                     number=int(request.form['number']),
                     name=request.form['name']
                 )
-                
+                _apply_entity_foreign_id(season, request.form)
+
                 flash(f'Utworzono sezon: {season.name}', 'success')
                 return redirect(url_for('view_season', season_id=season.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error creating season: {e}")
                 flash(f'Błąd podczas tworzenia sezonu: {str(e)}', 'error')
-        
-        return render_template('seasons/create.html')
+
+        return render_template('seasons/create.html', scrapers=scrapers)
 
 
     @app.route('/seasons/<int:season_id>/edit', methods=['GET', 'POST'])
     def edit_season(season_id):
         """Edit existing season"""
         season = season_manager.get_season_by_id(season_id)
-        
+
         if not season:
             flash('Nie znaleziono sezonu', 'error')
             return redirect(url_for('list_seasons'))
-        
+
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 season_manager.update_season(
@@ -152,17 +183,20 @@ def register_routes(app, exclude=None, team_manager=None):
                     number=int(request.form.get('number')) if request.form.get('number') else None,
                     name=request.form.get('name')
                 )
-                
+                _apply_entity_foreign_id(season, request.form)
+
                 flash(f'Zaktualizowano sezon: {season.name}', 'success')
                 return redirect(url_for('view_season', season_id=season.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error updating season: {e}")
                 flash(f'Błąd podczas aktualizacji sezonu: {str(e)}', 'error')
-        
-        return render_template('seasons/edit.html', season=season)
+
+        scraper_foreign_ids = {s.id: season.get_foreign_id(s.id) for s in scrapers}
+        return render_template('seasons/edit.html', season=season,
+                            scrapers=scrapers, scraper_foreign_ids=scraper_foreign_ids)
 
 
     @app.route('/seasons/<int:season_id>/delete', methods=['POST'])
@@ -429,17 +463,19 @@ def register_routes(app, exclude=None, team_manager=None):
         teams = Team.query.order_by(Team.name).all()
         Stadium = _get_stadium()
         stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
-        
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 selected_league_id = int(request.form.get('league_id', league_id or 0))
-                
+
                 # Parse date if provided
                 game_date = None
                 if request.form.get('date') and request.form.get('time'):
                     date_str = f"{request.form['date']} {request.form['time']}"
                     game_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M')
-                
+
                 game = game_manager.create_game(
                     home_team_id=int(request.form['home_team_id']),
                     away_team_id=int(request.form['away_team_id']),
@@ -449,20 +485,22 @@ def register_routes(app, exclude=None, team_manager=None):
                     group_nr=int(request.form.get('group_nr', 1)),
                     date=game_date
                 )
-                
+                _apply_entity_foreign_id(game, request.form)
+
                 flash(f'Utworzono mecz', 'success')
                 return redirect(url_for('view_game', game_id=game.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error creating game: {e}")
                 flash(f'Błąd podczas tworzenia meczu: {str(e)}', 'error')
-        
+
         return render_template('games/create.html',
                             leagues=leagues,
                             teams=teams,
                             stadiums=stadiums,
+                            scrapers=scrapers,
                             selected_league_id=league_id)
 
 
@@ -478,12 +516,14 @@ def register_routes(app, exclude=None, team_manager=None):
             return redirect(url_for('list_games'))
         
         Team = _get_team()
-        
+
         teams = Team.query.order_by(Team.name).all()
         Stadium = _get_stadium()
         stadiums = Stadium.query.order_by(Stadium.city, Stadium.name).all()
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
         shootout_manager = ShootoutManager()
-        
+
         if request.method == 'POST':
             try:
                 # Parse date if provided
@@ -491,7 +531,7 @@ def register_routes(app, exclude=None, team_manager=None):
                 if request.form.get('date') and request.form.get('time'):
                     date_str = f"{request.form['date']} {request.form['time']}"
                     game_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M')
-                
+
                 game_manager.update_game(
                     game_id=game_id,
                     home_team_id=int(request.form.get('home_team_id')) if request.form.get('home_team_id') else None,
@@ -505,32 +545,36 @@ def register_routes(app, exclude=None, team_manager=None):
                     round_number=int(request.form.get('round')) if request.form.get('round') else None,
                     group_nr=int(request.form.get('group_nr')) if request.form.get('group_nr') else None
                 )
-                
+                _apply_entity_foreign_id(game, request.form)
+
                 # Update penalty shootout if exists
                 if game.shootout:
                     home_penalties = request.form.get('home_team_penalties')
                     away_penalties = request.form.get('away_team_penalties')
-                    
+
                     if home_penalties is not None and away_penalties is not None:
                         shootout_manager.update_shootout_score(
                             shootout_id=game.shootout.id,
                             home_penalties=int(home_penalties),
                             away_penalties=int(away_penalties)
                         )
-                
+
                 flash(f'Zaktualizowano mecz', 'success')
                 return redirect(url_for('view_game', game_id=game.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error updating game: {e}")
                 flash(f'Błąd podczas aktualizacji meczu: {str(e)}', 'error')
-        
+
+        scraper_foreign_ids = {s.id: game.get_foreign_id(s.id) for s in scrapers}
         return render_template('games/edit.html',
                             game=game,
                             teams=teams,
-                            stadiums=stadiums)
+                            stadiums=stadiums,
+                            scrapers=scrapers,
+                            scraper_foreign_ids=scraper_foreign_ids)
 
 
     @app.route('/games/<int:game_id>/prepare-broadcast')
@@ -826,7 +870,14 @@ def register_routes(app, exclude=None, team_manager=None):
             flash('Nie znaleziono drużyny', 'error')
             return redirect(url_for('list_games'))
         players = _player_manager.get_players_by_team(team_id)
-        return render_template('players/list.html', team=team, players=players)
+
+        ActiveScraperConfig = _get_active_scraper_config()
+        player_scraper = ActiveScraperConfig.get_active_scraper('player')
+        team_scraper_foreign_id = team.get_foreign_id(player_scraper.id) if player_scraper else None
+
+        return render_template('players/list.html', team=team, players=players,
+                            player_scraper=player_scraper,
+                            team_scraper_foreign_id=team_scraper_foreign_id)
 
     @app.route('/teams/<int:team_id>/players/create', methods=['GET', 'POST'])
     def create_player(team_id):
@@ -2148,6 +2199,9 @@ def register_routes(app, exclude=None, team_manager=None):
     @app.route('/teams/create', methods=['GET', 'POST'])
     def create_team():
         """Create new team manually (without scraping)"""
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 uniform_home = request.form.getlist('uniform_home[]')
@@ -2160,6 +2214,7 @@ def register_routes(app, exclude=None, team_manager=None):
                     coach=request.form.get('coach'),
                     uniform={'home': uniform_home, 'away': uniform_away}
                 )
+                _apply_entity_foreign_id(team, request.form)
 
                 flash(f'Dodano zespół: {team.name}', 'success')
                 return redirect(url_for('view_team', team_id=team.id))
@@ -2168,7 +2223,7 @@ def register_routes(app, exclude=None, team_manager=None):
                 logger.error(f"Error creating team: {e}")
                 flash(f'Błąd podczas tworzenia zespołu: {str(e)}', 'error')
 
-        return render_template('teams/create.html')
+        return render_template('teams/create.html', scrapers=scrapers)
 
 
     @app.route('/teams/<int:team_id>/edit', methods=['GET', 'POST'])
@@ -2180,6 +2235,9 @@ def register_routes(app, exclude=None, team_manager=None):
         if not team:
             flash('Nie znaleziono zespołu', 'error')
             return redirect(url_for('list_teams'))
+
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
 
         if request.method == 'POST':
             try:
@@ -2195,6 +2253,7 @@ def register_routes(app, exclude=None, team_manager=None):
                     coach=request.form.get('coach'),          # ← dodać
                     uniform={'home': uniform_home, 'away': uniform_away}
                 )
+                _apply_entity_foreign_id(team, request.form)
 
                 flash(f'Zaktualizowano zespół: {team.name}', 'success')
                 return redirect(url_for('view_team', team_id=team.id))
@@ -2203,7 +2262,9 @@ def register_routes(app, exclude=None, team_manager=None):
                 logger.error(f"Error updating team: {e}")
                 flash(f'Błąd podczas aktualizacji zespołu: {str(e)}', 'error')
 
-        return render_template('teams/edit.html', team=team, logos=logos)
+        scraper_foreign_ids = {s.id: team.get_foreign_id(s.id) for s in scrapers}
+        return render_template('teams/edit.html', team=team, logos=logos,
+                            scrapers=scrapers, scraper_foreign_ids=scraper_foreign_ids)
 
 
     @app.route('/teams/<int:team_id>/delete', methods=['POST'])

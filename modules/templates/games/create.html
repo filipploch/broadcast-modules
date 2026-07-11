@@ -56,9 +56,22 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="foreign_id">Foreign ID</label>
-            <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
+            <label>Foreign ID</label>
+            {% if scrapers %}
+            <div class="scraper-data-links">
+                {% for scraper in scrapers %}
+                <a href="#" class="btn btn-secondary"
+                   data-scraper-id="{{ scraper.id }}" data-scraper-name="{{ scraper.name }}"
+                   onclick="openForeignIdModal(this); return false;">
+                    📊 Foreign ID: {{ scraper.name }}
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <small style="display:block;color:#6c757d;">Brak zarejestrowanych scraperów dla tego modułu.</small>
+            {% endif %}
         </div>
+        <input type="hidden" name="scraper_foreign_ids" id="scraper_foreign_ids_input" value="{}">
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Utwórz Mecz</button>
             <a href="{{ url_for('list_games') }}" class="btn btn-secondary">Anuluj</a>
@@ -67,7 +80,37 @@
 </div>
 {% endblock %}
 
+{% block modal_content %}
+    <div id="foreign-id-modal" class="modal-content invisible" style="background:#fff;padding:1.5rem;max-width:420px;margin:5vh auto;border-radius:8px;">
+        <h3 id="foreign-id-modal-title" style="margin-top:0;">Foreign ID</h3>
         <div class="form-group">
-            <label for="foreign_id">Foreign ID</label>
-            <input type="text" id="foreign_id" name="foreign_id" maxlength="500" placeholder="np. external-game-789">
+            <label for="modal_foreign_id_value">Foreign ID</label>
+            <input type="text" id="modal_foreign_id_value" maxlength="500" placeholder="np. external-game-789">
         </div>
+        <div class="actions">
+            <button type="button" class="btn btn-success" onclick="saveForeignIdModal()">Zapisz</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal();">Anuluj</button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let scraperForeignIds = {};
+    let currentForeignIdScraperId = null;
+
+    function openForeignIdModal(linkEl) {
+        currentForeignIdScraperId = parseInt(linkEl.dataset.scraperId, 10);
+        document.getElementById('foreign-id-modal-title').textContent = 'Foreign ID: ' + linkEl.dataset.scraperName;
+        document.getElementById('modal_foreign_id_value').value = scraperForeignIds[currentForeignIdScraperId] || '';
+        openModal('foreign-id-modal');
+    }
+
+    function saveForeignIdModal() {
+        if (currentForeignIdScraperId === null) return;
+        scraperForeignIds[currentForeignIdScraperId] = document.getElementById('modal_foreign_id_value').value.trim();
+        document.getElementById('scraper_foreign_ids_input').value = JSON.stringify(scraperForeignIds);
+        closeModal();
+    }
+</script>
+{% endblock %}
