@@ -12,6 +12,7 @@ from app.models.game_foreign_id import GameForeignId
 from app.models.player_foreign_id import PlayerForeignId
 from app.models.league_foreign_id import LeagueForeignId
 from app.models.season_foreign_id import SeasonForeignId
+from app.models.league_scraper_url import LeagueScraperUrl
 from app.models.game_player import GamePlayer
 from app.models.game_timer import GameTimer
 from app.models.settings import Settings

@@ -7,8 +7,8 @@
     <div class="card-header">
         <span>Utwórz Nową Ligę/Rozgrywki</span>
     </div>
-    
-    <form method="POST">
+
+    <form method="POST" id="league-form">
         <div class="form-group">
             <label for="season_id">
                 Sezon *
@@ -22,91 +22,42 @@
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="name">
                 Nazwa Ligi/Rozgrywek *
             </label>
-            <input 
-                type="text" 
-                id="name" 
-                name="name" 
+            <input
+                type="text"
+                id="name"
+                name="name"
                 required
                 maxlength="50"
                 placeholder="np. Dywizja A, Puchar Ligi">
         </div>
-        
+
         <div class="form-group">
-            <label for="games_url">
-                URL Tabeli Meczów *
-            </label>
-            <input 
-                type="url" 
-                id="games_url" 
-                name="games_url" 
-                required
-                placeholder="https://nalffutsal.pl/?page_id=...">
+            <label>Dane scraperów</label>
+            <small style="display:block;color:#6c757d;margin-bottom:.5rem;">
+                URL-e i foreign ID potrzebne poszczególnym scraperom do pobierania danych tej ligi. Można uzupełnić teraz albo później w edycji.
+            </small>
+            {% if scrapers %}
+            <div class="scraper-data-links">
+                {% for scraper in scrapers %}
+                <a href="#" class="btn btn-secondary"
+                   data-scraper-id="{{ scraper.id }}" data-scraper-name="{{ scraper.name }}"
+                   onclick="openScraperDataModal(this); return false;">
+                    📊 Dane scrapera: {{ scraper.name }}
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <small style="display:block;color:#6c757d;">Brak zarejestrowanych scraperów dla tego modułu.</small>
+            {% endif %}
         </div>
-        
-        <div class="form-group">
-            <label for="table_url">
-                URL Tabeli Ligowej
-            </label>
-            <input 
-                type="url" 
-                id="table_url" 
-                name="table_url" 
-                placeholder="https://nalffutsal.pl/?page_id=...">
-        </div>
-        
-        <div class="form-group">
-            <label for="scorers_url">
-                URL Tabeli Strzelców *
-            </label>
-            <input 
-                type="url" 
-                id="scorers_url" 
-                name="scorers_url" 
-                required
-                placeholder="https://nalffutsal.pl/?page_id=...">
-        </div>
-        
-        <div class="form-group">
-            <label for="assists_url">
-                URL Tabeli Asystentów *
-            </label>
-            <input 
-                type="url" 
-                id="assists_url" 
-                name="assists_url" 
-                required
-                placeholder="https://nalffutsal.pl/?page_id=...">
-        </div>
-        
-        <div class="form-group">
-            <label for="canadian_url">
-                URL Klasyfikacji Kanadyjskiej *
-            </label>
-            <input 
-                type="url" 
-                id="canadian_url" 
-                name="canadian_url" 
-                required
-                placeholder="https://nalffutsal.pl/?page_id=...">
-        </div>
-        
-        <div class="form-group">
-            <label for="foreign_id">
-                Foreign ID
-            </label>
-            <input 
-                type="text" 
-                id="foreign_id" 
-                name="foreign_id" 
-                maxlength="500"
-                placeholder="np. external-league-456">
-        </div>
-        
+
+        <input type="hidden" name="scraper_data" id="scraper_data_input" value="{}">
+
         <div class="form-group">
             <label>
                 <input type="checkbox" name="allows_draw" value="1" checked>
@@ -123,4 +74,72 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block modal_content %}
+<div id="scraper-data-modal" class="modal-content invisible" style="background:#fff;padding:1.5rem;max-width:520px;margin:5vh auto;border-radius:8px;">
+    <h3 id="scraper-data-modal-title" style="margin-top:0;">Dane scrapera</h3>
+
+    <div class="form-group">
+        <label for="modal_games_url">URL Tabeli Meczów</label>
+        <input type="url" id="modal_games_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label for="modal_table_url">URL Tabeli Ligowej</label>
+        <input type="url" id="modal_table_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label for="modal_scorers_url">URL Tabeli Strzelców</label>
+        <input type="url" id="modal_scorers_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label for="modal_assists_url">URL Tabeli Asystentów</label>
+        <input type="url" id="modal_assists_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label for="modal_canadian_url">URL Klasyfikacji Kanadyjskiej</label>
+        <input type="url" id="modal_canadian_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label for="modal_foreign_id">Foreign ID</label>
+        <input type="text" id="modal_foreign_id" maxlength="500" placeholder="np. external-league-456">
+    </div>
+
+    <div class="actions">
+        <button type="button" class="btn btn-success" onclick="saveScraperDataModal()">Zapisz</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal();">Anuluj</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const URL_FIELD_IDS = ['games_url', 'table_url', 'scorers_url', 'assists_url', 'canadian_url'];
+    let scraperData = {};
+    let currentScraperId = null;
+
+    function openScraperDataModal(linkEl) {
+        const scraperId = parseInt(linkEl.dataset.scraperId, 10);
+        currentScraperId = scraperId;
+        document.getElementById('scraper-data-modal-title').textContent = 'Dane scrapera: ' + linkEl.dataset.scraperName;
+        const data = scraperData[scraperId] || {};
+        URL_FIELD_IDS.forEach(function(field) {
+            document.getElementById('modal_' + field).value = data[field] || '';
+        });
+        document.getElementById('modal_foreign_id').value = data.foreign_id || '';
+        openModal('scraper-data-modal');
+    }
+
+    function saveScraperDataModal() {
+        if (currentScraperId === null) return;
+        const entry = {};
+        URL_FIELD_IDS.forEach(function(field) {
+            entry[field] = document.getElementById('modal_' + field).value.trim();
+        });
+        entry.foreign_id = document.getElementById('modal_foreign_id').value.trim();
+        scraperData[currentScraperId] = entry;
+        document.getElementById('scraper_data_input').value = JSON.stringify(scraperData);
+        closeModal();
+    }
+</script>
 {% endblock %}

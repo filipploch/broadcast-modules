@@ -65,14 +65,18 @@ class BaseTeamForeignIdMixin:
 
     @classmethod
     def set_foreign_id(cls, scraper_id, team_id, foreign_id):
-        """Utwórz lub zaktualizuj mapowanie (scraper, team) -> foreign_id."""
+        """Utwórz/zaktualizuj mapowanie (scraper, team) -> foreign_id. Puste foreign_id usuwa mapowanie."""
         row = cls.query.filter_by(scraper_id=scraper_id, team_id=team_id).first()
-        if row:
-            row.foreign_id = foreign_id
-            row.updated_at = datetime.utcnow()
-        else:
-            row = cls(scraper_id=scraper_id, team_id=team_id, foreign_id=foreign_id)
-            db.session.add(row)
+        if foreign_id:
+            if row:
+                row.foreign_id = foreign_id
+                row.updated_at = datetime.utcnow()
+            else:
+                row = cls(scraper_id=scraper_id, team_id=team_id, foreign_id=foreign_id)
+                db.session.add(row)
+        elif row:
+            db.session.delete(row)
+            row = None
         db.session.commit()
         return row
 

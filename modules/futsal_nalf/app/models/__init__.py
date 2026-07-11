@@ -13,6 +13,7 @@ from app.models.game_foreign_id import GameForeignId
 from app.models.player_foreign_id import PlayerForeignId
 from app.models.league_foreign_id import LeagueForeignId
 from app.models.season_foreign_id import SeasonForeignId
+from app.models.league_scraper_url import LeagueScraperUrl
 from app.models.stadium import Stadium
 from app.models.event import Event
 from app.models.event_camera import EventCamera

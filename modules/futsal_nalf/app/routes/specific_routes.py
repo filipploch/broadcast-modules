@@ -17,6 +17,7 @@ from app.managers import (
 )
 from app.models.period import Period
 from app.models.settings import Settings
+from app.models.scraper import Scraper
 import logging
 import os
 
@@ -28,6 +29,13 @@ team_scraper_manager   = TeamScraperManager()
 player_scraper_manager = PlayerScraperManager()
 game_scraper_manager   = GameScraperManager()
 league_manager         = LeagueManager()
+
+
+def _nalffutsal_scraper_id():
+    scraper = Scraper.get_by_folder('nalffutsal')
+    if not scraper:
+        raise RuntimeError("Scraper 'nalffutsal' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
 
 
 def register_routes(app):
@@ -360,12 +368,13 @@ def register_routes(app):
         league = league_manager.get_league_by_id(league_id)
         if not league:
             return jsonify({'error': 'Nie znaleziono ligi'}), 404
-        if not league.games_url:
-            return jsonify({'error': 'Liga nie ma skonfigurowanego URL do scrapowania'}), 400
+        games_url = league.get_scraper_url(_nalffutsal_scraper_id(), 'games_url')
+        if not games_url:
+            return jsonify({'error': 'Liga nie ma skonfigurowanego URL do scrapowania (Dane scrapera: NALF Futsal)'}), 400
         if game_scraper_manager.is_scraping_in_progress():
             return jsonify({'error': 'Scrapowanie już trwa'}), 409
         try:
-            game_scraper_manager.scrape_games_async([league.games_url], league_name=league.name)
+            game_scraper_manager.scrape_games_async([games_url], league_name=league.name)
             return jsonify({'status': 'started'}), 202
         except Exception as e:
             logger.error(f"Error starting scraping: {e}")

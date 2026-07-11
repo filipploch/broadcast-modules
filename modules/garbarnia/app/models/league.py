@@ -1,6 +1,7 @@
 """League — moduł garbarnia.
 
-Rozszerza BaseLeagueMixin o URL-e do zewnętrznych zasobów ligi.
+Rozszerza BaseLeagueMixin o parametry scraperów specyficzne dla ligi, które nie
+pasują do generycznego kształtu LeagueScraperUrl (URL-e per scraper są tam).
 """
 from core.extensions import db
 from core.models.base_league import BaseLeagueMixin
@@ -9,11 +10,6 @@ from core.models.base_league import BaseLeagueMixin
 class League(BaseLeagueMixin, db.Model):
     __tablename__ = 'leagues'
 
-    games_url             = db.Column(db.String(500), nullable=True)
-    table_url             = db.Column(db.String(500), nullable=True)
-    scorers_url           = db.Column(db.String(500), nullable=True)
-    assists_url           = db.Column(db.String(500), nullable=True)
-    canadian_url          = db.Column(db.String(500), nullable=True)
     superscore_season_id  = db.Column(db.String(100), nullable=True)
     # UUID used as ?playDictionary= query param on laczynaspilka.pl team pages
     play_dictionary_id    = db.Column(db.String(100), nullable=True)

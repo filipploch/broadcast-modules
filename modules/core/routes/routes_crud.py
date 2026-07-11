@@ -9,6 +9,7 @@ from core.managers.game_camera_manager import GameCameraManager
 # from core.models.base_team import get_team_model
 from core.extensions import db
 from datetime import datetime
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,45 @@ def _get_player():
 def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
+
+def _get_scraper():
+    from core.models.base_scraper import get_scraper_model
+    return get_scraper_model()
+
+def _get_league_scraper_url():
+    from core.models.base_league_scraper_url import get_league_scraper_url_model
+    return get_league_scraper_url_model()
+
+def _apply_league_scraper_data(league, form):
+    """Parsuje pole 'scraper_data' (JSON: {scraper_id: {url_type: value, foreign_id: value}})
+    z formularza modala i zapisuje do LeagueScraperUrl / LeagueForeignId.
+    Brakujące/uszkodzone dane nie przerywają zapisu ligi — tylko pomijamy je z logiem."""
+    raw = form.get('scraper_data')
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("Nieprawidłowy JSON w scraper_data — pomijam dane scraperów")
+        return
+    if not isinstance(data, dict):
+        return
+
+    LeagueScraperUrl = _get_league_scraper_url()
+    for scraper_id_raw, fields in data.items():
+        try:
+            scraper_id = int(scraper_id_raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(fields, dict):
+            continue
+
+        for url_type in LeagueScraperUrl.ALL_URL_TYPES:
+            value = (fields.get(url_type) or '').strip()
+            league.set_scraper_url(scraper_id, url_type, value)
+
+        foreign_id = (fields.get('foreign_id') or '').strip()
+        league.set_foreign_id(scraper_id, foreign_id)
 
 
 # =========================
@@ -180,69 +220,73 @@ def register_routes(app, exclude=None, team_manager=None):
     def create_league(season_id=None):
         """Create new league"""
         seasons = season_manager.get_all_seasons()
-        
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 selected_season_id = int(request.form.get('season_id', season_id or 0))
-                
+
                 league = league_manager.create_league(
                     season_id=selected_season_id,
                     name=request.form['name'],
-                    games_url=request.form['games_url'],
-                    scorers_url=request.form['scorers_url'],
-                    assists_url=request.form['assists_url'],
-                    canadian_url=request.form['canadian_url'],
-                    table_url=request.form.get('table_url', ''),
                     allows_draw=('allows_draw' in request.form),
                 )
-                
+                _apply_league_scraper_data(league, request.form)
+
                 flash(f'Utworzono ligę: {league.name}', 'success')
                 return redirect(url_for('view_league', league_id=league.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error creating league: {e}")
                 flash(f'Błąd podczas tworzenia ligi: {str(e)}', 'error')
-        
-        return render_template('leagues/create.html', 
-                            seasons=seasons, 
-                            selected_season_id=season_id)
+
+        return render_template('leagues/create.html',
+                            seasons=seasons,
+                            selected_season_id=season_id,
+                            scrapers=scrapers)
 
 
     @app.route('/leagues/<int:league_id>/edit', methods=['GET', 'POST'])
     def edit_league(league_id):
         """Edit existing league"""
         league = league_manager.get_league_by_id(league_id)
-        
+
         if not league:
             flash('Nie znaleziono ligi', 'error')
             return redirect(url_for('list_leagues'))
-        
+
+        Scraper = _get_scraper()
+        scrapers = Scraper.query.order_by(Scraper.name).all()
+
         if request.method == 'POST':
             try:
                 league_manager.update_league(
                     league_id=league_id,
                     name=request.form.get('name'),
-                    games_url=request.form.get('games_url'),
-                    table_url=request.form.get('table_url'),
-                    scorers_url=request.form.get('scorers_url'),
-                    assists_url=request.form.get('assists_url'),
-                    canadian_url=request.form.get('canadian_url'),
                     allows_draw=('allows_draw' in request.form),
                     play_dictionary_id=request.form.get('play_dictionary_id'),
                 )
-                
+                _apply_league_scraper_data(league, request.form)
+
                 flash(f'Zaktualizowano ligę: {league.name}', 'success')
                 return redirect(url_for('view_league', league_id=league.id))
-                
+
             except ValueError as e:
                 flash(str(e), 'error')
             except Exception as e:
                 logger.error(f"Error updating league: {e}")
                 flash(f'Błąd podczas aktualizacji ligi: {str(e)}', 'error')
-        
-        return render_template('leagues/edit.html', league=league)
+
+        scraper_data = {
+            scraper.id: {**league.get_scraper_urls(scraper.id), 'foreign_id': league.get_foreign_id(scraper.id)}
+            for scraper in scrapers
+        }
+
+        return render_template('leagues/edit.html', league=league,
+                            scrapers=scrapers, scraper_data=scraper_data)
 
 
     @app.route('/leagues/<int:league_id>/delete', methods=['POST'])

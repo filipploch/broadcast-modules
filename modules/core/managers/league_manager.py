@@ -69,20 +69,13 @@ class LeagueManager:
         League = _get_league()
         return League.query.get(league_id)
 
-    def create_league(self, season_id, name, games_url, scorers_url, assists_url,
-                      canadian_url, table_url=None,
-                      allows_draw=True):
+    def create_league(self, season_id, name, allows_draw=True):
         """
         Create new league
 
         Args:
             season_id: Season ID
             name: League name (e.g., "Dywizja A", "Puchar Ligi")
-            games_url: URL to games table
-            scorers_url: URL to scorers table
-            assists_url: URL to assists table
-            canadian_url: URL to canadian points table
-            table_url: Optional URL to league table
             allows_draw: True = liga grupowa (remis dozwolony),
                          False = rozgrywki pucharowe (remis → rzuty karne)
 
@@ -109,11 +102,6 @@ class LeagueManager:
                 season_id=season_id,
                 name=name,
                 allows_draw=allows_draw,
-                games_url=games_url,
-                table_url=table_url,
-                scorers_url=scorers_url,
-                assists_url=assists_url,
-                canadian_url=canadian_url,
             )
             db.session.add(league)
             db.session.commit()
@@ -131,8 +119,7 @@ class LeagueManager:
             logger.error(f"Error creating league: {e}")
             return None
 
-    def update_league(self, league_id, name=None, games_url=None, table_url=None,
-                      scorers_url=None, assists_url=None, canadian_url=None,
+    def update_league(self, league_id, name=None,
                       allows_draw=None, play_dictionary_id=None):
         """
         Update league
@@ -140,11 +127,6 @@ class LeagueManager:
         Args:
             league_id: League ID
             name: New league name (optional)
-            games_url: New games URL (optional)
-            table_url: New table URL (optional)
-            scorers_url: New scorers URL (optional)
-            assists_url: New assists URL (optional)
-            canadian_url: New canadian URL (optional)
 
         Returns:
             Updated League object or None if error
@@ -172,17 +154,6 @@ class LeagueManager:
                     raise ValueError(f"Liga o nazwie '{name}' już istnieje w tym sezonie")
                 league.name = name
 
-            # Update URLs if provided
-            if games_url is not None:
-                league.games_url = games_url
-            if table_url is not None:
-                league.table_url = table_url
-            if scorers_url is not None:
-                league.scorers_url = scorers_url
-            if assists_url is not None:
-                league.assists_url = assists_url
-            if canadian_url is not None:
-                league.canadian_url = canadian_url
             if play_dictionary_id is not None:
                 league.play_dictionary_id = play_dictionary_id or None
 

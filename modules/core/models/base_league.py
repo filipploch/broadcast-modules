@@ -7,6 +7,14 @@ def _get_league_foreign_id():
     from core.models.base_league_foreign_id import get_league_foreign_id_model
     return get_league_foreign_id_model()
 
+def _get_league_scraper_url():
+    from core.models.base_league_scraper_url import get_league_scraper_url_model
+    return get_league_scraper_url_model()
+
+def _get_scraper():
+    from core.models.base_scraper import get_scraper_model
+    return get_scraper_model()
+
 
 class BaseLeagueMixin:
     """Football league (e.g., Dywizja A, Dywizja B, Puchar Ligi)"""
@@ -59,6 +67,31 @@ class BaseLeagueMixin:
         """Zwraca {scraper.folder: foreign_id} dla wszystkich scraperów mapujących tę ligę."""
         return {row.scraper.folder: row.foreign_id for row in self.foreign_ids}
 
+    def get_scraper_url(self, scraper_id, url_type):
+        """Zwraca jeden URL (np. 'games_url') skonfigurowany dla danego scrapera, albo None."""
+        return _get_league_scraper_url().get_url(scraper_id, self.id, url_type)
+
+    def set_scraper_url(self, scraper_id, url_type, url):
+        """Zapisuje/aktualizuje/usuwa (gdy url puste) jeden URL dla danego scrapera."""
+        return _get_league_scraper_url().set_url(scraper_id, self.id, url_type, url)
+
+    def get_scraper_urls(self, scraper_id):
+        """Zwraca {url_type: url|None} dla wszystkich typów URL danego scrapera."""
+        return _get_league_scraper_url().get_urls_for_league(scraper_id, self.id)
+
+    def get_all_scraper_data(self):
+        """Zwraca {scraper.folder: {url_type: url, ..., 'foreign_id': ...}} dla scraperów
+        z jakimikolwiek danymi skonfigurowanymi dla tej ligi."""
+        result = {}
+        for scraper in _get_scraper().query.all():
+            urls = self.get_scraper_urls(scraper.id)
+            foreign_id = self.get_foreign_id(scraper.id)
+            if any(urls.values()) or foreign_id:
+                data = dict(urls)
+                data['foreign_id'] = foreign_id
+                result[scraper.folder] = data
+        return result
+
     @property
     def total_teams(self):
         """Get total number of teams in this league"""
@@ -84,11 +117,7 @@ class BaseLeagueMixin:
             'season_name': self.season.name if self.season else None,
             'name': self.name,
             'foreign_ids': self.get_foreign_ids(),
-            'games_url': self.games_url,
-            'table_url': self.table_url,
-            'scorers_url': self.scorers_url,
-            'assists_url': self.assists_url,
-            'canadian_url': self.canadian_url,
+            'scraper_data': self.get_all_scraper_data(),
             'total_teams': self.total_teams,
             'allows_draw': self.allows_draw,
             'total_games': self.total_games,

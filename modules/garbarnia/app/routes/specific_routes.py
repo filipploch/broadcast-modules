@@ -41,6 +41,13 @@ def _laczynaspilka_scraper_id():
     return scraper.id
 
 
+def _malopolskizpn_scraper_id():
+    scraper = Scraper.get_by_folder('malopolskizpn')
+    if not scraper:
+        raise RuntimeError("Scraper 'malopolskizpn' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
+
+
 def register_routes(app):
     """Rejestruje wszystkie trasy specyficzne dla futsal-nalf."""
     """Rejestruje wszystkie trasy specyficzne dla futsal-nalf."""
@@ -391,12 +398,13 @@ def register_routes(app):
         league = league_manager.get_league_by_id(league_id)
         if not league:
             return jsonify({'error': 'Nie znaleziono ligi'}), 404
-        if not league.games_url:
-            return jsonify({'error': 'Liga nie ma skonfigurowanego URL do scrapowania'}), 400
+        games_url = league.get_scraper_url(_malopolskizpn_scraper_id(), 'games_url')
+        if not games_url:
+            return jsonify({'error': 'Liga nie ma skonfigurowanego URL do scrapowania (Dane scrapera: Małopolski ZPN)'}), 400
         if game_scraper_manager.is_scraping_in_progress():
             return jsonify({'error': 'Scrapowanie już trwa'}), 409
         try:
-            game_scraper_manager.scrape_games_async([league.games_url], league_name=league.name)
+            game_scraper_manager.scrape_games_async([games_url], league_name=league.name)
             return jsonify({'status': 'started'}), 202
         except Exception as e:
             logger.error(f"Error starting scraping: {e}")
