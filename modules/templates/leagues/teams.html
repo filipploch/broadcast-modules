@@ -14,6 +14,11 @@
     <div class="card-header">
         <span>Drużyny w lidze: {{ league.name }}</span>
         <div class="actions">
+            {% if league.superscore_season_id is defined %}
+            <a href="{{ url_for('scrape_league_teams_superscore', league_id=league.id) }}" class="btn btn-success">
+                🔍 Scrapuj drużyny (superscore)
+            </a>
+            {% endif %}
             <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">
                 ← Powrót do ligi
             </a>
