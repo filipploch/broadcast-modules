@@ -14,6 +14,9 @@
         <div class="actions">
             {% if league %}
                 <button class="btn btn-success" onclick="startGameScraping({{ league.id }})">🔍 Scrapuj mecze</button>
+                {% if league.superscore_season_id is defined %}
+                <a href="{{ url_for('scrape_league_teams_superscore', league_id=league.id) }}" class="btn btn-secondary">🔍 Scrapuj drużyny (superscore)</a>
+                {% endif %}
                 <a href="{{ url_for('create_game', league_id=league.id) }}" class="btn btn-primary">➕ Nowy Mecz</a>
             {% else %}
                 <a href="{{ url_for('create_game') }}" class="btn btn-primary">➕ Nowy Mecz</a>

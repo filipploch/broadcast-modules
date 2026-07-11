@@ -404,7 +404,89 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error starting superscore scraping: {e}")
             return jsonify({'error': str(e)}), 500
-    
+
+    # =========================
+    # SCRAPOWANIE DRUŻYN LIGI (superscore) + dopasowywanie
+    # =========================
+
+    @app.route('/leagues/<int:league_id>/teams/scrape/superscore')
+    def scrape_league_teams_superscore(league_id):
+        """Pobierz drużyny ligi z superscore.live i zapisz kandydatów do przeglądu."""
+        try:
+            count = team_scraper_manager.scrape_league_teams_from_superscore(league_id)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('view_league', league_id=league_id))
+        except Exception as e:
+            logger.error(f"Error scraping league teams from superscore: {e}", exc_info=True)
+            flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
+            return redirect(url_for('view_league', league_id=league_id))
+
+        if count:
+            flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
+        else:
+            flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
+        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+
+    @app.route('/leagues/<int:league_id>/teams/pending-matches')
+    def review_pending_team_matches(league_id):
+        """Ekran przeglądu drużyn wykrytych przez scraper, oczekujących na potwierdzenie."""
+        from app.models.league import League
+        from app.models.team import Team
+
+        league = League.query.get(league_id)
+        if not league:
+            flash('Nie znaleziono ligi', 'error')
+            return redirect(url_for('list_leagues'))
+
+        pending = team_scraper_manager.get_pending_team_matches(league_id)
+        all_teams = Team.query.order_by(Team.name).all()
+
+        return render_template('teams/pending_matches.html',
+                            league=league, pending=pending, all_teams=all_teams)
+
+    @app.route('/teams/pending-matches/<int:pending_id>/resolve', methods=['POST'])
+    def resolve_pending_team_match(pending_id):
+        """Zatwierdź kandydata: połącz z istniejącą drużyną albo utwórz nową."""
+        from app.models.pending_team_match import PendingTeamMatch
+
+        pending = PendingTeamMatch.query.get(pending_id)
+        if not pending:
+            flash('Nie znaleziono wpisu do zatwierdzenia', 'error')
+            return redirect(url_for('list_leagues'))
+        league_id = pending.league_id
+
+        existing_team_id = request.form.get('existing_team_id')
+        try:
+            team = team_scraper_manager.resolve_pending_team_match(
+                pending_id=pending_id,
+                existing_team_id=int(existing_team_id) if existing_team_id else None,
+                name_14=request.form.get('name_14'),
+                short_name=request.form.get('short_name'),
+            )
+            flash(f'Dopasowano: {team.name}', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        except Exception as e:
+            logger.error(f"Error resolving pending team match: {e}", exc_info=True)
+            flash(f'Błąd podczas zatwierdzania: {str(e)}', 'error')
+
+        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+
+    @app.route('/teams/pending-matches/<int:pending_id>/reject', methods=['POST'])
+    def reject_pending_team_match(pending_id):
+        """Odrzuć/pomiń kandydata bez tworzenia żadnego powiązania."""
+        from app.models.pending_team_match import PendingTeamMatch
+
+        pending = PendingTeamMatch.query.get(pending_id)
+        league_id = pending.league_id if pending else None
+
+        team_scraper_manager.reject_pending_team_match(pending_id)
+        flash('Pominięto', 'info')
+
+        if league_id:
+            return redirect(url_for('review_pending_team_matches', league_id=league_id))
+        return redirect(url_for('list_leagues'))
 
     @app.route('/game-setup')
     def game_setup():

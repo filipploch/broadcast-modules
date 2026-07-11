@@ -1,0 +1,75 @@
+{% extends "base/base.html" %}
+{% block title %}Przegląd drużyn — {{ league.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Przegląd drużyn — {{ league.name }}</span>
+        <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">← Powrót do ligi</a>
+    </div>
+
+    {% if pending %}
+    <p style="padding:0 1rem;color:#6c757d;">
+        Dla każdej drużyny wykrytej na www wskaż, której drużynie w bazie odpowiada, albo wybierz „➕ Nowa drużyna”.
+        Podpowiedź (jeśli jest) jest już zaznaczona.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Drużyna z www</th>
+                <th>Dopasowanie</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pending %}
+            <tr>
+                <td>
+                    <strong>{{ item.scraped_name }}</strong>
+                    {% if item.suggested_team %}
+                    <br><small style="color:#6c757d;">Podpowiedź: {{ item.suggested_team.name }} ({{ (item.similarity_score * 100) | round | int }}%)</small>
+                    {% else %}
+                    <br><small style="color:#6c757d;">Brak dopasowania — prawdopodobnie nowa drużyna</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('resolve_pending_team_match', pending_id=item.id) }}" class="pending-match-form">
+                        <select name="existing_team_id" class="pending-team-select" onchange="togglePendingNewTeamFields(this)">
+                            <option value="">➕ Nowa drużyna</option>
+                            {% for team in all_teams %}
+                            <option value="{{ team.id }}" {% if item.suggested_team_id == team.id %}selected{% endif %}>
+                                {{ team.name }}{% if item.suggested_team_id == team.id %} ⭐{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="pending-new-team-fields" style="{% if item.suggested_team_id %}display:none;{% endif %}margin-top:.5rem;display:flex;gap:.5rem;">
+                            <input type="text" name="name_14" maxlength="14" placeholder="Nazwa skrócona (14 zn.)" value="{{ item.scraped_name[:14] }}">
+                            <input type="text" name="short_name" maxlength="3" minlength="3" placeholder="TLA" style="text-transform:uppercase;width:5rem;" value="{{ item.scraped_name[:3] | upper }}">
+                        </div>
+                        <div class="actions" style="margin-top:.5rem;">
+                            <button type="submit" class="btn btn-success btn-small">✅ Zatwierdź</button>
+                        </div>
+                    </form>
+                    <form method="POST" action="{{ url_for('reject_pending_team_match', pending_id=item.id) }}" style="display:inline;"
+                          onsubmit="return confirm('Pominąć {{ item.scraped_name }}?');">
+                        <button type="submit" class="btn btn-danger btn-small">Pomiń</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak drużyn oczekujących na przegląd.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function togglePendingNewTeamFields(select) {
+    const fields = select.closest('form').querySelector('.pending-new-team-fields');
+    fields.style.display = select.value ? 'none' : 'flex';
+}
+</script>
+{% endblock %}
