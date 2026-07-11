@@ -1,6 +1,6 @@
 """Team Manager - handles CRUD operations and scraping workflow with threading"""
 from typing import List, Dict, Optional
-from flask import session, current_app
+from flask import session
 from core.extensions import db
 from app.models.team import Team
 from core.managers.team_manager import TeamManager
@@ -31,90 +31,10 @@ class TeamScraperManager:
     # =========================
     # Scraping Workflow (Threaded)
     # =========================
-
-    def scrape_leagues_async(self, league_urls: List[str], league_name: str = '') -> bool:
-        """
-        Start scraping teams in a background thread.
-
-        Args:
-            league_urls: List of URLs to scrape
-            league_name: Human-readable league name for socket payloads
-
-        Returns:
-            True if scraping started, False if already running
-        """
-        with self._scraping_lock:
-            if self._scraping_thread and self._scraping_thread.is_alive():
-                logger.warning("Scraping already in progress")
-                return False
-
-            self._status = {
-                'status': 'in_progress',
-                'total_scraped': 0,
-                'updated': 0,
-                'new_pending': 0,
-                'error': None
-            }
-
-            app = current_app._get_current_object()
-
-            from core.extensions import socketio
-            socketio.emit('scraping_started', {'name': league_name})
-
-            self._scraping_thread = threading.Thread(
-                target=self._scrape_worker,
-                args=(app, league_urls, league_name),
-                daemon=True
-            )
-            self._scraping_thread.start()
-
-            logger.info(f"Started team scraping in background thread for {len(league_urls)} URLs")
-            return True
-
-    def _scrape_worker(self, app, league_urls: List[str], league_name: str):
-        """Background worker — runs in a separate thread."""
-        with app.app_context():
-            from core.extensions import socketio
-            try:
-                from app.managers.scrapers.malopolskizpn import TeamScraper
-
-                scraper = TeamScraper()
-                logger.info("Team scraping started in thread")
-
-                scraped_teams = scraper.scrape_multiple_leagues(league_urls)
-                stats = self._process_scraped_teams(scraped_teams)
-
-                self._status = {
-                    'status': 'completed',
-                    'total_scraped': stats['total_scraped'],
-                    'updated': stats['updated'],
-                    'new_pending': stats['new_pending'],
-                    'error': None
-                }
-
-                logger.info(
-                    f"Team scraping completed: {stats['total_scraped']} total, "
-                    f"{stats['updated']} updated, {stats['new_pending']} new"
-                )
-
-                socketio.emit('scraping_completed', {
-                    'status': 'success',
-                    'name': league_name,
-                    'total_scraped': stats['total_scraped'],
-                    'updated': stats['updated'],
-                    'new_pending': stats['new_pending'],
-                })
-
-            except Exception as e:
-                logger.error(f"Team scraping error in thread: {e}", exc_info=True)
-                self._status = {
-                    'status': 'error',
-                    'total_scraped': 0,
-                    'updated': 0,
-                    'new_pending': 0,
-                    'error': str(e)
-                }
-                socketio.emit('scraping_error', {'status': 'error', 'name': league_name, 'error': str(e)})
+    # NOTE: no scraper is currently wired up here — garbarnia has no
+    # dedicated team-list scraper (the old team_scraper.py was an
+    # unused nalffutsal.pl copy-paste, removed). _process_scraped_teams
+    # below stays ready for whichever scraper eventually calls it.
 
     def get_scraping_status(self) -> Dict:
         """Get current scraping status."""
