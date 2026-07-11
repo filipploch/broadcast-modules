@@ -1,4 +1,4 @@
-"""PlayerScraper - scraping players data from nalffutsal.pl team pages"""
+"""PlayerScraper - scraping players data from laczynaspilka.pl team pages"""
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -15,7 +15,7 @@ _UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 
 class PlayerScraper:
-    """Scraper for NALF Futsal player data from team pages"""
+    """Scraper for laczynaspilka.pl player data from team pages"""
 
     def __init__(self):
         self.session = requests.Session()
