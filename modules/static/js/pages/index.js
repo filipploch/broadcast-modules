@@ -232,13 +232,17 @@ socket.on('initial_data', (data) => {
     appState.isReordering     = false;
 
     applyReversedState(appState.isReversed);
-    if (appState.mainTimer) {
-        window.initialTime = appState.mainTimer.initial_time;
-        updateTimerDisplay(appState.mainTimer);
-    }
+    // Kontenery kar muszą powstać PRZED updateTimerDisplay/tickPenalties —
+    // inaczej pierwszy tick nie znajdzie jeszcze elementów [data-display-for]
+    // i wyświetlacz zostanie pusty aż do następnego ticku głównego timera
+    // (który przy zapauzowanym zegarze może nigdy nie nadejść).
     if (_hasPenalties) {
         fillPenaltiesTimersContainer(appState.home_penalties, 'home');
         fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+    }
+    if (appState.mainTimer) {
+        window.initialTime = appState.mainTimer.initial_time;
+        updateTimerDisplay(appState.mainTimer);
     }
 });
 
@@ -355,6 +359,32 @@ function formatTime(milliseconds) {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+// Ostatni znany elapsed głównego timera — potrzebny, żeby odświeżyć
+// wyświetlanie kary (tickPenalties) także wtedy, gdy główny timer akurat NIE
+// tyka (jest zapauzowany), np. przy dodaniu nowej kary albo korekcie +/-
+// karą po jej wygaśnięciu. Ten sam mechanizm co window._lastMainElapsed
+// w overlayu (penalty-timers-observers.js / overlay.js).
+let _lastMainElapsedMs = 0;
+
+/**
+ * Odświeża wyświetlane pozostałe czasy kar na podstawie ticku głównego
+ * timera — ten sam mechanizm (derived-variable) co w overlayu
+ * (penalty-timers-observers.js), zamiast ufania osobnym tickom pluginu per
+ * kara. Dzięki temu overlay i UI liczą z tego samego wzoru (time-display.js)
+ * i tej samej migawki (appState.home_penalties/away_penalties, odświeżanej
+ * przez 'reload_penalty_timers'/'initial_data').
+ */
+function tickPenalties(mainElapsedMs) {
+    if (!_hasPenalties) return;
+    const all = [].concat(appState.home_penalties || [], appState.away_penalties || []);
+    all.forEach(pen => {
+        const displayEl = document.querySelector(`[data-display-for="${pen.timer_id}"]`);
+        if (!displayEl) return;
+        const remaining = TimeDisplay.derivePenaltyRemainingMs(pen, mainElapsedMs);
+        displayEl.textContent = TimeDisplay.formatCountDown(remaining);
+    });
+}
+
 function updateTimerDisplay(timerData) {
     console.log("timerData:", timerData);
     const timerId = timerData.timer_id;
@@ -362,12 +392,21 @@ function updateTimerDisplay(timerData) {
     let timerLimit = timerData.limit   || 0;
     const initialTime  = timerData.initial_time || 0;
     const timerState = timerData.state;
+
+    const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
+
+    // Tylko tick głównego timera napędza kary — tick samej kary (gdyby tu
+    // trafił, np. przy limit_reached) ma inne znaczenie elapsed i nie może
+    // być użyty jako mainElapsedMs.
+    if (!timerId || !timerId.startsWith('penalty')) {
+        _lastMainElapsedMs = elapsed;
+        tickPenalties(elapsed);
+    }
+
     const minutesDisplay  = document.querySelector(`[data-display-for="${timerId}-min-display"]`);
     const secondsDisplay  = document.querySelector(`[data-display-for="${timerId}-sec-display"]`);
     const dsecondsDisplay = document.querySelector(`[data-display-for="${timerId}-ds-display"]`);
     if (!minutesDisplay || !secondsDisplay || !dsecondsDisplay) return;
-
-    const elapsed = (elapsedMs != null && !isNaN(elapsedMs)) ? elapsedMs : 0;
 
     let displayTime;
 
@@ -426,25 +465,6 @@ function updateTimerState(timerId, state) {
     });
 }
 
-function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit, initialTime=0) {
-    // console.log('updatePenaltyTimerDisplay');
-    const penaltyDisplay = document.querySelector(`[data-display-for="${timerId}"]`);
-    // Penalties count down: remaining = limit - (initialTime + elapsed)
-    const elapsedTime = timerLimit > 0
-        ? Math.max(0, timerLimit - initialTime - elapsedMs)
-        : initialTime + elapsedMs;
-    console.log('updatePenalty', elapsedTime);
-    if (!penaltyDisplay) return;
-    // Format time as MM:SS.CS
-    const minutes = Math.floor(elapsedTime / 60000);
-    const seconds = Math.floor((elapsedTime % 60000) / 1000);
-    
-    const minutesString = minutes.toString();
-    const secondsString = seconds.toString().padStart(2, '0');
-    
-    penaltyDisplay.textContent = `${minutesString}:${secondsString}`;
-}
-
 // ============================================================================
 // WEBSOCKET EVENT HANDLERS - UPDATES ONLY
 // ============================================================================
@@ -456,9 +476,9 @@ function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit, initialTime=0
 socket.on('timer_updated', (data) => {
     console.log('Timer updated:', data);
     if (data.elapsed_time !== undefined) {
-        if(data.timer_id.startsWith('penalty')){
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit);
-        } else {
+        // Kary nie mają już własnego wyświetlania z ticku — patrz tickPenalties()
+        // wywoływane wewnątrz updateTimerDisplay() dla ticku głównego timera.
+        if (!data.timer_id.startsWith('penalty')) {
             updateTimerDisplay(data);
         }
     }
@@ -512,12 +532,11 @@ socket.on('timer_reset', (data) => {
  */
 socket.on('timer_adjusted', (data) => {
     console.log('Timer adjusted:', data);
-    if (data.elapsed_time !== undefined) {
-        if (data.timer_id.startsWith('penalty')) {
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
-        } else {
-            updateTimerDisplay(data);
-        }
+    // Dla kar: backend po korekcie wysyła 'reload_penalty_timers' ze świeżą
+    // migawką (start_offset_ms/adjustment_ms) — kolejny tick głównego timera
+    // odświeży wyświetlanie przez tickPenalties().
+    if (data.elapsed_time !== undefined && !data.timer_id.startsWith('penalty')) {
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -527,12 +546,8 @@ socket.on('timer_adjusted', (data) => {
 socket.on('timer_resumed', (data) => {
     console.log('Timer resumed:', data);
     document.querySelectorAll('.ds-element').forEach(el => addClassName(el, 'hidden'));
-    if (data.elapsed_time !== undefined) {
-        if (data.timer_id.startsWith('penalty')) {
-            updatePenaltyTimerDisplay(data.timer_id, data.elapsed_time, data.limit, data.initial_time || 0);
-        } else {
-            updateTimerDisplay(data);
-        }
+    if (data.elapsed_time !== undefined && !data.timer_id.startsWith('penalty')) {
+        updateTimerDisplay(data);
     }
     if (data.state) {
         updateTimerState(data.timer_id, data.state);
@@ -653,15 +668,6 @@ socket.on('game_state_update', (data) => {
         awayFoulsLabel.textContent = data.away_team_value2;
 });
 
-socket.on('penalty_timer_update', (timerData) => {
-    updatePenaltyTimerDisplay(
-        timerData.timer_id,
-        timerData.elapsed_time,
-        timerData.limit,
-        timerData.initial_time
-    );
-});
-
 socket.on('penalty_timer_added', (data) => {
     const team = data.team_type;
     if (team === 'home') appState.home_penalties.push(data);
@@ -682,19 +688,6 @@ socket.on('penalty_timer_removed', (data) => {
         fillPenaltiesTimersContainer(appState.away_penalties, 'away');
     }
 });
-
-// ============================================================================
-// PENALTY TIMER DISPLAY
-// ============================================================================
-
-function updatePenaltyTimerDisplay(timerId, elapsedMs, timerLimit, initialTime = 0) {
-    const remaining = Math.max(0, timerLimit - elapsedMs);
-    const displayEl = document.querySelector(`[data-display-for="${timerId}"]`);
-    if (displayEl) {
-        const s = Math.floor(remaining / 1000);
-        displayEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    }
-}
 
 // ============================================================================
 // TIMER CONTROLS
@@ -778,14 +771,6 @@ function onFinishPeriodDblClick() {
             alert(`Błąd kończenia okresu: ${err}`);
             _showPeriodChoiceFrame();
         });
-}
-
-function adjustTimer(timerId, delta, isPenalty = false) {
-    socket.emit('adjust_timer', { timer_id: timerId, delta: delta, is_penalty: isPenalty });
-}
-
-function addPenaltyTimer(teamType, penaltyDuration = 2) {
-    socket.emit('add_penalty_timer', { team_type: teamType, duration: penaltyDuration });
 }
 
 function removeTimer(timerId) {
@@ -944,7 +929,10 @@ function adjustTimer(timerId, delta, isPenalty=false) {
             delta: effectiveDelta
         });
     } else {
-        let allTimersIds = getAllTimerIds();
+        // Kary NIE są tu uwzględniane — ich czas pozostały jest teraz
+        // wyliczany automatycznie z zegara głównego (derived-variable), więc
+        // osobna korekta kary przy korekcie zegara głównego podwajałaby efekt.
+        let allTimersIds = getAllTimerIds().filter(id => !id.startsWith('penalty'));
         allTimersIds.forEach(tmrId => {
             socket.emit('timer_adjust', {
                 timer_id: tmrId,
@@ -988,6 +976,11 @@ socket.on('reload_penalty_timers', (data) => {
     if (_hasPenalties) {
         fillPenaltiesTimersContainer(appState.home_penalties, 'home');
         fillPenaltiesTimersContainer(appState.away_penalties, 'away');
+        // fillPenaltiesTimersContainer() tworzy puste wyświetlacze (bez
+        // tekstu) — trzeba je od razu wypełnić. Nie można czekać na kolejny
+        // tick głównego timera, bo gdy jest on zapauzowany, żaden tick nigdy
+        // nie nadejdzie (patrz _lastMainElapsedMs).
+        tickPenalties(_lastMainElapsedMs);
     }
 });
 

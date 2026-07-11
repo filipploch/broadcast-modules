@@ -66,8 +66,8 @@ type timer struct {
 	timerType           TimerType
 	parentID            string
 	state               State
-	t0                  time.Time     // System time when started/resumed
-	elapsedBase         time.Duration // Stored elapsed from before pause/resume
+	t0                  time.Time     // System time when started/resumed (independent timers only)
+	elapsedBase         time.Duration // Stored elapsed from before pause/resume (independent timers only)
 	remainderTime       time.Duration // Remainder from last full second
 	initialTime         time.Duration // Initial time offset
 	limit               time.Duration // 0 = no limit
@@ -79,6 +79,12 @@ type timer struct {
 	callbacks           *Callbacks
 	stopChan            chan struct{} // Channel to stop ticker
 	mu                  sync.RWMutex
+
+	// Pola dependent timerów (np. kar): elapsed jest WYLICZANY z rodzica,
+	// zamiast liczony z własnego zegara systemowego. Dzięki temu dependent
+	// automatycznie dziedziczy pauzę/wznowienie rodzica bez osobnej kaskady.
+	parentOffset     time.Duration // elapsed rodzica w momencie utworzenia/reset tego timera
+	manualAdjustment time.Duration // suma ręcznych korekt (AdjustTime/SetElapsedTime)
 }
 
 // Manager manages multiple timers
@@ -94,11 +100,31 @@ func NewManager() *Manager {
 	}
 }
 
+// parentElapsed returns the current elapsed time of a parent timer, for
+// anchoring a newly created dependent timer. Caller must NOT already hold
+// parent.mu (a fresh RLock is taken here).
+func (m *Manager) parentElapsed(parent *timer) time.Duration {
+	if parent == nil {
+		return 0
+	}
+	parent.mu.RLock()
+	defer parent.mu.RUnlock()
+	return m.independentElapsed(parent)
+}
+
 // Create creates a new timer with the given id.
 func (m *Manager) Create(id string, config TimerConfig) {
 	updateInterval := config.UpdateInterval
 	if updateInterval == 0 {
 		updateInterval = 50 * time.Millisecond
+	}
+
+	var parentOffset time.Duration
+	if config.Type == TimerTypeDependent && config.ParentID != "" {
+		m.mu.RLock()
+		parent := m.timers[config.ParentID]
+		m.mu.RUnlock()
+		parentOffset = m.parentElapsed(parent)
 	}
 
 	t := &timer{
@@ -116,6 +142,7 @@ func (m *Manager) Create(id string, config TimerConfig) {
 		metadata:            config.Metadata,
 		callbacks:           config.Callbacks,
 		stopChan:            make(chan struct{}),
+		parentOffset:        parentOffset,
 	}
 
 	if t.metadata == nil {
@@ -142,6 +169,18 @@ func (m *Manager) Ensure(id string, config TimerConfig) bool {
 		updateInterval = 50 * time.Millisecond
 	}
 
+	var parentOffset time.Duration
+	if config.Type == TimerTypeDependent && config.ParentID != "" {
+		// m.mu is already held (write lock) — read the map directly instead
+		// of calling parentElapsed's RLock path (would deadlock, RWMutex
+		// isn't reentrant).
+		if parent, exists := m.timers[config.ParentID]; exists {
+			parent.mu.RLock()
+			parentOffset = m.independentElapsed(parent)
+			parent.mu.RUnlock()
+		}
+	}
+
 	t := &timer{
 		id:                  id,
 		timerType:           config.Type,
@@ -157,6 +196,7 @@ func (m *Manager) Ensure(id string, config TimerConfig) bool {
 		metadata:            config.Metadata,
 		callbacks:           config.Callbacks,
 		stopChan:            make(chan struct{}),
+		parentOffset:        parentOffset,
 	}
 
 	if t.metadata == nil {
@@ -187,7 +227,7 @@ func (m *Manager) Start(timerID string) error {
 	// Check if at limit
 	if t.limit > 0 && t.pauseAtLimit && t.elapsedBase >= t.limit {
 		// return fmt.Errorf("timer is at limit, cannot start")
-		go t.callbacks.OnLimit(t.elapsedBase+t.initialTime, timerID)
+		go t.callbacks.OnLimit(t.elapsedBase, timerID)
 	} else {
 		// Set t0 and start
 		t.t0 = time.Now()
@@ -208,7 +248,7 @@ func (m *Manager) Start(timerID string) error {
 
 		// Call OnStart callback
 		if t.callbacks != nil && t.callbacks.OnStart != nil {
-			go t.callbacks.OnStart(t.elapsedBase+t.initialTime, timerID)
+			go t.callbacks.OnStart(t.elapsedBase, timerID)
 		}
 	}
 
@@ -243,7 +283,7 @@ func (m *Manager) Pause(timerID string) error {
 
 	// Call OnPause callback
 	if t.callbacks != nil && t.callbacks.OnPause != nil {
-		go t.callbacks.OnPause(t.elapsedBase+t.initialTime, timerID)
+		go t.callbacks.OnPause(t.elapsedBase, timerID)
 	}
 
 	return nil
@@ -264,6 +304,20 @@ func (m *Manager) Reset(timerID string) error {
 		return fmt.Errorf("timer not found: %s", timerID)
 	}
 
+	// Dla dependent timera "0" oznacza: od teraz zaczynamy liczyć od nowa
+	// względem rodzica — trzeba więc ponownie zakotwiczyć parentOffset na
+	// jego aktualnym elapsed (obliczone PRZED zablokowaniem t.mu, żeby
+	// zachować kolejność blokad dziecko→rodzic).
+	var parentOffset time.Duration
+	if t.timerType == TimerTypeDependent && t.parentID != "" {
+		m.mu.RLock()
+		parent, pexists := m.timers[t.parentID]
+		m.mu.RUnlock()
+		if pexists {
+			parentOffset = m.parentElapsed(parent)
+		}
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -272,6 +326,10 @@ func (m *Manager) Reset(timerID string) error {
 	t.state = StateIdle
 	t.hasReachedLimit = false
 	t.lastBroadcastSecond = -1
+	if t.timerType == TimerTypeDependent {
+		t.parentOffset = parentOffset
+		t.manualAdjustment = 0
+	}
 
 	return nil
 }
@@ -360,6 +418,11 @@ func (m *Manager) AdjustTime(timerID string, delta time.Duration) error {
 		return fmt.Errorf("timer is stopped, cannot adjust")
 	}
 
+	// Zapamiętaj PRZED wspólnym blokiem obsługi limitu poniżej — potrzebne,
+	// żeby dependent timer (kara) mógł wznowić odliczanie, jeśli korekta
+	// cofnie go poniżej limitu po automatycznej pauzie (patrz niżej).
+	wasPausedAtLimit := t.hasReachedLimit && t.state == StatePaused
+
 	currentElapsed := m.calculateElapsedTime(t)
 	newElapsed := currentElapsed + delta
 
@@ -381,6 +444,37 @@ func (m *Manager) AdjustTime(timerID string, delta time.Duration) error {
 		}
 	} else {
 		t.hasReachedLimit = false
+	}
+
+	if t.timerType == TimerTypeDependent {
+		// Elapsed jest wyliczany z rodzica — korekta idzie do manualAdjustment,
+		// przeliczonego tak, żeby kolejne wywołanie calculateElapsedTime()
+		// dało dokładnie (skorygowane) newElapsed.
+		t.manualAdjustment += newElapsed - currentElapsed
+
+		// Kara automatycznie zapauzowana po osiągnięciu limitu (0:00) — jeśli
+		// korekta cofnęła ją teraz poniżej limitu, wznów odliczanie. Operator
+		// nie ma dziś osobnego przełącznika pauzy per kara, więc
+		// "paused-at-limit" zawsze oznacza właśnie automatyczną pauzę, nigdy
+		// ręczną — bez tego korekta "ożywiającej" karę zmieniałaby tylko
+		// zamrożoną wartość, nigdy nie wznawiając jej odliczania.
+		if wasPausedAtLimit && !t.hasReachedLimit {
+			t.state = StateRunning
+			select {
+			case <-t.stopChan:
+				t.stopChan = make(chan struct{})
+			default:
+			}
+			go m.runTimer(t.id)
+		}
+
+		if t.state != StateRunning {
+			t.elapsedBase = newElapsed
+			t.remainderTime = newElapsed % (1000 * time.Millisecond)
+		} else {
+			t.lastBroadcastSecond = (newElapsed.Milliseconds() / 1000) - 1
+		}
+		return nil
 	}
 
 	// Update elapsed base
@@ -454,8 +548,13 @@ func (m *Manager) runTimer(timerID string) {
 			t.mu.Unlock()
 
 			if shouldBroadcast && callbacks != nil && callbacks.OnSecondTick != nil {
+				// Raw elapsed — BEZ doliczania t.initialTime. initial_time
+				// jest już osobnym polem w broadcastowanym payloadzie
+				// (plugin.go), więc doliczanie go tutaj powodowało podwójne
+				// zliczanie po stronie klienta (overlay/UI dodają
+				// initial_time do "elapsed_time", który już je zawierał).
 				broadcastTime := time.Duration(currentSecond*1000) * time.Millisecond
-				callbacks.OnSecondTick(broadcastTime+t.initialTime, timerID)
+				callbacks.OnSecondTick(broadcastTime, timerID)
 			}
 
 			if limit > 0 && currentElapsed >= limit && !hasReachedLimit {
@@ -469,7 +568,7 @@ func (m *Manager) runTimer(timerID string) {
 					t.mu.Unlock()
 
 					if callbacks != nil && callbacks.OnLimit != nil {
-						go callbacks.OnLimit(limit+t.initialTime, timerID)
+						go callbacks.OnLimit(limit, timerID)
 					}
 
 					return
@@ -477,7 +576,7 @@ func (m *Manager) runTimer(timerID string) {
 				t.mu.Unlock()
 
 				if callbacks != nil && callbacks.OnLimit != nil {
-					go callbacks.OnLimit(limit+t.initialTime, timerID)
+					go callbacks.OnLimit(limit, timerID)
 				}
 			}
 
@@ -487,17 +586,48 @@ func (m *Manager) runTimer(timerID string) {
 	}
 }
 
-// calculateElapsedTime calculates current elapsed time
+// calculateElapsedTime calculates current elapsed time.
+//
+// Dependent timers (kary) nie mają własnego zegara — ich elapsed jest
+// wyliczany z rodzica (main timer), więc automatycznie dziedziczą jego
+// pauzę/wznowienie bez żadnej kaskady komend. Timer musi być sam w stanie
+// Running, żeby w ogóle podążać za rodzicem — jeśli operator jawnie
+// zapauzował konkretną karę, zamraża się ona niezależnie od rodzica
+// (tak samo jak niezależny timer).
 func (m *Manager) calculateElapsedTime(t *timer) time.Duration {
 	if t.state != StateRunning {
 		return t.elapsedBase
 	}
 
-	if t.t0.IsZero() {
+	if t.timerType == TimerTypeDependent && t.parentID != "" {
+		m.mu.RLock()
+		parent, exists := m.timers[t.parentID]
+		m.mu.RUnlock()
+
+		if exists {
+			elapsed := m.parentElapsed(parent) - t.parentOffset + t.manualAdjustment
+			if elapsed < 0 {
+				elapsed = 0
+			}
+			return elapsed
+		}
+		// Rodzic zniknął (np. usunięty) — zamroź na ostatniej znanej wartości.
 		return t.elapsedBase
 	}
 
-	elapsed := time.Since(t.t0) + t.elapsedBase
-	return elapsed
+	return m.independentElapsed(t)
+}
+
+// independentElapsed calculates elapsed time from the timer's own clock
+// (t0/elapsedBase), ignoring any parent relationship. Caller must already
+// hold t.mu (read or write).
+func (m *Manager) independentElapsed(t *timer) time.Duration {
+	if t.state != StateRunning {
+		return t.elapsedBase
+	}
+	if t.t0.IsZero() {
+		return t.elapsedBase
+	}
+	return time.Since(t.t0) + t.elapsedBase
 }
 

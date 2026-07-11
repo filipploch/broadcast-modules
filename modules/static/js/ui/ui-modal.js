@@ -36,8 +36,8 @@ function fillPenaltiesTimersContainer(_penalties, teamType){
             </div>
             <div class="penalty-element-controllers">
             <div class="gap"></div>
-            <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${penalty.timer_id}', -1000);">-</button>
-            <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${penalty.timer_id}', 1000);">+</button>
+            <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${penalty.timer_id}', 1000, true);">-</button>
+            <button class="penalty-modal-button adjust-penalty-time-button" onclick="adjustTimer('${penalty.timer_id}', -1000, true);">+</button>
             </div>
             </div>
             `;

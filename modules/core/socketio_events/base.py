@@ -149,6 +149,23 @@ def register_events(socketio):
         delta = data.get('delta', 0)
         tm.adjust_time(timer_id, delta)
 
+        # Dla kar: zapisz korektę też w bazie (adjustment_ms), inaczej
+        # migawka używana przez derived-variable (overlay + UI) — wyliczana
+        # z start_offset_ms/limit_ms/adjustment_ms — nie odzwierciedli ręcznej
+        # korekty +/-, mimo że sam plugin ją zastosował.
+        if timer_id and (timer_id.startswith('penalty_home') or
+                         timer_id.startswith('penalty_away')):
+            from core.models.base_game_timer import get_game_timer_model
+            from core.extensions import db
+            GameTimer = get_game_timer_model()
+            gt = GameTimer.query.filter_by(plugin_timer_id=timer_id).first()
+            if gt:
+                gt.adjustment_ms = (gt.adjustment_ms or 0) + delta
+                db.session.commit()
+                penalties = tm._get_penalties_dict(gt.game_id)
+                socketio.emit('reload_penalty_timers', {'penalties': penalties})
+                tm._broadcast_penalty_state(gt.game_id)
+
     @socketio.on('timer_set_time')
     def handle_timer_set_time(data):
         from flask_socketio import emit

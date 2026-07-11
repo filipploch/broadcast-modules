@@ -37,28 +37,24 @@
 
     /**
      * Oblicza pozostały czas kary w ms na podstawie elapsed głównego timera.
-     * Odpowiednik penalty_remaining_ms() z modelu GameTimer w Pythonie.
+     * Deleguje do wspólnego algorytmu (time-display.js) — ten sam wzór co
+     * GameTimer.penalty_remaining_ms() w Pythonie i UI operatora.
      *
      * @param {Object} pen   — obiekt kary z penalties Map
      * @param {number} mainElapsedMs — aktualny elapsed_time głównego timera
-     * @returns {number} pozostały czas w ms (min. 0)
+     * @returns {number} pozostały czas w ms, w przedziale [0, limit_ms]
      */
     function calcRemaining(pen, mainElapsedMs) {
-        const elapsedInPenalty =
-            mainElapsedMs - pen.start_offset_ms + (pen.adjustment_ms || 0);
-        return Math.max(0, pen.limit_ms - elapsedInPenalty);
+        return window.TimeDisplay.derivePenaltyRemainingMs(pen, mainElapsedMs);
     }
 
     /**
-     * Formatuje ms → "M:SS"
+     * Formatuje ms → "M:SS" (wspólny algorytm, konwencja floor).
      * @param {number} ms
      * @returns {string}
      */
     function formatMs(ms) {
-        const totalSeconds = Math.ceil(ms / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        return window.TimeDisplay.formatCountDown(ms);
     }
 
     // -------------------------------------------------------------------------

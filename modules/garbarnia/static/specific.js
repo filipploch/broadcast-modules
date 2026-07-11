@@ -3,11 +3,11 @@
 // żeby podmienić createTeamSquad po załadowaniu wszystkich skryptów.
 
 function setLeagueName() {
-    return 'Texom Małopolska 4. Liga';
+    return 'Hal-Mont Małopolska 5. Liga';
 }
 
 function setLeagueLogo() {
-    return '/static/images/TM4L/logoTM4L.png';
+    return '/static/images/HMM5L/logoHMM5Liga.png';
 }
 
 // Podmień createTeamSquad po załadowaniu overlay.js.

@@ -217,14 +217,25 @@ class PeriodManager:
         
         # If this is not the first period, handle penalty timers
         if period.period_order > 1:
-            # Remove penalty timers with limit_reached status
-            Settings.remove_limit_reached_penalties()
-            
-            # Get remaining penalty timers
-            current_timers = Settings.get_current_timers()
-            _remaining_penalties = current_timers.get("penalties", {"home": [], "away": []})
-            remaining_penalties = _remaining_penalties['home'] + _remaining_penalties['away']
-            
+            from core.models.base_game_timer import get_game_timer_model
+            GameTimer = get_game_timer_model()
+
+            # Kary przetrwałe z poprzedniej części. Źródłem prawdy jest tabela
+            # game_timers — Settings.current_timers['penalties'] NIE jest
+            # zasilane przy tworzeniu kary (Settings.add_penalty_timer() nie
+            # jest wywoływane nigdzie w kodzie), więc poleganie na nim tutaj
+            # oznaczało, że kary nigdy nie były faktycznie przenoszone.
+            carried_over_penalties = GameTimer.query.filter(
+                GameTimer.game_id == period.game_id,
+                GameTimer.period_id != period.id,
+                GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+                GameTimer.state.in_([
+                    GameTimer.STATE_IDLE,
+                    GameTimer.STATE_RUNNING,
+                    GameTimer.STATE_PAUSED,
+                ]),
+            ).all()
+
             # Ensure main timer exists (idempotent — reuses if plugin already has it)
             timer_manager.ensure_timer(
                 timer_id=period.main_timer_name,
@@ -243,29 +254,60 @@ class PeriodManager:
             Settings.update_main_timer(main_timer_data)
 
             # Recreate penalty timers as dependent on new period's main timer.
-            # elapsed_time from previous period becomes the new initial_time (UI offset),
-            # and the remaining time = original limit - elapsed becomes the new limit
-            # (plugin counts from 0, so it only needs to run for the remainder).
-            for penalty in remaining_penalties:
-                penalty_elapsed = penalty.get("elapsed_time", 0) or 0
-                penalty_limit   = penalty.get("limit", 120000) or 120000
-                remaining_limit = max(penalty_limit - penalty_elapsed, 0)
-
-                if remaining_limit == 0:
-                    # Penalty already fully served — skip
+            # Czas pozostały liczymy tym samym wzorem co overlay/derived-variable
+            # (GameTimer.penalty_remaining_ms), na podstawie zamrożonego elapsed
+            # głównego timera poprzedniej części, do którego kara była przypięta.
+            game = _get_game().query.get(period.game_id)
+            for gt in carried_over_penalties:
+                old_main_gt = timer_manager.get_active_main_timer(gt.period_id)
+                old_main_elapsed = old_main_gt.elapsed_time_ms if old_main_gt else 0
+                try:
+                    remaining_limit = gt.penalty_remaining_ms(old_main_elapsed)
+                except ValueError as e:
+                    logger.error(f'start_period: pomijam karę id={gt.id}: {e}')
                     continue
 
-                penalty_metadata = penalty.get("metadata", {})
+                if remaining_limit <= 0:
+                    # Kara odbyta w poprzedniej części — nie przenosimy dalej
+                    gt.state = GameTimer.STATE_LIMIT_REACHED
+                    continue
+
+                served_ms = max((gt.limit_ms or 0) - remaining_limit, 0)
+                team_name = ''
+                if game:
+                    team = game.home_team if gt.team == 'home' else game.away_team
+                    team_name = team.name if team else ''
+
+                # Usuń starą instancję (plugin + baza) — zostanie utworzona
+                # na nowo (ten sam plugin_timer_id) po potwierdzeniu z pluginu
+                # w _handle_penalty_timer_created(), tak jak przy tworzeniu
+                # zupełnie nowej kary.
+                timer_manager.remove_timer(gt.plugin_timer_id)
+                db.session.delete(gt)
+                db.session.commit()
+
                 timer_manager.create_timer(
-                    timer_id=penalty.get("timer_id"),
+                    timer_id=gt.plugin_timer_id,
                     timer_type="dependent",
                     parent_id=period.main_timer_name,
-                    initial_time=penalty_elapsed,   # UI shows time already served
-                    limit=remaining_limit,          # plugin runs only for the remainder
+                    initial_time=served_ms,        # UI shows time already served
+                    limit=remaining_limit,         # plugin runs only for the remainder
                     pause_at_limit=True,
-                    metadata=penalty_metadata
+                    metadata={
+                        'team': gt.team, 'team_name': team_name,
+                        'timer_class': 'penalty',
+                    },
                 )
+            db.session.commit()
         else:
+            # First period — fresh match start, nie ma czego przenosić z
+            # poprzedniego okresu. Usuń osierocone kary z ewentualnych
+            # wcześniejszych/nieukończonych sesji dla tego meczu — inaczej
+            # zostają powiązane z nieistniejącym już przebiegiem głównego
+            # timera i ich wyliczony czas pozostały przestaje mieć sens
+            # (start_offset_ms odnosi się do timera, który już nie istnieje).
+            self._clear_stale_penalties(period.game_id)
+
             # First period — ensure main timer exists (idempotent)
             timer_manager.ensure_timer(
                 timer_id=period.main_timer_name,
@@ -285,8 +327,44 @@ class PeriodManager:
         
         # DO NOT start the timer automatically - leave it in idle state
         # User will start it manually from UI
-        
+
         return period
+
+    @staticmethod
+    def _clear_stale_penalties(game_id: int):
+        """
+        Usuwa z bazy osierocone timery kar (typ 'penalty') dla danego meczu.
+
+        Wywoływane przy starcie pierwszej części meczu — w tym momencie nie
+        powinny istnieć żadne aktywne kary. Jeśli jakieś się znajdą, to
+        pozostałość po poprzedniej/nieukończonej sesji (np. serwer został
+        zrestartowany bez przejścia przez finish_period). Ich start_offset_ms
+        odnosi się do nieistniejącej już instancji głównego timera, więc
+        wyliczony na ich podstawie czas pozostały jest bez sensu (może nawet
+        przekraczać limit_ms) — bezpieczniej je po prostu skasować niż
+        próbować przenieść do nowej sesji.
+        """
+        from core.models.base_game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+
+        stale = GameTimer.query.filter(
+            GameTimer.game_id == game_id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).all()
+        if not stale:
+            return
+        for gt in stale:
+            logger.warning(
+                f'Usuwam osieroconą karę id={gt.id} '
+                f'(plugin_timer_id={gt.plugin_timer_id}) dla game_id={game_id}'
+            )
+            db.session.delete(gt)
+        db.session.commit()
 
     def finish_period(self, period_id: int):
         """
@@ -300,43 +378,57 @@ class PeriodManager:
         from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         from core.managers import get_timer_manager
-        
+        from core.models.base_game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+
         period = self.get_period_by_id(period_id)
         if not period:
             return None
-        
+
         timer_manager = get_timer_manager()
         current_timers = Settings.get_current_timers()
-        
+
         # Stop main timer if running
         main_timer = current_timers.get("main")
         if main_timer and main_timer.get("timer_id"):
             timer_state = timer_manager.get_timer_state(main_timer["timer_id"])
             if timer_state and timer_state.get("state") == "running":
                 timer_manager.pause_timer(main_timer["timer_id"])
-            
+
             # Update main timer with current state
             if timer_state:
                 main_timer["state"] = timer_state.get("state", "paused")
                 main_timer["elapsed_time"] = timer_state.get("elapsed_time", main_timer.get("elapsed_time", 0))
                 Settings.update_main_timer(main_timer)
-        
-        # Stop and update all penalty timers
-        _penalties = current_timers.get("penalties", {"home": [], "away": []})
-        penalties = _penalties['home'] + _penalties['away']
-        for i, penalty in enumerate(penalties):
-            timer_id = penalty.get("timer_id")
-            if timer_id:
-                timer_state = timer_manager.get_timer_state(timer_id)
-                if timer_state and timer_state.get("state") == "running":
-                    timer_manager.pause_timer(timer_id)
-                
-                # Update penalty timer with current state
-                if timer_state:
-                    penalty["state"] = timer_state.get("state", "paused")
-                    penalty["elapsed_time"] = timer_state.get("elapsed_time", penalty.get("elapsed_time", 0))
-                    Settings.update_penalty_timer(timer_id, penalty)
-        
+
+            # Zamroź finalny elapsed w tabeli game_timers — to na tej podstawie
+            # PeriodManager.start_period() przelicza czas pozostały przenoszonych
+            # kar (patrz GameTimer.penalty_remaining_ms), niezależnie od tego,
+            # czy asynchroniczna synchronizacja z pluginu (_sync_db_timer)
+            # zdąży dotrzeć zanim operator wystartuje kolejną część.
+            main_gt = GameTimer.query.filter_by(
+                game_id=period.game_id, period_id=period_id,
+                timer_type=GameTimer.TYPE_MAIN,
+            ).first()
+            if main_gt:
+                main_gt.elapsed_time_ms = main_timer.get("elapsed_time", 0) or 0
+                db.session.commit()
+
+        # Zatrzymaj (best-effort) aktywne kary tej części — ich przeniesienie
+        # do kolejnej części obsługuje PeriodManager.start_period().
+        active_penalties = GameTimer.query.filter(
+            GameTimer.game_id == period.game_id,
+            GameTimer.period_id == period_id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).all()
+        for gt in active_penalties:
+            timer_manager.pause_timer(gt.plugin_timer_id)
+
         # Set period status to FINISHED
         return self.set_period_status(period_id, _get_period().STATUS_FINISHED)
 

@@ -23,4 +23,4 @@ class GameTimer(BaseGameTimerMixin, db.Model):
                 f'GameTimer id={self.id}: start_offset_ms lub limit_ms nie są ustawione'
             )
         elapsed = main_elapsed_ms - self.start_offset_ms + self.adjustment_ms
-        return max(0, self.limit_ms - elapsed)
+        return min(self.limit_ms, max(0, self.limit_ms - elapsed))

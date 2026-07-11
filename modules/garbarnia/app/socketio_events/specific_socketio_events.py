@@ -102,7 +102,7 @@ def register_events(socketio):
             if (timer_manager and period) else None
         )
         penalties = (
-            timer_manager._get_penalties_dict(settings.current_period_id)
+            timer_manager._get_penalties_dict(settings.current_game_id)
             if (timer_manager and period) else {'home': [], 'away': []}
         )
 
