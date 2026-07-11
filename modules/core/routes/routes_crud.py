@@ -307,6 +307,7 @@ def register_routes(app, exclude=None, team_manager=None):
                     name=request.form.get('name'),
                     allows_draw=('allows_draw' in request.form),
                     play_dictionary_id=request.form.get('play_dictionary_id'),
+                    superscore_season_id=request.form.get('superscore_season_id'),
                 )
                 _apply_league_scraper_data(league, request.form)
 

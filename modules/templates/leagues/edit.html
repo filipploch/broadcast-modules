@@ -63,6 +63,24 @@
         </div>
         {% endif %}
 
+        {% if league.superscore_season_id is defined %}
+        <div class="form-group">
+            <label for="superscore_season_id">
+                Superscore Season ID
+            </label>
+            <input
+                type="text"
+                id="superscore_season_id"
+                name="superscore_season_id"
+                value="{{ league.superscore_season_id or '' }}"
+                maxlength="100"
+                placeholder="np. 4vDT5gZAVMkCxWuCYl8kzc">
+            <small style="display:block;color:#6c757d;margin-top:.25rem;">
+                ID sezonu z superscore.live (parametr ?season-id= w API fixtures). Wymagany do scrapowania meczów i drużyn przez superscore.
+            </small>
+        </div>
+        {% endif %}
+
         <div class="form-group">
             <label>
                 <input type="checkbox" name="allows_draw" value="1"

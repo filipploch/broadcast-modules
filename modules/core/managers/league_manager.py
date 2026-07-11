@@ -120,7 +120,7 @@ class LeagueManager:
             return None
 
     def update_league(self, league_id, name=None,
-                      allows_draw=None, play_dictionary_id=None):
+                      allows_draw=None, play_dictionary_id=None, superscore_season_id=None):
         """
         Update league
 
@@ -156,6 +156,8 @@ class LeagueManager:
 
             if play_dictionary_id is not None:
                 league.play_dictionary_id = play_dictionary_id or None
+            if superscore_season_id is not None:
+                league.superscore_season_id = superscore_season_id or None
 
             db.session.commit()
             logger.info(f"Updated league: {league}")
