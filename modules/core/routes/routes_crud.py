@@ -9,6 +9,7 @@ from core.managers.game_camera_manager import GameCameraManager
 # from core.models.base_team import get_team_model
 from core.extensions import db
 from datetime import datetime
+import inspect
 import json
 import logging
 
@@ -50,6 +51,10 @@ def _get_scraper():
 def _get_active_scraper_config():
     from core.models.base_active_scraper_config import get_active_scraper_config_model
     return get_active_scraper_config_model()
+
+def _accepts_param(func, param_name):
+    """Czy func deklaruje param_name jako parametr (np. 'coach' — tylko garbarnia)."""
+    return param_name in inspect.signature(func).parameters
 
 def _get_league_scraper_url():
     from core.models.base_league_scraper_url import get_league_scraper_url_model
@@ -2206,14 +2211,16 @@ def register_routes(app, exclude=None, team_manager=None):
             try:
                 uniform_home = request.form.getlist('uniform_home[]')
                 uniform_away = request.form.getlist('uniform_away[]')
-                team = team_manager.create_team(
+                create_kwargs = dict(
                     name=request.form['name'],
                     name_14=request.form['name_14'],
                     short_name=request.form['short_name'],
                     logo_path=request.form.get('logo_path', 'static/images/logos/default.png'),
-                    coach=request.form.get('coach'),
                     uniform={'home': uniform_home, 'away': uniform_away}
                 )
+                if _accepts_param(team_manager.create_team, 'coach'):
+                    create_kwargs['coach'] = request.form.get('coach')
+                team = team_manager.create_team(**create_kwargs)
                 _apply_entity_foreign_id(team, request.form)
 
                 flash(f'Dodano zespół: {team.name}', 'success')
