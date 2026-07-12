@@ -44,19 +44,22 @@
                     <br><small style="color:#6c757d;">Brak dopasowania — prawdopodobnie nowy zawodnik</small>
                     {% endif %}
                 </td>
+                {% set high_confidence = item.suggested_player_id and item.similarity_score is not none and item.similarity_score >= 0.9 %}
                 <td>
                     <form method="POST" action="{{ url_for('resolve_pending_player_match', pending_id=item.id) }}" class="pending-match-form"
                           onsubmit="return preparePendingPlayerMatchSubmit(this)">
                         <div class="pending-mode-switch">
                             <span class="pending-mode-label">Nowy zawodnik</span>
                             <label class="switch">
-                                <input type="checkbox" class="pending-mode-toggle" onchange="handlePendingModeToggle(this)">
+                                <input type="checkbox" class="pending-mode-toggle" onchange="handlePendingModeToggle(this)"
+                                       {% if high_confidence %}checked{% endif %}>
                                 <span class="slider round"></span>
                             </label>
                             <span class="pending-mode-label">Propozycja zawodnika</span>
                         </div>
 
-                        <select name="existing_player_id" class="pending-player-select" style="display:none;margin-top:.5rem;">
+                        <select name="existing_player_id" class="pending-player-select"
+                                style="margin-top:.5rem;{% if high_confidence %}display:block;{% else %}display:none;{% endif %}">
                             <option value="">➕ Nowy zawodnik</option>
                             {% for player in all_players %}
                             <option value="{{ player.id }}"
@@ -67,7 +70,8 @@
                             {% endfor %}
                         </select>
 
-                        <div class="pending-new-player-fields" style="margin-top:.5rem;gap:.5rem;display:flex;">
+                        <div class="pending-new-player-fields"
+                             style="margin-top:.5rem;gap:.5rem;{% if high_confidence %}display:none;{% else %}display:flex;{% endif %}">
                             <input type="text" name="first_name" placeholder="Imię" value="{{ item.scraped_first_name }}">
                             <input type="text" name="last_name" placeholder="Nazwisko" value="{{ item.scraped_last_name }}">
                             <input type="number" name="number" placeholder="Nr" style="width:5rem;">
