@@ -66,6 +66,7 @@
 
                         <div class="actions" style="margin-top:.5rem;">
                             <button type="submit" class="btn btn-success btn-small">✅ Zatwierdź</button>
+                            <button type="submit" class="btn btn-primary btn-small" onclick="submitPendingAsNewPlayer(this)">➕ Nowy zawodnik</button>
                         </div>
                     </form>
                     <form method="POST" action="{{ url_for('reject_pending_player_match', pending_id=item.id) }}" style="display:inline;"
@@ -126,6 +127,12 @@
 function togglePendingNewPlayerFields(select) {
     const fields = select.closest('form').querySelector('.pending-new-player-fields');
     fields.style.display = select.value ? 'none' : 'flex';
+}
+
+function submitPendingAsNewPlayer(button) {
+    const select = button.closest('form').querySelector('.pending-player-select');
+    select.value = '';
+    togglePendingNewPlayerFields(select);
 }
 </script>
 {% endblock %}
