@@ -22,8 +22,11 @@ class BasePlayerMixin:
 
     @db.declared_attr
     def team_id(cls):
+        # Nullable: zawodnik bez drużyny ("wolny agent") — np. po tym jak scraper
+        # wykrył, że opuścił drużynę. GamePlayer przechowuje własny snapshot
+        # team_id z chwili meczu, więc wyzerowanie tego pola nie rusza historii.
         return db.Column(db.Integer, db.ForeignKey('teams.id'),
-                         nullable=False, index=True)
+                         nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,

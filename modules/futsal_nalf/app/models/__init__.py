@@ -16,6 +16,7 @@ from app.models.season_foreign_id import SeasonForeignId
 from app.models.league_scraper_url import LeagueScraperUrl
 from app.models.pending_team_match import PendingTeamMatch
 from app.models.pending_player_match import PendingPlayerMatch
+from app.models.pending_player_departure import PendingPlayerDeparture
 from app.models.stadium import Stadium
 from app.models.event import Event
 from app.models.event_camera import EventCamera

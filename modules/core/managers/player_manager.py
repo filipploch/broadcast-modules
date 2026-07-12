@@ -61,6 +61,25 @@ class PlayerManager:
             Player.last_name.asc(),
         ).all()
 
+    def get_players_without_team(self):
+        """Zawodnicy bez przypisanej drużyny (np. po wykryciu odejścia przez scraper)."""
+        Player = _get_player()
+        return Player.query.filter_by(team_id=None).order_by(
+            Player.last_name, Player.first_name
+        ).all()
+
+    def remove_player_from_team(self, player_id: int):
+        """Wyzeruj team_id zawodnika (staje się wolnym agentem). Historia meczowa
+        (GamePlayer) nie jest tym ruszana — przechowuje własny snapshot team_id."""
+        player = self.get_player_by_id(player_id)
+        if not player:
+            logger.warning(f"Player with ID {player_id} not found")
+            return None
+        player.team_id = None
+        db.session.commit()
+        logger.info(f"Removed player ID {player_id} from team (now without team)")
+        return player
+
     def get_player_by_id(self, player_id: int):
         Player = _get_player()
         return Player.query.get(player_id)

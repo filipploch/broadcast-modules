@@ -27,6 +27,7 @@ game_manager           = GameManager()
 team_manager           = TeamManager()
 team_scraper_manager   = TeamScraperManager()
 player_scraper_manager = PlayerScraperManager()
+player_manager_generic = PlayerManager()
 game_scraper_manager   = GameScraperManager()
 league_manager         = LeagueManager()
 
@@ -283,7 +284,11 @@ def register_routes(app):
             return jsonify({'status': 'started'}), 202
         return jsonify({'error': 'Nie można rozpocząć scrapowania — sprawdź czy drużyna ma skonfigurowany URL'}), 400
 
-
+    @app.route('/players/free-agents')
+    def list_free_agent_players():
+        """Zawodnicy bez przypisanej drużyny."""
+        players = player_manager_generic.get_players_without_team()
+        return render_template('players/free_agents.html', players=players)
 
     # =========================
     # ASSIGNMENT API

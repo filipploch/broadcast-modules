@@ -1,9 +1,9 @@
 {% extends "base/base.html" %}
-{% block title %}{{ 'Edytuj zawodnika' if player else 'Dodaj zawodnika' }} — {{ team.name }}{% endblock %}
+{% block title %}{{ 'Edytuj zawodnika' if player else 'Dodaj zawodnika' }} — {{ team.name if team else 'wolny agent' }}{% endblock %}
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <span>{{ 'Edytuj zawodnika' if player else 'Nowy zawodnik' }} — {{ team.name }}</span>
+        <span>{{ 'Edytuj zawodnika' if player else 'Nowy zawodnik' }} — {{ team.name if team else 'bez drużyny' }}</span>
     </div>
     <form method="POST">
         <div class="form-group">
@@ -18,6 +18,17 @@
                    value="{{ player.first_name if player else '' }}"
                    required maxlength="100" placeholder="np. Jan">
         </div>
+        {% if player and all_teams is defined %}
+        <div class="form-group">
+            <label for="team_id">Drużyna</label>
+            <select id="team_id" name="team_id">
+                <option value="">— bez drużyny (wolny agent) —</option>
+                {% for t in all_teams %}
+                <option value="{{ t.id }}" {% if player.team_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
         <div class="form-group">
             <label for="number">Numer koszulki</label>
             <input type="number" id="number" name="number"
@@ -40,7 +51,11 @@
         </div>
         <div class="actions">
             <button type="submit" class="btn btn-success">✅ Zapisz</button>
+            {% if team %}
             <a href="{{ url_for('list_players', team_id=team.id) }}" class="btn btn-secondary">Anuluj</a>
+            {% else %}
+            <a href="{{ url_for('list_free_agent_players') }}" class="btn btn-secondary">Anuluj</a>
+            {% endif %}
         </div>
     </form>
 </div>

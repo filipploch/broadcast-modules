@@ -923,6 +923,12 @@ def register_routes(app, exclude=None, team_manager=None):
             return redirect(url_for('list_games'))
         if request.method == 'POST':
             try:
+                new_team_id = request.form.get('team_id')
+                if new_team_id:
+                    _player_manager.update_player(player_id=player_id, team_id=int(new_team_id))
+                else:
+                    _player_manager.remove_player_from_team(player_id)
+
                 _player_manager.update_player(
                     player_id=player_id,
                     first_name=request.form['first_name'].strip(),
@@ -932,10 +938,14 @@ def register_routes(app, exclude=None, team_manager=None):
                     is_captain='is_captain' in request.form,
                 )
                 flash('Zawodnik zaktualizowany', 'success')
-                return redirect(url_for('list_players', team_id=player.team_id))
+                if player.team_id:
+                    return redirect(url_for('list_players', team_id=player.team_id))
+                return redirect(url_for('list_free_agent_players'))
             except Exception as e:
                 flash(f'Błąd: {e}', 'error')
-        return render_template('players/form.html', team=player.team, player=player)
+        Team = _get_team()
+        all_teams = Team.query.order_by(Team.name).all()
+        return render_template('players/form.html', team=player.team, player=player, all_teams=all_teams)
 
     @app.route('/players/<int:player_id>/delete', methods=['POST'])
     def delete_player(player_id):

@@ -20,6 +20,7 @@ from app.models.team import Team
 from app.models.player import Player
 from app.models.scraper import Scraper
 from app.models.pending_player_match import PendingPlayerMatch
+from app.models.pending_player_departure import PendingPlayerDeparture
 from app.models.player_foreign_id import PlayerForeignId
 from app.managers.scrapers.superscore.superscore_player_scraper import SuperscorePlayerScraper
 
@@ -59,14 +60,21 @@ def _best_match(first_name: str, last_name: str, candidates: List[Player]):
 class PlayerMatchManager:
     """Workflow scrapowania/dopasowywania kadry drużyny (zawodnicy + trener)."""
 
-    def scrape_team_players_from_superscore(self, team_id: int) -> int:
+    def scrape_team_players_from_superscore(self, team_id: int) -> Dict[str, int]:
         """
         Pobierz kadrę drużyny z superscore.live i zapisz kandydatów-zawodników
         do dopasowania w PendingPlayerMatch. Trenera zapisuje od razu do
         Team.coach (nadpisuje poprzednią wartość).
 
+        Zawodnicy aktualnie przypisani do tej drużyny w bazie, którzy mają już
+        foreign_id tego scrapera (czyli byli wcześniej świadomie dopasowani),
+        ale nie występują w świeżo pobranym składzie, trafiają do
+        PendingPlayerDeparture — czekają na potwierdzenie odejścia, nie są
+        usuwani automatycznie.
+
         Returns:
-            Liczba wpisów oczekujących utworzonych/odświeżonych.
+            {'new_matches': liczba nowych/odświeżonych PendingPlayerMatch,
+             'departed': liczba wpisów w kolejce odejść po synchronizacji}
 
         Raises:
             ValueError: brak drużyny, brak przypisanego superscore foreign_id,
@@ -100,8 +108,10 @@ class PlayerMatchManager:
         }
         all_players = Player.query.order_by(Player.last_name, Player.first_name).all()
 
-        count = 0
+        scraped_foreign_ids = set()
+        new_matches = 0
         for scraped in squad['players']:
+            scraped_foreign_ids.add(scraped['foreign_id'])
             resolved_player_id = already_resolved.get(scraped['foreign_id'])
             if resolved_player_id is not None:
                 # Już dopasowany wcześniej (np. przy okazji innej drużyny) —
@@ -122,9 +132,16 @@ class PlayerMatchManager:
                 suggested_player_id=best_player.id if best_player else None,
                 similarity_score=score,
             )
-            count += 1
+            new_matches += 1
 
-        return count
+        departed_player_ids = []
+        for player in Player.query.filter_by(team_id=team_id).all():
+            foreign_id = player.get_foreign_id(scraper_id)
+            if foreign_id and foreign_id not in scraped_foreign_ids:
+                departed_player_ids.append(player.id)
+        PendingPlayerDeparture.sync(team_id, scraper_id, departed_player_ids)
+
+        return {'new_matches': new_matches, 'departed': len(departed_player_ids)}
 
     def get_pending_player_matches(self, team_id: int) -> List[PendingPlayerMatch]:
         return PendingPlayerMatch.get_for_team(team_id)
@@ -190,3 +207,31 @@ class PlayerMatchManager:
             except ValueError:
                 skipped += 1
         return {'confirmed': confirmed, 'skipped': skipped}
+
+    # =========================
+    # Odejścia z drużyny (zawodnicy zniknięci z kadry na www)
+    # =========================
+
+    def get_pending_player_departures(self, team_id: int) -> List[PendingPlayerDeparture]:
+        return PendingPlayerDeparture.get_for_team(team_id)
+
+    def confirm_pending_player_departure(self, pending_id: int) -> Player:
+        """Potwierdź odejście: wyzeruj team_id zawodnika (zostaje wolnym agentem)."""
+        pending = PendingPlayerDeparture.query.get(pending_id)
+        if not pending:
+            raise ValueError("Nie znaleziono wpisu do potwierdzenia")
+
+        player = player_manager.remove_player_from_team(pending.player_id)
+        db.session.delete(pending)
+        db.session.commit()
+        return player
+
+    def dismiss_pending_player_departure(self, pending_id: int) -> bool:
+        """Odrzuć alarm o odejściu — zawodnik zostaje w drużynie bez zmian.
+        Jeśli nadal będzie nieobecny w kolejnym scrapowaniu, zostanie zgłoszony ponownie."""
+        pending = PendingPlayerDeparture.query.get(pending_id)
+        if not pending:
+            return False
+        db.session.delete(pending)
+        db.session.commit()
+        return True

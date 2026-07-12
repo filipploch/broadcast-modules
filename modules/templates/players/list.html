@@ -21,6 +21,7 @@
             </button>
             {% endif %}
             <a href="{{ url_for('create_player', team_id=team.id) }}" class="btn btn-primary">➕ Dodaj ręcznie</a>
+            <a href="{{ url_for('list_free_agent_players') }}" class="btn btn-secondary">🆓 Wolni zawodnicy</a>
             <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">← Drużyny</a>
         </div>
     </div>

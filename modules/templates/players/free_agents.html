@@ -1,0 +1,46 @@
+{% extends "base/base.html" %}
+{% block title %}Zawodnicy bez drużyny{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Zawodnicy bez drużyny</span>
+        <a href="{{ url_for('list_teams') }}" class="btn btn-secondary">← Drużyny</a>
+    </div>
+    {% if players %}
+    <p style="padding:0 1rem;color:#6c757d;">
+        Zawodnicy, którzy nie są aktualnie przypisani do żadnej drużyny (np. potwierdzone odejście wykryte przez
+        scraper kadry). Historia meczowa jest zachowana — edytuj, żeby przypisać do nowej drużyny, albo usuń.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Nazwisko i imię</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in players %}
+            <tr>
+                <td>
+                    <strong>{{ player.last_name }}</strong> {{ player.first_name }}
+                </td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('edit_player', player_id=player.id) }}" class="btn btn-secondary btn-small">Edytuj / przypisz drużynę</a>
+                        <form action="{{ url_for('delete_player', player_id=player.id) }}" method="POST" style="display:inline;"
+                              onsubmit="return confirm('Usunąć {{ player.last_name }} {{ player.first_name }}?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak zawodników bez drużyny.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

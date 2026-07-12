@@ -77,10 +77,47 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
+    {% elif not departures %}
     <p style="text-align:center;padding:2rem;color:#7f8c8d;">
         Brak zawodników oczekujących na przegląd.
     </p>
+    {% endif %}
+
+    {% if departures %}
+    <div class="card-header" style="border-top:1px solid #dee2e6;margin-top:1rem;">
+        <span>⚠️ Zniknęli z kadry na superscore</span>
+    </div>
+    <p style="padding:0 1rem;color:#6c757d;">
+        Ci zawodnicy są przypisani do drużyny w bazie i byli wcześniej dopasowani przez superscore, ale nie
+        występują już w aktualnie pobranym składzie. „Usuń z kadry” zeruje im drużynę (zostają wolnym agentem,
+        historia meczowa jest zachowana) — „Zostaw” pozostawia bez zmian (zostaną znów zgłoszeni przy kolejnym scrapowaniu, jeśli nadal będą nieobecni).
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Zawodnik</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for dep in departures %}
+            <tr>
+                <td>{{ dep.player.last_name }} {{ dep.player.first_name }}</td>
+                <td>
+                    <div class="actions">
+                        <form method="POST" action="{{ url_for('confirm_pending_player_departure', pending_id=dep.id) }}" style="display:inline;"
+                              onsubmit="return confirm('Usunąć {{ dep.player.last_name }} {{ dep.player.first_name }} z kadry drużyny?');">
+                            <button type="submit" class="btn btn-danger btn-small">Usuń z kadry</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('dismiss_pending_player_departure', pending_id=dep.id) }}" style="display:inline;">
+                            <button type="submit" class="btn btn-secondary btn-small">Zostaw</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
 </div>
 {% endblock %}

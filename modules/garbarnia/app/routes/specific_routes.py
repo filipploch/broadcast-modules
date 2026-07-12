@@ -31,6 +31,7 @@ team_manager           = TeamManager()
 team_scraper_manager   = TeamScraperManager()
 player_scraper_manager = PlayerScraperManager()
 player_match_manager   = PlayerMatchManager()
+player_manager_generic = PlayerManager()
 game_scraper_manager   = GameScraperManager()
 league_manager         = LeagueManager()
 
@@ -512,7 +513,7 @@ def register_routes(app):
         """Pobierz kadrę drużyny (zawodnicy + trener) z superscore.live i zapisz
         kandydatów-zawodników do przeglądu. Trenera ustawia od razu."""
         try:
-            count = player_match_manager.scrape_team_players_from_superscore(team_id)
+            result = player_match_manager.scrape_team_players_from_superscore(team_id)
         except ValueError as e:
             flash(str(e), 'error')
             return redirect(url_for('list_players', team_id=team_id))
@@ -521,15 +522,21 @@ def register_routes(app):
             flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
             return redirect(url_for('list_players', team_id=team_id))
 
-        if count:
-            flash(f'Znaleziono {count} zawodników do przejrzenia', 'success')
+        parts = []
+        if result['new_matches']:
+            parts.append(f"{result['new_matches']} nowych zawodników do dopasowania")
+        if result['departed']:
+            parts.append(f"{result['departed']} zniknęło z kadry (do potwierdzenia)")
+        if parts:
+            flash('Wynik scrapowania: ' + ', '.join(parts), 'success')
         else:
-            flash('Brak nowych zawodników do przejrzenia — wszyscy już dopasowani', 'info')
+            flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
         return redirect(url_for('review_pending_player_matches', team_id=team_id))
 
     @app.route('/teams/<int:team_id>/players/pending-matches')
     def review_pending_player_matches(team_id):
-        """Ekran przeglądu zawodników wykrytych przez scraper, oczekujących na potwierdzenie."""
+        """Ekran przeglądu zawodników wykrytych przez scraper (nowi kandydaci
+        i podejrzenia odejść), oczekujących na potwierdzenie."""
         from app.models.team import Team
         from app.models.player import Player
 
@@ -539,10 +546,12 @@ def register_routes(app):
             return redirect(url_for('list_teams'))
 
         pending = player_match_manager.get_pending_player_matches(team_id)
+        departures = player_match_manager.get_pending_player_departures(team_id)
         all_players = Player.query.order_by(Player.last_name, Player.first_name).all()
 
         return render_template('players/pending_matches.html',
-                            team=team, pending=pending, all_players=all_players)
+                            team=team, pending=pending, departures=departures,
+                            all_players=all_players)
 
     @app.route('/players/pending-matches/<int:pending_id>/resolve', methods=['POST'])
     def resolve_pending_player_match(pending_id):
@@ -601,6 +610,47 @@ def register_routes(app):
         else:
             flash('Brak kandydatur z sugestią do automatycznego zatwierdzenia', 'info')
         return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
+    @app.route('/players/pending-departures/<int:pending_id>/confirm', methods=['POST'])
+    def confirm_pending_player_departure(pending_id):
+        """Potwierdź odejście: zawodnik zostaje wolnym agentem (team_id=None),
+        historia meczowa pozostaje nietknięta."""
+        from app.models.pending_player_departure import PendingPlayerDeparture
+
+        pending = PendingPlayerDeparture.query.get(pending_id)
+        if not pending:
+            flash('Nie znaleziono wpisu', 'error')
+            return redirect(url_for('list_teams'))
+        team_id = pending.team_id
+
+        try:
+            player = player_match_manager.confirm_pending_player_departure(pending_id)
+            flash(f'{player.full_name} usunięty z kadry drużyny (wolny agent)', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+
+        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
+    @app.route('/players/pending-departures/<int:pending_id>/dismiss', methods=['POST'])
+    def dismiss_pending_player_departure(pending_id):
+        """Odrzuć alarm o odejściu — zawodnik zostaje w drużynie bez zmian."""
+        from app.models.pending_player_departure import PendingPlayerDeparture
+
+        pending = PendingPlayerDeparture.query.get(pending_id)
+        team_id = pending.team_id if pending else None
+
+        player_match_manager.dismiss_pending_player_departure(pending_id)
+        flash('Zawodnik pozostaje w drużynie', 'info')
+
+        if team_id:
+            return redirect(url_for('review_pending_player_matches', team_id=team_id))
+        return redirect(url_for('list_teams'))
+
+    @app.route('/players/free-agents')
+    def list_free_agent_players():
+        """Zawodnicy bez przypisanej drużyny (np. po potwierdzonym odejściu)."""
+        players = player_manager_generic.get_players_without_team()
+        return render_template('players/free_agents.html', players=players)
 
     @app.route('/game-setup')
     def game_setup():
