@@ -70,6 +70,7 @@ from app.managers.game_player_manager import GamePlayerManager
 from app.managers.game_scraper_manager import GameScraperManager
 from app.managers.period_manager import PeriodManager
 from app.managers.player_scraper_manager import PlayerScraperManager
+from app.managers.player_match_manager import PlayerMatchManager
 from app.managers.team_scraper_manager import TeamScraperManager
 from app.managers.team_manager import TeamManager
 from app.managers.timer_manager import TimerManager

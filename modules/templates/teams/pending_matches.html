@@ -4,13 +4,22 @@
 <div class="card">
     <div class="card-header">
         <span>Przegląd drużyn — {{ league.name }}</span>
-        <a href="{{ url_for('league_teams', league_id=league.id) }}" class="btn btn-secondary">← Powrót do drużyn ligi</a>
+        <div class="actions">
+            {% if pending|selectattr('suggested_team_id')|list %}
+            <form method="POST" action="{{ url_for('confirm_all_pending_team_matches', league_id=league.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Zatwierdzić wszystkie kandydatury z sugerowaną drużyną?');">
+                <button type="submit" class="btn btn-success">✅ Potwierdź wszystkie</button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('league_teams', league_id=league.id) }}" class="btn btn-secondary">← Powrót do drużyn ligi</a>
+        </div>
     </div>
 
     {% if pending %}
     <p style="padding:0 1rem;color:#6c757d;">
         Dla każdej drużyny wykrytej na www wskaż, której drużynie w bazie odpowiada, albo wybierz „➕ Nowa drużyna”.
-        Podpowiedź (jeśli jest) jest już zaznaczona.
+        Podpowiedź (jeśli jest) jest już zaznaczona. „Potwierdź wszystkie” zatwierdza od razu tylko kandydatury z podpowiedzią —
+        drużyny bez dopasowania nadal wymagają ręcznej decyzji.
     </p>
     <table>
         <thead>

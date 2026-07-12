@@ -1,0 +1,94 @@
+{% extends "base/base.html" %}
+{% block title %}Przegląd zawodników — {{ team.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Przegląd zawodników — {{ team.name }}</span>
+        <div class="actions">
+            {% if pending|selectattr('suggested_player_id')|list %}
+            <form method="POST" action="{{ url_for('confirm_all_pending_player_matches', team_id=team.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Zatwierdzić wszystkich kandydatów z sugerowanym zawodnikiem?');">
+                <button type="submit" class="btn btn-success">✅ Potwierdź wszystkie</button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('list_players', team_id=team.id) }}" class="btn btn-secondary">← Powrót do zawodników</a>
+        </div>
+    </div>
+
+    {% if pending %}
+    <p style="padding:0 1rem;color:#6c757d;">
+        Dla każdego zawodnika wykrytego na www wskaż, któremu zawodnikowi w bazie odpowiada (z dowolnej drużyny —
+        np. jeśli transferował się), albo wybierz „➕ Nowy zawodnik”. Podpowiedź (jeśli jest) jest już zaznaczona.
+        „Potwierdź wszystkie” zatwierdza od razu tylko kandydatury z podpowiedzią — zawodnicy bez dopasowania
+        nadal wymagają ręcznej decyzji.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Zawodnik z www</th>
+                <th>Dopasowanie</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pending %}
+            <tr>
+                <td>
+                    <strong>{{ item.scraped_last_name }} {{ item.scraped_first_name }}</strong>
+                    {% if item.scraped_is_goalkeeper %}<span title="Bramkarz">🧤</span>{% endif %}
+                    {% if item.suggested_player %}
+                    <br><small style="color:#6c757d;">Podpowiedź: {{ item.suggested_player.last_name }} {{ item.suggested_player.first_name }}
+                        ({{ item.suggested_player.team.name if item.suggested_player.team else '—' }})
+                        — {{ (item.similarity_score * 100) | round | int }}%</small>
+                    {% else %}
+                    <br><small style="color:#6c757d;">Brak dopasowania — prawdopodobnie nowy zawodnik</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('resolve_pending_player_match', pending_id=item.id) }}" class="pending-match-form">
+                        <select name="existing_player_id" class="pending-player-select" onchange="togglePendingNewPlayerFields(this)">
+                            <option value="">➕ Nowy zawodnik</option>
+                            {% for player in all_players %}
+                            <option value="{{ player.id }}"
+                                {% if item.suggested_player_id == player.id %}selected{% endif %}>
+                                {{ player.last_name }} {{ player.first_name }} ({{ player.team.name if player.team else '—' }})
+                                {% if item.suggested_player_id == player.id %} ⭐{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+
+                        <div class="pending-new-player-fields"
+                             style="margin-top:.5rem;gap:.5rem;{% if item.suggested_player_id %}display:none;{% else %}display:flex;{% endif %}">
+                            <input type="text" name="first_name" placeholder="Imię" value="{{ item.scraped_first_name }}">
+                            <input type="text" name="last_name" placeholder="Nazwisko" value="{{ item.scraped_last_name }}">
+                            <input type="number" name="number" placeholder="Nr" style="width:5rem;">
+                        </div>
+
+                        <div class="actions" style="margin-top:.5rem;">
+                            <button type="submit" class="btn btn-success btn-small">✅ Zatwierdź</button>
+                        </div>
+                    </form>
+                    <form method="POST" action="{{ url_for('reject_pending_player_match', pending_id=item.id) }}" style="display:inline;"
+                          onsubmit="return confirm('Pominąć {{ item.scraped_last_name }} {{ item.scraped_first_name }}?');">
+                        <button type="submit" class="btn btn-danger btn-small">Pomiń</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak zawodników oczekujących na przegląd.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function togglePendingNewPlayerFields(select) {
+    const fields = select.closest('form').querySelector('.pending-new-player-fields');
+    fields.style.display = select.value ? 'none' : 'flex';
+}
+</script>
+{% endblock %}

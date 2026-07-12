@@ -180,3 +180,27 @@ class TeamScraperManager:
         db.session.delete(pending)
         db.session.commit()
         return True
+
+    def resolve_all_suggested_team_matches(self, league_id: int) -> Dict[str, int]:
+        """
+        „Potwierdź wszystkie": automatycznie zatwierdź wpisy oczekujące, które
+        mają sugerowaną drużynę (similarity >= SIMILARITY_THRESHOLD), łącząc
+        z sugestią. Przy konflikcie short_name zachowuje wersję już zapisaną
+        w bazie (short_name_choice='existing') zamiast milcząco ją nadpisywać.
+        Wpisy bez sugestii (nowa drużyna) wymagają ręcznej decyzji i zostają
+        w kolejce.
+        """
+        confirmed, skipped = 0, 0
+        for pending in PendingTeamMatch.get_for_league(league_id):
+            if not pending.suggested_team_id:
+                skipped += 1
+                continue
+            try:
+                self.resolve_pending_team_match(
+                    pending.id, existing_team_id=pending.suggested_team_id,
+                    short_name_choice='existing',
+                )
+                confirmed += 1
+            except ValueError:
+                skipped += 1
+        return {'confirmed': confirmed, 'skipped': skipped}

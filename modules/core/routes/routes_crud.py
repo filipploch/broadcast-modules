@@ -881,9 +881,17 @@ def register_routes(app, exclude=None, team_manager=None):
         player_scraper = ActiveScraperConfig.get_active_scraper('player')
         team_scraper_foreign_id = team.get_foreign_id(player_scraper.id) if player_scraper else None
 
+        # Scrapowanie kadry z superscore.live (jeśli moduł je obsługuje i drużyna
+        # ma już przypisany foreign_id od dopasowania drużyn ligi).
+        has_superscore_player_scrape = 'scrape_team_players_superscore' in current_app.view_functions
+        superscore_scraper = _get_scraper().get_by_folder('superscore') if has_superscore_player_scrape else None
+        superscore_team_foreign_id = team.get_foreign_id(superscore_scraper.id) if superscore_scraper else None
+
         return render_template('players/list.html', team=team, players=players,
                             player_scraper=player_scraper,
-                            team_scraper_foreign_id=team_scraper_foreign_id)
+                            team_scraper_foreign_id=team_scraper_foreign_id,
+                            has_superscore_player_scrape=has_superscore_player_scrape,
+                            superscore_team_foreign_id=superscore_team_foreign_id)
 
     @app.route('/teams/<int:team_id>/players/create', methods=['GET', 'POST'])
     def create_player(team_id):

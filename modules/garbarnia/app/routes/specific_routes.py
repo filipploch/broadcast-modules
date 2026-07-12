@@ -12,7 +12,7 @@ from app.managers import (
     GameEventManager, CameraManager, GameCameraManager,
     CommentatorManager, GameScraperManager, GameCommentatorManager,
     RefereeManager, TeamScraperManager, GameRefereeManager,
-    GamePlayerManager, PlayerScraperManager, PlayerManager,
+    GamePlayerManager, PlayerScraperManager, PlayerManager, PlayerMatchManager,
     StadiumManager, EventManager,
 )
 # from app.managers.game_scraper_manager import GameScraperManager
@@ -30,6 +30,7 @@ game_manager           = GameManager()
 team_manager           = TeamManager()
 team_scraper_manager   = TeamScraperManager()
 player_scraper_manager = PlayerScraperManager()
+player_match_manager   = PlayerMatchManager()
 game_scraper_manager   = GameScraperManager()
 league_manager         = LeagueManager()
 
@@ -488,6 +489,118 @@ def register_routes(app):
         if league_id:
             return redirect(url_for('review_pending_team_matches', league_id=league_id))
         return redirect(url_for('list_leagues'))
+
+    @app.route('/leagues/<int:league_id>/teams/pending-matches/confirm-all', methods=['POST'])
+    def confirm_all_pending_team_matches(league_id):
+        """Zatwierdź od razu wszystkie kandydatury z sugerowaną drużyną."""
+        result = team_scraper_manager.resolve_all_suggested_team_matches(league_id)
+        if result['confirmed']:
+            msg = f"Zatwierdzono {result['confirmed']} drużyn(y)"
+            if result['skipped']:
+                msg += f", {result['skipped']} wymaga ręcznej decyzji (brak sugestii)"
+            flash(msg, 'success')
+        else:
+            flash('Brak kandydatur z sugestią do automatycznego zatwierdzenia', 'info')
+        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+
+    # =========================
+    # SCRAPOWANIE KADRY DRUŻYNY (superscore) + dopasowywanie zawodników
+    # =========================
+
+    @app.route('/teams/<int:team_id>/players/scrape/superscore')
+    def scrape_team_players_superscore(team_id):
+        """Pobierz kadrę drużyny (zawodnicy + trener) z superscore.live i zapisz
+        kandydatów-zawodników do przeglądu. Trenera ustawia od razu."""
+        try:
+            count = player_match_manager.scrape_team_players_from_superscore(team_id)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('list_players', team_id=team_id))
+        except Exception as e:
+            logger.error(f"Error scraping team players from superscore: {e}", exc_info=True)
+            flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
+            return redirect(url_for('list_players', team_id=team_id))
+
+        if count:
+            flash(f'Znaleziono {count} zawodników do przejrzenia', 'success')
+        else:
+            flash('Brak nowych zawodników do przejrzenia — wszyscy już dopasowani', 'info')
+        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
+    @app.route('/teams/<int:team_id>/players/pending-matches')
+    def review_pending_player_matches(team_id):
+        """Ekran przeglądu zawodników wykrytych przez scraper, oczekujących na potwierdzenie."""
+        from app.models.team import Team
+        from app.models.player import Player
+
+        team = Team.query.get(team_id)
+        if not team:
+            flash('Nie znaleziono drużyny', 'error')
+            return redirect(url_for('list_teams'))
+
+        pending = player_match_manager.get_pending_player_matches(team_id)
+        all_players = Player.query.order_by(Player.last_name, Player.first_name).all()
+
+        return render_template('players/pending_matches.html',
+                            team=team, pending=pending, all_players=all_players)
+
+    @app.route('/players/pending-matches/<int:pending_id>/resolve', methods=['POST'])
+    def resolve_pending_player_match(pending_id):
+        """Zatwierdź kandydata: połącz z istniejącym zawodnikiem albo utwórz nowego."""
+        from app.models.pending_player_match import PendingPlayerMatch
+
+        pending = PendingPlayerMatch.query.get(pending_id)
+        if not pending:
+            flash('Nie znaleziono wpisu do zatwierdzenia', 'error')
+            return redirect(url_for('list_teams'))
+        team_id = pending.team_id
+
+        existing_player_id = request.form.get('existing_player_id')
+        number = request.form.get('number')
+        try:
+            player = player_match_manager.resolve_pending_player_match(
+                pending_id=pending_id,
+                existing_player_id=int(existing_player_id) if existing_player_id else None,
+                first_name=request.form.get('first_name'),
+                last_name=request.form.get('last_name'),
+                number=int(number) if number else None,
+            )
+            flash(f'Dopasowano: {player.full_name}', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        except Exception as e:
+            logger.error(f"Error resolving pending player match: {e}", exc_info=True)
+            flash(f'Błąd podczas zatwierdzania: {str(e)}', 'error')
+
+        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
+    @app.route('/players/pending-matches/<int:pending_id>/reject', methods=['POST'])
+    def reject_pending_player_match(pending_id):
+        """Odrzuć/pomiń kandydata bez tworzenia żadnego powiązania."""
+        from app.models.pending_player_match import PendingPlayerMatch
+
+        pending = PendingPlayerMatch.query.get(pending_id)
+        team_id = pending.team_id if pending else None
+
+        player_match_manager.reject_pending_player_match(pending_id)
+        flash('Pominięto', 'info')
+
+        if team_id:
+            return redirect(url_for('review_pending_player_matches', team_id=team_id))
+        return redirect(url_for('list_teams'))
+
+    @app.route('/teams/<int:team_id>/players/pending-matches/confirm-all', methods=['POST'])
+    def confirm_all_pending_player_matches(team_id):
+        """Zatwierdź od razu wszystkich kandydatów z sugerowanym zawodnikiem."""
+        result = player_match_manager.resolve_all_suggested_player_matches(team_id)
+        if result['confirmed']:
+            msg = f"Zatwierdzono {result['confirmed']} zawodników"
+            if result['skipped']:
+                msg += f", {result['skipped']} wymaga ręcznej decyzji (brak sugestii)"
+            flash(msg, 'success')
+        else:
+            flash('Brak kandydatur z sugestią do automatycznego zatwierdzenia', 'info')
+        return redirect(url_for('review_pending_player_matches', team_id=team_id))
 
     @app.route('/game-setup')
     def game_setup():

@@ -10,6 +10,11 @@
                 Pobierz zawodników
             </button>
             {% endif %}
+            {% if has_superscore_player_scrape and superscore_team_foreign_id %}
+            <a href="{{ url_for('scrape_team_players_superscore', team_id=team.id) }}" class="btn btn-success" title="Pobierz kadrę (zawodnicy + trener) z superscore.live">
+                🔍 Scrapuj kadrę (superscore)
+            </a>
+            {% endif %}
             {% if player_scraper and player_scraper.folder == 'laczynaspilka' and team_scraper_foreign_id %}
             <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team_scraper_foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
                 📋 Kopiuj URL
