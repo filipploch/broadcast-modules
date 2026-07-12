@@ -17,10 +17,10 @@
 
     {% if pending %}
     <p style="padding:0 1rem;color:#6c757d;">
-        Dla każdego zawodnika wykrytego na www wskaż, któremu zawodnikowi w bazie odpowiada (z dowolnej drużyny —
-        np. jeśli transferował się), albo wybierz „➕ Nowy zawodnik”. Podpowiedź (jeśli jest) jest już zaznaczona.
-        „Potwierdź wszystkie” zatwierdza od razu tylko kandydatury z podpowiedzią — zawodnicy bez dopasowania
-        nadal wymagają ręcznej decyzji.
+        Dla każdego zawodnika wykrytego na www przełącznikiem wybierz, czy to nowy zawodnik (domyślnie), czy
+        dopasowanie do istniejącego w bazie (z dowolnej drużyny — np. jeśli transferował się; podpowiedź, jeśli
+        jest, jest już zaznaczona na liście). „Potwierdź wszystkie” zatwierdza od razu tylko kandydatury z podpowiedzią —
+        zawodnicy bez dopasowania nadal wymagają ręcznej decyzji.
     </p>
     <table>
         <thead>
@@ -45,8 +45,18 @@
                     {% endif %}
                 </td>
                 <td>
-                    <form method="POST" action="{{ url_for('resolve_pending_player_match', pending_id=item.id) }}" class="pending-match-form">
-                        <select name="existing_player_id" class="pending-player-select" onchange="togglePendingNewPlayerFields(this)">
+                    <form method="POST" action="{{ url_for('resolve_pending_player_match', pending_id=item.id) }}" class="pending-match-form"
+                          onsubmit="return preparePendingPlayerMatchSubmit(this)">
+                        <div class="pending-mode-switch">
+                            <span class="pending-mode-label">Nowy zawodnik</span>
+                            <label class="switch">
+                                <input type="checkbox" class="pending-mode-toggle" onchange="handlePendingModeToggle(this)">
+                                <span class="slider round"></span>
+                            </label>
+                            <span class="pending-mode-label">Propozycja zawodnika</span>
+                        </div>
+
+                        <select name="existing_player_id" class="pending-player-select" style="display:none;margin-top:.5rem;">
                             <option value="">➕ Nowy zawodnik</option>
                             {% for player in all_players %}
                             <option value="{{ player.id }}"
@@ -57,8 +67,7 @@
                             {% endfor %}
                         </select>
 
-                        <div class="pending-new-player-fields"
-                             style="margin-top:.5rem;gap:.5rem;{% if item.suggested_player_id %}display:none;{% else %}display:flex;{% endif %}">
+                        <div class="pending-new-player-fields" style="margin-top:.5rem;gap:.5rem;display:flex;">
                             <input type="text" name="first_name" placeholder="Imię" value="{{ item.scraped_first_name }}">
                             <input type="text" name="last_name" placeholder="Nazwisko" value="{{ item.scraped_last_name }}">
                             <input type="number" name="number" placeholder="Nr" style="width:5rem;">
@@ -66,7 +75,6 @@
 
                         <div class="actions" style="margin-top:.5rem;">
                             <button type="submit" class="btn btn-success btn-small">✅ Zatwierdź</button>
-                            <button type="submit" class="btn btn-primary btn-small" onclick="submitPendingAsNewPlayer(this)">➕ Nowy zawodnik</button>
                         </div>
                     </form>
                     <form method="POST" action="{{ url_for('reject_pending_player_match', pending_id=item.id) }}" style="display:inline;"
@@ -122,17 +130,86 @@
     {% endif %}
 </div>
 {% endblock %}
+{% block extra_css %}
+<style>
+.pending-mode-switch {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+.pending-mode-label {
+    font-size: .8rem;
+    color: #6c757d;
+}
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.switch .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+}
+.switch .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .2s;
+}
+.switch .slider.round {
+    border-radius: 22px;
+}
+.switch .slider.round:before {
+    border-radius: 50%;
+}
+.switch input:checked + .slider {
+    background-color: #3498db;
+}
+.switch input:checked + .slider:before {
+    transform: translateX(18px);
+}
+</style>
+{% endblock %}
 {% block extra_js %}
 <script>
-function togglePendingNewPlayerFields(select) {
-    const fields = select.closest('form').querySelector('.pending-new-player-fields');
-    fields.style.display = select.value ? 'none' : 'flex';
+function handlePendingModeToggle(checkbox) {
+    const form = checkbox.closest('form');
+    const select = form.querySelector('.pending-player-select');
+    const newFields = form.querySelector('.pending-new-player-fields');
+    if (checkbox.checked) {
+        // Propozycja zawodnika
+        select.style.display = '';
+        newFields.style.display = 'none';
+    } else {
+        // Nowy zawodnik (domyślnie)
+        select.style.display = 'none';
+        newFields.style.display = 'flex';
+    }
 }
 
-function submitPendingAsNewPlayer(button) {
-    const select = button.closest('form').querySelector('.pending-player-select');
-    select.value = '';
-    togglePendingNewPlayerFields(select);
+function preparePendingPlayerMatchSubmit(form) {
+    const checkbox = form.querySelector('.pending-mode-toggle');
+    const select = form.querySelector('.pending-player-select');
+    if (!checkbox.checked) {
+        // Tryb "Nowy zawodnik" jest źródłem prawdy — niezależnie od tego,
+        // co zostało wcześniej podświetlone w ukrytym select (np. podpowiedź).
+        select.value = '';
+    }
+    return true;
 }
 </script>
 {% endblock %}
