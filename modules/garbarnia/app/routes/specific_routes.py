@@ -381,7 +381,7 @@ def register_routes(app):
         if game_scraper_manager.is_scraping_in_progress():
             return jsonify({'error': 'Scrapowanie już trwa'}), 409
         try:
-            game_scraper_manager.scrape_games_async([games_url], league_name=league.name)
+            game_scraper_manager.scrape_games_async([games_url], league_name=league.name, league_id=league_id)
             return jsonify({'status': 'started'}), 202
         except Exception as e:
             logger.error(f"Error starting scraping: {e}")

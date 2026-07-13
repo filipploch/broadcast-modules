@@ -24,15 +24,27 @@ Struktura HTML:
     </div>
 
 Każdy mecz zwracany jako słownik z kluczami:
-    round           int
-    date            str  'YYYY-MM-DD HH:MM:SS'  (lub None)
-    home_team_name  str  oryginalna nazwa z WWW (uppercase)
-    away_team_name  str
-    home_team_goals int | None
-    away_team_goals int | None
-    home_ht_goals   int | None   bramki 1. połowy gospod.
-    away_ht_goals   int | None   bramki 1. połowy gości
-    status          int  Game.STATUS_FINISHED(2) | Game.STATUS_NOT_STARTED(0)
+    foreign_id            str | None  '{GOSPODARZ}vs{GOŚĆ}at{league_id}' — tylko
+                                       gdy league_id podany do scrape_game()/
+                                       scrape_multiple_leagues() (patrz niżej)
+    round                 int
+    date                  str  'YYYY-MM-DD HH:MM:SS'  (lub None)
+    home_team_name        str  oryginalna nazwa z WWW (uppercase)
+    away_team_name        str
+    home_team_foreign_id  str  == home_team_name (MZPN: foreign_id drużyny to jej nazwa)
+    away_team_foreign_id  str  == away_team_name
+    home_team_goals       int | None
+    away_team_goals       int | None
+    home_ht_goals         int | None   bramki 1. połowy gospod.
+    away_ht_goals         int | None   bramki 1. połowy gości
+    status                int  Game.STATUS_FINISHED(2) | Game.STATUS_NOT_STARTED(0)
+
+foreign_id meczu — MZPN nie daje żadnego ID per mecz w HTML (data/wynik mogą
+się zmienić między scrapowaniami), jedyne stałe dane to nazwy drużyn. W obrębie
+jednej ligi/sezonu (czyli jednego league_id w naszej bazie) para (gospodarz,
+gość) nie powtarza się — różne rozgrywki (liga/puchar) i różne sezony to zawsze
+różne league_id — więc "{gospodarz}vs{gość}at{league_id}" jest unikalne i
+deterministyczne bez potrzeby dodatkowego scrapowania.
 """
 import re
 import logging
@@ -63,12 +75,17 @@ class GameScraper:
 
     # ── Publiczne API (identyczne z futsal GameScraper) ───────────────────────
 
-    def scrape_game(self, page_url: str) -> list[dict]:
+    def scrape_game(self, page_url: str, league_id: Optional[int] = None) -> list[dict]:
         """
         Pobierz i sparsuj terminarz z podanego URL.
 
         Args:
-            page_url: URL strony z terminarzem (np. .../iv_liga/?view=schedule)
+            page_url:  URL strony z terminarzem (np. .../iv_liga/?view=schedule)
+            league_id: id ligi w naszej bazie — wstrzykiwane do foreign_id meczu
+                       (patrz _build_match_foreign_id). Bez tego (np. gdy wywołuje
+                       to team-scraper, który nie zna jeszcze league_id albo mu on
+                       niepotrzebny) foreign_id meczu wychodzi None — wciąż da się
+                       wyciągnąć same nazwy drużyn.
 
         Returns:
             Lista słowników z danymi meczów
@@ -76,7 +93,7 @@ class GameScraper:
         try:
             response = self.session.get(page_url, timeout=15)
             response.raise_for_status()
-            return self._parse_html(response.text)
+            return self._parse_html(response.text, league_id)
         except requests.RequestException as e:
             logger.error(f"Błąd pobierania {page_url}: {e}")
             return []
@@ -84,7 +101,7 @@ class GameScraper:
             logger.error(f"Nieoczekiwany błąd scrapowania {page_url}: {e}", exc_info=True)
             return []
 
-    def scrape_multiple_leagues(self, page_urls: list[str]) -> list[dict]:
+    def scrape_multiple_leagues(self, page_urls: list[str], league_id: Optional[int] = None) -> list[dict]:
         """
         Scrapuj wiele URL-i i zwróć połączoną listę meczów.
 
@@ -92,20 +109,23 @@ class GameScraper:
 
         Args:
             page_urls: Lista URL-i terminarzy
+            league_id: patrz scrape_game() — współdzielone przez wszystkie URL-e
+                       w tym wywołaniu (w praktyce zawsze wywoływane z jednym
+                       URL-em na ligę)
 
         Returns:
             Połączona lista słowników z danymi meczów
         """
         all_games = []
         for url in page_urls:
-            games = self.scrape_game(url)
+            games = self.scrape_game(url, league_id)
             all_games.extend(games)
             logger.info(f"Scrapowano {len(games)} meczów z {url}")
         return all_games
 
     # ── Parsowanie HTML ───────────────────────────────────────────────────────
 
-    def _parse_html(self, html: str) -> list[dict]:
+    def _parse_html(self, html: str, league_id: Optional[int] = None) -> list[dict]:
         """Parsuj HTML terminarza, zwróć listę meczów."""
         soup     = BeautifulSoup(html, 'html.parser')
         schedule = soup.select_one('.mzpn-schedule')
@@ -134,14 +154,14 @@ class GameScraper:
                 logger.warning("Mecz poza blokiem kolejki — pomijam")
                 continue
 
-            game_data = self._extract_game_data(element, current_round)
+            game_data = self._extract_game_data(element, current_round, league_id)
             if game_data:
                 games.append(game_data)
 
         logger.info(f"Sparsowano {len(games)} meczów")
         return games
 
-    def _extract_game_data(self, element, round_nr: int) -> Optional[dict]:
+    def _extract_game_data(self, element, round_nr: int, league_id: Optional[int] = None) -> Optional[dict]:
         """
         Wyciągnij dane jednego meczu z elementu <div class="mzpn-match">.
 
@@ -170,21 +190,40 @@ class GameScraper:
             dt_str = self._parse_datetime_str(date_str, time_str)
 
             return {
-                'round':           round_nr,
-                'date':            dt_str,
-                'home_team_name':  home_raw,
-                'away_team_name':  away_raw,
-                'home_team_goals': score['home_goals'],
-                'away_team_goals': score['away_goals'],
-                'home_ht_goals':   score['home_ht_goals'],
-                'away_ht_goals':   score['away_ht_goals'],
-                'status':          score['status'],
+                # MZPN nie ma żadnego ID per mecz w HTML (data/wynik mogą się
+                # zmienić) — jedyne stałe dane to nazwy drużyn. W obrębie jednej
+                # ligi/sezonu (czyli jednego league_id w naszej bazie) para
+                # (gospodarz, gość) nie powtarza się, więc to wystarcza za id.
+                'foreign_id':           (
+                    self._build_match_foreign_id(home_raw, away_raw, league_id)
+                    if league_id is not None else None
+                ),
+                'round':                round_nr,
+                'date':                 dt_str,
+                'home_team_name':       home_raw,
+                'away_team_name':       away_raw,
+                # Foreign_id drużyny MZPN to jej nazwa (ustalone przy team-scraperze) —
+                # więc tu po prostu ta sama wartość co home/away_team_name.
+                'home_team_foreign_id': home_raw,
+                'away_team_foreign_id': away_raw,
+                'home_team_goals':      score['home_goals'],
+                'away_team_goals':      score['away_goals'],
+                'home_ht_goals':        score['home_ht_goals'],
+                'away_ht_goals':        score['away_ht_goals'],
+                'status':               score['status'],
             }
         except Exception as e:
             logger.error(f"Błąd parsowania meczu kolejka={round_nr}: {e}")
             return None
 
     # ── Pomocnicze ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_match_foreign_id(home_name: str, away_name: str, league_id: int) -> str:
+        """'{GOSPODARZ}vs{GOŚĆ}at{league_id}' — unikalne w obrębie jednej ligi/
+        sezonu: ta sama para nie powtarza się w danych rozgrywkach, a różne
+        rozgrywki (liga/puchar) albo sezony to zawsze różne league_id."""
+        return f'{home_name}vs{away_name}at{league_id}'
 
     @staticmethod
     def _parse_score(text: str) -> dict:

@@ -43,20 +43,23 @@ class GameScraperManager:
 
     # ── Publiczne API ─────────────────────────────────────────────────────────
 
-    def scrape_games_async(self, league_urls: List[str], league_name: str = '') -> bool:
+    def scrape_games_async(self, league_urls: List[str], league_name: str = '', league_id: Optional[int] = None) -> bool:
         """
         Uruchom scrapowanie MZPN (HTML) w wątku w tle.
 
         Args:
             league_urls: Lista URL-i terminarzy
             league_name: Czytelna nazwa ligi (do socketio emit)
+            league_id:   id ligi w naszej bazie — wstrzykiwane do foreign_id
+                         meczu (MZPN nie ma własnego ID per mecz, patrz
+                         GameScraper._build_match_foreign_id)
 
         Returns:
             True jeśli wątek wystartował, False jeśli już działa
         """
         return self._start_scraping_thread(
             target=self._scrape_worker,
-            args=(current_app._get_current_object(), league_urls, league_name),
+            args=(current_app._get_current_object(), league_urls, league_name, league_id),
             league_name=league_name,
         )
 
@@ -132,15 +135,20 @@ class GameScraperManager:
 
     # ── Wątek roboczy ─────────────────────────────────────────────────────────
 
-    def _scrape_worker(self, app, league_urls: List[str], league_name: str):
+    def _scrape_worker(self, app, league_urls: List[str], league_name: str, league_id: Optional[int] = None):
         """Wątek w tle — pobiera HTML (MZPN), przetwarza, zapisuje do bazy."""
         with app.app_context():
             from core.extensions import socketio
             try:
                 from app.managers.scrapers.malopolskizpn.game_scraper import GameScraper
+                from app.models.scraper import Scraper
                 scraper       = GameScraper()
-                scraped_games = scraper.scrape_multiple_leagues(league_urls)
-                stats         = self._process_scraped_games(scraped_games)
+                scraped_games = scraper.scrape_multiple_leagues(league_urls, league_id=league_id)
+                mzpn_scraper  = Scraper.get_by_folder('malopolskizpn')
+                stats         = self._process_scraped_games(
+                    scraped_games,
+                    scraper_id=mzpn_scraper.id if mzpn_scraper else None,
+                )
 
                 self._status = {
                     'status':        'completed',
