@@ -19,6 +19,7 @@ from app.models.scraper import Scraper
 from app.models.pending_team_match import PendingTeamMatch
 from app.models.team_foreign_id import TeamForeignId
 from app.managers.scrapers.superscore.superscore_team_scraper import SuperscoreTeamScraper
+from app.managers.scrapers.malopolskizpn.team_scraper import MalopolskiZpnTeamScraper
 
 SIMILARITY_THRESHOLD = 0.6
 
@@ -33,17 +34,33 @@ def _superscore_scraper_id() -> int:
     return scraper.id
 
 
+def _malopolskizpn_scraper_id() -> int:
+    scraper = Scraper.get_by_folder('malopolskizpn')
+    if not scraper:
+        raise RuntimeError("Scraper 'malopolskizpn' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
+
+
 def _normalize(name: str) -> str:
     return ' '.join(name.lower().split())
 
 
-def _best_match(name: str, candidates: List[Team]):
-    """Zwraca (Team|None, score) najbardziej podobnej drużyny wśród candidates."""
-    norm_name = _normalize(name)
+def _normalize_upper(name: str) -> str:
+    return ' '.join(name.upper().split())
+
+
+def _best_match(name: str, candidates: List[Team], normalize=_normalize):
+    """Zwraca (Team|None, score) najbardziej podobnej drużyny wśród candidates.
+
+    normalize dobiera się do konwencji nazewnictwa źródła: superscore zapisuje
+    nazwy "normalnie" (lowercase-owalne 1:1), MZPN WIELKIMI LITERAMI — stąd
+    osobny _normalize_upper zamiast jednego domyślnego lowercase dla obu.
+    """
+    norm_name = normalize(name)
     best_team = None
     best_score = 0.0
     for team in candidates:
-        score = difflib.SequenceMatcher(None, norm_name, _normalize(team.name)).ratio()
+        score = difflib.SequenceMatcher(None, norm_name, normalize(team.name)).ratio()
         if score > best_score:
             best_score = score
             best_team = team
@@ -116,6 +133,76 @@ class TeamScraperManager:
                 scraped_name=scraped['name'],
                 scraped_foreign_id=scraped['foreign_id'],
                 scraped_short_name=scraped.get('short_code'),
+                suggested_team_id=best_team.id if best_team else None,
+                similarity_score=score,
+            )
+            count += 1
+
+        return count
+
+    def scrape_league_teams_from_malopolskizpn(self, league_id: int) -> int:
+        """
+        Pobierz drużyny ligi z terminarza malopolskizpn.pl (lista spotkań) i
+        zapisz kandydatów do dopasowania w PendingTeamMatch. Ten sam URL co
+        scraper meczów (games_url) — MZPN nie ma osobnego endpointu na drużyny,
+        więc parsujemy terminarz i wyciągamy unikalne nazwy z .h/.g.
+
+        foreign_id drużyny to jej nazwa dokładnie jak na www (WIELKIMI
+        LITERAMI) — MZPN nie udostępnia żadnego innego stabilnego ID. Dopasowanie
+        do drużyn w bazie porównuje po konwersji obu stron do wielkich liter
+        (_best_match_upper), inaczej niż lowercase używany dla superscore.
+
+        Nic nie zapisuje bezpośrednio do Team/LeagueTeam — wymaga potwierdzenia
+        przez resolve_pending_team_match(). Drużyna już dopasowana wcześniej
+        (ma wpis w TeamForeignId dla tego scrapera) i nieprzypisana jeszcze do
+        TEJ ligi zostaje do niej dopisana automatycznie (tak jak przy superscore).
+
+        Returns:
+            Liczba wpisów oczekujących utworzonych/odświeżonych.
+
+        Raises:
+            ValueError: brak ligi, brak skonfigurowanego URL terminarza (Dane
+                scrapera: Małopolski ZPN), albo błąd pobierania danych.
+        """
+        league = League.query.get(league_id)
+        if not league:
+            raise ValueError("Nie znaleziono ligi")
+
+        scraper_id = _malopolskizpn_scraper_id()
+        games_url = league.get_scraper_url(scraper_id, 'games_url')
+        if not games_url:
+            raise ValueError(
+                "Liga nie ma skonfigurowanego URL terminarza (Dane scrapera: Małopolski ZPN)"
+            )
+
+        try:
+            scraped_teams = MalopolskiZpnTeamScraper().scrape_teams(games_url)
+        except RuntimeError as e:
+            raise ValueError(str(e)) from e
+
+        already_resolved = {
+            row.foreign_id: row.team_id
+            for row in TeamForeignId.query.filter_by(scraper_id=scraper_id).all()
+        }
+        all_teams = Team.query.order_by(Team.name).all()
+        league_team_ids = {lt.team_id for lt in league.get_teams()}
+
+        count = 0
+        for scraped in scraped_teams:
+            resolved_team_id = already_resolved.get(scraped['foreign_id'])
+            if resolved_team_id is not None:
+                if resolved_team_id not in league_team_ids:
+                    league_manager.add_team_to_league(league.id, resolved_team_id, group_nr=1)
+                    league_team_ids.add(resolved_team_id)
+                continue  # już dopasowane w poprzednim uruchomieniu
+
+            best_team, score = _best_match(scraped['name'], all_teams, normalize=_normalize_upper)
+            PendingTeamMatch.upsert(
+                league_id=league_id,
+                scraper_id=scraper_id,
+                scraped_name=scraped['name'],
+                scraped_foreign_id=scraped['foreign_id'],
+                scraped_short_name=None,
                 suggested_team_id=best_team.id if best_team else None,
                 similarity_score=score,
             )

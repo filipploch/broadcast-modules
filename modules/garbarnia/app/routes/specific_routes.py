@@ -430,6 +430,25 @@ def register_routes(app):
             flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
         return redirect(url_for('review_pending_team_matches', league_id=league_id))
 
+    @app.route('/leagues/<int:league_id>/teams/scrape/malopolskizpn')
+    def scrape_league_teams_malopolskizpn(league_id):
+        """Pobierz drużyny ligi z terminarza malopolskizpn.pl i zapisz kandydatów do przeglądu."""
+        try:
+            count = team_scraper_manager.scrape_league_teams_from_malopolskizpn(league_id)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('league_teams', league_id=league_id))
+        except Exception as e:
+            logger.error(f"Error scraping league teams from malopolskizpn: {e}", exc_info=True)
+            flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
+            return redirect(url_for('league_teams', league_id=league_id))
+
+        if count:
+            flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
+        else:
+            flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
+        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+
     @app.route('/leagues/<int:league_id>/teams/pending-matches')
     def review_pending_team_matches(league_id):
         """Ekran przeglądu drużyn wykrytych przez scraper, oczekujących na potwierdzenie."""

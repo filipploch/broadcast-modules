@@ -19,6 +19,11 @@
                 🔍 Scrapuj drużyny (superscore)
             </a>
             {% endif %}
+            {% if has_malopolskizpn_team_scrape and malopolskizpn_games_url %}
+            <a href="{{ url_for('scrape_league_teams_malopolskizpn', league_id=league.id) }}" class="btn btn-success">
+                🔍 Scrapuj drużyny (MZPN)
+            </a>
+            {% endif %}
             <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">
                 ← Powrót do ligi
             </a>

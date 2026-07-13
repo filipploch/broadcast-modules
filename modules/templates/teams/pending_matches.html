@@ -34,6 +34,7 @@
             <tr>
                 <td>
                     <strong>{{ item.scraped_name }}</strong>
+                    <small style="color:#adb5bd;">({{ item.scraper.name if item.scraper else '—' }})</small>
                     {% if item.suggested_team %}
                     <br><small style="color:#6c757d;">Podpowiedź: {{ item.suggested_team.name }} ({{ (item.similarity_score * 100) | round | int }}%)</small>
                     {% else %}

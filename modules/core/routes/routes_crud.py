@@ -368,11 +368,22 @@ def register_routes(app, exclude=None, team_manager=None):
         
         teams = league_manager.get_league_teams(league_id)
         available_teams = league_manager.get_available_teams(league_id)
-        
+
+        # Scrapowanie drużyn z terminarza malopolskizpn.pl (jeśli moduł je
+        # obsługuje i liga ma skonfigurowany URL terminarza dla tego scrapera).
+        has_malopolskizpn_team_scrape = 'scrape_league_teams_malopolskizpn' in current_app.view_functions
+        malopolskizpn_games_url = None
+        if has_malopolskizpn_team_scrape:
+            mzpn_scraper = _get_scraper().get_by_folder('malopolskizpn')
+            if mzpn_scraper:
+                malopolskizpn_games_url = league.get_scraper_url(mzpn_scraper.id, 'games_url')
+
         return render_template('leagues/teams.html',
                             league=league,
                             teams=teams,
-                            available_teams=available_teams)
+                            available_teams=available_teams,
+                            has_malopolskizpn_team_scrape=has_malopolskizpn_team_scrape,
+                            malopolskizpn_games_url=malopolskizpn_games_url)
 
 
     @app.route('/leagues/<int:league_id>/teams/add', methods=['POST'])
