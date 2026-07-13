@@ -454,9 +454,20 @@ def register_routes(app, exclude=None, team_manager=None):
         games = game_manager.get_all_games(league_id=league_id)
         league = league_manager.get_league_by_id(league_id) if league_id else None
 
+        # Otwarte niespójności danych między scraperami meczów (jeśli moduł
+        # obsługuje tę funkcję — patrz game_scraper_manager._reconcile_cross_scraper_data)
+        open_game_conflicts_count = 0
+        if league_id and 'review_game_conflicts' in current_app.view_functions:
+            from core.models.base_game_conflict import get_game_conflict_model
+            GameConflict = get_game_conflict_model()
+            open_game_conflicts_count = GameConflict.query.filter_by(
+                league_id=league_id, resolved_at=None
+            ).count()
+
         return render_template('games/list.html',
                             games=games,
-                            league=league)
+                            league=league,
+                            open_game_conflicts_count=open_game_conflicts_count)
 
 
     @app.route('/games/<int:game_id>')

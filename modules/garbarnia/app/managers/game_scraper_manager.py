@@ -255,6 +255,8 @@ class GameScraperManager:
         from app.models.team import Team
         from app.models.team_foreign_id import TeamForeignId
         from app.models.game_foreign_id import GameForeignId
+        from app.models.game_scraper_snapshot import GameScraperSnapshot
+        from app.models.game_conflict import GameConflict
 
         # Buduj słownik drużyn z aktualnej ligi/sezonu raz dla całego batcha
         team_lookup = self._build_team_lookup()
@@ -354,6 +356,17 @@ class GameScraperManager:
                     )
                     continue
 
+                # ── Zgodność między scraperami (jeśli mecz ma już dane z INNEGO
+                # scrapera) — patrz _reconcile_cross_scraper_data ──────────────
+                periods_gd = gd
+                if scraper_id:
+                    proceed, periods_gd = self._reconcile_cross_scraper_data(
+                        existing, league_id, scraper_id, gd, status, parsed_date,
+                        GameScraperSnapshot, GameConflict,
+                    )
+                    if not proceed:
+                        continue
+
                 changes = {
                     'home_team_goals': (existing.home_team_goals, home_goals),
                     'away_team_goals': (existing.away_team_goals, away_goals),
@@ -366,8 +379,13 @@ class GameScraperManager:
                         setattr(existing, field, changes[field][1])
                     existing.updated_at = datetime.utcnow()
                     logger.info(f"Zaktualizowano mecz id={existing.id}: {changed}")
-                    # Zaktualizuj też okresy
-                    self._upsert_periods(existing, gd, Period)
+                    updated_count += 1
+                # Okresy odświeżamy zawsze (nie tylko gdy changed) — periods_gd
+                # może nieść nowy podział na połowy (np. z MZPN) nawet gdy wynik
+                # końcowy/data na Game się nie zmieniły; _upsert_periods jest
+                # idempotentny więc powtórka z tymi samymi danymi jest nieszkodliwa.
+                self._upsert_periods(existing, periods_gd, Period)
+                if not changed and periods_gd is not gd:
                     updated_count += 1
 
             else:
@@ -390,6 +408,13 @@ class GameScraperManager:
                 game.away_team_short_name = away_team.short_name
                 if scraper_id and game_foreign_id:
                     game.set_foreign_id(scraper_id, game_foreign_id)
+                if scraper_id:
+                    # Brak innego scrapera do porównania na tym etapie (mecz dopiero
+                    # co powstał) — zapisz tylko własny snapshot na przyszłość.
+                    GameScraperSnapshot.upsert(
+                        scraper_id, game.id, home_goals, away_goals,
+                        gd['home_ht_goals'], gd['away_ht_goals'], parsed_date, status,
+                    )
                 self._upsert_periods(game, gd, Period)
                 logger.info(
                     f"Nowy mecz kolejka={gd['round']} "
@@ -403,6 +428,139 @@ class GameScraperManager:
             'updated':       updated_count,
             'new_pending':   new_count,
         }
+
+    # ── Zgodność danych między scraperami ───────────────────────────────────────
+
+    @staticmethod
+    def _malopolskizpn_scraper_id() -> Optional[int]:
+        from app.models.scraper import Scraper
+        scraper = Scraper.get_by_folder('malopolskizpn')
+        return scraper.id if scraper else None
+
+    def _reconcile_cross_scraper_data(self, existing_game, league_id: int, scraper_id: int,
+                                       gd: Dict, status: int, parsed_date,
+                                       GameScraperSnapshot, GameConflict):
+        """
+        Porównuje świeżo zescrapowane dane (gd, od scraper_id) z tym, co ostatnio
+        zaobserwował INNY scraper dla tego samego meczu (GameScraperSnapshot).
+
+        - Brak danych z innego scrapera → nic do porównania, aplikuj normalnie.
+        - Wynik końcowy i data zgodne → aplikuj; jeśli drugi scraper to
+          malopolskizpn i ma dane 1./2. połowy, okresy budujemy z JEGO danych
+          (bogatsze/bardziej wiarygodne wg ustalenia z użytkownikiem), nie z gd.
+        - Niezgodność (wynik i/lub data) → NIE aplikuj automatycznie. Jeśli
+          dokładnie taka sama niezgodność była już wcześniej ręcznie rozstrzygnięta
+          (błąd na źródłowej stronie nadal niepoprawiony) → pomiń po cichu, nie
+          zgłaszaj ponownie. W przeciwnym razie utwórz/odśwież otwarty GameConflict
+          do przeglądu przez admina.
+
+        Zawsze (niezależnie od wyniku porównania) zapisuje świeży
+        GameScraperSnapshot dla scraper_id, żeby kolejne porównania (z dowolnej
+        strony) miały aktualny punkt odniesienia.
+
+        Returns:
+            (proceed: bool, periods_gd: dict) — periods_gd to słownik zgodny z
+            _upsert_periods() (home/away_team_goals, home/away_ht_goals, status),
+            do budowy okresów gdy proceed=True.
+        """
+        other = GameScraperSnapshot.get_other(existing_game.id, scraper_id)
+
+        GameScraperSnapshot.upsert(
+            scraper_id, existing_game.id,
+            gd['home_team_goals'], gd['away_team_goals'],
+            gd['home_ht_goals'], gd['away_ht_goals'],
+            parsed_date, status,
+        )
+
+        if other is None:
+            return True, gd
+
+        scores_match = (gd['home_team_goals'] == other.home_team_goals and
+                         gd['away_team_goals'] == other.away_team_goals)
+        dates_match = (parsed_date is None or other.date is None or parsed_date == other.date)
+
+        if scores_match and dates_match:
+            mzpn_scraper_id = self._malopolskizpn_scraper_id()
+            if other.scraper_id == mzpn_scraper_id and other.home_ht_goals is not None:
+                return True, {
+                    'home_team_goals': other.home_team_goals,
+                    'away_team_goals': other.away_team_goals,
+                    'home_ht_goals':   other.home_ht_goals,
+                    'away_ht_goals':   other.away_ht_goals,
+                    'status':          other.status,
+                }
+            return True, gd
+
+        already_resolved = GameConflict.find_matching_resolution(
+            existing_game.id,
+            scraper_id, gd['home_team_goals'], gd['away_team_goals'], parsed_date,
+            other.scraper_id, other.home_team_goals, other.away_team_goals, other.date,
+        )
+        if already_resolved:
+            logger.debug(f"Konflikt danych meczu id={existing_game.id} już rozstrzygnięty wcześniej — pomijam")
+            return False, gd
+
+        GameConflict.upsert_open(
+            existing_game.id, league_id,
+            scraper_id, gd['home_team_goals'], gd['away_team_goals'],
+            gd['home_ht_goals'], gd['away_ht_goals'], parsed_date,
+            other.scraper_id, other.home_team_goals, other.away_team_goals,
+            other.home_ht_goals, other.away_ht_goals, other.date,
+        )
+        logger.warning(f"Niespójność danych meczu id={existing_game.id} między scraperami — czeka na decyzję admina")
+        return False, gd
+
+    def get_pending_game_conflicts(self, league_id: int) -> List:
+        from app.models.game_conflict import GameConflict
+        return GameConflict.get_open_for_league(league_id)
+
+    def resolve_game_conflict(self, conflict_id: int, chosen_scraper_id: int):
+        """
+        Zatwierdź konflikt: zastosuj dane wskazanego scrapera (wynik, wynik do
+        przerwy, data) jako prawidłowe. Wiersz NIE jest usuwany — zostaje
+        oznaczony jako rozwiązany, żeby ten sam (niepoprawiony) błąd źródła nie
+        był zgłaszany ponownie przy kolejnych scrapowaniach.
+        """
+        from app.models.game import Game
+        from app.models.period import Period
+        from app.models.game_conflict import GameConflict
+
+        conflict = GameConflict.query.get(conflict_id)
+        if not conflict:
+            raise ValueError("Nie znaleziono konfliktu do rozwiązania")
+        if chosen_scraper_id not in (conflict.scraper_a_id, conflict.scraper_b_id):
+            raise ValueError("Wskazany scraper nie jest jedną ze stron tego konfliktu")
+
+        game = Game.query.get(conflict.game_id)
+        if not game:
+            raise ValueError("Nie znaleziono meczu powiązanego z konfliktem")
+
+        if chosen_scraper_id == conflict.scraper_a_id:
+            home, away = conflict.scraper_a_home_goals, conflict.scraper_a_away_goals
+            home_ht, away_ht = conflict.scraper_a_home_ht_goals, conflict.scraper_a_away_ht_goals
+            date = conflict.scraper_a_date
+        else:
+            home, away = conflict.scraper_b_home_goals, conflict.scraper_b_away_goals
+            home_ht, away_ht = conflict.scraper_b_home_ht_goals, conflict.scraper_b_away_ht_goals
+            date = conflict.scraper_b_date
+
+        game.home_team_goals = home
+        game.away_team_goals = away
+        game.date = date
+        if home is not None and away is not None:
+            game.status = Game.STATUS_FINISHED
+        game.updated_at = datetime.utcnow()
+
+        self._upsert_periods(game, {
+            'home_team_goals': home, 'away_team_goals': away,
+            'home_ht_goals': home_ht, 'away_ht_goals': away_ht,
+            'status': 2 if (home is not None and away is not None) else 0,
+        }, Period)
+
+        conflict.resolved_at = datetime.utcnow()
+        conflict.resolved_scraper_id = chosen_scraper_id
+        db.session.commit()
+        return game
 
     # ── Okresy ───────────────────────────────────────────────────────────────
 

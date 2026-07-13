@@ -408,6 +408,47 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
 
     # =========================
+    # NIESPÓJNOŚCI DANYCH MECZU MIĘDZY SCRAPERAMI (superscore vs malopolskizpn)
+    # =========================
+
+    @app.route('/leagues/<int:league_id>/games/conflicts')
+    def review_game_conflicts(league_id):
+        """Ekran przeglądu meczów, dla których dwa scrapery podały niespójne dane."""
+        league = league_manager.get_league_by_id(league_id)
+        if not league:
+            flash('Nie znaleziono ligi', 'error')
+            return redirect(url_for('list_leagues'))
+
+        conflicts = game_scraper_manager.get_pending_game_conflicts(league_id)
+        return render_template('games/conflicts.html', league=league, conflicts=conflicts)
+
+    @app.route('/games/conflicts/<int:conflict_id>/resolve', methods=['POST'])
+    def resolve_game_conflict(conflict_id):
+        """Zatwierdź konflikt: zastosuj dane wskazanego scrapera jako prawidłowe."""
+        from app.models.game_conflict import GameConflict
+
+        conflict = GameConflict.query.get(conflict_id)
+        if not conflict:
+            flash('Nie znaleziono konfliktu', 'error')
+            return redirect(url_for('list_leagues'))
+        league_id = conflict.league_id
+
+        chosen_scraper_id = request.form.get('chosen_scraper_id')
+        try:
+            game_scraper_manager.resolve_game_conflict(
+                conflict_id=conflict_id,
+                chosen_scraper_id=int(chosen_scraper_id) if chosen_scraper_id else None,
+            )
+            flash('Zapisano wybrane dane meczu', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        except Exception as e:
+            logger.error(f"Error resolving game conflict: {e}", exc_info=True)
+            flash(f'Błąd podczas zatwierdzania: {str(e)}', 'error')
+
+        return redirect(url_for('review_game_conflicts', league_id=league_id))
+
+    # =========================
     # SCRAPOWANIE DRUŻYN LIGI (superscore) + dopasowywanie
     # =========================
 

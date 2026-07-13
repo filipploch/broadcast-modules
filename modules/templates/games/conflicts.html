@@ -1,0 +1,86 @@
+{% extends "base/base.html" %}
+{% block title %}Niespójności danych meczów — {{ league.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Niespójności danych meczów — {{ league.name }}</span>
+        <a href="{{ url_for('league_games', league_id=league.id) }}" class="btn btn-secondary">← Powrót do meczów</a>
+    </div>
+
+    {% if conflicts %}
+    <p style="padding:0 1rem;color:#6c757d;">
+        Dwa scrapery podały różne dane dla tego samego meczu (wynik i/lub data). Wybierz, które dane są prawidłowe —
+        zostaną zapisane razem z wynikiem połówek. Jeśli błąd na stronie źródłowej nie zostanie poprawiony, ten sam
+        (już rozstrzygnięty) konflikt nie pojawi się ponownie przy kolejnym scrapowaniu.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Mecz</th>
+                <th>{{ conflicts[0].scraper_a.name if conflicts[0].scraper_a else 'Źródło A' }} / {{ conflicts[0].scraper_b.name if conflicts[0].scraper_b else 'Źródło B' }}</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in conflicts %}
+            <tr>
+                <td>
+                    <strong>{{ c.game.home_team.name if c.game and c.game.home_team else '?' }}
+                        vs {{ c.game.away_team.name if c.game and c.game.away_team else '?' }}</strong>
+                    <br><small style="color:#6c757d;">kolejka {{ c.game.round if c.game else '—' }}</small>
+                </td>
+                <td>
+                    <table style="width:auto;">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Wynik</th>
+                                <th>Do przerwy</th>
+                                <th>Data i godzina</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>{{ c.scraper_a.name if c.scraper_a else 'Źródło A' }}</strong></td>
+                                <td>{{ c.scraper_a_home_goals if c.scraper_a_home_goals is not none else '—' }}:{{ c.scraper_a_away_goals if c.scraper_a_away_goals is not none else '—' }}</td>
+                                <td>{{ c.scraper_a_home_ht_goals if c.scraper_a_home_ht_goals is not none else '—' }}:{{ c.scraper_a_away_ht_goals if c.scraper_a_away_ht_goals is not none else '—' }}</td>
+                                <td>{{ c.scraper_a_date.strftime('%Y-%m-%d %H:%M') if c.scraper_a_date else '—' }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>{{ c.scraper_b.name if c.scraper_b else 'Źródło B' }}</strong></td>
+                                <td>{{ c.scraper_b_home_goals if c.scraper_b_home_goals is not none else '—' }}:{{ c.scraper_b_away_goals if c.scraper_b_away_goals is not none else '—' }}</td>
+                                <td>{{ c.scraper_b_home_ht_goals if c.scraper_b_home_ht_goals is not none else '—' }}:{{ c.scraper_b_away_ht_goals if c.scraper_b_away_ht_goals is not none else '—' }}</td>
+                                <td>{{ c.scraper_b_date.strftime('%Y-%m-%d %H:%M') if c.scraper_b_date else '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+                <td>
+                    <div class="actions" style="flex-direction:column;align-items:stretch;gap:.5rem;">
+                        <form method="POST" action="{{ url_for('resolve_game_conflict', conflict_id=c.id) }}"
+                              onsubmit="return confirm('Zapisać dane z {{ c.scraper_a.name if c.scraper_a else "Źródła A" }}?');">
+                            <input type="hidden" name="chosen_scraper_id" value="{{ c.scraper_a_id }}">
+                            <button type="submit" class="btn btn-success btn-small" style="width:100%;">
+                                ✅ {{ c.scraper_a.name if c.scraper_a else 'Źródło A' }}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('resolve_game_conflict', conflict_id=c.id) }}"
+                              onsubmit="return confirm('Zapisać dane z {{ c.scraper_b.name if c.scraper_b else "Źródła B" }}?');">
+                            <input type="hidden" name="chosen_scraper_id" value="{{ c.scraper_b_id }}">
+                            <button type="submit" class="btn btn-success btn-small" style="width:100%;">
+                                ✅ {{ c.scraper_b.name if c.scraper_b else 'Źródło B' }}
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak niespójności oczekujących na przegląd.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
