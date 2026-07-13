@@ -177,9 +177,14 @@ class GameScraperManager:
             from core.extensions import socketio
             try:
                 from app.managers.scrapers.superscore.superscore_game_scraper import SuperscoreGameScraper
+                from app.models.scraper import Scraper
                 scraper       = SuperscoreGameScraper()
                 scraped_games = scraper.scrape_multiple_seasons(season_ids)
-                stats         = self._process_scraped_games(scraped_games)
+                superscore_scraper = Scraper.get_by_folder('superscore')
+                stats         = self._process_scraped_games(
+                    scraped_games,
+                    scraper_id=superscore_scraper.id if superscore_scraper else None,
+                )
 
                 self._status = {
                     'status':        'completed',
@@ -212,12 +217,22 @@ class GameScraperManager:
 
     # ── Przetwarzanie i zapis do bazy ─────────────────────────────────────────
 
-    def _process_scraped_games(self, scraped_games: List[Dict]) -> Dict[str, int]:
+    def _process_scraped_games(self, scraped_games: List[Dict], scraper_id: Optional[int] = None) -> Dict[str, int]:
         """
         Przetworz listę meczów z scrapera i zapisz do bazy.
 
-        Identyfikacja istniejącego meczu: league_id + round + home_team_id + away_team_id.
-        (MZPN nie daje foreign_id per mecz — inaczej niż futsal.)
+        Identyfikacja istniejącego meczu:
+          - jeśli scraper_id podany i mecz ma foreign_id (superscore: event['id'])
+            → najpierw po GameForeignId (stabilne, przetrwa np. zmianę kolejki),
+          - w przeciwnym razie po league_id + round + home_team_id + away_team_id
+            (MZPN nie daje foreign_id per mecz — inaczej niż futsal/superscore).
+
+        Identyfikacja drużyn:
+          - jeśli scraper_id podany i mecz ma home/away_team_foreign_id (superscore:
+            'slug/hash') → najpierw po TeamForeignId (już potwierdzone przez admina
+            w scraperze drużyn — pewniejsze niż dopasowanie po nazwie),
+          - fallback: dopasowanie po znormalizowanej nazwie (jak dotychczas; jedyna
+            ścieżka dla MZPN, które nie ma żadnego ID per drużyna).
 
         Logika aktualizacji:
           - Jeśli WWW mówi STATUS_NOT_STARTED ale DB ma bardziej zaawansowany status
@@ -226,9 +241,12 @@ class GameScraperManager:
 
         Dla nowych meczów tworzy też 2 okresy (1. i 2. połowa).
         """
-        from app.models.game   import Game
+        from app.models.game import Game
         from app.models.period import Period
-        from app.models.league       import League
+        from app.models.league import League
+        from app.models.team import Team
+        from app.models.team_foreign_id import TeamForeignId
+        from app.models.game_foreign_id import GameForeignId
 
         # Buduj słownik drużyn z aktualnej ligi/sezonu raz dla całego batcha
         team_lookup = self._build_team_lookup()
@@ -249,8 +267,19 @@ class GameScraperManager:
         STATUS_FINISHED    = Game.STATUS_FINISHED
 
         for gd in scraped_games:
-            home_team = team_lookup.get(_normalize(gd['home_team_name']))
-            away_team = team_lookup.get(_normalize(gd['away_team_name']))
+            home_team = away_team = None
+            if scraper_id and gd.get('home_team_foreign_id') and gd.get('away_team_foreign_id'):
+                home_id = TeamForeignId.get_local_id(scraper_id, gd['home_team_foreign_id'])
+                away_id = TeamForeignId.get_local_id(scraper_id, gd['away_team_foreign_id'])
+                if home_id:
+                    home_team = Team.query.get(home_id)
+                if away_id:
+                    away_team = Team.query.get(away_id)
+
+            if not home_team:
+                home_team = team_lookup.get(_normalize(gd['home_team_name']))
+            if not away_team:
+                away_team = team_lookup.get(_normalize(gd['away_team_name']))
 
             if not home_team or not away_team:
                 logger.warning(
@@ -273,15 +302,23 @@ class GameScraperManager:
             parsed_date     = self._parse_date(gd['date'])
 
             # ── Szukaj istniejącego meczu ─────────────────────────────────
-            # Najpierw próbuj po kolejce + drużynach (dokładne dopasowanie).
-            # Jeśli nie znaleziono (np. scraper zwrócił round=0), szukaj tylko
-            # po drużynach — w sezonie każda para (home, away) jest unikalna.
-            existing = Game.query.filter_by(
-                league_id    = league_id,
-                round        = gd['round'],
-                home_team_id = home_team.id,
-                away_team_id = away_team.id,
-            ).first()
+            existing = None
+            game_foreign_id = gd.get('foreign_id')
+            if scraper_id and game_foreign_id:
+                existing_id = GameForeignId.get_local_id(scraper_id, game_foreign_id)
+                if existing_id:
+                    existing = Game.query.get(existing_id)
+
+            if existing is None:
+                # Najpierw próbuj po kolejce + drużynach (dokładne dopasowanie).
+                # Jeśli nie znaleziono (np. scraper zwrócił round=0), szukaj tylko
+                # po drużynach — w sezonie każda para (home, away) jest unikalna.
+                existing = Game.query.filter_by(
+                    league_id    = league_id,
+                    round        = gd['round'],
+                    home_team_id = home_team.id,
+                    away_team_id = away_team.id,
+                ).first()
 
             if existing is None:
                 existing = Game.query.filter_by(
@@ -296,6 +333,9 @@ class GameScraperManager:
                     )
 
             if existing:
+                if scraper_id and game_foreign_id and not existing.get_foreign_id(scraper_id):
+                    existing.set_foreign_id(scraper_id, game_foreign_id)
+
                 # Nie cofaj statusu — jeśli DB ma FINISHED a scraper mówi NOT_STARTED,
                 # DB jest aktualniejsza (np. mecz wpisany ręcznie)
                 if existing.status == STATUS_FINISHED and status == STATUS_NOT_STARTED:
@@ -340,6 +380,8 @@ class GameScraperManager:
                 db.session.flush()   # game.id dostępne przed commit
                 game.home_team_short_name = home_team.short_name
                 game.away_team_short_name = away_team.short_name
+                if scraper_id and game_foreign_id:
+                    game.set_foreign_id(scraper_id, game_foreign_id)
                 self._upsert_periods(game, gd, Period)
                 logger.info(
                     f"Nowy mecz kolejka={gd['round']} "

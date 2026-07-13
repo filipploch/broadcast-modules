@@ -13,15 +13,19 @@ Dane meczu:
     scores[type=1]      wynik do przerwy
 
 Każdy mecz zwracany jako słownik z kluczami:
-    round           int
-    date            str  'YYYY-MM-DD HH:MM:SS+00:00'  (lub None)
-    home_team_name  str
-    away_team_name  str
-    home_team_goals int | None
-    away_team_goals int | None
-    home_ht_goals   int | None
-    away_ht_goals   int | None
-    status          int  0=NOT_STARTED | 1=IN_PROGRESS | 2=FINISHED
+    foreign_id            str | None  event['id'] — identyczny z #match_id we
+                                       fragmencie URL strony szczegółów meczu
+    round                 int
+    date                  str  'YYYY-MM-DD HH:MM:SS+00:00'  (lub None)
+    home_team_name        str
+    away_team_name        str
+    home_team_foreign_id  str | None  'slug/hash' — format zgodny z TeamForeignId
+    away_team_foreign_id  str | None
+    home_team_goals       int | None
+    away_team_goals       int | None
+    home_ht_goals         int | None
+    away_ht_goals         int | None
+    status                int  0=NOT_STARTED | 1=IN_PROGRESS | 2=FINISHED
 """
 import logging
 import requests
@@ -108,8 +112,10 @@ class SuperscoreGameScraper:
 
     def _parse_event(self, event: dict) -> Optional[dict]:
         try:
-            home_name = self._extract_team_name(event.get('team1') or {})
-            away_name = self._extract_team_name(event.get('team2') or {})
+            home_team = event.get('team1') or {}
+            away_team = event.get('team2') or {}
+            home_name = self._extract_team_name(home_team)
+            away_name = self._extract_team_name(away_team)
             if not home_name or not away_name:
                 return None
 
@@ -131,15 +137,25 @@ class SuperscoreGameScraper:
             )
 
             return {
-                'round':           round_nr,
-                'date':            date_str,
-                'home_team_name':  home_name,
-                'away_team_name':  away_name,
-                'home_team_goals': home_goals,
-                'away_team_goals': away_goals,
-                'home_ht_goals':   ht_score[0] if ht_score else None,
-                'away_ht_goals':   ht_score[1] if ht_score else None,
-                'status':          status,
+                # event['id'] — ten sam identyfikator co #match_id we fragmencie
+                # URL strony szczegółów meczu (potwierdzone na realnych danych) —
+                # pozwala w przyszłości dociągnąć szczegóły przez
+                # /v2/soccer/fixtures/overview/plsuperscore/pl-PL?fixture-id=...
+                'foreign_id':           event.get('id'),
+                'round':                round_nr,
+                'date':                 date_str,
+                'home_team_name':       home_name,
+                'away_team_name':       away_name,
+                # 'slug/hash' — ten sam format co TeamForeignId zapisany przez
+                # SuperscoreTeamScraper, więc drużyny da się rozstrzygnąć od razu
+                # przez potwierdzony wcześniej foreign_id zamiast dopasowania po nazwie.
+                'home_team_foreign_id': self._extract_team_foreign_id(home_team),
+                'away_team_foreign_id': self._extract_team_foreign_id(away_team),
+                'home_team_goals':      home_goals,
+                'away_team_goals':      away_goals,
+                'home_ht_goals':        ht_score[0] if ht_score else None,
+                'away_ht_goals':        ht_score[1] if ht_score else None,
+                'status':               status,
             }
         except Exception as e:
             logger.error(f"Błąd parsowania eventu: {e}", exc_info=True)
@@ -162,6 +178,18 @@ class SuperscoreGameScraper:
             if name.strip():
                 return name.strip()
         return None
+
+    @staticmethod
+    def _extract_team_foreign_id(team: dict) -> Optional[str]:
+        """Zbuduj 'slug/hash' z seo_id — identyczny format jak
+        SuperscoreTeamScraper._extract_team(), więc bezpośrednio porównywalny
+        z tym co zapisane w TeamForeignId."""
+        seo_id = team.get('seo_id') or {}
+        slug = (seo_id.get('slug') or {}).get('value')
+        team_hash = (seo_id.get('hash') or {}).get('value')
+        if not slug or not team_hash:
+            return None
+        return f'{slug}/{team_hash}'
 
     @staticmethod
     def _extract_score(event: dict, score_type: int) -> Optional[tuple[int, int]]:
