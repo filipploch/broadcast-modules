@@ -6,9 +6,14 @@
         <span>Zawodnicy — {{ team.name }}</span>
         <div class="actions">
             {% if team.team_url or team_scraper_foreign_id %}
-            <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})" title="Pobierz zawodników z pliku HTML (SingleFile)">
+            <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})" title="Pobierz zawodników z pliku HTML (SingleFile) — dopasowanie automatyczne, bez przeglądu">
                 Pobierz zawodników
             </button>
+            {% endif %}
+            {% if has_laczynaspilka_player_scrape and laczynaspilka_team_foreign_id %}
+            <a href="{{ url_for('scrape_team_players_laczynaspilka', team_id=team.id) }}" class="btn btn-success" title="Pobierz kadrę z zapisanego pliku HTML laczynaspilka.pl, z przeglądem dopasowań">
+                🔍 Scrapuj kadrę (laczynaspilka)
+            </a>
             {% endif %}
             {% if has_superscore_player_scrape and superscore_team_foreign_id %}
             <a href="{{ url_for('scrape_team_players_superscore', team_id=team.id) }}" class="btn btn-success" title="Pobierz kadrę (zawodnicy + trener) z superscore.live">

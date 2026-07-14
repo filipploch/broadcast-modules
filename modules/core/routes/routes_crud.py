@@ -909,11 +909,20 @@ def register_routes(app, exclude=None, team_manager=None):
         superscore_scraper = _get_scraper().get_by_folder('superscore') if has_superscore_player_scrape else None
         superscore_team_foreign_id = team.get_foreign_id(superscore_scraper.id) if superscore_scraper else None
 
+        # Scrapowanie kadry z lokalnie zapisanego pliku HTML laczynaspilka.pl,
+        # z przeglądem dopasowań (jeśli moduł je obsługuje i drużyna ma już
+        # przypisane foreign_id dla tego scrapera).
+        has_laczynaspilka_player_scrape = 'scrape_team_players_laczynaspilka' in current_app.view_functions
+        laczynaspilka_scraper = _get_scraper().get_by_folder('laczynaspilka') if has_laczynaspilka_player_scrape else None
+        laczynaspilka_team_foreign_id = team.get_foreign_id(laczynaspilka_scraper.id) if laczynaspilka_scraper else None
+
         return render_template('players/list.html', team=team, players=players,
                             player_scraper=player_scraper,
                             team_scraper_foreign_id=team_scraper_foreign_id,
                             has_superscore_player_scrape=has_superscore_player_scrape,
-                            superscore_team_foreign_id=superscore_team_foreign_id)
+                            superscore_team_foreign_id=superscore_team_foreign_id,
+                            has_laczynaspilka_player_scrape=has_laczynaspilka_player_scrape,
+                            laczynaspilka_team_foreign_id=laczynaspilka_team_foreign_id)
 
     @app.route('/teams/<int:team_id>/players/create', methods=['GET', 'POST'])
     def create_player(team_id):

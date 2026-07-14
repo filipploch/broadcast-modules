@@ -36,6 +36,7 @@
                 <td>
                     <strong>{{ item.scraped_last_name }} {{ item.scraped_first_name }}</strong>
                     {% if item.scraped_is_goalkeeper %}<span title="Bramkarz">🧤</span>{% endif %}
+                    <small style="color:#adb5bd;">({{ item.scraper.name if item.scraper else '—' }})</small>
                     {% if item.suggested_player %}
                     <br><small style="color:#6c757d;">Podpowiedź: {{ item.suggested_player.last_name }} {{ item.suggested_player.first_name }}
                         ({{ item.suggested_player.team.name if item.suggested_player.team else '—' }})
@@ -98,10 +99,10 @@
 
     {% if departures %}
     <div class="card-header" style="border-top:1px solid #dee2e6;margin-top:1rem;">
-        <span>⚠️ Zniknęli z kadry na superscore</span>
+        <span>⚠️ Zniknęli z kadry</span>
     </div>
     <p style="padding:0 1rem;color:#6c757d;">
-        Ci zawodnicy są przypisani do drużyny w bazie i byli wcześniej dopasowani przez superscore, ale nie
+        Ci zawodnicy są przypisani do drużyny w bazie i byli wcześniej dopasowani przez scraper, ale nie
         występują już w aktualnie pobranym składzie. „Usuń z kadry” zeruje im drużynę (zostają wolnym agentem,
         historia meczowa jest zachowana) — „Zostaw” pozostawia bez zmian (zostaną znów zgłoszeni przy kolejnym scrapowaniu, jeśli nadal będą nieobecni).
     </p>
@@ -109,6 +110,7 @@
         <thead>
             <tr>
                 <th>Zawodnik</th>
+                <th>Źródło</th>
                 <th>Akcje</th>
             </tr>
         </thead>
@@ -116,6 +118,7 @@
             {% for dep in departures %}
             <tr>
                 <td>{{ dep.player.last_name }} {{ dep.player.first_name }}</td>
+                <td><small style="color:#adb5bd;">{{ dep.scraper.name if dep.scraper else '—' }}</small></td>
                 <td>
                     <div class="actions">
                         <form method="POST" action="{{ url_for('confirm_pending_player_departure', pending_id=dep.id) }}" style="display:inline;"

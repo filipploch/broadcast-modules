@@ -12,6 +12,7 @@ kandydata po podobieństwie imienia i nazwiska. Wiąże to dopiero
 resolve_pending_player_match(), wywołane z ekranu przeglądu po decyzji admina.
 """
 import difflib
+import logging
 from typing import Dict, List, Optional
 
 from core.extensions import db
@@ -26,6 +27,8 @@ from app.managers.scrapers.superscore.superscore_player_scraper import Superscor
 
 SIMILARITY_THRESHOLD = 0.6
 
+logger = logging.getLogger(__name__)
+
 player_manager = PlayerManager()
 
 
@@ -33,6 +36,13 @@ def _superscore_scraper_id() -> int:
     scraper = Scraper.get_by_folder('superscore')
     if not scraper:
         raise RuntimeError("Scraper 'superscore' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
+
+
+def _laczynaspilka_scraper_id() -> int:
+    scraper = Scraper.get_by_folder('laczynaspilka')
+    if not scraper:
+        raise RuntimeError("Scraper 'laczynaspilka' nie jest zarejestrowany w tabeli scrapers")
     return scraper.id
 
 
@@ -102,6 +112,71 @@ class PlayerMatchManager:
             team.coach = squad['manager_name']
             db.session.commit()
 
+        return self._queue_scraped_players(team, scraper_id, squad['players'])
+
+    def scrape_team_players_from_laczynaspilka(self, team_id: int) -> Dict[str, int]:
+        """
+        Pobierz kadrę drużyny z lokalnie zapisanego pliku HTML laczynaspilka.pl
+        (np. przez SingleFile — ten sam plik co dotychczasowy auto-sync scraper
+        w player_scraper_manager.py) i zapisz kandydatów-zawodników do
+        dopasowania w PendingPlayerMatch — analogicznie do superscore, nic nie
+        jest linkowane automatycznie.
+
+        Laczynaspilka nie udostępnia danych trenera na karcie drużyny — Team.coach
+        nie jest tu ruszane (inaczej niż przy superscore).
+
+        Returns:
+            {'new_matches': ..., 'departed': ...}
+
+        Raises:
+            ValueError: brak drużyny, brak przypisanego foreign_id (UUID) albo
+                brak zapisanego pliku HTML w katalogu tymczasowym.
+        """
+        from flask import current_app
+        import sys
+        from app.managers.scrapers.laczynaspilka.player_scraper import PlayerScraper
+
+        team = Team.query.get(team_id)
+        if not team:
+            raise ValueError("Nie znaleziono drużyny")
+
+        scraper_id = _laczynaspilka_scraper_id()
+        team_foreign_id = team.get_foreign_id(scraper_id)
+        if not team_foreign_id:
+            raise ValueError(
+                "Drużyna nie ma skonfigurowanego foreign_id dla laczynaspilka.pl"
+            )
+
+        temp_dir = sys.path[0] + current_app.config['TEMP_DIR']
+        html_scraper = PlayerScraper()
+        html_path = html_scraper.find_html_file_for_team(temp_dir, team_foreign_id)
+        if not html_path:
+            raise ValueError(
+                "Nie znaleziono zapisanego pliku HTML dla tej drużyny w katalogu tymczasowym — "
+                f"pobierz i zapisz stronę https://www.laczynaspilka.pl/rozgrywki/druzyna/{team_foreign_id} "
+                "(np. wtyczką SingleFile) przed scrapowaniem."
+            )
+
+        squad_players = html_scraper.scrape_players_from_html(html_path, team_foreign_id)
+        result = self._queue_scraped_players(team, scraper_id, squad_players)
+
+        html_path.unlink(missing_ok=True)
+        return result
+
+    def _queue_scraped_players(self, team: Team, scraper_id: int, scraped_players: List[Dict]) -> Dict[str, int]:
+        """
+        Wspólna logika dla wszystkich scraperów kadry: zawodnik już dopasowany
+        wcześniej (ma wpis w PlayerForeignId dla tego scrapera) dostaje tylko
+        backfill team_id jeśli zmienił drużynę; reszta trafia do
+        PendingPlayerMatch z podpowiedzią po podobieństwie imienia/nazwiska.
+        Zawodnicy przypisani do drużyny w bazie, którzy mieli foreign_id tego
+        scrapera ale nie występują już w świeżym składzie, trafiają do
+        PendingPlayerDeparture (nic nie usuwane automatycznie).
+
+        Wpisy scraped bez foreign_id są pomijane — bez stabilnego identyfikatora
+        nie da się ich bezpiecznie odróżnić od już zatwierdzonych zawodników
+        przy kolejnym scrapowaniu.
+        """
         already_resolved = {
             row.foreign_id: row.player_id
             for row in PlayerForeignId.query.filter_by(scraper_id=scraper_id).all()
@@ -110,36 +185,44 @@ class PlayerMatchManager:
 
         scraped_foreign_ids = set()
         new_matches = 0
-        for scraped in squad['players']:
-            scraped_foreign_ids.add(scraped['foreign_id'])
-            resolved_player_id = already_resolved.get(scraped['foreign_id'])
+        for scraped in scraped_players:
+            foreign_id = scraped.get('foreign_id')
+            if not foreign_id:
+                logger.warning(
+                    f"Pomijam zawodnika bez foreign_id: "
+                    f"{scraped.get('first_name')} {scraped.get('last_name')}"
+                )
+                continue
+            scraped_foreign_ids.add(foreign_id)
+
+            resolved_player_id = already_resolved.get(foreign_id)
             if resolved_player_id is not None:
                 # Już dopasowany wcześniej (np. przy okazji innej drużyny) —
                 # jeśli od tamtej pory zmienił drużynę, uaktualnij przypisanie.
                 player = player_manager.get_player_by_id(resolved_player_id)
-                if player and player.team_id != team_id:
-                    player_manager.update_player(player.id, team_id=team_id)
+                if player and player.team_id != team.id:
+                    player_manager.update_player(player.id, team_id=team.id)
                 continue
 
             best_player, score = _best_match(scraped['first_name'], scraped['last_name'], all_players)
             PendingPlayerMatch.upsert(
-                team_id=team_id,
+                team_id=team.id,
                 scraper_id=scraper_id,
                 scraped_first_name=scraped['first_name'],
                 scraped_last_name=scraped['last_name'],
-                scraped_foreign_id=scraped['foreign_id'],
-                scraped_is_goalkeeper=scraped['is_goalkeeper'],
+                scraped_foreign_id=foreign_id,
+                scraped_is_goalkeeper=bool(scraped.get('is_goalkeeper')),
                 suggested_player_id=best_player.id if best_player else None,
                 similarity_score=score,
             )
             new_matches += 1
 
         departed_player_ids = []
-        for player in Player.query.filter_by(team_id=team_id).all():
+        for player in Player.query.filter_by(team_id=team.id).all():
             foreign_id = player.get_foreign_id(scraper_id)
             if foreign_id and foreign_id not in scraped_foreign_ids:
                 departed_player_ids.append(player.id)
-        PendingPlayerDeparture.sync(team_id, scraper_id, departed_player_ids)
+        PendingPlayerDeparture.sync(team.id, scraper_id, departed_player_ids)
 
         return {'new_matches': new_matches, 'departed': len(departed_player_ids)}
 

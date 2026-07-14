@@ -593,6 +593,31 @@ def register_routes(app):
             flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
         return redirect(url_for('review_pending_player_matches', team_id=team_id))
 
+    @app.route('/teams/<int:team_id>/players/scrape/laczynaspilka')
+    def scrape_team_players_laczynaspilka(team_id):
+        """Pobierz kadrę drużyny z lokalnie zapisanego pliku HTML laczynaspilka.pl
+        i zapisz kandydatów-zawodników do przeglądu (ta sama kolejka co superscore)."""
+        try:
+            result = player_match_manager.scrape_team_players_from_laczynaspilka(team_id)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('list_players', team_id=team_id))
+        except Exception as e:
+            logger.error(f"Error scraping team players from laczynaspilka: {e}", exc_info=True)
+            flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
+            return redirect(url_for('list_players', team_id=team_id))
+
+        parts = []
+        if result['new_matches']:
+            parts.append(f"{result['new_matches']} nowych zawodników do dopasowania")
+        if result['departed']:
+            parts.append(f"{result['departed']} zniknęło z kadry (do potwierdzenia)")
+        if parts:
+            flash('Wynik scrapowania: ' + ', '.join(parts), 'success')
+        else:
+            flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
+        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
     @app.route('/teams/<int:team_id>/players/pending-matches')
     def review_pending_player_matches(team_id):
         """Ekran przeglądu zawodników wykrytych przez scraper (nowi kandydaci
