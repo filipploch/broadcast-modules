@@ -346,13 +346,17 @@ class GameScraperManager:
                 if scraper_id and game_foreign_id and not existing.get_foreign_id(scraper_id):
                     existing.set_foreign_id(scraper_id, game_foreign_id)
 
-                # Nie cofaj statusu — jeśli DB ma FINISHED a scraper mówi NOT_STARTED,
-                # DB jest aktualniejsza (np. mecz wpisany ręcznie)
-                if existing.status == STATUS_FINISHED and status == STATUS_NOT_STARTED:
+                # Nie cofaj statusu do NOT_STARTED, jeśli DB ma już PENDING albo
+                # FINISHED — żaden scraper nie ustawia PENDING/FINISHED i nie
+                # zwraca teraz NOT_STARTED dla tego samego meczu, więc taki DB
+                # stan może pochodzić tylko od użytkownika (np. ręcznie
+                # wystartowany/zakończony mecz transmitowany na żywo) —
+                # użytkownik ma priorytet, żaden scraper go nie cofa.
+                if existing.status in (STATUS_FINISHED, STATUS_IN_PROGRESS) and status == STATUS_NOT_STARTED:
                     logger.debug(
                         f"Pomijam kolejka={gd['round']} "
                         f"{gd['home_team_name']} vs {gd['away_team_name']} "
-                        f"— www=NOT_STARTED, db=FINISHED"
+                        f"— www=NOT_STARTED, db={'FINISHED' if existing.status == STATUS_FINISHED else 'PENDING'}"
                     )
                     continue
 
