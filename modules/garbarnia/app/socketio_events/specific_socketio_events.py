@@ -385,24 +385,25 @@ def register_events(socketio):
 
     # TODO(UI): brak jeszcze przycisku/formularza "Dodaj zdarzenie wstecznie"
     # — handler gotowy, czeka na podpięcie z UI (lokalizacja formularza do
-    # ustalenia). Payload docelowo z formularza: period_id + elapsed_ms
-    # (MM:SS wybranego momentu w danym okresie) + typ zdarzenia/drużyna/
-    # zawodnik — patrz GameEventManager.record_event_at_time().
+    # ustalenia). Payload docelowo z formularza: period_id + event_time_delta_s
+    # (MM:SS wybranego momentu w danym okresie, w sekundach) + typ zdarzenia/
+    # drużyna/zawodnik — patrz GameEventManager.record_event_at_time().
     @socketio.on('add_game_event_to_db_backdated')
     def handle_add_game_event_to_db_backdated(data):
         """Jak add_game_event_to_db, ale dla momentu z przeszłości wskazanego
-        ręcznie (period_id + elapsed_ms), nie z bieżącego stanu timera/gry.
-        Dane kamer (EventCamera) liczone z historii (RecordingLookupManager),
-        nie żywym GetRecordStatus — patrz record_event_at_time()."""
+        ręcznie (period_id + event_time_delta_s), nie z bieżącego stanu
+        timera/gry. Dane kamer (EventCamera) liczone z historii
+        (RecordingLookupManager), nie żywym GetRecordStatus — patrz
+        record_event_at_time()."""
         from app.models.game import Game
 
         game_id    = data.get('game_id')
         period_id  = data.get('period_id')
-        elapsed_ms = data.get('elapsed_ms')
+        event_time_delta_s = data.get('event_time_delta_s')
         event_id   = data.get('event_id')
 
-        if not all([game_id, period_id, elapsed_ms is not None, event_id]):
-            socketio.emit('error', {'message': 'Wymagane: game_id, period_id, elapsed_ms, event_id'})
+        if not all([game_id, period_id, event_time_delta_s is not None, event_id]):
+            socketio.emit('error', {'message': 'Wymagane: game_id, period_id, event_time_delta_s, event_id'})
             return
 
         team_id   = None
@@ -419,7 +420,7 @@ def register_events(socketio):
             game_event = manager.record_event_at_time(
                 game_id=game_id,
                 period_id=period_id,
-                elapsed_ms=elapsed_ms,
+                event_time_delta_s=event_time_delta_s,
                 event_id=event_id,
                 team_id=team_id,
                 player_id=data.get('player_id'),

@@ -285,7 +285,7 @@ class GameEventManager:
     # Backend (ten manager + socket handler add_game_event_to_db_backdated
     # w garbarnia/app/socketio_events/specific_socketio_events.py) już działa
     # i jest przetestowany end-to-end; brakuje tylko UI.
-    def record_event_at_time(self, game_id: int, period_id: int, elapsed_ms: int,
+    def record_event_at_time(self, game_id: int, period_id: int, event_time_delta_s: int,
                              event_id: int, team_id: int = None, player_id: int = None,
                              event_place: str = None, comment: str = None):
         """
@@ -294,10 +294,11 @@ class GameEventManager:
         chwili, w której faktycznie się wydarzyła).
 
         W przeciwieństwie do record_event_now() (bieżący, żywy stan timera):
-          - game_time liczony jest z podanego elapsed_ms (czas od początku
-            period_id) wg tego samego wzorca co core.utils.timer_utils.
-            get_current_time_in_seconds() — period.initial_time (suma limitów
-            poprzednich części, ms) + elapsed_ms, oba w sekundach;
+          - game_time liczony jest z podanego event_time_delta_s (czas od
+            początku period_id, w sekundach) wg tego samego wzorca co
+            core.utils.timer_utils.get_current_time_in_seconds() —
+            period.initial_time (suma limitów poprzednich części, ms) // 1000
+            + event_time_delta_s;
           - dane kamer (EventCamera) NIE są pytane na żywo (GetRecordStatus
             zwróciłoby stan "teraz", nie wybranej chwili z przeszłości) —
             liczone są z historii przez RecordingLookupManager (patrz
@@ -317,7 +318,7 @@ class GameEventManager:
         if not period or period.game_id != game_id:
             raise ValueError(f"Część o ID {period_id} nie istnieje lub nie należy do meczu {game_id}")
 
-        game_time = period.initial_time // 1000 + elapsed_ms // 1000
+        game_time = period.initial_time // 1000 + event_time_delta_s
 
         game_event = self.record_event(
             game_id=game_id,
@@ -330,10 +331,10 @@ class GameEventManager:
             comment=comment,
         )
 
-        self._attach_recording_lookup(game_event, period_id, elapsed_ms)
+        self._attach_recording_lookup(game_event, period_id, event_time_delta_s)
         return game_event
 
-    def _attach_recording_lookup(self, game_event, period_id: int, elapsed_ms: int):
+    def _attach_recording_lookup(self, game_event, period_id: int, event_time_delta_s: int):
         """Wypełnij EventCamera na podstawie historii (RecordingLookupManager)
         zamiast żywego GetRecordStatus — jedyna opcja dla momentu z przeszłości.
         Cicho pomija (nic nie zapisuje), jeśli moduł nie rejestruje modeli
@@ -341,7 +342,7 @@ class GameEventManager:
         jeszcze próbek obejmujących ten moment."""
         try:
             from core.managers.recording_lookup_manager import RecordingLookupManager
-            result = RecordingLookupManager().locate(game_event.game_id, period_id, elapsed_ms)
+            result = RecordingLookupManager().locate(game_event.game_id, period_id, event_time_delta_s)
         except RuntimeError:
             return  # moduł nie rejestruje wymaganych modeli
         if not result['cameras']:

@@ -35,12 +35,12 @@ def _get_period():
     return get_period_model()
 
 
-def _default_tolerance_ms():
+def _default_tolerance_s():
     try:
         from flask import current_app
-        return current_app.config.get('HELPER_MATCH_TOLERANCE_MS', 8000)
+        return current_app.config.get('HELPER_MATCH_TOLERANCE_S', 8)
     except Exception:
-        return 8000
+        return 8
 
 
 class HelperRelayManager:
@@ -56,7 +56,7 @@ class HelperRelayManager:
         """
         payload:
           external_id (str, wymagane), display_name (opc.)
-          game_id, period_id, elapsed_ms (wymagane)
+          game_id, period_id, event_time_delta_s (wymagane)
           event_id, team_id, player_id, comment (opc.)
           source_game_event_id (opc.) — obecność = korekta (kind='correction')
         """
@@ -70,33 +70,33 @@ class HelperRelayManager:
 
         game_id     = payload['game_id']
         period_id   = payload['period_id']
-        elapsed_ms  = payload['elapsed_ms']
+        event_time_delta_s = payload['event_time_delta_s']
         event_id    = payload.get('event_id')
         team_id     = payload.get('team_id')
         player_id   = payload.get('player_id')
         comment     = payload.get('comment')
         source_game_event_id = payload.get('source_game_event_id')
         kind = Candidate.KIND_CORRECTION if source_game_event_id else Candidate.KIND_NEW
-        tolerance_ms = _default_tolerance_ms()
+        tolerance_s = _default_tolerance_s()
 
         auto_reject_reason = self._check_auto_reject(
-            kind, game_id, period_id, elapsed_ms, event_id, team_id,
-            player_id, source_game_event_id, tolerance_ms,
+            kind, game_id, period_id, event_time_delta_s, event_id, team_id,
+            player_id, source_game_event_id, tolerance_s,
         )
 
         candidate = None
         if auto_reject_reason is None:
             candidate = Candidate.find_matching_pending(
-                game_id, period_id, kind, elapsed_ms=elapsed_ms,
+                game_id, period_id, kind, event_time_delta_s=event_time_delta_s,
                 event_id=event_id, team_id=team_id,
-                source_game_event_id=source_game_event_id, tolerance_ms=tolerance_ms,
+                source_game_event_id=source_game_event_id, tolerance_s=tolerance_s,
             )
 
         if candidate is None:
             candidate = Candidate(
                 game_id=game_id, period_id=period_id, kind=kind,
                 event_id=event_id, team_id=team_id, player_id=player_id,
-                elapsed_ms=elapsed_ms, comment=comment,
+                event_time_delta_s=event_time_delta_s, comment=comment,
                 source_game_event_id=source_game_event_id,
                 status=Candidate.STATUS_AUTO_REJECTED if auto_reject_reason else Candidate.STATUS_PENDING,
                 status_reason=auto_reject_reason,
@@ -114,7 +114,7 @@ class HelperRelayManager:
 
         submission = Submission(
             helper_id=helper.id, candidate_id=candidate.id,
-            game_id=game_id, period_id=period_id, elapsed_ms=elapsed_ms,
+            game_id=game_id, period_id=period_id, event_time_delta_s=event_time_delta_s,
             event_id=event_id, team_id=team_id, player_id=player_id,
             comment=comment, source_game_event_id=source_game_event_id,
         )
@@ -131,8 +131,8 @@ class HelperRelayManager:
 
         return candidate
 
-    def _check_auto_reject(self, kind, game_id, period_id, elapsed_ms, event_id,
-                            team_id, player_id, source_game_event_id, tolerance_ms):
+    def _check_auto_reject(self, kind, game_id, period_id, event_time_delta_s, event_id,
+                            team_id, player_id, source_game_event_id, tolerance_s):
         """Zwraca status_reason (str) jeśli zgłoszenie duplikuje coś już
         zalogowanego w GameEvent, albo None jeśli nie ma podstaw do
         auto-odrzucenia. Patrz docs/helper-app-design.md sekcja 4-5."""
@@ -151,8 +151,7 @@ class HelperRelayManager:
         period = Period.query.get(period_id)
         if not period:
             return None
-        target_game_time = period.initial_time // 1000 + elapsed_ms // 1000
-        tolerance_s = max(1, tolerance_ms // 1000)
+        target_game_time = period.initial_time // 1000 + event_time_delta_s
 
         existing = GameEvent.query.filter_by(
             game_id=game_id, period_id=period_id, event_id=event_id, team_id=team_id,
@@ -188,7 +187,7 @@ class HelperRelayManager:
         if candidate.kind == Candidate.KIND_NEW:
             game_event = gem.record_event_at_time(
                 game_id=candidate.game_id, period_id=candidate.period_id,
-                elapsed_ms=candidate.elapsed_ms, event_id=candidate.event_id,
+                event_time_delta_s=candidate.event_time_delta_s, event_id=candidate.event_id,
                 team_id=candidate.team_id, player_id=candidate.player_id,
                 comment=candidate.comment,
             )

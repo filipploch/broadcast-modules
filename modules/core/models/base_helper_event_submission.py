@@ -28,7 +28,7 @@ class BaseHelperEventSubmissionMixin:
     def period_id(cls):
         return db.Column(db.Integer, db.ForeignKey('periods.id'), nullable=False, index=True)
 
-    elapsed_ms = db.Column(db.Integer, nullable=False)
+    event_time_delta_s = db.Column(db.Integer, nullable=False)
 
     @declared_attr
     def event_id(cls):
@@ -65,7 +65,7 @@ class BaseHelperEventSubmissionMixin:
             'candidate_id':         self.candidate_id,
             'game_id':              self.game_id,
             'period_id':            self.period_id,
-            'elapsed_ms':           self.elapsed_ms,
+            'event_time_delta_s':   self.event_time_delta_s,
             'event_id':             self.event_id,
             'team_id':              self.team_id,
             'player_id':            self.player_id,

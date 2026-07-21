@@ -43,7 +43,7 @@ class Config:
     HELPER_RELAY_URL = os.environ.get('HELPER_RELAY_URL') or 'wss://REPLACE-ME.onrender.com/relay'
     HELPER_RELAY_TOKEN = os.environ.get('HELPER_RELAY_TOKEN') or ''
     HELPER_RELAY_PING_INTERVAL_S = 300
-    HELPER_MATCH_TOLERANCE_MS = 8000
+    HELPER_MATCH_TOLERANCE_S = 8
 
 
 class DevelopmentConfig(Config):

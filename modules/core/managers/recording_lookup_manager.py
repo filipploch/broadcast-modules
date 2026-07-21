@@ -1,6 +1,6 @@
 """RecordingLookupManager — zamiana wybranego czasu meczowego (okres +
-elapsed_ms) na plik nagrania i offset w sekundach, dla każdej kamery, która
-wtedy nagrywała ten mecz.
+event_time_delta_s) na plik nagrania i offset w sekundach, dla każdej
+kamery, która wtedy nagrywała ten mecz.
 
 Łączy dwa niezależne logi:
   - TimerSample:              elapsed_time_ms głównego timera okresu → czas ścienny
@@ -11,12 +11,12 @@ from datetime import datetime
 
 class RecordingLookupManager:
 
-    def locate(self, game_id: int, period_id: int, elapsed_ms: int) -> dict:
+    def locate(self, game_id: int, period_id: int, event_time_delta_s: int) -> dict:
         """
         Args:
-            game_id:    mecz, którego dotyczy zapytanie
-            period_id:  okres (połowa), w którym mieści się elapsed_ms
-            elapsed_ms: czas meczowy (od początku okresu) w milisekundach
+            game_id:            mecz, którego dotyczy zapytanie
+            period_id:          okres (połowa), w którym mieści się event_time_delta_s
+            event_time_delta_s: czas meczowy (od początku okresu) w sekundach
 
         Returns:
             {
@@ -35,7 +35,7 @@ class RecordingLookupManager:
         TimerSample = get_timer_sample_model()
         CameraRecordingSegment = get_camera_recording_segment_model()
 
-        wall_clock = TimerSample.wall_clock_for_elapsed(period_id, elapsed_ms)
+        wall_clock = TimerSample.wall_clock_for_elapsed(period_id, event_time_delta_s)
         if wall_clock is None:
             return {'wall_clock': None, 'cameras': []}
 

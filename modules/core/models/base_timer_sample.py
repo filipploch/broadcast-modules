@@ -62,12 +62,17 @@ class BaseTimerSampleMixin:
         return row
 
     @classmethod
-    def wall_clock_for_elapsed(cls, period_id, target_elapsed_ms):
+    def wall_clock_for_elapsed(cls, period_id, event_time_delta_s):
         """
-        Interpoluj czas ścienny dla zadanego elapsed_time_ms na podstawie
-        najbliższych otaczających próbek. None jeśli brak jakichkolwiek
-        próbek dla tego okresu.
+        Interpoluj czas ścienny dla zadanego event_time_delta_s (offset od
+        początku okresu, w sekundach — ta sama jednostka co wszędzie indziej
+        w mechanizmie "wstecznym", patrz GameEventManager.record_event_at_time)
+        na podstawie najbliższych otaczających próbek (elapsed_time_ms, tu
+        nadal w ms — to precyzja z jaką timer-plugin faktycznie raportuje
+        swój stan). None jeśli brak jakichkolwiek próbek dla tego okresu.
         """
+        target_elapsed_ms = event_time_delta_s * 1000
+
         before = (cls.query
                   .filter(cls.period_id == period_id, cls.elapsed_time_ms <= target_elapsed_ms)
                   .order_by(cls.elapsed_time_ms.desc())

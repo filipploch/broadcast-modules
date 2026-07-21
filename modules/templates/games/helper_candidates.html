@@ -35,7 +35,7 @@
                     vs {{ c.game.away_team.name if c.game.away_team else '?' }}
                     {% else %}#{{ c.game_id }}{% endif %}
                 </td>
-                <td>{{ (c.elapsed_ms // 60000) }}:{{ '%02d' % ((c.elapsed_ms % 60000) // 1000) }}</td>
+                <td>{{ (c.event_time_delta_s // 60) }}:{{ '%02d' % (c.event_time_delta_s % 60) }}</td>
                 <td>
                     {% if c.kind == 'correction' %}
                     ✏️ korekta zdarzenia #{{ c.source_game_event_id }}

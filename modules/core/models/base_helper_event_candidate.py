@@ -46,7 +46,7 @@ class BaseHelperEventCandidateMixin:
     def player_id(cls):
         return db.Column(db.Integer, db.ForeignKey('players.id'), nullable=True)
 
-    elapsed_ms = db.Column(db.Integer, nullable=False)
+    event_time_delta_s = db.Column(db.Integer, nullable=False)
     comment    = db.Column(db.String(500), nullable=True)
 
     @declared_attr
@@ -106,7 +106,7 @@ class BaseHelperEventCandidateMixin:
             'event_id':              self.event_id,
             'team_id':               self.team_id,
             'player_id':             self.player_id,
-            'elapsed_ms':            self.elapsed_ms,
+            'event_time_delta_s':    self.event_time_delta_s,
             'comment':               self.comment,
             'source_game_event_id':  self.source_game_event_id,
             'event_name':            self.event.name if self.event else None,
@@ -125,9 +125,9 @@ class BaseHelperEventCandidateMixin:
         }
 
     @classmethod
-    def find_matching_pending(cls, game_id, period_id, kind, elapsed_ms=None,
+    def find_matching_pending(cls, game_id, period_id, kind, event_time_delta_s=None,
                                event_id=None, team_id=None,
-                               source_game_event_id=None, tolerance_ms=8000):
+                               source_game_event_id=None, tolerance_s=8):
         """Szuka istniejącego kandydata PENDING pasującego wg reguł dedup
         z docs/helper-app-design.md (sekcja 4-5). Nie tworzy niczego."""
         query = cls.query.filter_by(
@@ -138,7 +138,7 @@ class BaseHelperEventCandidateMixin:
 
         query = query.filter_by(event_id=event_id, team_id=team_id)
         for candidate in query.all():
-            if abs(candidate.elapsed_ms - elapsed_ms) <= tolerance_ms:
+            if abs(candidate.event_time_delta_s - event_time_delta_s) <= tolerance_s:
                 return candidate
         return None
 
@@ -147,7 +147,7 @@ class BaseHelperEventCandidateMixin:
         query = cls.query.filter_by(game_id=game_id)
         if status is not None:
             query = query.filter_by(status=status)
-        return query.order_by(cls.elapsed_ms).all()
+        return query.order_by(cls.event_time_delta_s).all()
 
     @classmethod
     def get_pending_for_league(cls, league_id):
@@ -158,7 +158,7 @@ class BaseHelperEventCandidateMixin:
         return (cls.query
                 .join(Game, Game.id == cls.game_id)
                 .filter(Game.league_id == league_id, cls.status == cls.STATUS_PENDING)
-                .order_by(cls.game_id, cls.elapsed_ms)
+                .order_by(cls.game_id, cls.event_time_delta_s)
                 .all())
 
 
