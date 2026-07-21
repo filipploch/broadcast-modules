@@ -1,18 +1,20 @@
 .specific-colors {
   color: white;
-  background-color: #303093;
-  background-image: linear-gradient(to bottom, #303093, #080862);
+  background-color: #480f0f;
+  background-image: linear-gradient(to bottom, rgb(72, 54, 28), #2a1b06);
 }
 
 .info-body-right {
-  flex: 1;                 /* ← równa szerokość */
-  display: flex;           /* ← centrowanie obrazka */
-  justify-content: center;
-  align-items: center;
+  flex: 1;
+  display: flex;
+  justify-content: end;
+  align-items: normal;
+  padding-top: 75px;
+  padding-right: 150px;
 }
 
 .info-body-right img {
-  width: 500px;
-  height: 500px;
-  object-fit: cover;       /* opcjonalnie – zachowuje proporcje w razie potrzeby */
+  width: 250px;
+  height: 250px;
+  object-fit: cover;
 }
