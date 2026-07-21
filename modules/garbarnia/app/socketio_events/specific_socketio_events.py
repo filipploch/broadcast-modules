@@ -383,6 +383,55 @@ def register_events(socketio):
                 'cameras': cameras,
             })
 
+    # TODO(UI): brak jeszcze przycisku/formularza "Dodaj zdarzenie wstecznie"
+    # — handler gotowy, czeka na podpięcie z UI (lokalizacja formularza do
+    # ustalenia). Payload docelowo z formularza: period_id + elapsed_ms
+    # (MM:SS wybranego momentu w danym okresie) + typ zdarzenia/drużyna/
+    # zawodnik — patrz GameEventManager.record_event_at_time().
+    @socketio.on('add_game_event_to_db_backdated')
+    def handle_add_game_event_to_db_backdated(data):
+        """Jak add_game_event_to_db, ale dla momentu z przeszłości wskazanego
+        ręcznie (period_id + elapsed_ms), nie z bieżącego stanu timera/gry.
+        Dane kamer (EventCamera) liczone z historii (RecordingLookupManager),
+        nie żywym GetRecordStatus — patrz record_event_at_time()."""
+        from app.models.game import Game
+
+        game_id    = data.get('game_id')
+        period_id  = data.get('period_id')
+        elapsed_ms = data.get('elapsed_ms')
+        event_id   = data.get('event_id')
+
+        if not all([game_id, period_id, elapsed_ms is not None, event_id]):
+            socketio.emit('error', {'message': 'Wymagane: game_id, period_id, elapsed_ms, event_id'})
+            return
+
+        team_id   = None
+        team_type = data.get('team_type')
+        if team_type in ('home', 'away'):
+            game    = Game.query.get(game_id)
+            if not game:
+                socketio.emit('error', {'message': f'Nie znaleziono meczu o ID {game_id}'})
+                return
+            team_id = game.home_team_id if team_type == 'home' else game.away_team_id
+
+        try:
+            manager = GameEventManager()
+            game_event = manager.record_event_at_time(
+                game_id=game_id,
+                period_id=period_id,
+                elapsed_ms=elapsed_ms,
+                event_id=event_id,
+                team_id=team_id,
+                player_id=data.get('player_id'),
+                event_place=data.get('selected_cell_id'),
+                comment=data.get('comment'),
+            )
+        except Exception as e:
+            current_app.logger.error(f'❌ Failed to save backdated game event: {e}')
+            socketio.emit('error', {'message': str(e)})
+            return
+
+        socketio.emit('game_event_added', {'game_event': game_event.to_dict()})
 
     @socketio.on('show_info')
     def handle_show_info(data):

@@ -31,6 +31,14 @@ def _get_game_event():
     from core.models.base_game_event import get_game_event_model
     return get_game_event_model()
 
+def _get_game_camera():
+    from core.models.base_game_camera import get_game_camera_model
+    return get_game_camera_model()
+
+def _get_event_camera():
+    from core.models.base_event_camera import get_event_camera_model
+    return get_event_camera_model()
+
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +277,104 @@ class GameEventManager:
             player_id=player_id,
             event_place=event_place
         )
+
+    # TODO(UI): brak jeszcze formularza/przycisku "Dodaj zdarzenie wstecznie"
+    # w interfejsie na żywo — ten mechanizm jest gotowy do podpięcia pod
+    # przyszły formularz (okres + MM:SS -> typ zdarzenia/drużyna/zawodnik).
+    # Backend (ten manager + socket handler add_game_event_to_db_backdated
+    # w garbarnia/app/socketio_events/specific_socketio_events.py) już działa
+    # i jest przetestowany end-to-end; brakuje tylko UI.
+    def record_event_at_time(self, game_id: int, period_id: int, elapsed_ms: int,
+                             event_id: int, team_id: int = None, player_id: int = None,
+                             event_place: str = None, comment: str = None):
+        """
+        Zapisz zdarzenie dla WYBRANEGO, niekoniecznie bieżącego momentu meczu
+        ("wstecznie" — operator zauważa sytuację z opóźnieniem i cofa się do
+        chwili, w której faktycznie się wydarzyła).
+
+        W przeciwieństwie do record_event_now() (bieżący, żywy stan timera):
+          - game_time liczony jest z podanego elapsed_ms (czas od początku
+            period_id) wg tego samego wzorca co core.utils.timer_utils.
+            get_current_time_in_seconds() — period.initial_time (suma limitów
+            poprzednich części, ms) + elapsed_ms, oba w sekundach;
+          - dane kamer (EventCamera) NIE są pytane na żywo (GetRecordStatus
+            zwróciłoby stan "teraz", nie wybranej chwili z przeszłości) —
+            liczone są z historii przez RecordingLookupManager (patrz
+            _attach_recording_lookup), więc wymagają żeby timer_samples/
+            camera_recording_segments miały dane obejmujące ten moment
+            (moduły bez tych tabel — np. futsal_nalf — po prostu nie dostaną
+            danych kamer, zdarzenie i tak zostanie zapisane).
+
+        Returns:
+            GameEvent
+
+        Raises:
+            ValueError: podany okres nie istnieje albo nie należy do meczu
+        """
+        Period = _get_period()
+        period = Period.query.get(period_id)
+        if not period or period.game_id != game_id:
+            raise ValueError(f"Część o ID {period_id} nie istnieje lub nie należy do meczu {game_id}")
+
+        game_time = period.initial_time // 1000 + elapsed_ms // 1000
+
+        game_event = self.record_event(
+            game_id=game_id,
+            event_id=event_id,
+            game_time=game_time,
+            period_id=period_id,
+            team_id=team_id,
+            player_id=player_id,
+            event_place=event_place,
+            comment=comment,
+        )
+
+        self._attach_recording_lookup(game_event, period_id, elapsed_ms)
+        return game_event
+
+    def _attach_recording_lookup(self, game_event, period_id: int, elapsed_ms: int):
+        """Wypełnij EventCamera na podstawie historii (RecordingLookupManager)
+        zamiast żywego GetRecordStatus — jedyna opcja dla momentu z przeszłości.
+        Cicho pomija (nic nie zapisuje), jeśli moduł nie rejestruje modeli
+        timer_samples/camera_recording_segments (np. futsal_nalf) albo nie ma
+        jeszcze próbek obejmujących ten moment."""
+        try:
+            from core.managers.recording_lookup_manager import RecordingLookupManager
+            result = RecordingLookupManager().locate(game_event.game_id, period_id, elapsed_ms)
+        except RuntimeError:
+            return  # moduł nie rejestruje wymaganych modeli
+        if not result['cameras']:
+            return
+
+        GameCamera = _get_game_camera()
+        EventCamera = _get_event_camera()
+        from core.models.base_game_camera import HDMI_TO_DEVICE
+        device_to_hdmi = {device: hdmi for hdmi, device in HDMI_TO_DEVICE.items()}
+
+        for cam in result['cameras']:
+            hdmi_input = device_to_hdmi.get(cam['recorder_camera_id'])
+            if hdmi_input is None:
+                continue
+            gc = GameCamera.query.filter_by(game_id=game_event.game_id, hdmi_input=hdmi_input).first()
+            if gc is None:
+                continue  # ten slot HDMI nie ma przypisanej fizycznej kamery w tym meczu
+
+            replay_end_time = int(cam['offset_seconds'] * 1000)
+            existing = EventCamera.query.filter_by(
+                game_event_id=game_event.id, camera_id=gc.camera_id
+            ).first()
+            if existing:
+                continue
+            db.session.add(EventCamera(
+                game_event_id=game_event.id,
+                camera_id=gc.camera_id,
+                # Konwencja zgodna z recorder_manager._on_record_status —
+                # udział sieciowy na Windows, nie ścieżka lokalna z rekordera.
+                video_path='R:/recorder/' + cam['file_name'],
+                replay_start_time=EventCamera.calc_replay_start_time(replay_end_time),
+                replay_end_time=replay_end_time,
+            ))
+        db.session.commit()
 
     def get_events_for_game(self, game_id: int, period_id: int = None,
                            event_id: int = None, team_id: int = None,
