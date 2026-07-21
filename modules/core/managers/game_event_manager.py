@@ -227,6 +227,7 @@ class GameEventManager:
             db.session.commit()
 
             logger.info(f"Recorded event '{event.name}' at {game_event.game_time_formatted} in game {game_id}")
+            self._notify_helper_relay(game_event)
             return game_event
 
         except Exception as e:
@@ -376,6 +377,16 @@ class GameEventManager:
             ))
         db.session.commit()
 
+    def _notify_helper_relay(self, game_event):
+        """Best-effort push do apki pomocnika (docs/helper-app-design.md sekcja
+        6) — no-op cicho jeśli relay wyłączony/niepołączony lub brak kontekstu
+        aplikacji (np. wywołanie ze skryptu offline)."""
+        try:
+            from core.managers import get_helper_relay_manager
+            get_helper_relay_manager().notify_event_recorded(game_event)
+        except Exception as e:
+            logger.debug(f"[helper-relay] notify skipped: {e}")
+
     def get_events_for_game(self, game_id: int, period_id: int = None,
                            event_id: int = None, team_id: int = None,
                            include_hidden: bool = False):
@@ -415,7 +426,7 @@ class GameEventManager:
                         replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
                         event_place: str = None, team_id=_NOT_SET, player_id=_NOT_SET,
                         home_team_goals: int = None, away_team_goals: int = None,
-                        is_visible: bool = None):
+                        is_visible: bool = None, comment=_NOT_SET):
         """
         Update game event
 
@@ -468,9 +479,12 @@ class GameEventManager:
                 game_event.away_team_goals = away_team_goals
             if is_visible is not None:
                 game_event.is_visible = is_visible
+            if comment is not _NOT_SET:
+                game_event.comment = comment
 
             db.session.commit()
             logger.info(f"Updated GameEvent ID {game_event_id}")
+            self._notify_helper_relay(game_event)
             return game_event
 
         except Exception as e:

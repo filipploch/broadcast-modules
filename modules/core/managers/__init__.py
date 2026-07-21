@@ -21,6 +21,8 @@ _replay_export_manager = None
 _controller_manager    = None  # ⭐ NOWY: integracja USB controllera
 _servo_manager         = None  # pan/tilt MG90S servo heads
 _gopro_manager         = None  # GoPro Hero 4 bridge
+_helper_relay_client   = None  # połączenie WSS do apki pomocnika na Render
+_helper_relay_manager  = None  # dedup/auto-reject/approve dla zgłoszeń pomocników
 _initialization_lock   = threading.Lock()
 _initialized           = False
 _timer_manager_class   = None  # moduł może ustawić przed initialize_core_managers
@@ -44,7 +46,8 @@ def initialize_core_managers(app):
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
            _replay_export_manager, _game_event_manager, _controller_manager, \
-           _servo_manager, _gopro_manager, _initialized
+           _servo_manager, _gopro_manager, _helper_relay_client, \
+           _helper_relay_manager, _initialized
 
     with _initialization_lock:
         if _initialized:
@@ -87,6 +90,19 @@ def initialize_core_managers(app):
             _controller_manager = ControllerManager(_hub_client, default_speed=default_speed)
             _controller_manager.attach_app(app)
             app.logger.info("✅ Controller Manager initialized")
+
+            # HelperRelayManager — łącznik z apką pomocnika na Render (opcjonalny,
+            # patrz docs/helper-app-design.md). Nigdy nie blokuje ani nie wywala
+            # startu aplikacji — Render może jeszcze nie istnieć / spać.
+            try:
+                _helper_relay_manager = get_helper_relay_manager()
+                if app.config.get('HELPER_RELAY_ENABLED', False):
+                    get_helper_relay_client().connect()
+                    app.logger.info("✅ Helper Relay Client — connecting (background)")
+                else:
+                    app.logger.info("Helper Relay wyłączony (HELPER_RELAY_ENABLED=False)")
+            except Exception as e:
+                app.logger.warning(f"Helper Relay init skipped: {e}")
 
             _initialized = True
             app.logger.info("✅ Core managers initialization complete")
@@ -212,16 +228,43 @@ def get_gopro_manager():
     return _gopro_manager
 
 
+def get_helper_relay_client():
+    global _helper_relay_client
+    if _helper_relay_client is None:
+        from core.managers.helper_relay_client import HelperRelayClient
+        _helper_relay_client = HelperRelayClient(
+            relay_url=current_app.config.get('HELPER_RELAY_URL'),
+            token=current_app.config.get('HELPER_RELAY_TOKEN'),
+            app=current_app._get_current_object(),
+            ping_interval_s=current_app.config.get('HELPER_RELAY_PING_INTERVAL_S', 300),
+        )
+        current_app.logger.info("✅ Helper Relay Client initialized (lazy)")
+    return _helper_relay_client
+
+
+def get_helper_relay_manager():
+    global _helper_relay_manager
+    if _helper_relay_manager is None:
+        from core.managers.helper_relay_manager import HelperRelayManager
+        client = get_helper_relay_client() if current_app.config.get('HELPER_RELAY_ENABLED', False) else None
+        _helper_relay_manager = HelperRelayManager(relay_client=client)
+        current_app.logger.info("✅ Helper Relay Manager initialized (lazy)")
+    return _helper_relay_manager
+
+
 def shutdown_core_managers():
     """Rozłącza hub i zeruje wszystkie singletony."""
     global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
-           _replay_export_manager, _controller_manager, _initialized
+           _replay_export_manager, _controller_manager, _helper_relay_client, \
+           _helper_relay_manager, _initialized
 
     current_app.logger.info("Shutting down core managers...")
 
     if _hub_client is not None:
         _hub_client.disconnect()
+    if _helper_relay_client is not None:
+        _helper_relay_client.disconnect()
 
     _hub_client            = None
     _timer_manager         = None
@@ -235,6 +278,8 @@ def shutdown_core_managers():
     _controller_manager    = None
     _servo_manager         = None
     _gopro_manager         = None
+    _helper_relay_client   = None
+    _helper_relay_manager  = None
     _initialized           = False
 
     current_app.logger.info("✅ Core managers shutdown complete")

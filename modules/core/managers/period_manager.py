@@ -197,7 +197,9 @@ class PeriodManager:
         period = self.set_period_status(period_id, _get_period().STATUS_PENDING)
         if not period:
             return None
-        
+
+        self._notify_helper_relay_period(period, 'started')
+
         timer_manager = get_timer_manager()
         
         # Prepare main timer data
@@ -430,7 +432,20 @@ class PeriodManager:
             timer_manager.pause_timer(gt.plugin_timer_id)
 
         # Set period status to FINISHED
-        return self.set_period_status(period_id, _get_period().STATUS_FINISHED)
+        finished = self.set_period_status(period_id, _get_period().STATUS_FINISHED)
+        if finished:
+            self._notify_helper_relay_period(finished, 'finished')
+        return finished
+
+    def _notify_helper_relay_period(self, period, state: str):
+        """Best-effort push do apki pomocnika (docs/helper-app-design.md
+        sekcja 6) — no-op cicho jeśli relay wyłączony/niepołączony."""
+        try:
+            from core.managers import get_helper_relay_manager
+            get_helper_relay_manager().notify_period_state(period, state)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(f"[helper-relay] period notify skipped: {e}")
 
     def delete_period(self, period_id: int) -> bool:
         """

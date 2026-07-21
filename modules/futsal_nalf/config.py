@@ -36,6 +36,15 @@ class Config:
     HAS_PENALTY_TIMERS = True
     MEDIA_CURSOR = None
 
+    # Apka pomocnika realizatora (Render), patrz docs/helper-app-design.md.
+    # Wyłączona domyślnie — apka jeszcze nie istnieje; gdy powstanie, ustawić
+    # HELPER_RELAY_ENABLED=1 i podać prawdziwy URL/token przez zmienne środowiskowe.
+    HELPER_RELAY_ENABLED = os.environ.get('HELPER_RELAY_ENABLED', '0') == '1'
+    HELPER_RELAY_URL = os.environ.get('HELPER_RELAY_URL') or 'wss://REPLACE-ME.onrender.com/relay'
+    HELPER_RELAY_TOKEN = os.environ.get('HELPER_RELAY_TOKEN') or ''
+    HELPER_RELAY_PING_INTERVAL_S = 300
+    HELPER_MATCH_TOLERANCE_MS = 8000
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
