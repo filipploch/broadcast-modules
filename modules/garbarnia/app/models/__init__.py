@@ -31,6 +31,9 @@ from app.models.event import Event
 from app.models.event_camera import EventCamera
 from app.models.game_camera import GameCamera
 from app.models.game_event import GameEvent
+from app.models.helper import Helper
+from app.models.helper_event_candidate import HelperEventCandidate
+from app.models.helper_event_submission import HelperEventSubmission
 from app.models.commentator import Commentator
 from app.models.game_commentator import GameCommentator
 from app.models.game_referee import GameReferee
