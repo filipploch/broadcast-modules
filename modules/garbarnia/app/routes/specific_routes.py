@@ -50,6 +50,74 @@ def _malopolskizpn_scraper_id():
     return scraper.id
 
 
+def _wants_json_cascade():
+    """Czy żądanie pochodzi z kaskady scraperów (ScraperCascade, patrz
+    scraper-cascade.js) — wtedy zwracamy JSON zamiast flash+redirect, żeby JS
+    mógł uruchomić kolejny scraper z wybranej listy bez przeładowania strony."""
+    return request.headers.get('X-Scraper-Cascade') == '1'
+
+
+def _run_team_scrape(league_id, scrape_fn):
+    """Wspólna logika dla scrape_league_teams_from_* (superscore/malopolskizpn/
+    laczynaspilka): try/except + odpowiedź JSON (kaskada) albo flash+redirect
+    (bezpośrednie kliknięcie linku poza kaskadą)."""
+    try:
+        count = scrape_fn(league_id)
+    except ValueError as e:
+        if _wants_json_cascade():
+            return jsonify({'error': str(e)}), 400
+        flash(str(e), 'error')
+        return redirect(url_for('league_teams', league_id=league_id))
+    except Exception as e:
+        logger.error(f"Error scraping league teams: {e}", exc_info=True)
+        if _wants_json_cascade():
+            return jsonify({'error': str(e)}), 500
+        flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
+        return redirect(url_for('league_teams', league_id=league_id))
+
+    if _wants_json_cascade():
+        return jsonify({'count': count})
+
+    if count:
+        flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
+    else:
+        flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
+    return redirect(url_for('review_pending_team_matches', league_id=league_id))
+
+
+def _run_player_scrape(team_id, scrape_fn):
+    """Wspólna logika dla scrape_team_players_from_* (superscore/laczynaspilka):
+    try/except + odpowiedź JSON (kaskada) albo flash+redirect (bezpośrednie
+    kliknięcie linku poza kaskadą)."""
+    try:
+        result = scrape_fn(team_id)
+    except ValueError as e:
+        if _wants_json_cascade():
+            return jsonify({'error': str(e)}), 400
+        flash(str(e), 'error')
+        return redirect(url_for('list_players', team_id=team_id))
+    except Exception as e:
+        logger.error(f"Error scraping team players: {e}", exc_info=True)
+        if _wants_json_cascade():
+            return jsonify({'error': str(e)}), 500
+        flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
+        return redirect(url_for('list_players', team_id=team_id))
+
+    if _wants_json_cascade():
+        return jsonify(result)
+
+    parts = []
+    if result['new_matches']:
+        parts.append(f"{result['new_matches']} nowych zawodników do dopasowania")
+    if result['departed']:
+        parts.append(f"{result['departed']} zniknęło z kadry (do potwierdzenia)")
+    if parts:
+        flash('Wynik scrapowania: ' + ', '.join(parts), 'success')
+    else:
+        flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
+    return redirect(url_for('review_pending_player_matches', team_id=team_id))
+
+
 def register_routes(app):
     """Rejestruje wszystkie trasy specyficzne dla futsal-nalf."""
     """Rejestruje wszystkie trasy specyficzne dla futsal-nalf."""
@@ -400,7 +468,7 @@ def register_routes(app):
             return jsonify({'error': 'Scrapowanie już trwa'}), 409
         try:
             game_scraper_manager.scrape_superscore_async(
-                [league.superscore_season_id], league_name=league.name
+                [league.superscore_season_id], league_name=league.name, league_id=league_id
             )
             return jsonify({'status': 'started'}), 202
         except Exception as e:
@@ -413,40 +481,58 @@ def register_routes(app):
 
     @app.route('/leagues/<int:league_id>/games/conflicts')
     def review_game_conflicts(league_id):
-        """Ekran przeglądu meczów, dla których dwa scrapery podały niespójne dane."""
+        """Ekran przeglądu meczów, dla których znane źródła (scrapery, plus
+        wynik oficjalny jeśli mecz jest edytowany) podają niespójne dane."""
         league = league_manager.get_league_by_id(league_id)
         if not league:
             flash('Nie znaleziono ligi', 'error')
             return redirect(url_for('list_leagues'))
 
-        conflicts = game_scraper_manager.get_pending_game_conflicts(league_id)
-        return render_template('games/conflicts.html', league=league, conflicts=conflicts)
+        discrepancies = game_scraper_manager.get_games_with_data_discrepancy(league_id)
+        return render_template('games/conflicts.html', league=league, discrepancies=discrepancies)
 
-    @app.route('/games/conflicts/<int:conflict_id>/resolve', methods=['POST'])
-    def resolve_game_conflict(conflict_id):
-        """Zatwierdź konflikt: zastosuj dane wskazanego scrapera jako prawidłowe."""
-        from app.models.game_conflict import GameConflict
+    @app.route('/games/<int:game_id>/set-official', methods=['POST'])
+    def set_official_game_result(game_id):
+        """Zastosuj dane wskazanego scrapera jako oficjalny wynik meczu — oznacza
+        mecz jako edytowany (żaden scraper już go nie nadpisze). Można wywołać
+        wielokrotnie, żeby zmienić wcześniejszą decyzję na inne źródło."""
+        from app.models.game import Game
 
-        conflict = GameConflict.query.get(conflict_id)
-        if not conflict:
-            flash('Nie znaleziono konfliktu', 'error')
+        game = Game.query.get(game_id)
+        if not game:
+            flash('Nie znaleziono meczu', 'error')
             return redirect(url_for('list_leagues'))
-        league_id = conflict.league_id
+        league_id = game.league_id
 
-        chosen_scraper_id = request.form.get('chosen_scraper_id')
+        scraper_id = request.form.get('scraper_id')
         try:
-            game_scraper_manager.resolve_game_conflict(
-                conflict_id=conflict_id,
-                chosen_scraper_id=int(chosen_scraper_id) if chosen_scraper_id else None,
+            game_scraper_manager.set_official_result(
+                game_id=game_id,
+                scraper_id=int(scraper_id) if scraper_id else None,
             )
             flash('Zapisano wybrane dane meczu', 'success')
         except ValueError as e:
             flash(str(e), 'error')
         except Exception as e:
-            logger.error(f"Error resolving game conflict: {e}", exc_info=True)
+            logger.error(f"Error setting official game result: {e}", exc_info=True)
             flash(f'Błąd podczas zatwierdzania: {str(e)}', 'error')
 
         return redirect(url_for('review_game_conflicts', league_id=league_id))
+
+    @app.route('/games/<int:game_id>/remove-edited', methods=['POST'])
+    def remove_game_edited_flag(game_id):
+        """Zdejmij blokadę edycji — mecz wraca do 'nie rozpoczęty, bez wyniku',
+        gotowy do świeżego scrapowania od zera."""
+        try:
+            game_scraper_manager.remove_edited_flag(game_id)
+            flash('Zdjęto blokadę edycji — mecz gotowy do ponownego scrapowania', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        except Exception as e:
+            logger.error(f"Error removing edited flag: {e}", exc_info=True)
+            flash(f'Błąd: {str(e)}', 'error')
+
+        return redirect(url_for('edit_game', game_id=game_id))
 
     # =========================
     # SCRAPOWANIE DRUŻYN LIGI (superscore) + dopasowywanie
@@ -455,40 +541,17 @@ def register_routes(app):
     @app.route('/leagues/<int:league_id>/teams/scrape/superscore')
     def scrape_league_teams_superscore(league_id):
         """Pobierz drużyny ligi z superscore.live i zapisz kandydatów do przeglądu."""
-        try:
-            count = team_scraper_manager.scrape_league_teams_from_superscore(league_id)
-        except ValueError as e:
-            flash(str(e), 'error')
-            return redirect(url_for('league_teams', league_id=league_id))
-        except Exception as e:
-            logger.error(f"Error scraping league teams from superscore: {e}", exc_info=True)
-            flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
-            return redirect(url_for('league_teams', league_id=league_id))
-
-        if count:
-            flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
-        else:
-            flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
-        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+        return _run_team_scrape(league_id, team_scraper_manager.scrape_league_teams_from_superscore)
 
     @app.route('/leagues/<int:league_id>/teams/scrape/malopolskizpn')
     def scrape_league_teams_malopolskizpn(league_id):
         """Pobierz drużyny ligi z terminarza malopolskizpn.pl i zapisz kandydatów do przeglądu."""
-        try:
-            count = team_scraper_manager.scrape_league_teams_from_malopolskizpn(league_id)
-        except ValueError as e:
-            flash(str(e), 'error')
-            return redirect(url_for('league_teams', league_id=league_id))
-        except Exception as e:
-            logger.error(f"Error scraping league teams from malopolskizpn: {e}", exc_info=True)
-            flash(f'Błąd podczas scrapowania drużyn: {str(e)}', 'error')
-            return redirect(url_for('league_teams', league_id=league_id))
+        return _run_team_scrape(league_id, team_scraper_manager.scrape_league_teams_from_malopolskizpn)
 
-        if count:
-            flash(f'Znaleziono {count} drużyn(y) do przejrzenia', 'success')
-        else:
-            flash('Brak nowych drużyn do przejrzenia — wszystkie już dopasowane', 'info')
-        return redirect(url_for('review_pending_team_matches', league_id=league_id))
+    @app.route('/leagues/<int:league_id>/teams/scrape/laczynaspilka')
+    def scrape_league_teams_laczynaspilka(league_id):
+        """Pobierz drużyny ligi z lokalnie zapisanej strony tabeli rozgrywek laczynaspilka.pl."""
+        return _run_team_scrape(league_id, team_scraper_manager.scrape_league_teams_from_laczynaspilka)
 
     @app.route('/leagues/<int:league_id>/teams/pending-matches')
     def review_pending_team_matches(league_id):
@@ -572,51 +635,13 @@ def register_routes(app):
     def scrape_team_players_superscore(team_id):
         """Pobierz kadrę drużyny (zawodnicy + trener) z superscore.live i zapisz
         kandydatów-zawodników do przeglądu. Trenera ustawia od razu."""
-        try:
-            result = player_match_manager.scrape_team_players_from_superscore(team_id)
-        except ValueError as e:
-            flash(str(e), 'error')
-            return redirect(url_for('list_players', team_id=team_id))
-        except Exception as e:
-            logger.error(f"Error scraping team players from superscore: {e}", exc_info=True)
-            flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
-            return redirect(url_for('list_players', team_id=team_id))
-
-        parts = []
-        if result['new_matches']:
-            parts.append(f"{result['new_matches']} nowych zawodników do dopasowania")
-        if result['departed']:
-            parts.append(f"{result['departed']} zniknęło z kadry (do potwierdzenia)")
-        if parts:
-            flash('Wynik scrapowania: ' + ', '.join(parts), 'success')
-        else:
-            flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
-        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+        return _run_player_scrape(team_id, player_match_manager.scrape_team_players_from_superscore)
 
     @app.route('/teams/<int:team_id>/players/scrape/laczynaspilka')
     def scrape_team_players_laczynaspilka(team_id):
         """Pobierz kadrę drużyny z lokalnie zapisanego pliku HTML laczynaspilka.pl
         i zapisz kandydatów-zawodników do przeglądu (ta sama kolejka co superscore)."""
-        try:
-            result = player_match_manager.scrape_team_players_from_laczynaspilka(team_id)
-        except ValueError as e:
-            flash(str(e), 'error')
-            return redirect(url_for('list_players', team_id=team_id))
-        except Exception as e:
-            logger.error(f"Error scraping team players from laczynaspilka: {e}", exc_info=True)
-            flash(f'Błąd podczas scrapowania kadry: {str(e)}', 'error')
-            return redirect(url_for('list_players', team_id=team_id))
-
-        parts = []
-        if result['new_matches']:
-            parts.append(f"{result['new_matches']} nowych zawodników do dopasowania")
-        if result['departed']:
-            parts.append(f"{result['departed']} zniknęło z kadry (do potwierdzenia)")
-        if parts:
-            flash('Wynik scrapowania: ' + ', '.join(parts), 'success')
-        else:
-            flash('Brak zmian — kadra zgodna z tym co już jest w bazie', 'info')
-        return redirect(url_for('review_pending_player_matches', team_id=team_id))
+        return _run_player_scrape(team_id, player_match_manager.scrape_team_players_from_laczynaspilka)
 
     @app.route('/teams/<int:team_id>/players/pending-matches')
     def review_pending_player_matches(team_id):
@@ -785,15 +810,24 @@ def register_routes(app):
     
     @app.route('/games/')
     def list_games():
-        """List all games in database"""
-        games = game_manager.get_all_games()
-        stats = game_scraper_manager.get_statistics()
-        scraping_status = game_scraper_manager.get_scraping_status()
+        """Lista meczów jednej ligi — przekierowuje do właściwej trasy per-liga
+        (routes_crud.league_games), która filtruje poprawnie i buduje pełny
+        kontekst (scrapery, niespójności). ?league_id= jeśli podane, inaczej
+        liga aktualnie transmitowanego meczu — nigdy wszystkie mecze naraz."""
+        from app.models.settings import Settings
 
-        return render_template('games/list.html',
-                               games=games,
-                               stats=stats,
-                               scraping_status=scraping_status)
+        league_id = request.args.get('league_id', type=int)
+        if league_id is None:
+            settings = Settings.get_settings()
+            current_game = (game_manager.get_game_by_id(settings.current_game_id)
+                            if settings.current_game_id else None)
+            league_id = current_game.league_id if current_game else None
+
+        if league_id is None:
+            flash('Brak wybranej ligi — wybierz ligę z listy', 'info')
+            return redirect(url_for('list_leagues'))
+
+        return redirect(url_for('league_games', league_id=league_id))
     
     @app.route('/api/player-game/<int:pg_id>', methods=['PATCH'])
     def api_patch_game_player(pg_id):
@@ -977,8 +1011,6 @@ def register_routes(app):
     @app.route('/api/games/scrape/status')
     def api_games_scrape_status():
         """API: Get current game scraping status"""
-        # from app.managers.game_scraper_manager import GameScraperManager
         from flask import jsonify
-        game_scraper_manager = GameScraperManager()
         status = game_scraper_manager.get_scraping_status()
         return jsonify(status)

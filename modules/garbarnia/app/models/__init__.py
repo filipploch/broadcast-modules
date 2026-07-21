@@ -10,7 +10,6 @@ from app.models.period import Period
 from app.models.team_foreign_id import TeamForeignId
 from app.models.game_foreign_id import GameForeignId
 from app.models.game_scraper_snapshot import GameScraperSnapshot
-from app.models.game_conflict import GameConflict
 from app.models.player_foreign_id import PlayerForeignId
 from app.models.league_foreign_id import LeagueForeignId
 from app.models.season_foreign_id import SeasonForeignId

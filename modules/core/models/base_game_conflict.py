@@ -99,6 +99,16 @@ class BaseGameConflictMixin:
                 .all())
 
     @classmethod
+    def get_resolved_for_league(cls, league_id):
+        """Konflikty już rozstrzygnięte przez admina dla tej ligi — do wglądu
+        w historię (np. gdy ten sam, niepoprawiony błąd źródła jest po cichu
+        pomijany przy kolejnych scrapowaniach zamiast zgłaszany ponownie)."""
+        return (cls.query
+                .filter(cls.league_id == league_id, cls.resolved_at.isnot(None))
+                .order_by(cls.resolved_at.desc())
+                .all())
+
+    @classmethod
     def find_matching_resolution(cls, game_id, scraper_a_id, a_home, a_away, a_date,
                                   scraper_b_id, b_home, b_away, b_date):
         """Szuka już ROZWIĄZANEGO konfliktu dla tego meczu o identycznym

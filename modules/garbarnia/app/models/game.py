@@ -82,6 +82,14 @@ class Game(BaseGameMixin, db.Model):
     is_home_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
     is_away_team_lost_by_wo = db.Column(db.Boolean, nullable=False, default=False)
 
+    # Ustawiane ręcznie przez admina (edycja formularza albo wybór "to jest
+    # prawda" na raporcie niespójności) — od tego momentu żaden scraper już
+    # nie nadpisuje wyniku/statusu/daty tego meczu (patrz
+    # game_scraper_manager._process_scraped_games), tylko dalej zapisuje
+    # swój snapshot do porównania. Cofnięcie (patrz remove_edited_flag)
+    # resetuje mecz do "nie rozpoczęty, bez wyniku".
+    is_edited = db.Column(db.Boolean, nullable=False, default=False)
+
     shootout = db.relationship('Shootout', backref='game',
                                uselist=False, cascade='all, delete-orphan')
 
@@ -156,6 +164,7 @@ class Game(BaseGameMixin, db.Model):
         d['away_team_red_cards']     = self.away_team_red_cards
         d['is_home_team_lost_by_wo'] = self.is_home_team_lost_by_wo
         d['is_away_team_lost_by_wo'] = self.is_away_team_lost_by_wo
+        d['is_edited']               = self.is_edited
         d['is_walkover']             = self.is_walkover
         d['is_double_walkover']      = self.is_double_walkover
         d['has_shootout']            = self.has_shootout

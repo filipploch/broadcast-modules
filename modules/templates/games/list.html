@@ -1,5 +1,8 @@
 {% extends "base/base.html" %}
 {% block title %}{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}{% endblock %}
+
+{% set any_game_scraper = has_malopolskizpn_games_scrape or has_superscore_games_scrape %}
+
 {% block content %}
 {% if league %}
 <div style="background:#d1ecf1;border:1px solid #bee5eb;padding:1rem;border-radius:4px;margin-bottom:1.5rem;">
@@ -13,10 +16,26 @@
         <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
-                <button class="btn btn-success" onclick="startGameScraping({{ league.id }})">🔍 Scrapuj mecze</button>
-                {% if open_game_conflicts_count %}
-                <a href="{{ url_for('review_game_conflicts', league_id=league.id) }}" class="btn btn-danger">
-                    ⚠️ Niespójności ({{ open_game_conflicts_count }})
+                {% if any_game_scraper %}
+                <div class="scraper-cascade">
+                    <button type="button" class="btn btn-success cascade-run-btn" id="cascade-run-games" onclick="ScraperCascade.run('games')">
+                        🔍 Scrapuj mecze
+                    </button>
+                    <button type="button" class="btn btn-success cascade-toggle-btn" onclick="ScraperCascade.toggleMenu('games')" title="Wybierz scrapery">▾</button>
+                    <div class="cascade-menu" id="cascade-menu-games" style="display:none;">
+                        {% if has_malopolskizpn_games_scrape %}
+                        <label><input type="checkbox" value="malopolskizpn" checked> Małopolski ZPN</label>
+                        {% endif %}
+                        {% if has_superscore_games_scrape %}
+                        <label><input type="checkbox" value="superscore" checked> Superscore</label>
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="cascade-status" id="cascade-status-games" style="display:none;"></span>
+                {% endif %}
+                {% if has_game_conflicts_review %}
+                <a href="{{ url_for('review_game_conflicts', league_id=league.id) }}" class="btn {{ 'btn-danger' if open_game_conflicts_count else 'btn-secondary' }}">
+                    ⚠️ Niespójności{% if open_game_conflicts_count %} ({{ open_game_conflicts_count }}){% endif %}
                 </a>
                 {% endif %}
                 <a href="{{ url_for('create_game', league_id=league.id) }}" class="btn btn-primary">➕ Nowy Mecz</a>
@@ -24,10 +43,6 @@
                 <a href="{{ url_for('create_game') }}" class="btn btn-primary">➕ Nowy Mecz</a>
             {% endif %}
         </div>
-    </div>
-
-    <div id="scrape-status-bar" style="display:none;padding:.5rem 1rem;background:#fff3cd;border-bottom:1px solid #ffc107;font-size:.9rem;">
-        ⏳ <span id="scrape-status-text">Scrapowanie w toku...</span>
     </div>
 
     {% if games %}
@@ -94,8 +109,23 @@
     // ---------------------------------------------------------------------------
     var _leagueId = {{ league.id if league else 'null' }};
     var _currentGameId = null;
-    var _scrapeIntervalId = null;
+
+    {% if any_game_scraper %}
+    ScraperCascade.register('games', [
+        {% if has_malopolskizpn_games_scrape %}
+        { id: 'malopolskizpn', label: 'Małopolski ZPN', run: function () {
+            return ScraperCascade.runAsyncJobAndPoll('{{ url_for("scrape_games", league_id=league.id) }}', '/api/games/scrape/status');
+        } },
+        {% endif %}
+        {% if has_superscore_games_scrape %}
+        { id: 'superscore', label: 'Superscore', run: function () {
+            return ScraperCascade.runAsyncJobAndPoll('{{ url_for("scrape_games_superscore", league_id=league.id) }}', '/api/games/scrape/status');
+        } },
+        {% endif %}
+    ], function (results) {
+        refreshGamesTable();
+    });
+    {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/pages/game-status.js') }}"></script>
-<script src="{{ url_for('static', filename='js/pages/game-scraping-status.js') }}"></script>
 {% endblock %}

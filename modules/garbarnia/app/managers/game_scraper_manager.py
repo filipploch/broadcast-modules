@@ -63,20 +63,24 @@ class GameScraperManager:
             league_name=league_name,
         )
 
-    def scrape_superscore_async(self, season_ids: List[str], league_name: str = '') -> bool:
+    def scrape_superscore_async(self, season_ids: List[str], league_name: str = '',
+                                 league_id: Optional[int] = None) -> bool:
         """
         Uruchom scrapowanie z superscore.live API w wątku w tle.
 
         Args:
             season_ids:  Lista ID sezonów (np. ['4vDT5gZAVMkCxWuCYl8kzc'])
             league_name: Czytelna nazwa ligi (do socketio emit)
+            league_id:   id ligi w naszej bazie — wstrzykiwane do zescrapowanych
+                         meczów zamiast zgadywania przez _get_current_league_id()
+                         (patrz _process_scraped_games)
 
         Returns:
             True jeśli wątek wystartował, False jeśli już działa
         """
         return self._start_scraping_thread(
             target=self._scrape_superscore_worker,
-            args=(current_app._get_current_object(), season_ids, league_name),
+            args=(current_app._get_current_object(), season_ids, league_name, league_id),
             league_name=league_name,
         )
 
@@ -148,6 +152,7 @@ class GameScraperManager:
                 stats         = self._process_scraped_games(
                     scraped_games,
                     scraper_id=mzpn_scraper.id if mzpn_scraper else None,
+                    league_id=league_id,
                 )
 
                 self._status = {
@@ -179,7 +184,8 @@ class GameScraperManager:
                     'status': 'error', 'name': league_name, 'error': str(e),
                 })
 
-    def _scrape_superscore_worker(self, app, season_ids: List[str], league_name: str):
+    def _scrape_superscore_worker(self, app, season_ids: List[str], league_name: str,
+                                   league_id: Optional[int] = None):
         """Wątek w tle — pobiera dane z superscore API, przetwarza, zapisuje do bazy."""
         with app.app_context():
             from core.extensions import socketio
@@ -192,6 +198,7 @@ class GameScraperManager:
                 stats         = self._process_scraped_games(
                     scraped_games,
                     scraper_id=superscore_scraper.id if superscore_scraper else None,
+                    league_id=league_id,
                 )
 
                 self._status = {
@@ -225,9 +232,19 @@ class GameScraperManager:
 
     # ── Przetwarzanie i zapis do bazy ─────────────────────────────────────────
 
-    def _process_scraped_games(self, scraped_games: List[Dict], scraper_id: Optional[int] = None) -> Dict[str, int]:
+    def _process_scraped_games(self, scraped_games: List[Dict], scraper_id: Optional[int] = None,
+                                league_id: Optional[int] = None) -> Dict[str, int]:
         """
         Przetworz listę meczów z scrapera i zapisz do bazy.
+
+        league_id: liga, do której należą scrapowane mecze — MUSI pochodzić
+        od wywołującego (patrz scrape_games_async/scrape_superscore_async),
+        nie wolno jej zgadywać przez _get_current_league_id() (liga aktualnie
+        transmitowanego meczu) — inaczej przy scrapowaniu ligi X w trakcie
+        gdy Settings.current_game_id wskazuje na ligę Y, wszystkie mecze ligi X
+        trafiają błędnie do ligi Y (tak faktycznie się stało — patrz naprawa
+        danych po tym fixie). _get_current_league_id() zostaje jako fallback
+        wyłącznie dla wywołań, które go jawnie nie podają.
 
         Identyfikacja istniejącego meczu:
           - jeśli scraper_id podany i mecz ma foreign_id (superscore: event['id'])
@@ -256,18 +273,19 @@ class GameScraperManager:
         from app.models.team_foreign_id import TeamForeignId
         from app.models.game_foreign_id import GameForeignId
         from app.models.game_scraper_snapshot import GameScraperSnapshot
-        from app.models.game_conflict import GameConflict
 
-        # Buduj słownik drużyn z aktualnej ligi/sezonu raz dla całego batcha
-        team_lookup = self._build_team_lookup()
-        if not team_lookup:
-            logger.error("Brak drużyn w bazie — przerywam import")
-            return {'total_scraped': len(scraped_games), 'updated': 0, 'new_pending': 0}
-
-        # Pobierz league_id (zakładamy jedną ligę skonfigurowaną w Settings)
-        league_id = self._get_current_league_id()
+        # league_id powinno przyjść jawnie od wywołującego (patrz docstring) —
+        # _get_current_league_id() to tylko fallback dla wywołań bez tej wiedzy.
+        if league_id is None:
+            league_id = self._get_current_league_id()
         if not league_id:
             logger.error("Nie można ustalić league_id — przerywam import")
+            return {'total_scraped': len(scraped_games), 'updated': 0, 'new_pending': 0}
+
+        # Buduj słownik drużyn z TEJ KONKRETNEJ ligi (nie całej bazy/innej ligi)
+        team_lookup = self._build_team_lookup(league_id)
+        if not team_lookup:
+            logger.error("Brak drużyn w bazie — przerywam import")
             return {'total_scraped': len(scraped_games), 'updated': 0, 'new_pending': 0}
 
         updated_count  = 0
@@ -346,6 +364,19 @@ class GameScraperManager:
                 if scraper_id and game_foreign_id and not existing.get_foreign_id(scraper_id):
                     existing.set_foreign_id(scraper_id, game_foreign_id)
 
+                if existing.is_edited:
+                    # Mecz zablokowany ręczną decyzją admina (edycja formularza
+                    # albo wybór źródła na raporcie niespójności) — scraper
+                    # nadal zapisuje własny snapshot do porównania, ale nie
+                    # rusza już Game/Period. Odblokowanie: patrz
+                    # remove_edited_flag().
+                    if scraper_id:
+                        GameScraperSnapshot.upsert(
+                            scraper_id, existing.id, home_goals, away_goals,
+                            gd['home_ht_goals'], gd['away_ht_goals'], parsed_date, status,
+                        )
+                    continue
+
                 # Nie cofaj statusu do NOT_STARTED, jeśli DB ma już PENDING albo
                 # FINISHED — żaden scraper nie ustawia PENDING/FINISHED i nie
                 # zwraca teraz NOT_STARTED dla tego samego meczu, więc taki DB
@@ -375,8 +406,7 @@ class GameScraperManager:
                 merged = False
                 if scraper_id:
                     proceed, resolved, merged = self._reconcile_cross_scraper_data(
-                        existing, league_id, scraper_id, gd, status, parsed_date,
-                        GameScraperSnapshot, GameConflict,
+                        existing, scraper_id, gd, status, parsed_date, GameScraperSnapshot,
                     )
                     if not proceed:
                         continue
@@ -459,16 +489,20 @@ class GameScraperManager:
             return other_value
         return own_value
 
-    def _reconcile_cross_scraper_data(self, existing_game, league_id: int, scraper_id: int,
+    def _reconcile_cross_scraper_data(self, existing_game, scraper_id: int,
                                        gd: Dict, status: int, parsed_date,
-                                       GameScraperSnapshot, GameConflict):
+                                       GameScraperSnapshot):
         """
         Porównuje świeżo zescrapowane dane (gd, od scraper_id) z tym, co ostatnio
         zaobserwował INNY scraper dla tego samego meczu (GameScraperSnapshot).
 
         Dla wyniku końcowego (home/away_team_goals) i daty — pól, których
         niezgodność ma znaczenie:
-          - obie strony mają wartość i się różnią → prawdziwy konflikt,
+          - obie strony mają wartość i się różnią → prawdziwy konflikt, NIE
+            aplikuj automatycznie — mecz zostaje jak był, widoczny na żywo na
+            raporcie niespójności (patrz get_games_with_data_discrepancy),
+            dopóki admin nie wskaże które źródło jest prawdziwe (co oznacza
+            mecz jako is_edited i blokuje dalsze nadpisywanie przez scrapery),
           - jedna strona ma None a druga wartość → NIE jest to konflikt,
             bierzemy wartość niepustą (żadna decyzja admina niepotrzebna),
           - obie None albo równe → bez zmian.
@@ -478,12 +512,6 @@ class GameScraperManager:
         budujemy z danych malopolskizpn, jeśli je ma (bogatsze/bardziej
         wiarygodne wg ustalenia z użytkownikiem); w przeciwnym razie
         uzupełniamy braki (None) wartością z drugiej strony tak samo jak wynik.
-
-        Prawdziwy konflikt (wynik i/lub data) → NIE aplikuj automatycznie.
-        Jeśli dokładnie taka sama niezgodność była już wcześniej ręcznie
-        rozstrzygnięta (błąd na źródłowej stronie nadal niepoprawiony) →
-        pomiń po cichu, nie zgłaszaj ponownie. W przeciwnym razie utwórz/
-        odśwież otwarty GameConflict do przeglądu przez admina.
 
         Zawsze (niezależnie od wyniku porównania) zapisuje świeży
         GameScraperSnapshot dla scraper_id, żeby kolejne porównania (z dowolnej
@@ -527,25 +555,9 @@ class GameScraperManager:
                 conflicting_fields.append(field)
 
         if conflicting_fields:
-            already_resolved = GameConflict.find_matching_resolution(
-                existing_game.id,
-                scraper_id, gd['home_team_goals'], gd['away_team_goals'], parsed_date,
-                other.scraper_id, other.home_team_goals, other.away_team_goals, other.date,
-            )
-            if already_resolved:
-                logger.debug(f"Konflikt danych meczu id={existing_game.id} już rozstrzygnięty wcześniej — pomijam")
-                return False, own, True
-
-            GameConflict.upsert_open(
-                existing_game.id, league_id,
-                scraper_id, gd['home_team_goals'], gd['away_team_goals'],
-                gd['home_ht_goals'], gd['away_ht_goals'], parsed_date,
-                other.scraper_id, other.home_team_goals, other.away_team_goals,
-                other.home_ht_goals, other.away_ht_goals, other.date,
-            )
             logger.warning(
                 f"Niespójność danych meczu id={existing_game.id} między scraperami "
-                f"({', '.join(conflicting_fields)}) — czeka na decyzję admina"
+                f"({', '.join(conflicting_fields)}) — widoczna na raporcie niespójności"
             )
             return False, own, True
 
@@ -572,55 +584,117 @@ class GameScraperManager:
 
         return True, resolved, True
 
-    def get_pending_game_conflicts(self, league_id: int) -> List:
-        from app.models.game_conflict import GameConflict
-        return GameConflict.get_open_for_league(league_id)
+    # ── Raport niespójności / edycja ręczna ──────────────────────────────────
 
-    def resolve_game_conflict(self, conflict_id: int, chosen_scraper_id: int):
+    def get_games_with_data_discrepancy(self, league_id: int) -> List[Dict]:
         """
-        Zatwierdź konflikt: zastosuj dane wskazanego scrapera (wynik, wynik do
-        przerwy, data) jako prawidłowe. Wiersz NIE jest usuwany — zostaje
-        oznaczony jako rozwiązany, żeby ten sam (niepoprawiony) błąd źródła nie
-        był zgłaszany ponownie przy kolejnych scrapowaniach.
+        Mecze tej ligi, dla których znane źródła — snapshoty scraperów, plus
+        wynik oficjalny jeśli mecz jest is_edited — nie zgadzają się co do
+        wyniku pełnego czasu gry i/lub daty (wynik do przerwy nigdy nie jest
+        polem konfliktowym).
+
+        Pokazywane są WSZYSTKIE takie mecze, także już is_edited — admin mógł
+        wybrać niewłaściwe źródło i powinien móc zmienić decyzję na inne
+        (patrz set_official_result, można wywołać wielokrotnie).
+
+        Returns:
+            [{'game': Game, 'sources': [{'scraper_id': int|None, 'label': str,
+              'home_goals', 'away_goals', 'date', 'is_official': bool}, ...]}]
+            posortowane po dacie meczu.
+        """
+        from app.models.game_scraper_snapshot import GameScraperSnapshot
+
+        games = GameScraperSnapshot.get_games_with_discrepancy(league_id)
+        result = []
+        for game in games:
+            snapshots = GameScraperSnapshot.get_all_for_game(game.id)
+            sources = [
+                {
+                    'scraper_id': snap.scraper_id,
+                    'label':      snap.scraper.name if snap.scraper else f'Scraper {snap.scraper_id}',
+                    'home_goals': snap.home_team_goals,
+                    'away_goals': snap.away_team_goals,
+                    'date':       snap.date,
+                    'is_official': False,
+                }
+                for snap in snapshots
+            ]
+            if game.is_edited:
+                sources.append({
+                    'scraper_id':  None,
+                    'label':       'Oficjalny (edytowany)',
+                    'home_goals':  game.home_team_goals,
+                    'away_goals':  game.away_team_goals,
+                    'date':        game.date,
+                    'is_official': True,
+                })
+            result.append({'game': game, 'sources': sources})
+
+        result.sort(key=lambda r: (r['game'].date is None, r['game'].date))
+        return result
+
+    def set_official_result(self, game_id: int, scraper_id: int):
+        """
+        Zastosuj dane wskazanego scrapera jako oficjalny wynik meczu i oznacz
+        mecz jako edytowany — od teraz żaden scraper go już nie nadpisze
+        (patrz _process_scraped_games: existing.is_edited). Można wywołać
+        wielokrotnie dla tego samego meczu ze wskazaniem innego scrapera —
+        to zmiana wcześniejszej decyzji, nie jednorazowe rozstrzygnięcie.
         """
         from app.models.game import Game
         from app.models.period import Period
-        from app.models.game_conflict import GameConflict
+        from app.models.game_scraper_snapshot import GameScraperSnapshot
 
-        conflict = GameConflict.query.get(conflict_id)
-        if not conflict:
-            raise ValueError("Nie znaleziono konfliktu do rozwiązania")
-        if chosen_scraper_id not in (conflict.scraper_a_id, conflict.scraper_b_id):
-            raise ValueError("Wskazany scraper nie jest jedną ze stron tego konfliktu")
-
-        game = Game.query.get(conflict.game_id)
+        game = Game.query.get(game_id)
         if not game:
-            raise ValueError("Nie znaleziono meczu powiązanego z konfliktem")
+            raise ValueError("Nie znaleziono meczu")
 
-        if chosen_scraper_id == conflict.scraper_a_id:
-            home, away = conflict.scraper_a_home_goals, conflict.scraper_a_away_goals
-            home_ht, away_ht = conflict.scraper_a_home_ht_goals, conflict.scraper_a_away_ht_goals
-            date = conflict.scraper_a_date
-        else:
-            home, away = conflict.scraper_b_home_goals, conflict.scraper_b_away_goals
-            home_ht, away_ht = conflict.scraper_b_home_ht_goals, conflict.scraper_b_away_ht_goals
-            date = conflict.scraper_b_date
+        snapshot = GameScraperSnapshot.get(scraper_id, game_id)
+        if not snapshot:
+            raise ValueError("Brak zapisanych danych wskazanego scrapera dla tego meczu")
 
-        game.home_team_goals = home
-        game.away_team_goals = away
-        game.date = date
-        if home is not None and away is not None:
+        game.home_team_goals = snapshot.home_team_goals
+        game.away_team_goals = snapshot.away_team_goals
+        game.date            = snapshot.date
+        if snapshot.home_team_goals is not None and snapshot.away_team_goals is not None:
             game.status = Game.STATUS_FINISHED
+        game.is_edited  = True
         game.updated_at = datetime.utcnow()
 
         self._upsert_periods(game, {
-            'home_team_goals': home, 'away_team_goals': away,
-            'home_ht_goals': home_ht, 'away_ht_goals': away_ht,
-            'status': 2 if (home is not None and away is not None) else 0,
+            'home_team_goals': snapshot.home_team_goals, 'away_team_goals': snapshot.away_team_goals,
+            'home_ht_goals':   snapshot.home_ht_goals,   'away_ht_goals':   snapshot.away_ht_goals,
+            'status': 2 if (snapshot.home_team_goals is not None and snapshot.away_team_goals is not None) else 0,
         }, Period)
 
-        conflict.resolved_at = datetime.utcnow()
-        conflict.resolved_scraper_id = chosen_scraper_id
+        db.session.commit()
+        return game
+
+    def remove_edited_flag(self, game_id: int):
+        """
+        Zdejmij blokadę is_edited — mecz wraca do stanu 'nie rozpoczęty, bez
+        wyniku' (okresy również zerowane), gotowy do ponownego, świeżego
+        scrapowania od zera zamiast pozostawania zamrożonym na starej decyzji.
+        """
+        from app.models.game import Game
+        from app.models.period import Period
+
+        game = Game.query.get(game_id)
+        if not game:
+            raise ValueError("Nie znaleziono meczu")
+
+        game.is_edited       = False
+        game.status          = Game.STATUS_NOT_STARTED
+        game.home_team_goals = None
+        game.away_team_goals = None
+        game.updated_at      = datetime.utcnow()
+
+        self._upsert_periods(game, {
+            'home_team_goals': None, 'away_team_goals': None,
+            'home_ht_goals':   None, 'away_ht_goals':   None,
+            'status': 0,
+        }, Period)
+
         db.session.commit()
         return game
 
@@ -710,10 +784,16 @@ class GameScraperManager:
     # ── Helpery ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _build_team_lookup() -> Dict[str, object]:
+    def _build_team_lookup(league_id: Optional[int] = None) -> Dict[str, object]:
         """
-        Zbuduj słownik {normalized_name → Team} z drużyn bieżącej ligi/sezonu.
-        Filtrowanie przez LeagueTeam → tylko drużyny z aktualnej ligi.
+        Zbuduj słownik {normalized_name → Team} z drużyn danej ligi.
+
+        league_id: liga, której drużyny mają być brane pod uwagę — powinna
+        pochodzić jawnie od wywołującego (ta sama liga, dla której scrapujemy
+        mecze), nie zgadywana z Settings.current_game_id (liga aktualnie
+        transmitowanego meczu może być zupełnie inna niż ta, którą właśnie
+        scrapujemy). Fallback na current_game_id/wszystkie drużyny tylko gdy
+        league_id nie podano.
         """
         from app.models.settings import Settings
         from app.models.team import Team
@@ -721,23 +801,22 @@ class GameScraperManager:
         from app.models.league_team import LeagueTeam
         from app.models.scraper import Scraper
 
-        settings = Settings.get_settings()
-        if not settings.current_game_id:
-            # Fallback: wszystkie drużyny z bazy
-            teams = Team.query.all()
+        if league_id is None:
+            settings = Settings.get_settings()
+            if settings.current_game_id:
+                from app.models.game import Game
+                game = Game.query.get(settings.current_game_id)
+                league_id = game.league_id if game else None
+
+        if league_id is not None:
+            team_ids = (
+                db.session.query(LeagueTeam.team_id)
+                .filter_by(league_id=league_id)
+                .subquery()
+            )
+            teams = Team.query.filter(Team.id.in_(team_ids)).all()
         else:
-            # Pobierz drużyny z ligi bieżącego meczu
-            from app.models.game import Game
-            game = Game.query.get(settings.current_game_id)
-            if game:
-                team_ids = (
-                    db.session.query(LeagueTeam.team_id)
-                    .filter_by(league_id=game.league_id)
-                    .subquery()
-                )
-                teams = Team.query.filter(Team.id.in_(team_ids)).all()
-            else:
-                teams = Team.query.all()
+            teams = Team.query.all()
 
         lookup = {_normalize(t.name): t for t in teams}
 

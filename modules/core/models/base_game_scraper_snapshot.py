@@ -63,6 +63,51 @@ class BaseGameScraperSnapshotMixin:
                 .first())
 
     @classmethod
+    def get_all_for_game(cls, game_id):
+        """Zwraca snapshoty WSZYSTKICH scraperów dla tego meczu — do porównania
+        N źródeł naraz (nie tylko pary), patrz raport niespójności."""
+        return cls.query.filter_by(game_id=game_id).all()
+
+    @classmethod
+    def get_games_with_discrepancy(cls, league_id):
+        """
+        Mecze tej ligi, dla których snapshoty różnych scraperów (plus wynik
+        oficjalny, jeśli mecz ma is_edited — atrybut specyficzny dla modułów,
+        które go obsługują, stąd getattr) nie zgadzają się co do wyniku
+        pełnego czasu gry i/lub daty (wynik do przerwy nigdy nie jest polem
+        konfliktowym). Współdzielone: core używa tego do samego licznika
+        (badge na liście meczów), moduł (np. garbarnia) buduje na tej
+        podstawie pełny raport ze szczegółami źródeł.
+        """
+        from core.models.base_game import get_game_model
+        Game = get_game_model()
+
+        games = Game.query.filter_by(league_id=league_id).all()
+        result = []
+        for game in games:
+            snaps = cls.query.filter_by(game_id=game.id).all()
+            if not snaps:
+                continue
+            values = [(s.home_team_goals, s.away_team_goals, s.date) for s in snaps]
+            if getattr(game, 'is_edited', False):
+                values.append((game.home_team_goals, game.away_team_goals, game.date))
+            if cls._values_disagree(values):
+                result.append(game)
+        return result
+
+    @staticmethod
+    def _values_disagree(values):
+        """`values` to lista (home_goals, away_goals, date) — True jeśli
+        którekolwiek dwie mają różne (oba niepuste) wartości w którymkolwiek
+        z tych trzech pól."""
+        for i in range(len(values)):
+            for j in range(i + 1, len(values)):
+                for a, b in zip(values[i], values[j]):
+                    if a is not None and b is not None and a != b:
+                        return True
+        return False
+
+    @classmethod
     def upsert(cls, scraper_id, game_id, home_team_goals, away_team_goals,
                home_ht_goals, away_ht_goals, date, status):
         row = cls.get(scraper_id, game_id)

@@ -7,27 +7,33 @@
         <a href="{{ url_for('league_games', league_id=league.id) }}" class="btn btn-secondary">← Powrót do meczów</a>
     </div>
 
-    {% if conflicts %}
+    {% if discrepancies %}
     <p style="padding:0 1rem;color:#6c757d;">
-        Dwa scrapery podały różne dane dla tego samego meczu (wynik i/lub data). Wybierz, które dane są prawidłowe —
-        zostaną zapisane razem z wynikiem połówek. Jeśli błąd na stronie źródłowej nie zostanie poprawiony, ten sam
-        (już rozstrzygnięty) konflikt nie pojawi się ponownie przy kolejnym scrapowaniu.
+        Znane źródła (scrapery, plus wynik oficjalny dla już edytowanych meczów) podają różne dane dla tego
+        samego meczu (wynik pełnego czasu gry i/lub data — wynik do przerwy nie jest tu brany pod uwagę).
+        Wybierz, które dane mają być prawdziwe — mecz zostanie oznaczony jako edytowany i żaden scraper już
+        go nie nadpisze. Możesz zmienić decyzję w dowolnym momencie, wybierając inne źródło.
     </p>
     <table>
         <thead>
             <tr>
                 <th>Mecz</th>
-                <th>{{ conflicts[0].scraper_a.name if conflicts[0].scraper_a else 'Źródło A' }} / {{ conflicts[0].scraper_b.name if conflicts[0].scraper_b else 'Źródło B' }}</th>
+                <th>Źródła</th>
                 <th>Akcje</th>
             </tr>
         </thead>
         <tbody>
-            {% for c in conflicts %}
+            {% for d in discrepancies %}
+            {% set game = d.game %}
             <tr>
                 <td>
-                    <strong>{{ c.game.home_team.name if c.game and c.game.home_team else '?' }}
-                        vs {{ c.game.away_team.name if c.game and c.game.away_team else '?' }}</strong>
-                    <br><small style="color:#6c757d;">kolejka {{ c.game.round if c.game else '—' }}</small>
+                    <strong>{{ game.home_team.name if game.home_team else '?' }}
+                        vs {{ game.away_team.name if game.away_team else '?' }}</strong>
+                    <br><small style="color:#6c757d;">kolejka {{ game.round }}</small>
+                    {% if game.is_edited %}
+                    <br><small style="color:#e67e22;">✏️ edytowany</small>
+                    {% endif %}
+                    <br><a href="{{ url_for('edit_game', game_id=game.id) }}" class="btn btn-secondary btn-small" style="margin-top:.4rem;">Edytuj mecz</a>
                 </td>
                 <td>
                     <table style="width:auto;">
@@ -35,42 +41,33 @@
                             <tr>
                                 <th></th>
                                 <th>Wynik</th>
-                                <th>Do przerwy</th>
                                 <th>Data i godzina</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td><strong>{{ c.scraper_a.name if c.scraper_a else 'Źródło A' }}</strong></td>
-                                <td>{{ c.scraper_a_home_goals if c.scraper_a_home_goals is not none else '—' }}:{{ c.scraper_a_away_goals if c.scraper_a_away_goals is not none else '—' }}</td>
-                                <td>{{ c.scraper_a_home_ht_goals if c.scraper_a_home_ht_goals is not none else '—' }}:{{ c.scraper_a_away_ht_goals if c.scraper_a_away_ht_goals is not none else '—' }}</td>
-                                <td>{{ c.scraper_a_date.strftime('%Y-%m-%d %H:%M') if c.scraper_a_date else '—' }}</td>
+                            {% for s in d.sources %}
+                            <tr{% if s.is_official %} style="font-weight:600;"{% endif %}>
+                                <td>{{ s.label }}</td>
+                                <td>{{ s.home_goals if s.home_goals is not none else '—' }}:{{ s.away_goals if s.away_goals is not none else '—' }}</td>
+                                <td>{{ s.date.strftime('%Y-%m-%d %H:%M') if s.date else '—' }}</td>
                             </tr>
-                            <tr>
-                                <td><strong>{{ c.scraper_b.name if c.scraper_b else 'Źródło B' }}</strong></td>
-                                <td>{{ c.scraper_b_home_goals if c.scraper_b_home_goals is not none else '—' }}:{{ c.scraper_b_away_goals if c.scraper_b_away_goals is not none else '—' }}</td>
-                                <td>{{ c.scraper_b_home_ht_goals if c.scraper_b_home_ht_goals is not none else '—' }}:{{ c.scraper_b_away_ht_goals if c.scraper_b_away_ht_goals is not none else '—' }}</td>
-                                <td>{{ c.scraper_b_date.strftime('%Y-%m-%d %H:%M') if c.scraper_b_date else '—' }}</td>
-                            </tr>
+                            {% endfor %}
                         </tbody>
                     </table>
                 </td>
                 <td>
                     <div class="actions" style="flex-direction:column;align-items:stretch;gap:.5rem;">
-                        <form method="POST" action="{{ url_for('resolve_game_conflict', conflict_id=c.id) }}"
-                              onsubmit="return confirm('Zapisać dane z {{ c.scraper_a.name if c.scraper_a else "Źródła A" }}?');">
-                            <input type="hidden" name="chosen_scraper_id" value="{{ c.scraper_a_id }}">
+                        {% for s in d.sources %}
+                        {% if not s.is_official %}
+                        <form method="POST" action="{{ url_for('set_official_game_result', game_id=game.id) }}"
+                              onsubmit="return confirm('Zapisać dane z {{ s.label }} jako oficjalny wynik?');">
+                            <input type="hidden" name="scraper_id" value="{{ s.scraper_id }}">
                             <button type="submit" class="btn btn-success btn-small" style="width:100%;">
-                                ✅ {{ c.scraper_a.name if c.scraper_a else 'Źródło A' }}
+                                ✅ {{ s.label }}
                             </button>
                         </form>
-                        <form method="POST" action="{{ url_for('resolve_game_conflict', conflict_id=c.id) }}"
-                              onsubmit="return confirm('Zapisać dane z {{ c.scraper_b.name if c.scraper_b else "Źródła B" }}?');">
-                            <input type="hidden" name="chosen_scraper_id" value="{{ c.scraper_b_id }}">
-                            <button type="submit" class="btn btn-success btn-small" style="width:100%;">
-                                ✅ {{ c.scraper_b.name if c.scraper_b else 'Źródło B' }}
-                            </button>
-                        </form>
+                        {% endif %}
+                        {% endfor %}
                     </div>
                 </td>
             </tr>
@@ -79,7 +76,7 @@
     </table>
     {% else %}
     <p style="text-align:center;padding:2rem;color:#7f8c8d;">
-        Brak niespójności oczekujących na przegląd.
+        Brak niespójności — dane wszystkich znanych źródeł są ze sobą zgodne.
     </p>
     {% endif %}
 </div>

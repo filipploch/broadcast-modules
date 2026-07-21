@@ -12,6 +12,8 @@ from datetime import datetime
 import inspect
 import json
 import logging
+import re
+from urllib.parse import urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,85 @@ def _apply_league_scraper_data(league, form):
 
         foreign_id = (fields.get('foreign_id') or '').strip()
         league.set_foreign_id(scraper_id, foreign_id)
+
+_SUPERSCORE_LEAGUE_URL_RE = re.compile(
+    r'^https?://superscore\.live/[a-zA-Z]{2}-[a-zA-Z]{2}/pilka-nozna/rozgrywki/([^/?#]+)/([^/?#]+)'
+)
+
+def _parse_superscore_league_url(value):
+    """
+    Jeśli `value` to URL listy spotkań ligi na superscore.live
+    (https://superscore.live/{locale}/pilka-nozna/rozgrywki/{slug}/{hash}?season={id}),
+    zwraca (foreign_id, season_id) — foreign_id='{slug}/{hash}' (ten sam format co
+    foreign_id drużyny, patrz superscore_team_scraper.py), season_id z parametru
+    ?season= (może być None, jeśli URL go nie zawiera). Gdy `value` nie pasuje do
+    tego kształtu (bo to zwykłe ID wpisane ręcznie), zwraca None.
+    """
+    m = _SUPERSCORE_LEAGUE_URL_RE.match((value or '').strip())
+    if not m:
+        return None
+    foreign_id = f'{m.group(1)}/{m.group(2)}'
+    season_id = (parse_qs(urlparse(value).query).get('season') or [None])[0]
+    return foreign_id, season_id
+
+def _resolve_superscore_league_fields(season_value, foreign_value):
+    """
+    Pole 'Superscore Season ID' albo 'Foreign ID' w modalu ligi może zawierać
+    albo konkretną wartość, albo cały URL ligi na superscore.live — wtedy oba
+    pola wyprowadzane są z tego samego URL-a zamiast wymagać ręcznego rozbicia
+    go przez admina. Sprawdza oba stringi pod kątem takiego URL-a (w kolejności:
+    season_value, potem foreign_value) i jeśli któryś pasuje, zwraca poprawione
+    (season_value, foreign_value); w przeciwnym razie zwraca je bez zmian.
+    """
+    for candidate in (season_value, foreign_value):
+        parsed = _parse_superscore_league_url(candidate)
+        if parsed:
+            foreign_id, season_id = parsed
+            return (season_id or season_value), foreign_id
+    return season_value, foreign_value
+
+
+_LACZYNASPILKA_LEAGUE_URL_RE = re.compile(r'^https?://(?:www\.)?laczynaspilka\.pl/rozgrywki\b')
+
+def _parse_laczynaspilka_league_url(value):
+    """
+    Jeśli `value` to URL listy rozgrywek na laczynaspilka.pl
+    (https://www.laczynaspilka.pl/rozgrywki?season=...&leagueId=...&group=...&...),
+    zwraca (play_dictionary_id, season_id, league_foreign_id) wyciągnięte z
+    parametrów `group`, `season`, `leagueId` (którykolwiek z nich, którego URL
+    nie zawiera, wychodzi jako None). Gdy `value` nie pasuje do tego kształtu
+    (bo to zwykłe ID wpisane ręcznie), zwraca None.
+
+    Uwaga: `group` to play_dictionary_id — ten sam UUID, który na stronie
+    pojedynczej drużyny występuje jako ?playDictionary=, patrz League.play_dictionary_id.
+    """
+    value = (value or '').strip()
+    if not _LACZYNASPILKA_LEAGUE_URL_RE.match(value):
+        return None
+    qs = parse_qs(urlparse(value).query)
+    play_dictionary_id = (qs.get('group') or [None])[0]
+    season_id = (qs.get('season') or [None])[0]
+    league_foreign_id = (qs.get('leagueId') or [None])[0]
+    return play_dictionary_id, season_id, league_foreign_id
+
+def _resolve_laczynaspilka_league_fields(play_dictionary_value, season_value, foreign_value):
+    """
+    Analogicznie do _resolve_superscore_league_fields, ale dla trzech pól
+    naraz (Play Dictionary ID / Season ID / Foreign ID) — sprawdza każdy z
+    trzech stringów pod kątem URL-a listy rozgrywek laczynaspilka.pl i jeśli
+    któryś pasuje, wyprowadza z niego wszystkie trzy wartości (parametr,
+    którego dany URL nie zawiera, zachowuje dotychczasową wartość pola).
+    """
+    for candidate in (play_dictionary_value, season_value, foreign_value):
+        parsed = _parse_laczynaspilka_league_url(candidate)
+        if parsed:
+            play_dictionary_id, season_id, league_foreign_id = parsed
+            return (
+                play_dictionary_id or play_dictionary_value,
+                season_id or season_value,
+                league_foreign_id or foreign_value,
+            )
+    return play_dictionary_value, season_value, foreign_value
 
 def _apply_entity_foreign_id(entity, form):
     """Parsuje pole 'scraper_foreign_ids' (JSON: {scraper_id: foreign_id}) z formularza
@@ -307,6 +388,7 @@ def register_routes(app, exclude=None, team_manager=None):
                     name=request.form.get('name'),
                     allows_draw=('allows_draw' in request.form),
                     play_dictionary_id=request.form.get('play_dictionary_id'),
+                    laczynaspilka_season_id=request.form.get('laczynaspilka_season_id'),
                     superscore_season_id=request.form.get('superscore_season_id'),
                 )
                 _apply_league_scraper_data(league, request.form)
@@ -378,12 +460,18 @@ def register_routes(app, exclude=None, team_manager=None):
             if mzpn_scraper:
                 malopolskizpn_games_url = league.get_scraper_url(mzpn_scraper.id, 'games_url')
 
+        # Scrapowanie drużyn z lokalnie zapisanej strony tabeli rozgrywek
+        # laczynaspilka.pl (jeśli moduł je obsługuje) — brak per-ligowego
+        # URL-a do skonfigurowania, plik znajdowany jest po nazwie.
+        has_laczynaspilka_team_scrape = 'scrape_league_teams_laczynaspilka' in current_app.view_functions
+
         return render_template('leagues/teams.html',
                             league=league,
                             teams=teams,
                             available_teams=available_teams,
                             has_malopolskizpn_team_scrape=has_malopolskizpn_team_scrape,
-                            malopolskizpn_games_url=malopolskizpn_games_url)
+                            malopolskizpn_games_url=malopolskizpn_games_url,
+                            has_laczynaspilka_team_scrape=has_laczynaspilka_team_scrape)
 
 
     @app.route('/leagues/<int:league_id>/teams/add', methods=['POST'])
@@ -454,20 +542,38 @@ def register_routes(app, exclude=None, team_manager=None):
         games = game_manager.get_all_games(league_id=league_id)
         league = league_manager.get_league_by_id(league_id) if league_id else None
 
-        # Otwarte niespójności danych między scraperami meczów (jeśli moduł
-        # obsługuje tę funkcję — patrz game_scraper_manager._reconcile_cross_scraper_data)
+        # Niespójności danych między scraperami meczów (jeśli moduł obsługuje tę
+        # funkcję — patrz game_scraper_manager._reconcile_cross_scraper_data).
+        # Link do przeglądu pokazujemy zawsze (nie tylko gdy coś jest niespójne)
+        # — admin może chcieć zajrzeć na stronę nawet przy pustym raporcie.
+        has_game_conflicts_review = bool(league_id) and 'review_game_conflicts' in current_app.view_functions
         open_game_conflicts_count = 0
-        if league_id and 'review_game_conflicts' in current_app.view_functions:
-            from core.models.base_game_conflict import get_game_conflict_model
-            GameConflict = get_game_conflict_model()
-            open_game_conflicts_count = GameConflict.query.filter_by(
-                league_id=league_id, resolved_at=None
-            ).count()
+        if has_game_conflicts_review:
+            from core.models.base_game_scraper_snapshot import get_game_scraper_snapshot_model
+            GameScraperSnapshot = get_game_scraper_snapshot_model()
+            open_game_conflicts_count = len(GameScraperSnapshot.get_games_with_discrepancy(league_id))
+
+        # Scrapery meczów dostępne dla tej ligi (moduł obsługuje trasę I liga ma
+        # skonfigurowane dane wymagane danemu scraperowi) — do rozwijanej listy
+        # scraperów przy przycisku "Scrapuj mecze" (patrz scraper-cascade.js).
+        has_malopolskizpn_games_scrape = False
+        has_superscore_games_scrape = False
+        if league:
+            if 'scrape_games' in current_app.view_functions:
+                mzpn_scraper = _get_scraper().get_by_folder('malopolskizpn')
+                if mzpn_scraper and league.get_scraper_url(mzpn_scraper.id, 'games_url'):
+                    has_malopolskizpn_games_scrape = True
+            if 'scrape_games_superscore' in current_app.view_functions:
+                if getattr(league, 'superscore_season_id', None):
+                    has_superscore_games_scrape = True
 
         return render_template('games/list.html',
                             games=games,
                             league=league,
-                            open_game_conflicts_count=open_game_conflicts_count)
+                            has_game_conflicts_review=has_game_conflicts_review,
+                            open_game_conflicts_count=open_game_conflicts_count,
+                            has_malopolskizpn_games_scrape=has_malopolskizpn_games_scrape,
+                            has_superscore_games_scrape=has_superscore_games_scrape)
 
 
     @app.route('/games/<int:game_id>')
@@ -573,6 +679,16 @@ def register_routes(app, exclude=None, team_manager=None):
                     round_number=int(request.form.get('round')) if request.form.get('round') else None,
                     group_nr=int(request.form.get('group_nr')) if request.form.get('group_nr') else None
                 )
+
+                if request.form.get('status') is not None:
+                    game_manager.set_game_status(game_id, int(request.form['status']))
+
+                # Każdy zapis tego formularza to ręczna decyzja o danych meczu
+                # (niezależnie czy user wpisał wynik sam, czy tylko poprawił
+                # stadion/kolejkę) — od teraz scrapery już go nie nadpisują,
+                # patrz Game.is_edited / game_scraper_manager._process_scraped_games.
+                game_manager.mark_as_edited(game_id)
+
                 _apply_entity_foreign_id(game, request.form)
 
                 # Update penalty shootout if exists
@@ -666,6 +782,13 @@ def register_routes(app, exclude=None, team_manager=None):
             Settings.clear_timers()
             Settings.set_current_shootout(None)
             Settings.set_current_game(game_id)
+
+            # Wybrany mecz może należeć do innej ligi/sezonu niż dotychczas
+            # transmitowany — dopasuj current_season_id, żeby np. pasek zakładek
+            # ligowych (zakładka MECZE) pokazywał ligi właściwego sezonu.
+            league = league_manager.get_league_by_id(game.league_id)
+            if league:
+                Settings.set_current_season(league.season_id)
 
             # Auto-dobór okresu: aktywny → pierwszy nierozpoczęty → ostatni zakończony
             periods = Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
@@ -825,11 +948,99 @@ def register_routes(app, exclude=None, team_manager=None):
     def api_get_league(league_id):
         """API: Get league with statistics"""
         stats = league_manager.get_league_statistics(league_id)
-        
+
         if not stats:
             return jsonify({'error': 'League not found'}), 404
-        
+
         return jsonify(stats)
+
+
+    @app.route('/api/leagues/<int:league_id>/scraper-data', methods=['PATCH'])
+    def api_save_league_scraper_data(league_id):
+        """API: zapisz dane JEDNEGO scrapera dla ligi (modal 'Dane scrapera' w
+        leagues/edit.html) od razu po zatwierdzeniu modala — bez konieczności
+        zatwierdzania całego formularza edycji ligi.
+
+        Body (JSON): {
+            scraper_id: int (wymagane),
+            play_dictionary_id?: str,        # tylko laczynaspilka
+            laczynaspilka_season_id?: str,   # tylko laczynaspilka
+            superscore_season_id?: str,      # tylko superscore
+            urls?: {games_url, table_url, scorers_url, assists_url, canadian_url},
+            foreign_id?: str,
+        }
+        Klucz nieobecny w body zostaje nietknięty; obecny z pustą wartością czyści dane
+        (tak samo jak przy zapisie przez pełny formularz edycji ligi).
+
+        Dla superscore (gdy 'superscore_season_id' obecne w body): jeśli
+        superscore_season_id ALBO foreign_id to cały URL listy spotkań ligi na
+        superscore.live (a nie gołe ID/hash), oba pola są z niego wyprowadzane
+        automatycznie — patrz _resolve_superscore_league_fields.
+
+        Dla laczynaspilka (gdy 'play_dictionary_id' obecne w body): jeśli
+        play_dictionary_id ALBO laczynaspilka_season_id ALBO foreign_id to cały
+        URL listy rozgrywek na laczynaspilka.pl, wszystkie trzy pola są z niego
+        wyprowadzane automatycznie — patrz _resolve_laczynaspilka_league_fields.
+
+        Response (JSON): {success: true, ...} — zawiera faktycznie zapisane
+        wartości dla obecnych w body kluczy (po ew. rozwiązaniu URL-a), żeby
+        frontend mógł zsynchronizować swoje hidden inputy z tym, co naprawdę
+        wylądowało w bazie.
+        """
+        league = league_manager.get_league_by_id(league_id)
+        if not league:
+            return jsonify({'error': 'Nie znaleziono ligi'}), 404
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            scraper_id = int(payload.get('scraper_id'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Brak lub nieprawidłowy scraper_id'}), 400
+
+        response = {'success': True}
+        try:
+            if 'play_dictionary_id' in payload:
+                play_dict_value = (payload.get('play_dictionary_id') or '').strip()
+                laczynaspilka_season_value = (payload.get('laczynaspilka_season_id') or '').strip()
+                foreign_value = (payload.get('foreign_id') or '').strip()
+                play_dict_value, laczynaspilka_season_value, foreign_value = _resolve_laczynaspilka_league_fields(
+                    play_dict_value, laczynaspilka_season_value, foreign_value
+                )
+                league_manager.update_league(
+                    league_id=league_id,
+                    play_dictionary_id=play_dict_value,
+                    laczynaspilka_season_id=laczynaspilka_season_value,
+                )
+                payload['foreign_id'] = foreign_value  # niżej trafi do LeagueForeignId
+                response['play_dictionary_id'] = play_dict_value
+                response['laczynaspilka_season_id'] = laczynaspilka_season_value
+
+            if 'superscore_season_id' in payload:
+                season_value = (payload.get('superscore_season_id') or '').strip()
+                foreign_value = (payload.get('foreign_id') or '').strip()
+                season_value, foreign_value = _resolve_superscore_league_fields(season_value, foreign_value)
+                league_manager.update_league(league_id=league_id, superscore_season_id=season_value)
+                payload['foreign_id'] = foreign_value  # niżej trafi do LeagueForeignId
+                response['superscore_season_id'] = season_value
+
+            urls = payload.get('urls')
+            if isinstance(urls, dict):
+                LeagueScraperUrl = _get_league_scraper_url()
+                for url_type in LeagueScraperUrl.ALL_URL_TYPES:
+                    if url_type in urls:
+                        league.set_scraper_url(scraper_id, url_type, (urls.get(url_type) or '').strip())
+
+            if 'foreign_id' in payload:
+                foreign_id_value = (payload.get('foreign_id') or '').strip()
+                league.set_foreign_id(scraper_id, foreign_id_value)
+                response['foreign_id'] = foreign_id_value
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f"Error saving league scraper data: {e}", exc_info=True)
+            return jsonify({'error': 'Błąd zapisu danych scrapera'}), 500
+
+        return jsonify(response)
 
 
     @app.route('/api/games')

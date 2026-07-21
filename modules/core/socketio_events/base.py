@@ -675,18 +675,31 @@ def _handle_core_content(content_type, data):
         date_from  = payload.get('date_from', date.today().isoformat())
         date_to    = payload.get('date_to', date_from)
 
+        league_manager = LeagueManager()
+        Settings = get_settings_model()
+        settings = Settings.get_settings()
+
         # Domyślnie: liga aktualnie transmitowanego meczu
         if league_id is None:
-            Settings = get_settings_model()
-            settings = Settings.get_settings()
             current_game = GameManager().get_game_by_id(settings.current_game_id)
             league_id = current_game.league_id if current_game else None
+
+        # Zakładki ligowe ograniczone do JEDNEGO sezonu — sezonu wybranej
+        # (albo domyślnej) ligi, a gdy tej nie da się ustalić, aktualnego
+        # sezonu z Settings. Różne sezony nie powinny mieszać się w jednym
+        # pasku zakładek (patrz Settings.current_season_id).
+        season_id = None
+        if league_id:
+            selected_league = league_manager.get_league_by_id(league_id)
+            season_id = selected_league.season_id if selected_league else None
+        if season_id is None:
+            season_id = settings.current_season_id
 
         from core.extensions import db
         from core.models.base_game import get_game_model
         Game = get_game_model()
 
-        leagues = LeagueManager().get_all_leagues()
+        leagues = league_manager.get_all_leagues(season_id=season_id) if season_id else []
 
         # Dołącz max_group_nr per liga (potrzebne do standings fetch w JS)
         leagues_data = []

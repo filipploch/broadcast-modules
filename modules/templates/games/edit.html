@@ -3,12 +3,20 @@
 {% block content %}
 <div class="card">
     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span>Edytuj Mecz</span>
-        {% if game.periods.count() == 0 %}
-        <a href="{{ url_for('prepare_game_for_broadcast', game_id=game.id) }}" class="btn btn-primary">📡 Przygotuj mecz do transmisji</a>
-        {% else %}
-        <a href="{{ url_for('select_game_for_broadcast', game_id=game.id) }}" class="btn btn-success">✅ Wybierz mecz do transmisji</a>
-        {% endif %}
+        <span>Edytuj Mecz{% if game.is_edited is defined and game.is_edited %} <small style="color:#e67e22;">✏️ edytowany</small>{% endif %}</span>
+        <div class="actions">
+            {% if game.is_edited is defined and game.is_edited %}
+            <form method="POST" action="{{ url_for('remove_game_edited_flag', game_id=game.id) }}"
+                  onsubmit="return confirm('Cofnąć edycję? Mecz wróci do stanu \'nie rozpoczęty, bez wyniku\' i będzie znów nadpisywany przez scrapery.');">
+                <button type="submit" class="btn btn-secondary">↩️ Cofnij edycję</button>
+            </form>
+            {% endif %}
+            {% if game.periods.count() == 0 %}
+            <a href="{{ url_for('prepare_game_for_broadcast', game_id=game.id) }}" class="btn btn-primary">📡 Przygotuj mecz do transmisji</a>
+            {% else %}
+            <a href="{{ url_for('select_game_for_broadcast', game_id=game.id) }}" class="btn btn-success">✅ Wybierz mecz do transmisji</a>
+            {% endif %}
+        </div>
     </div>
     <form method="POST">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -23,6 +31,20 @@
                 <select id="away_team_id" name="away_team_id" required readonly>
                     {% for team in teams %}<option value="{{ team.id }}" {% if team.id == game.away_team_id %}selected{% endif %}>{{ team.name }} ({{ team.short_name }})</option>{% endfor %}
                 </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Status meczu</label>
+            <div style="display:flex;gap:1.5rem;">
+                <label style="font-weight:normal;display:flex;align-items:center;gap:.35rem;">
+                    <input type="radio" name="status" value="0" {{ 'checked' if game.status == 0 }}> Nie rozpoczęty
+                </label>
+                <label style="font-weight:normal;display:flex;align-items:center;gap:.35rem;">
+                    <input type="radio" name="status" value="1" {{ 'checked' if game.status == 1 }}> Trwa
+                </label>
+                <label style="font-weight:normal;display:flex;align-items:center;gap:.35rem;">
+                    <input type="radio" name="status" value="2" {{ 'checked' if game.status == 2 }}> Zakończony
+                </label>
             </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr; gap: 1rem;">

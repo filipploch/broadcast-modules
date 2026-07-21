@@ -244,6 +244,21 @@ class GameManager:
             logger.error(f"Error updating game: {e}")
             return None
 
+    def mark_as_edited(self, game_id):
+        """
+        Oznacz mecz jako ręcznie edytowany (patrz Game.is_edited, moduł
+        garbarnia) — od teraz żaden scraper już go nie nadpisuje. Wywoływane
+        przy każdym zapisie formularza edycji meczu, niezależnie od tego,
+        które pola faktycznie się zmieniły.
+        """
+        game = self.get_game_by_id(game_id)
+        if not game:
+            raise ValueError(f"Nie znaleziono meczu o ID {game_id}")
+        if hasattr(game, 'is_edited'):
+            game.is_edited = True
+            db.session.commit()
+        return game
+
     def update_game_score(self, game_id, home_goals, away_goals,
                            home_fouls=None, away_fouls=None):
         """
