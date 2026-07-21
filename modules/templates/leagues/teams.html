@@ -2,6 +2,10 @@
 
 {% block title %}Zarządzanie Drużynami - {{ league.name }}{% endblock %}
 
+{% set has_superscore_team_scrape = league.superscore_season_id is defined %}
+{% set has_malopolskizpn_team_scrape_ready = has_malopolskizpn_team_scrape and malopolskizpn_games_url %}
+{% set any_team_scraper = has_superscore_team_scrape or has_malopolskizpn_team_scrape_ready or has_laczynaspilka_team_scrape %}
+
 {% block content %}
 <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
     <strong>⚽ Liga:</strong> {{ league.name }}
@@ -14,15 +18,25 @@
     <div class="card-header">
         <span>Drużyny w lidze: {{ league.name }}</span>
         <div class="actions">
-            {% if league.superscore_season_id is defined %}
-            <a href="{{ url_for('scrape_league_teams_superscore', league_id=league.id) }}" class="btn btn-success">
-                🔍 Scrapuj drużyny (superscore)
-            </a>
-            {% endif %}
-            {% if has_malopolskizpn_team_scrape and malopolskizpn_games_url %}
-            <a href="{{ url_for('scrape_league_teams_malopolskizpn', league_id=league.id) }}" class="btn btn-success">
-                🔍 Scrapuj drużyny (MZPN)
-            </a>
+            {% if any_team_scraper %}
+            <div class="scraper-cascade">
+                <button type="button" class="btn btn-success cascade-run-btn" id="cascade-run-teams" onclick="ScraperCascade.run('teams')">
+                    🔍 Scrapuj drużyny
+                </button>
+                <button type="button" class="btn btn-success cascade-toggle-btn" onclick="ScraperCascade.toggleMenu('teams')" title="Wybierz scrapery">▾</button>
+                <div class="cascade-menu" id="cascade-menu-teams" style="display:none;">
+                    {% if has_superscore_team_scrape %}
+                    <label><input type="checkbox" value="superscore" checked> Superscore</label>
+                    {% endif %}
+                    {% if has_malopolskizpn_team_scrape_ready %}
+                    <label><input type="checkbox" value="malopolskizpn" checked> Małopolski ZPN</label>
+                    {% endif %}
+                    {% if has_laczynaspilka_team_scrape %}
+                    <label><input type="checkbox" value="laczynaspilka" checked> Łączy Nas Piłka</label>
+                    {% endif %}
+                </div>
+            </div>
+            <span class="cascade-status" id="cascade-status-teams" style="display:none;"></span>
             {% endif %}
             <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">
                 ← Powrót do ligi
@@ -123,5 +137,31 @@
         <a href="{{ url_for('create_team') }}" style="color: #3498db;">Dodaj nową drużynę</a>
     </p>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if any_team_scraper %}
+<script>
+    ScraperCascade.register('teams', [
+        {% if has_superscore_team_scrape %}
+        { id: 'superscore', label: 'Superscore', run: function () {
+            return ScraperCascade.fetchJson('{{ url_for("scrape_league_teams_superscore", league_id=league.id) }}');
+        } },
+        {% endif %}
+        {% if has_malopolskizpn_team_scrape_ready %}
+        { id: 'malopolskizpn', label: 'Małopolski ZPN', run: function () {
+            return ScraperCascade.fetchJson('{{ url_for("scrape_league_teams_malopolskizpn", league_id=league.id) }}');
+        } },
+        {% endif %}
+        {% if has_laczynaspilka_team_scrape %}
+        { id: 'laczynaspilka', label: 'Łączy Nas Piłka', run: function () {
+            return ScraperCascade.fetchJson('{{ url_for("scrape_league_teams_laczynaspilka", league_id=league.id) }}');
+        } },
+        {% endif %}
+    ], function (results) {
+        window.location.href = '{{ url_for("review_pending_team_matches", league_id=league.id) }}';
+    });
+</script>
 {% endif %}
 {% endblock %}

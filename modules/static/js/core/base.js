@@ -55,11 +55,6 @@ function closeSocketMonitor() {
     addClassName(monitor, 'hidden');
 }
 
-function startGameScraping(leagueID) {
-    fetch(`/leagues/${leagueID}/games/scrape`)
-        .catch(err => console.error('Game scraping request failed:', err));
-}
-
 function startPlayerScraping(teamID) {
     fetch(`/teams/${teamID}/scrape-players`)
         .catch(err => console.error('Player scraping request failed:', err));
