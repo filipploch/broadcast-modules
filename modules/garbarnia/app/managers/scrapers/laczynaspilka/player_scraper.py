@@ -7,6 +7,8 @@ from pathlib import Path
 
 import logging
 
+from app.managers.scrapers.laczynaspilka.html_snapshot import find_latest_matching_html
+
 logger = logging.getLogger(__name__)
 
 # UUID pattern
@@ -41,7 +43,9 @@ class PlayerScraper:
 
     def find_html_file_for_team(self, html_dir: str | Path, team_foreign_id: str) -> Optional[Path]:
         """
-        Znajdź plik HTML w katalogu który zawiera foreign_id drużyny w nazwie.
+        Znajdź najnowszy plik HTML w katalogu, który zawiera foreign_id drużyny
+        w nazwie — usuwając po drodze starsze zapisane wersje tej samej strony
+        (np. gdy admin nadpisał zapis nowszym przed uruchomieniem scrapera).
 
         Args:
             html_dir:        Katalog z pobranymi plikami HTML
@@ -50,18 +54,7 @@ class PlayerScraper:
         Returns:
             Path do pliku lub None jeśli nie znaleziono
         """
-        html_dir = Path(html_dir)
-        if not html_dir.exists():
-            logger.error(f"Katalog {html_dir} nie istnieje")
-            return None
-
-        for path in html_dir.glob('*.html'):
-            if team_foreign_id in path.name:
-                logger.debug(f"Znaleziono plik dla drużyny {team_foreign_id}: {path.name}")
-                return path
-
-        logger.warning(f"Nie znaleziono pliku HTML dla drużyny {team_foreign_id} w {html_dir}")
-        return None
+        return find_latest_matching_html(html_dir, team_foreign_id)
 
 
     def scrape_players_from_html(self, html_path: str | Path, team_foreign_id: str) -> list[dict]:

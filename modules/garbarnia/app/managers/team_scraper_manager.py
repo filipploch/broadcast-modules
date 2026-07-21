@@ -20,6 +20,7 @@ from app.models.pending_team_match import PendingTeamMatch
 from app.models.team_foreign_id import TeamForeignId
 from app.managers.scrapers.superscore.superscore_team_scraper import SuperscoreTeamScraper
 from app.managers.scrapers.malopolskizpn.team_scraper import MalopolskiZpnTeamScraper
+from app.managers.scrapers.laczynaspilka.team_scraper import LaczynaspilkaTeamScraper
 
 SIMILARITY_THRESHOLD = 0.6
 
@@ -38,6 +39,13 @@ def _malopolskizpn_scraper_id() -> int:
     scraper = Scraper.get_by_folder('malopolskizpn')
     if not scraper:
         raise RuntimeError("Scraper 'malopolskizpn' nie jest zarejestrowany w tabeli scrapers")
+    return scraper.id
+
+
+def _laczynaspilka_scraper_id() -> int:
+    scraper = Scraper.get_by_folder('laczynaspilka')
+    if not scraper:
+        raise RuntimeError("Scraper 'laczynaspilka' nie jest zarejestrowany w tabeli scrapers")
     return scraper.id
 
 
@@ -207,6 +215,95 @@ class TeamScraperManager:
                 similarity_score=score,
             )
             count += 1
+
+        return count
+
+    def scrape_league_teams_from_laczynaspilka(self, league_id: int) -> int:
+        """
+        Pobierz drużyny ligi z lokalnie zapisanej strony tabeli rozgrywek
+        laczynaspilka.pl (nazwa pliku zawiera 'season' — admin zapisuje ją
+        np. wtyczką SingleFile, tak jak przy scrapowaniu kadry) i zapisz
+        kandydatów do dopasowania w PendingTeamMatch.
+
+        Strona tabeli nie eksponuje UUID drużyny (widoczny dopiero na stronie
+        pojedynczej drużyny, a ten zmienia się co sezon) — foreign_id to
+        nazwa drużyny, tak jak przy malopolskizpn. Dzięki temu dopasowanie
+        raz potwierdzone przez admina jest rozpoznawane automatycznie w
+        kolejnych sezonach, mimo że UUID drużyny na www się zmienił.
+
+        Nic nie zapisuje bezpośrednio do Team/LeagueTeam — wymaga
+        potwierdzenia przez resolve_pending_team_match(). Drużyna już
+        dopasowana wcześniej i nieprzypisana jeszcze do TEJ ligi zostaje do
+        niej dopisana automatycznie (tak jak przy pozostałych scraperach).
+
+        Returns:
+            Liczba wpisów oczekujących utworzonych/odświeżonych.
+
+        Raises:
+            ValueError: brak ligi, brak zapisanego pliku strony sezonu w
+                katalogu tymczasowym, albo plik nie zawiera żadnych drużyn.
+        """
+        import sys
+        from flask import current_app
+
+        league = League.query.get(league_id)
+        if not league:
+            raise ValueError("Nie znaleziono ligi")
+
+        scraper_id = _laczynaspilka_scraper_id()
+        temp_dir = sys.path[0] + current_app.config['TEMP_DIR']
+
+        html_scraper = LaczynaspilkaTeamScraper()
+        html_path = html_scraper.find_html_file(temp_dir)
+        if not html_path:
+            raise ValueError(
+                f"Nie znaleziono zapisanego pliku strony sezonu (nazwa zawierająca "
+                f"'season') w katalogu {temp_dir} — zapisz stronę tabeli rozgrywek "
+                f"(np. wtyczką SingleFile) przed scrapowaniem."
+            )
+
+        try:
+            scraped_teams = html_scraper.scrape_teams_from_html(html_path)
+        except Exception as e:
+            raise ValueError(f"Błąd parsowania pliku {html_path.name}: {e}") from e
+        if not scraped_teams:
+            raise ValueError(
+                f"Plik {html_path.name} nie zawiera żadnych drużyn — sprawdź, czy "
+                f"strona zapisała się poprawnie i czy struktura strony się nie zmieniła."
+            )
+
+        already_resolved = {
+            row.foreign_id: row.team_id
+            for row in TeamForeignId.query.filter_by(scraper_id=scraper_id).all()
+        }
+        all_teams = Team.query.order_by(Team.name).all()
+        league_team_ids = {lt.team_id for lt in league.get_teams()}
+
+        count = 0
+        for scraped in scraped_teams:
+            resolved_team_id = already_resolved.get(scraped['foreign_id'])
+            if resolved_team_id is not None:
+                if resolved_team_id not in league_team_ids:
+                    league_manager.add_team_to_league(league.id, resolved_team_id, group_nr=1)
+                    league_team_ids.add(resolved_team_id)
+                continue  # już dopasowane w poprzednim uruchomieniu
+
+            best_team, score = _best_match(scraped['name'], all_teams)
+            PendingTeamMatch.upsert(
+                league_id=league_id,
+                scraper_id=scraper_id,
+                scraped_name=scraped['name'],
+                scraped_foreign_id=scraped['foreign_id'],
+                scraped_short_name=None,
+                suggested_team_id=best_team.id if best_team else None,
+                similarity_score=score,
+            )
+            count += 1
+
+        # Plik usuwany dopiero tutaj — po tym jak wszystkie drużyny trafiły
+        # bezpiecznie do PendingTeamMatch/TeamForeignId, żeby przy błędzie w
+        # trakcie przetwarzania źródłowy plik zostawał do ponownej próby.
+        html_path.unlink(missing_ok=True)
 
         return count
 

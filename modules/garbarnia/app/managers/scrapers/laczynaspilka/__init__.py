@@ -1,1 +1,2 @@
 from app.managers.scrapers.laczynaspilka.player_scraper import PlayerScraper
+from app.managers.scrapers.laczynaspilka.team_scraper import LaczynaspilkaTeamScraper
