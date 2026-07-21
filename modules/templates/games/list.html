@@ -38,6 +38,11 @@
                     ⚠️ Niespójności{% if open_game_conflicts_count %} ({{ open_game_conflicts_count }}){% endif %}
                 </a>
                 {% endif %}
+                {% if has_helper_candidates_review %}
+                <a href="{{ url_for('review_helper_candidates', league_id=league.id) }}" class="btn {{ 'btn-danger' if pending_helper_candidates_count else 'btn-secondary' }}">
+                    🙋 Zgłoszenia pomocników{% if pending_helper_candidates_count %} ({{ pending_helper_candidates_count }}){% endif %}
+                </a>
+                {% endif %}
                 <a href="{{ url_for('create_game', league_id=league.id) }}" class="btn btn-primary">➕ Nowy Mecz</a>
             {% else %}
                 <a href="{{ url_for('create_game') }}" class="btn btn-primary">➕ Nowy Mecz</a>

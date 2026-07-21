@@ -575,6 +575,43 @@ def register_events(socketio):
         })
         current_app.logger.info(f'[replay_control] {cmd_type} → {signal}')
 
+    # ── Kandydaci zgłoszeń od pomocnika (patrz docs/helper-app-design.md) ──────
+
+    @socketio.on('get_helper_candidates')
+    def handle_get_helper_candidates(data):
+        """data = { 'league_id': int }"""
+        from flask_socketio import emit
+        from core.managers import get_helper_relay_manager
+        league_id = data.get('league_id')
+        candidates = get_helper_relay_manager().get_pending_candidates(league_id)
+        emit('helper_candidates_list', {
+            'league_id': league_id,
+            'candidates': [c.to_dict() for c in candidates],
+        })
+
+    @socketio.on('approve_helper_candidate')
+    def handle_approve_helper_candidate(data):
+        """data = { 'candidate_id': int }"""
+        from core.extensions import socketio as _sio
+        from core.managers import get_helper_relay_manager
+        try:
+            candidate = get_helper_relay_manager().approve_candidate(data.get('candidate_id'))
+            _sio.emit('helper_candidate_resolved', candidate.to_dict())
+        except ValueError as e:
+            _sio.emit('helper_candidate_error', {'error': str(e)})
+
+    @socketio.on('reject_helper_candidate')
+    def handle_reject_helper_candidate(data):
+        """data = { 'candidate_id': int, 'reason': str (opcjonalne) }"""
+        from core.extensions import socketio as _sio
+        from core.managers import get_helper_relay_manager
+        try:
+            candidate = get_helper_relay_manager().reject_candidate(
+                data.get('candidate_id'), reason=data.get('reason'))
+            _sio.emit('helper_candidate_resolved', candidate.to_dict())
+        except ValueError as e:
+            _sio.emit('helper_candidate_error', {'error': str(e)})
+
 
 def handle_ui_monitor_content(data, extra_handler=None):
     """

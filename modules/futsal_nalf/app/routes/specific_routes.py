@@ -414,7 +414,46 @@ def register_routes(app):
                                games=games,
                                stats=stats,
                                scraping_status=scraping_status)
-    
+
+    # =========================
+    # KANDYDACI ZGŁOSZEŃ OD POMOCNIKA (apka na Render — patrz docs/helper-app-design.md)
+    # =========================
+
+    @app.route('/leagues/<int:league_id>/helper-candidates')
+    def review_helper_candidates(league_id):
+        """Ekran przeglądu propozycji (nowych zdarzeń i korekt) zgłoszonych
+        przez pomocników, oczekujących na decyzję operatora."""
+        from core.managers import get_helper_relay_manager
+        league = league_manager.get_league_by_id(league_id)
+        if not league:
+            flash('Nie znaleziono ligi', 'error')
+            return redirect(url_for('list_leagues'))
+
+        candidates = get_helper_relay_manager().get_pending_candidates(league_id)
+        return render_template('games/helper_candidates.html', league=league, candidates=candidates)
+
+    @app.route('/helper-candidates/<int:candidate_id>/approve', methods=['POST'])
+    def approve_helper_candidate_route(candidate_id):
+        from core.managers import get_helper_relay_manager
+        league_id = request.form.get('league_id')
+        try:
+            get_helper_relay_manager().approve_candidate(candidate_id)
+            flash('Zatwierdzono zgłoszenie', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        return redirect(url_for('review_helper_candidates', league_id=league_id))
+
+    @app.route('/helper-candidates/<int:candidate_id>/reject', methods=['POST'])
+    def reject_helper_candidate_route(candidate_id):
+        from core.managers import get_helper_relay_manager
+        league_id = request.form.get('league_id')
+        try:
+            get_helper_relay_manager().reject_candidate(candidate_id, reason='odrzucone ręcznie przez operatora')
+            flash('Odrzucono zgłoszenie', 'success')
+        except ValueError as e:
+            flash(str(e), 'error')
+        return redirect(url_for('review_helper_candidates', league_id=league_id))
+
     @app.route('/api/player-game/<int:pg_id>', methods=['PATCH'])
     def api_patch_game_player(pg_id):
         """Update GamePlayer snapshot fields (number, is_goalkeeper, is_captain).

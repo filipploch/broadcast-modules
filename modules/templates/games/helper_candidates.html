@@ -1,0 +1,79 @@
+{% extends "base/base.html" %}
+{% block title %}Zgłoszenia pomocników — {{ league.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Zgłoszenia pomocników — {{ league.name }}</span>
+        <a href="{{ url_for('league_games', league_id=league.id) }}" class="btn btn-secondary">← Powrót do meczów</a>
+    </div>
+
+    <p style="padding:0 1rem;color:#6c757d;">
+        Propozycje zdarzeń i korekt zgłoszone przez pomocników (apka na Render) — patrz
+        <code>docs/helper-app-design.md</code>. Zgłoszenia identyczne z już zalogowanymi zdarzeniami są
+        odrzucane automatycznie i nie pojawiają się tutaj. Zatwierdzenie propozycji "nowe zdarzenie"
+        dopisuje je do meczu; zatwierdzenie "korekta" nadpisuje wskazane pole istniejącego zdarzenia.
+    </p>
+
+    {% if candidates %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mecz</th>
+                <th>Czas</th>
+                <th>Rodzaj</th>
+                <th>Propozycja</th>
+                <th>Zgłosili</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in candidates %}
+            <tr>
+                <td>
+                    {% if c.game %}
+                    {{ c.game.home_team.name if c.game.home_team else '?' }}
+                    vs {{ c.game.away_team.name if c.game.away_team else '?' }}
+                    {% else %}#{{ c.game_id }}{% endif %}
+                </td>
+                <td>{{ (c.elapsed_ms // 60000) }}:{{ '%02d' % ((c.elapsed_ms % 60000) // 1000) }}</td>
+                <td>
+                    {% if c.kind == 'correction' %}
+                    ✏️ korekta zdarzenia #{{ c.source_game_event_id }}
+                    {% else %}
+                    ➕ nowe zdarzenie
+                    {% endif %}
+                </td>
+                <td>
+                    {{ c.event.name if c.event else '—' }}
+                    {% if c.team %} · {{ c.team.name }}{% endif %}
+                    {% if c.player %} · {{ c.player.full_name }}{% endif %}
+                    {% if c.comment %}<br><small style="color:#6c757d;">{{ c.comment }}</small>{% endif %}
+                </td>
+                <td>
+                    {% for s in c.submissions %}
+                        {{ s.helper.display_name or s.helper.external_id if s.helper else '?' }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>
+                    <div class="actions" style="flex-direction:column;align-items:stretch;gap:.5rem;">
+                        <form method="POST" action="{{ url_for('approve_helper_candidate_route', candidate_id=c.id) }}">
+                            <input type="hidden" name="league_id" value="{{ league.id }}">
+                            <button type="submit" class="btn btn-success btn-small" style="width:100%;">✅ Zatwierdź</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('reject_helper_candidate_route', candidate_id=c.id) }}">
+                            <input type="hidden" name="league_id" value="{{ league.id }}">
+                            <button type="submit" class="btn btn-danger btn-small" style="width:100%;">✖ Odrzuć</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak oczekujących zgłoszeń.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

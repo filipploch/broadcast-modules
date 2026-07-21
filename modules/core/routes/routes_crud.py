@@ -553,6 +553,15 @@ def register_routes(app, exclude=None, team_manager=None):
             GameScraperSnapshot = get_game_scraper_snapshot_model()
             open_game_conflicts_count = len(GameScraperSnapshot.get_games_with_discrepancy(league_id))
 
+        # Propozycje od pomocników (apka na Render) oczekujące na decyzję —
+        # patrz docs/helper-app-design.md. Link pokazujemy zawsze (nie tylko
+        # gdy coś czeka), tak samo jak przy niespójnościach scraperów.
+        has_helper_candidates_review = bool(league_id) and 'review_helper_candidates' in current_app.view_functions
+        pending_helper_candidates_count = 0
+        if has_helper_candidates_review:
+            from core.managers import get_helper_relay_manager
+            pending_helper_candidates_count = len(get_helper_relay_manager().get_pending_candidates(league_id))
+
         # Scrapery meczów dostępne dla tej ligi (moduł obsługuje trasę I liga ma
         # skonfigurowane dane wymagane danemu scraperowi) — do rozwijanej listy
         # scraperów przy przycisku "Scrapuj mecze" (patrz scraper-cascade.js).
@@ -572,6 +581,8 @@ def register_routes(app, exclude=None, team_manager=None):
                             league=league,
                             has_game_conflicts_review=has_game_conflicts_review,
                             open_game_conflicts_count=open_game_conflicts_count,
+                            has_helper_candidates_review=has_helper_candidates_review,
+                            pending_helper_candidates_count=pending_helper_candidates_count,
                             has_malopolskizpn_games_scrape=has_malopolskizpn_games_scrape,
                             has_superscore_games_scrape=has_superscore_games_scrape)
 
