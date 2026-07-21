@@ -672,11 +672,35 @@ class TimerManager:
                 return
             gt.sync_from_plugin(elapsed_time_ms, state)
             db.session.commit()
+
+            # Log próbek TYLKO głównego timera okresu (nie kar) — do zamiany
+            # czasu meczowego na czas ścienny (patrz base_timer_sample.py).
+            if gt.timer_type == gt.TYPE_MAIN and gt.period_id:
+                self._maybe_record_timer_sample(gt.period_id, elapsed_time_ms, state)
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(
                 f'_sync_db_timer({plugin_timer_id}): {e}'
             )
+
+    # Minimalny odstęp między kolejnymi próbkami "running" tego samego okresu —
+    # zmiany stanu (start/pauza/wznów) logowane są zawsze, niezależnie od tego
+    # limitu, żeby granice pauz były dokładne.
+    _MIN_SAMPLE_INTERVAL_S = 2
+
+    def _maybe_record_timer_sample(self, period_id: int, elapsed_time_ms: int, state: str):
+        try:
+            from core.models.base_timer_sample import get_timer_sample_model
+            TimerSample = get_timer_sample_model()
+        except RuntimeError:
+            return  # moduł nie rejestruje tego modelu
+
+        last = TimerSample.last_for_period(period_id)
+        now = datetime.utcnow()
+        state_changed = last is None or last.state != state
+        interval_elapsed = last is None or (now - last.occurred_at).total_seconds() >= self._MIN_SAMPLE_INTERVAL_S
+        if state_changed or interval_elapsed:
+            TimerSample.record(period_id, elapsed_time_ms, state, occurred_at=now)
 
     @staticmethod
     def _get_penalties_dict(game_id: int) -> dict:

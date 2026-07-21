@@ -1014,3 +1014,22 @@ def register_routes(app):
         from flask import jsonify
         status = game_scraper_manager.get_scraping_status()
         return jsonify(status)
+
+    @app.route('/api/games/<int:game_id>/periods/<int:period_id>/locate-recording')
+    def api_locate_recording(game_id, period_id):
+        """API: dla wybranego czasu meczowego (elapsed_ms od początku okresu),
+        zwróć per kamera plik nagrania + offset w sekundach — patrz
+        RecordingLookupManager."""
+        from flask import jsonify
+        from core.managers.recording_lookup_manager import RecordingLookupManager
+
+        elapsed_ms = request.args.get('elapsed_ms', type=int)
+        if elapsed_ms is None:
+            return jsonify({'error': 'Wymagany parametr elapsed_ms'}), 400
+
+        try:
+            result = RecordingLookupManager().locate(game_id, period_id, elapsed_ms)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error locating recording: {e}", exc_info=True)
+            return jsonify({'error': str(e)}), 500

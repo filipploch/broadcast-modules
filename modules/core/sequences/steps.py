@@ -224,7 +224,18 @@ def show_transition(delay_ms: int = 0) -> dict:
 def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
     import datetime
     from core.models.base_game_camera import HDMI_TO_DEVICE
+    from core.models.base_settings import get_settings_model
     _cameras = cameras if cameras is not None else {d: False for d in HDMI_TO_DEVICE.values()}
+
+    # match_id/period_id — meczu/okresu aktualnie ustawionego jako transmitowany
+    # w chwili odpalenia komendy. Plugin wpisuje je do meta pliku i odsyła z
+    # powrotem w recording_started, żeby dało się zapisać camera_recording_segment
+    # przypisany do właściwego meczu/okresu (patrz recorder_manager.on_recording_started).
+    Settings = get_settings_model()
+    settings = Settings.get_settings()
+    match_id  = str(settings.current_game_id) if settings.current_game_id else None
+    period_id = str(settings.current_period_id) if settings.current_period_id else None
+
     return {
         "target": "broadcast",
         "action": "recording_command",
@@ -233,6 +244,8 @@ def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
             'requestData': {},
             'request_id':  f'my-unique-id-{datetime.datetime.now()}',
             'cameras': _cameras,
+            'match_id':  match_id,
+            'period_id': period_id,
         },
         "delay_ms": delay_ms
     }

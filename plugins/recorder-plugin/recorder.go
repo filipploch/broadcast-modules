@@ -175,6 +175,11 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 //   - the camera ID is unknown
 //   - recording is already active for that camera
 //   - the systemd service cannot be started
+//
+// On success, notifies main_module via notifyRecordingStarted() — this is
+// the only call site for StartRecord (including the crash auto-restart path
+// in handleUnexpectedStop), so it also covers "started recording again after
+// a crash" without any extra wiring there.
 func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) error {
 	rm.mu.RLock()
 	cam, ok := rm.cameras[cameraID]
@@ -184,10 +189,16 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 		return fmt.Errorf("unknown camera: %s", cameraID)
 	}
 
-	return cam.StartRecord(meta)
+	if err := cam.StartRecord(meta); err != nil {
+		return err
+	}
+
+	rm.notifyRecordingStarted(cam.LastMeta())
+	return nil
 }
 
 // StopRecord stops recording for the given camera.
+// On success, notifies main_module via notifyRecordingStopped().
 func (rm *RecorderManager) StopRecord(cameraID string) error {
 	rm.mu.RLock()
 	cam, ok := rm.cameras[cameraID]
@@ -197,7 +208,12 @@ func (rm *RecorderManager) StopRecord(cameraID string) error {
 		return fmt.Errorf("unknown camera: %s", cameraID)
 	}
 
-	return cam.StopRecord()
+	if err := cam.StopRecord(); err != nil {
+		return err
+	}
+
+	rm.notifyRecordingStopped(cameraID)
+	return nil
 }
 
 // StopAll stops recording on every active camera. Called on plugin shutdown.

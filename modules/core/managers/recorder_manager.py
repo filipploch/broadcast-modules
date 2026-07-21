@@ -190,10 +190,46 @@ class RecorderManager:
         return [cam.recorder_camera_id for cam in cameras if cam.recorder_camera_id]
     
     def on_recording_started(self, msg):
-        """Called by hub_client when recorder-plugin reports recording started for a camera."""
+        """Called by hub_client when recorder-plugin reports recording started for a camera.
+
+        Persists a camera_recording_segment (module-specific — silently
+        skipped for modules that don't register that model, e.g. futsal_nalf)
+        so a later "what was recording at match time T" lookup is possible.
+        started_at is stamped as datetime.utcnow() (server receipt time), not
+        parsed from the plugin's self-reported started_at — see
+        base_camera_recording_segment.py for why.
+        """
+        from datetime import datetime
         payload = msg.get('payload', {})
         camera_id = payload.get('camera_id')
         current_app.logger.info(f"▶️  Recording started: {camera_id} → {payload.get('file_name')}")
+
+        reported_started_at = None
+        started_at_ms = payload.get('started_at')
+        if started_at_ms:
+            try:
+                reported_started_at = datetime.utcfromtimestamp(int(started_at_ms) / 1000)
+            except (TypeError, ValueError):
+                current_app.logger.warning(f"recording_started: invalid started_at={started_at_ms!r}")
+
+        try:
+            from core.models.base_camera_recording_segment import get_camera_recording_segment_model
+            CameraRecordingSegment = get_camera_recording_segment_model()
+            match_id  = payload.get('match_id') or None
+            period_id = payload.get('period_id') or None
+            CameraRecordingSegment.start_segment(
+                recorder_camera_id=camera_id,
+                game_id=int(match_id) if match_id else None,
+                period_id=int(period_id) if period_id else None,
+                file_name=payload.get('file_name'),
+                file_path=payload.get('file_path'),
+                reported_started_at=reported_started_at,
+            )
+        except RuntimeError:
+            pass  # moduł nie rejestruje tego modelu — funkcja niedostępna, nic do zrobienia
+        except Exception as e:
+            current_app.logger.error(f"Failed to persist camera_recording_segment (start): {e}")
+
         self._emit_to_ui('recording_started', {
             'camera_id':   camera_id,
             'camera_name': payload.get('camera_name'),
@@ -202,16 +238,26 @@ class RecorderManager:
             'started_at':  payload.get('started_at'),
             'match_id':    payload.get('match_id'),
             'period_id':   payload.get('period_id'),
-        }, broadcast=True)
+        })
 
     def on_recording_stopped(self, msg):
         """Called by hub_client when recorder-plugin reports recording stopped for a camera."""
         payload = msg.get('payload', {})
         camera_id = payload.get('camera_id')
         current_app.logger.info(f"⏹️  Recording stopped: {camera_id}")
+
+        try:
+            from core.models.base_camera_recording_segment import get_camera_recording_segment_model
+            CameraRecordingSegment = get_camera_recording_segment_model()
+            CameraRecordingSegment.close_open_segment(camera_id)
+        except RuntimeError:
+            pass
+        except Exception as e:
+            current_app.logger.error(f"Failed to persist camera_recording_segment (stop): {e}")
+
         self._emit_to_ui('recording_stopped', {
             'camera_id': camera_id,
-        }, broadcast=True)
+        })
     
     def get_camera_status(self):
         """Get recording status"""
