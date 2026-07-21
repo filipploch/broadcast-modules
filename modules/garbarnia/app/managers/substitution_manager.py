@@ -112,6 +112,69 @@ class SubstitutionManager:
             substitution_group=group,
         )
 
+    # TODO(UI): brak jeszcze przycisku/formularza "Dodaj zmianę wstecznie" —
+    # analogiczne do GameEventManager.record_event_at_time(), gotowe do
+    # podpięcia pod przyszły formularz (okres + MM:SS -> para zawodników).
+    def make_substitution_at_time(
+        self,
+        game_id:            int,
+        team_id:            int,
+        player_in_id:       int,
+        player_out_id:      int,
+        period_id:          int,
+        event_time_delta_s: int,
+    ) -> Substitution:
+        """
+        Jak make_substitution(), ale dla WYBRANEGO, niekoniecznie bieżącego
+        okresu meczu ("wstecznie" — patrz GameEventManager.record_event_at_time,
+        ten sam wzorzec: period_id podawany jawnie zamiast odczytywany z
+        Settings.current_period_id, żeby dało się cofnąć do wcześniejszej
+        części meczu niż ta aktualnie trwająca).
+
+        Raises:
+            ValueError: podany okres nie istnieje/nie należy do meczu, albo
+                błąd walidacji pary zawodników (patrz _make_group)
+        """
+        group = self._next_group_number(game_id, team_id)
+        subs = self.make_substitution_group_at_time(
+            game_id=game_id,
+            team_id=team_id,
+            items=[SubstitutionItem(player_in_id, player_out_id)],
+            period_id=period_id,
+            event_time_delta_s=event_time_delta_s,
+        )
+        return subs[0]
+
+    def make_substitution_group_at_time(
+        self,
+        game_id:            int,
+        team_id:            int,
+        items:              List[SubstitutionItem],
+        period_id:          int,
+        event_time_delta_s: int,
+    ) -> List[Substitution]:
+        """Jak make_substitution_group(), ale dla WYBRANEGO okresu — patrz
+        make_substitution_at_time()."""
+        if not items:
+            raise ValueError("Lista zmian nie może być pusta")
+
+        from app.models.period import Period
+        period = Period.query.get(period_id)
+        if not period or period.game_id != game_id:
+            raise ValueError(f"Część o ID {period_id} nie istnieje lub nie należy do meczu {game_id}")
+
+        game_time_ms = period.initial_time + event_time_delta_s * 1000
+
+        group = self._next_group_number(game_id, team_id)
+        return self._make_group(
+            game_id=game_id,
+            team_id=team_id,
+            items=items,
+            game_time_ms=game_time_ms,
+            substitution_group=group,
+            period_id=period_id,
+        )
+
     # ── Wewnętrzna implementacja tworzenia ────────────────────────────────────
 
     def _make_group(
@@ -121,12 +184,17 @@ class SubstitutionManager:
         items:              List[SubstitutionItem],
         game_time_ms:       int,
         substitution_group: int,
+        period_id:          Optional[int] = None,
     ) -> List[Substitution]:
         """
         Wewnętrzna metoda: waliduj wszystkie pary, zapisz w jednej transakcji.
         Numer grupy jest przekazywany z zewnątrz — obliczony raz przed pętlą.
+
+        period_id: jawnie podany okres (mechanizm "wstecznie") albo None,
+        żeby odczytać bieżący z Settings.current_period_id (zwykły, żywy flow).
         """
-        period_id          = _current_period_id()
+        if period_id is None:
+            period_id = _current_period_id()
         role_after_exit    = ROLE_SUBSTITUTE if _return_changes_enabled() else ROLE_RETIRED
 
         # ── Walidacja wszystkich par przed jakimkolwiek zapisem ───────────────
