@@ -47,6 +47,9 @@
         {% if league.play_dictionary_id is defined %}
         <input type="hidden" name="play_dictionary_id" id="play_dictionary_id" value="{{ league.play_dictionary_id or '' }}">
         {% endif %}
+        {% if league.laczynaspilka_season_id is defined %}
+        <input type="hidden" name="laczynaspilka_season_id" id="laczynaspilka_season_id" value="{{ league.laczynaspilka_season_id or '' }}">
+        {% endif %}
         {% if league.superscore_season_id is defined %}
         <input type="hidden" name="superscore_season_id" id="superscore_season_id" value="{{ league.superscore_season_id or '' }}">
         {% endif %}
@@ -98,16 +101,31 @@
     </div>
     <div class="form-group" id="modal-play-dictionary-group" style="display:none;">
         <label for="modal_play_dictionary_id">Play Dictionary ID (laczynaspilka.pl)</label>
-        <input type="text" id="modal_play_dictionary_id" maxlength="100" placeholder="np. f40fdfb8-9104-4691-ad1d-099511583470">
+        <input type="text" id="modal_play_dictionary_id" maxlength="100" placeholder="np. f40fdfb8-9104-4691-ad1d-099511583470 — albo wklej URL rozgrywek">
         <small style="display:block;color:#6c757d;margin-top:.25rem;">
-            UUID sezonu rozgrywek z laczynaspilka.pl (parametr ?playDictionary= w URL). Wymagany do automatycznego scrapowania składów.
+            UUID rozgrywek z laczynaspilka.pl (parametr ?group= w URL, ten sam co ?playDictionary= na stronie drużyny). Wymagany do automatycznego scrapowania składów.
+        </small>
+        <label for="modal_laczynaspilka_season_id" style="margin-top:.75rem;">Season ID (laczynaspilka.pl)</label>
+        <input type="text" id="modal_laczynaspilka_season_id" maxlength="100" placeholder="np. 3c77d143-8010-4073-9842-d6b63365ffce — albo wklej URL rozgrywek">
+        <small style="display:block;color:#6c757d;margin-top:.25rem;">
+            UUID sezonu z laczynaspilka.pl (parametr ?season= w URL).
+        </small>
+        <small style="display:block;color:#6c757d;margin-top:.5rem;">
+            Można wkleić w dowolne z powyższych pól albo w Foreign ID cały adres listy rozgrywek
+            (https://www.laczynaspilka.pl/rozgrywki?season=...&amp;leagueId=...&amp;group=...) —
+            wszystkie trzy wartości (Play Dictionary ID, Season ID, Foreign ID) zostaną z niego wyprowadzone automatycznie.
         </small>
     </div>
     <div class="form-group" id="modal-superscore-season-group" style="display:none;">
         <label for="modal_superscore_season_id">Superscore Season ID</label>
-        <input type="text" id="modal_superscore_season_id" maxlength="100" placeholder="np. 4vDT5gZAVMkCxWuCYl8kzc">
+        <input type="text" id="modal_superscore_season_id" maxlength="100" placeholder="np. 4vDT5gZAVMkCxWuCYl8kzc — albo wklej URL ligi">
         <small style="display:block;color:#6c757d;margin-top:.25rem;">
             ID sezonu z superscore.live (parametr ?season-id= w API fixtures). Wymagany do scrapowania meczów i drużyn przez superscore.
+        </small>
+        <small style="display:block;color:#6c757d;margin-top:.5rem;">
+            Można wkleić tutaj albo w Foreign ID cały adres listy spotkań ligi
+            (https://superscore.live/{locale}/pilka-nozna/rozgrywki/{slug}/{hash}?season=...) —
+            oba pola zostaną z niego wyprowadzone automatycznie.
         </small>
     </div>
     <div class="form-group">
@@ -146,6 +164,7 @@
         if (folder === 'laczynaspilka') {
             playDictEl.style.display = 'block';
             document.getElementById('modal_play_dictionary_id').value = document.getElementById('play_dictionary_id').value;
+            document.getElementById('modal_laczynaspilka_season_id').value = document.getElementById('laczynaspilka_season_id').value;
         } else if (folder === 'superscore') {
             superscoreEl.style.display = 'block';
             document.getElementById('modal_superscore_season_id').value = document.getElementById('superscore_season_id').value;
@@ -164,25 +183,85 @@
     function saveScraperDataModal() {
         if (currentScraperId === null) return;
 
+        const payload = { scraper_id: currentScraperId };
+        let urls = null;
+
         if (currentScraperFolder === 'laczynaspilka') {
-            document.getElementById('play_dictionary_id').value = document.getElementById('modal_play_dictionary_id').value.trim();
+            // Każde z tych dwóch pól (i Foreign ID niżej) akceptuje albo gołe
+            // ID, albo cały URL listy rozgrywek na laczynaspilka.pl — backend
+            // rozpoznaje URL i sam wylicza wszystkie trzy wartości (patrz
+            // _resolve_laczynaspilka_league_fields w routes_crud.py).
+            payload.play_dictionary_id = document.getElementById('modal_play_dictionary_id').value.trim();
+            payload.laczynaspilka_season_id = document.getElementById('modal_laczynaspilka_season_id').value.trim();
         } else if (currentScraperFolder === 'superscore') {
-            document.getElementById('superscore_season_id').value = document.getElementById('modal_superscore_season_id').value.trim();
+            // Pole akceptuje albo gołe Season ID, albo cały URL ligi na
+            // superscore.live — backend rozpoznaje URL i sam wylicza oba pola
+            // (patrz _resolve_superscore_league_fields w routes_crud.py).
+            payload.superscore_season_id = document.getElementById('modal_superscore_season_id').value.trim();
         } else {
-            const entry = scraperData[currentScraperId] || {};
+            urls = {};
             URL_FIELD_IDS.forEach(function(field) {
-                entry[field] = document.getElementById('modal_' + field).value.trim();
+                urls[field] = document.getElementById('modal_' + field).value.trim();
             });
-            scraperData[currentScraperId] = entry;
+            payload.urls = urls;
         }
 
-        // Foreign ID jest niezależny od URL-i/play_dictionary_id/superscore_season_id —
-        // dotyczy każdego scrapera tak samo, więc zawsze ląduje w scraper_data.
-        const fidEntry = scraperData[currentScraperId] || {};
-        fidEntry.foreign_id = document.getElementById('modal_foreign_id').value.trim();
-        scraperData[currentScraperId] = fidEntry;
-        document.getElementById('scraper_data_input').value = JSON.stringify(scraperData);
-        closeModal();
+        // Foreign ID (akceptuje ten sam URL co superscore_season_id — patrz wyżej)
+        // jest niezależny od URL-i/play_dictionary_id/superscore_season_id —
+        // dotyczy każdego scrapera tak samo, więc zawsze ląduje w payload.
+        payload.foreign_id = document.getElementById('modal_foreign_id').value.trim();
+
+        const saveBtn = document.querySelector('#scraper-data-modal .btn-success');
+        const originalLabel = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Zapisywanie...';
+
+        fetch('/api/leagues/{{ league.id }}/scraper-data', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(res) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalLabel;
+            if (!res.ok) {
+                alert('Błąd zapisu: ' + (res.data.error || 'nieznany błąd'));
+                return;
+            }
+
+            // Backend mógł "rozwiązać" wklejony URL do konkretnych wartości —
+            // hidden inputy/scraperData synchronizujemy dopiero teraz, tym co
+            // faktycznie wylądowało w bazie, żeby ewentualny późniejszy submit
+            // całego formularza edycji ligi wysłał to samo (nie surowy URL).
+            if ('play_dictionary_id' in res.data) {
+                document.getElementById('play_dictionary_id').value = res.data.play_dictionary_id;
+            }
+            if ('laczynaspilka_season_id' in res.data) {
+                document.getElementById('laczynaspilka_season_id').value = res.data.laczynaspilka_season_id;
+            }
+            if ('superscore_season_id' in res.data) {
+                document.getElementById('superscore_season_id').value = res.data.superscore_season_id;
+            }
+            if (urls) {
+                const entry = scraperData[currentScraperId] || {};
+                Object.assign(entry, urls);
+                scraperData[currentScraperId] = entry;
+            }
+            if ('foreign_id' in res.data) {
+                const fidEntry = scraperData[currentScraperId] || {};
+                fidEntry.foreign_id = res.data.foreign_id;
+                scraperData[currentScraperId] = fidEntry;
+            }
+            document.getElementById('scraper_data_input').value = JSON.stringify(scraperData);
+
+            closeModal();
+        })
+        .catch(function() {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalLabel;
+            alert('Błąd połączenia podczas zapisu danych scrapera');
+        });
     }
 </script>
 {% endblock %}
