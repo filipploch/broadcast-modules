@@ -219,6 +219,15 @@ class PeriodManager:
         
         # If this is not the first period, handle penalty timers
         if period.period_order > 1:
+            # Zamiana stron drużyn — przy każdej kolejnej części (2., 3. itd.)
+            # drużyny zmieniają strony boiska, tak jak przy ręcznym kliknięciu
+            # przycisku odwrócenia tablicy (onReverseButtonClick w index.js).
+            settings = Settings.get_settings()
+            settings.is_scoreboard_reversed = not settings.is_scoreboard_reversed
+            db.session.commit()
+            from core.extensions import socketio
+            socketio.emit('scoreboard_reversed', {'is_reversed': settings.is_scoreboard_reversed})
+
             from core.models.base_game_timer import get_game_timer_model
             GameTimer = get_game_timer_model()
 
