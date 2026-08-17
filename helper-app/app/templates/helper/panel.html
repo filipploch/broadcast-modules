@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Panel pomocnika{% endblock %}
+{% block content %}
+<h1>Zgłoś zdarzenie</h1>
+
+<div class="card muted">
+    <p>
+        Szkic UI — ten formularz jeszcze nie wysyła zgłoszeń do modułu
+        głównego (brak podłączonego połączenia HelperRelay). Zobacz TODO
+        w <code>app/routes/helper.py</code>.
+    </p>
+</div>
+
+<div class="card">
+    <form method="post" action="{{ url_for('helper.submit_event') }}">
+        <label>Typ zdarzenia
+            <select name="event_type" required>
+                {% for et in event_types %}
+                <option value="{{ et.id }}">{{ et.label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>Drużyna
+            <select name="team" required>
+                {% for team in teams %}
+                <option value="{{ team.id }}">{{ team.label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>Komentarz (opcjonalnie)
+            <input type="text" name="comment" placeholder="np. nr 9, główka">
+        </label>
+
+        <button type="submit" class="btn btn-primary">Zgłoś</button>
+    </form>
+</div>
+{% endblock %}

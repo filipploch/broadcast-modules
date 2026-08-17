@@ -12,6 +12,7 @@
 **/static/images/logos/*
 !**/static/images/logos/default.png
 *.md
+!helper-app/**/*.md
 *.exe*
 *.*~
 *.sqbpro

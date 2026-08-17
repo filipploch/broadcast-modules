@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Panel admina{% endblock %}
+{% block content %}
+<h1>Pomocnicy</h1>
+
+<div class="card">
+    <h2>Dodaj pomocnika</h2>
+    <form method="post" action="{{ url_for('admin.create_helper') }}" class="inline-form">
+        <input type="text" name="username" placeholder="login (np. kuba_kamera2)" required>
+        <input type="text" name="display_name" placeholder="nazwa wyświetlana (opcjonalnie)">
+        <button type="submit" class="btn btn-primary">Utwórz</button>
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Login</th>
+                <th>Nazwa</th>
+                <th>Status</th>
+                <th>Ostatnie logowanie</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for helper in helpers %}
+            <tr>
+                <td>{{ helper.username }}</td>
+                <td>{{ helper.display_name }}</td>
+                <td>{{ 'aktywny' if helper.active else 'wyłączony' }}</td>
+                <td>{{ helper.last_login_at.strftime('%Y-%m-%d %H:%M') if helper.last_login_at else '—' }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('admin.toggle_helper_active', helper_id=helper.id) }}">
+                        <button type="submit" class="btn btn-secondary btn-small">
+                            {{ 'Wyłącz' if helper.active else 'Włącz' }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">Brak pomocników — dodaj pierwszego powyżej.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card muted">
+    <h2>Połączenie z modułem głównym</h2>
+    <p>
+        TODO: status połączenia WSS (HelperRelay) — jeszcze niepodłączone
+        w tym szkicu. Zobacz <code>docs/helper-app-design.md</code>
+        w repo modułu głównego.
+    </p>
+</div>
+{% endblock %}

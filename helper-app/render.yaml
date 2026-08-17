@@ -1,0 +1,36 @@
+# Render Blueprint — patrz https://render.com/docs/blueprint-spec
+#
+# Zamiast tego pliku można też skonfigurować serwis ręcznie w dashboardzie
+# Render, ustawiając "Root Directory" na `helper-app`. Ten plik jest
+# opcjonalny, ale pozwala odtworzyć konfigurację jednym kliknięciem
+# ("New > Blueprint" w Render, wskazując ten branch/repo).
+#
+# UWAGA: darmowy plan PostgreSQL na Render bywa czasowy (baza wygasa po
+# pewnym czasie nieużywania) — sprawdź aktualny cennik/regulamin przed
+# oparciem na nim produkcji.
+
+databases:
+  - name: helper-app-db
+    plan: free
+    databaseName: helper_app
+    user: helper_app
+
+services:
+  - type: web
+    name: helper-app
+    runtime: python
+    rootDir: helper-app
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: helper-app-db
+          property: connectionString
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
