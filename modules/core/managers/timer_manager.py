@@ -673,6 +673,20 @@ class TimerManager:
             gt.sync_from_plugin(elapsed_time_ms, state)
             db.session.commit()
 
+            # Start głównego timera okresu = faktyczne rozpoczęcie tej części
+            # meczu. Okres mógł zostać ustawiony jako current_period_id (np.
+            # przy wyborze meczu do transmisji) bez przejścia przez
+            # PeriodManager.start_period(), więc jego status w bazie wciąż
+            # jest NOT_STARTED — dociągamy go tutaj do PENDING.
+            if (gt.timer_type == gt.TYPE_MAIN and gt.period_id
+                    and state == gt.STATE_RUNNING):
+                from core.models.base_period import get_period_model
+                Period = get_period_model()
+                period = Period.query.get(gt.period_id)
+                if period and period.status == Period.STATUS_NOT_STARTED:
+                    period.status = Period.STATUS_PENDING
+                    db.session.commit()
+
             # Log próbek TYLKO głównego timera okresu (nie kar) — do zamiany
             # czasu meczowego na czas ścienny (patrz base_timer_sample.py).
             if gt.timer_type == gt.TYPE_MAIN and gt.period_id:
