@@ -46,10 +46,15 @@ function renderScoreboard(){
     const addedTimeDisplay = document.createElement('div');
     addedTimeDisplay.id = 'added-time-display';
     addedTimeDisplay.classList.add('added-time-display', 'position-absolute');
+    const addedTimeCounter = document.createElement('div');
+    addedTimeCounter.id = 'added-time-counter';
+    addedTimeCounter.classList.add('added-time-counter');
+    addedTimeCounter.innerText = `00:00`;
     const addedTimeLabel = document.createElement('div');
     addedTimeLabel.id = 'added-time-label';
     addedTimeLabel.classList.add('added-time-label');
-    addedTimeLabel.innerText = `+5'`;
+    addedTimeLabel.innerText = '';
+    addedTimeDisplay.appendChild(addedTimeCounter);
     addedTimeDisplay.appendChild(addedTimeLabel);
     mainScoreboardContainer.appendChild(addedTimeDisplay);
     const redCardsContainer = document.createElement('div');

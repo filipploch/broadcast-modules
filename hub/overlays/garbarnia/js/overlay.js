@@ -8,6 +8,7 @@ const display = document.getElementById('main-timer-display');
 
 let registered = false;
 let currentAddedTime = 0;
+let addedTimeCounterActive = false;
 
 var homeTeamScoreElement = document.getElementById('home-team-score');
 var awayTeamScoreElement = document.getElementById('away-team-score');
@@ -153,11 +154,11 @@ function openGameContainer(container) {
 
     const addedTimeDisplay = document.getElementById('added-time-display');
     const addedTimeLabel = document.getElementById('added-time-label');
-    addedTimeLabel.innerText = `+${currentAddedTime}'`;
+    addedTimeLabel.innerText = currentAddedTime > 0 ? `+${currentAddedTime}'` : '';
     addedTimeDisplay.style.animation = 'none';
     addedTimeDisplay.offsetHeight;
-    addedTimeDisplay.style.transform = currentAddedTime > 0 ? 'translateX(0)' : 'translateX(-80px)';
-
+    // addedTimeDisplay.style.transform = addedTimeCounterActive ? 'translateX(0)' : 'translateX(-80px)';
+    addedTimeDisplay.style.transform = addedTimeCounterActive ? 'translateX(170px)' : 'translateX(-15px)';
     let scoreboardContainer = document.getElementById('scoreboard-container');
     scoreboardContainer.style.animation = null;
     scoreboardContainer.style.animation = 'scoreboardSlideIn 500ms ease-in-out 300ms both';
@@ -1912,11 +1913,31 @@ ws.onmessage = (event) => {
 
         if (data.elapsed_time === undefined) {
             display.textContent = '';
+            // remove_timer (koniec/zmiana części) wysyła "timer_updated" bez elapsed_time —
+            // to sygnał, że stary main timer przestał istnieć, więc doliczony czas
+            // poprzedniej części trzeba schować od razu, a nie dopiero po pierwszym
+            // ticku nowej części (inaczej wisi na ekranie do startu odliczania).
+            // Kary (timer_id zaczynające się od "penalty_") są tu pomijane — ich
+            // usunięcie nie powinno wpływać na wyświetlanie doliczonego czasu gry.
+            if (!(data.timer_id && data.timer_id.startsWith('penalty_'))) {
+                updateAddedTimeCounter(null);
+            }
         } else {
-            // Aktualizuj wyświetlanie głównego zegara
-            display.textContent = FutsalFormatters.formatElapsedTime(
-                data.elapsed_time, data.initial_time
-            );
+            // limit dotyczy elapsed_time tej części (bez initial_time — patrz plugin.go)
+            const limit = data.limit;
+            const isOvertime = typeof limit === 'number' && limit > 0 && data.elapsed_time >= limit;
+
+            if (isOvertime) {
+                // Główny zegar zamraża się na wartości limitu, doliczony czas idzie od 00:00
+                display.textContent = FutsalFormatters.formatElapsedTime(limit, data.initial_time);
+                updateAddedTimeCounter(data.elapsed_time - limit);
+            } else {
+                // Aktualizuj wyświetlanie głównego zegara
+                display.textContent = FutsalFormatters.formatElapsedTime(
+                    data.elapsed_time, data.initial_time
+                );
+                updateAddedTimeCounter(null);
+            }
 
             // Cache ostatniego elapsed — potrzebny przy rehydratacji po reload
             window._lastMainElapsed = data.elapsed_time;
@@ -2115,20 +2136,34 @@ ws.onmessage = (event) => {
 }
 
 function showAddedTime(added_time) {
-    const addedTimeDisplay = document.getElementById('added-time-display');
+    // Sam label tylko aktualizuje treść — pokazanie/schowanie #added-time-display
+    // steruje teraz updateAddedTimeCounter() w momencie startu/końca doliczonego czasu.
     const addedTimeLabel = document.getElementById('added-time-label');
-
     addedTimeLabel.innerText = added_time > 0 ? `+${added_time}'` : '';
+    currentAddedTime = added_time;
+}
 
-    if (currentAddedTime === 0 && added_time > 0) {
+function updateAddedTimeCounter(overtimeMs) {
+    const addedTimeDisplay = document.getElementById('added-time-display');
+    const addedTimeCounter = document.getElementById('added-time-counter');
+
+    if (overtimeMs === null) {
+        addedTimeCounter.innerText = FutsalFormatters.formatElapsedTime(0, 0, { format: 'mm:ss' });
+        if (addedTimeCounterActive) {
+            addedTimeCounterActive = false;
+            addedTimeDisplay.style.animation = 'none';
+            addedTimeDisplay.offsetHeight;
+            addedTimeDisplay.style.animation = 'addedTimeSlideOut 500ms ease-in-out both';
+        }
+        return;
+    }
+
+    addedTimeCounter.innerText = FutsalFormatters.formatElapsedTime(overtimeMs, 0, { format: 'mm:ss' });
+
+    if (!addedTimeCounterActive) {
+        addedTimeCounterActive = true;
         addedTimeDisplay.style.animation = 'none';
         addedTimeDisplay.offsetHeight;
         addedTimeDisplay.style.animation = 'addedTimeSlideIn 500ms ease-in-out both';
-    } else if (currentAddedTime > 0 && added_time === 0) {
-        addedTimeDisplay.style.animation = 'none';
-        addedTimeDisplay.offsetHeight;
-        addedTimeDisplay.style.animation = 'addedTimeSlideOut 500ms ease-in-out both';
     }
-
-    currentAddedTime = added_time;
 }

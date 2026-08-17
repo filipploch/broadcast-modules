@@ -242,29 +242,39 @@
 }
 
 #added-time-display {
-    right: 0;
+    right: 50px;
     top: 0;
     background-image: url('../img/added-time-background.png');
-    width: 505px;
+    width: 500px;
     height: 100%;
     z-index: -1;
     background-repeat: no-repeat;
-    /*! text-align: right; */
     color: white;
     display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 20px;
+    gap: 10px;
+}
+
+#added-time-counter {
+    font-size: 30px;
+    font-weight: 600;
+    text-shadow: 2px 2px 4px rgb(17, 14, 22);
+    text-align: right;
+    width: 80px;
 }
 
 #added-time-label {
-    position: absolute;
-    right: 20px;
-    align-self: center;
     font-size: 30px;
-    width: 80px;
+    text-align: center;
+    width: 65px;
+    padding-right: 18px;
 }
 
 @keyframes scoreboardSlideIn {
     0% {
-        left: -600px;
+        left: -700px;
     }
     100% {
         left: 0;
@@ -272,11 +282,11 @@
 }
 
 @keyframes addedTimeSlideIn {
-    0%   { transform: translateX(-80px); }
-    100% { transform: translateX(0); }
+    0%   { transform: translateX(-15px); }
+    100% { transform: translateX(160px); }
 }
 
 @keyframes addedTimeSlideOut {
-    0%   { transform: translateX(0); }
-    100% { transform: translateX(-80px); }
+    0%   { transform: translateX(160px); }
+    100% { transform: translateX(-15px); }
 }
