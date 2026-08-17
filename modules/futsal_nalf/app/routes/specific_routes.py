@@ -15,7 +15,6 @@ from app.managers import (
     GamePlayerManager, PlayerManager, PlayerScraperManager,
     StadiumManager, EventManager,
 )
-from app.models.period import Period
 from app.models.settings import Settings
 from app.models.scraper import Scraper
 import logging
@@ -364,7 +363,6 @@ def register_routes(app):
         """Game setup page — manage periods, squads, referees, cameras."""
         from app.models.settings import Settings
         from app.models.game import Game
-        from app.models.period import Period
         # from app.managers.game_player_manager import GamePlayerManager
         # from core.managers.game_referee_manager import GameRefereeManager
         # from core.managers.game_commentator_manager import GameCommentatorManager
@@ -373,8 +371,6 @@ def register_routes(app):
         settings = Settings.get_settings()
 
         game     = None
-        periods  = []
-        shootout = None
         assigned = {
             'home_squad':   [],
             'away_squad':   [],
@@ -386,9 +382,6 @@ def register_routes(app):
         if settings.current_game_id:
             game = Game.query.get(settings.current_game_id)
             if game:
-                periods  = Period.query.filter_by(game_id=game.id).all()
-                shootout = game.shootout
-
                 pg_mgr = GamePlayerManager()
                 assigned['home_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
                 assigned['away_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
@@ -398,9 +391,6 @@ def register_routes(app):
 
         return render_template('game-setup.html',
                             game=game,
-                            periods=periods,
-                            shootout=shootout,
-                            settings=settings,
                             assigned=assigned)
     
     @app.route('/games/')

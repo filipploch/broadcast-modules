@@ -59,6 +59,7 @@ def create_app(config_name='default'):
                          if settings.current_season_id else None
                 return {
                     'broadcast_game_id':  settings.current_game_id,
+                    'current_period_id':  settings.current_period_id,
                     'season':             season,
                     'module_name':        app.config.get('MODULE_NAME', ''),
                     'timer_desc':         app.config.get('TIMER_DESC', False),
@@ -67,6 +68,7 @@ def create_app(config_name='default'):
             except Exception:
                 return {
                     'broadcast_game_id':  None,
+                    'current_period_id':  None,
                     'season':             None,
                     'module_name':        app.config.get('MODULE_NAME', ''),
                     'has_penalty_timers': app.config.get('HAS_PENALTY_TIMERS', False),

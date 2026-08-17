@@ -18,7 +18,6 @@ from app.managers import (
 # from app.managers.game_scraper_manager import GameScraperManager
 # from app.managers.team_scraper_manager import TeamScraperManager
 # from app.managers.player_scraper_manager import PlayerScraperManager
-from app.models.period import Period
 from app.models.settings import Settings
 from app.models.scraper import Scraper
 import logging
@@ -806,7 +805,6 @@ def register_routes(app):
         """Game setup page — manage periods, squads, referees, cameras."""
         from app.models.settings import Settings
         from app.models.game import Game
-        from app.models.period import Period
         # from app.managers.game_player_manager import GamePlayerManager
         # from core.managers.game_referee_manager import GameRefereeManager
         # from core.managers.game_commentator_manager import GameCommentatorManager
@@ -815,8 +813,6 @@ def register_routes(app):
         settings = Settings.get_settings()
 
         game     = None
-        periods  = []
-        shootout = None
         assigned = {
             'home_squad':   [],
             'away_squad':   [],
@@ -828,9 +824,6 @@ def register_routes(app):
         if settings.current_game_id:
             game = Game.query.get(settings.current_game_id)
             if game:
-                periods  = Period.query.filter_by(game_id=game.id).all()
-                shootout = game.shootout
-
                 pg_mgr = GamePlayerManager()
                 assigned['home_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.home_team_id)
                 assigned['away_squad']   = pg_mgr.get_players_for_game(game.id, team_id=game.away_team_id)
@@ -838,14 +831,9 @@ def register_routes(app):
                 assigned['commentators'] = GameCommentatorManager().get_commentators_for_game(game.id)
                 assigned['cameras']      = GameCameraManager().get_cameras_for_game(game.id)
 
-        in_frame = request.args.get('in_frame', '0') == '1'
         return render_template('game-setup.html',
                             game=game,
-                            periods=periods,
-                            shootout=shootout,
-                            settings=settings,
-                            assigned=assigned,
-                            in_frame=in_frame)
+                            assigned=assigned)
     
     @app.route('/games/')
     def list_games():
