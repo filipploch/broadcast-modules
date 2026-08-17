@@ -1211,6 +1211,17 @@ def register_routes(app, exclude=None, team_manager=None):
         flash('Zawodnik usunięty', 'success')
         return redirect(url_for('list_players', team_id=team_id))
 
+    @app.route('/players/<int:player_id>/remove-from-team', methods=['POST'])
+    def remove_player_from_team_route(player_id):
+        player = _player_manager.get_player_by_id(player_id)
+        if not player:
+            flash('Nie znaleziono zawodnika', 'error')
+            return redirect(url_for('list_games'))
+        team_id = player.team_id
+        _player_manager.remove_player_from_team(player_id)
+        flash('Zawodnik usunięty z drużyny', 'success')
+        return redirect(url_for('list_players', team_id=team_id))
+
     @app.route('/api/teams/<int:team_id>/players', methods=['POST'])
     def api_create_player(team_id):
         data = request.get_json() or {}
