@@ -1,0 +1,69 @@
+{% extends "base/base.html" %}
+{% block title %}Podgląd propozycji składu{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>
+            Propozycja składu — {{ proposal.team.name if proposal.team else '#' ~ proposal.team_id }}
+            {% if proposal.game %}
+            ({{ proposal.game.home_team.name if proposal.game.home_team else '?' }}
+             vs {{ proposal.game.away_team.name if proposal.game.away_team else '?' }})
+            {% endif %}
+        </span>
+        <a href="{{ url_for('list_squad_proposals') }}" class="btn btn-secondary">← Powrót do listy</a>
+    </div>
+
+    <p style="padding:0 1rem;color:#6c757d;">
+        Zgłosił: {{ proposal.helper.display_name or proposal.helper.external_id if proposal.helper else '—' }}
+        · Wysłano: {{ proposal.submitted_at.strftime('%Y-%m-%d %H:%M') if proposal.submitted_at else '—' }}
+    </p>
+
+    {% if proposal.coach_name and proposal.coach_name != current_coach %}
+    <div style="padding:.75rem 1rem;margin:0 1rem 1rem;background:#fff3cd;border-radius:4px;">
+        <strong>Trener:</strong> aktualnie <em>{{ current_coach or '—' }}</em>
+        → propozycja <strong>{{ proposal.coach_name }}</strong>
+    </div>
+    {% elif proposal.coach_name %}
+    <div style="padding:.75rem 1rem;margin:0 1rem 1rem;color:#6c757d;">
+        Trener: <strong>{{ proposal.coach_name }}</strong> (bez zmian względem aktualnego)
+    </div>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>Zawodnik</th>
+                <th>Aktualnie w meczu</th>
+                <th>Propozycja pomocnika</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr {% if row.changed %}style="background:#fff3cd;"{% endif %}>
+                <td>{{ row.player.last_name }} {{ row.player.first_name }}</td>
+                <td>
+                    {% if row.current_role == 'starter' %}Skład wyjściowy
+                    {% elif row.current_role == 'substitute' %}Rezerwa
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if row.proposed_role == 'starter' %}<strong>Skład wyjściowy</strong>
+                    {% elif row.proposed_role == 'substitute' %}<strong>Rezerwa</strong>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="actions" style="padding:1rem;gap:1rem;">
+        <form method="POST" action="{{ url_for('apply_squad_proposal', proposal_id=proposal.id) }}"
+              onsubmit="return confirm('Zastąpić skład meczu tą propozycją? Ręczne zmiany zrobione po wysłaniu kadry zostaną nadpisane.');">
+            <button type="submit" class="btn btn-success">✅ Zastosuj</button>
+        </form>
+        <form method="POST" action="{{ url_for('reject_squad_proposal', proposal_id=proposal.id) }}">
+            <button type="submit" class="btn btn-danger">✖ Odrzuć</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

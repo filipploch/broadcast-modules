@@ -46,6 +46,7 @@ body {
 
 .card.muted { color: var(--muted); font-size: .9rem; }
 .card h2 { margin-top: 0; font-size: 1.05rem; }
+.muted { color: var(--muted); }
 
 label {
     display: block;

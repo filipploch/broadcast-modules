@@ -53,6 +53,14 @@ class Config:
     HELPER_RELAY_PING_INTERVAL_S = 300
     HELPER_MATCH_TOLERANCE_S = 8
 
+    # Lekki kanał REST do Helper App (osobny od HELPER_RELAY_* powyżej,
+    # który jest zarezerwowany dla przyszłego WSS relay). Używany dziś tylko
+    # przez funkcję "skład + trener" — moduł główny zawsze dzwoni wychodząco
+    # (POST push kadry / GET pull propozycji), Render nigdy nie łączy się
+    # do modułu głównego (ten jest za NAT-em).
+    HELPER_APP_BASE_URL = os.environ.get('HELPER_APP_BASE_URL') or 'http://localhost:5001'
+    HELPER_APP_REST_TOKEN = os.environ.get('HELPER_APP_REST_TOKEN') or ''
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

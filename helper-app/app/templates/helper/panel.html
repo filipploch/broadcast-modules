@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Panel pomocnika{% endblock %}
 {% block content %}
+<h1>Panel pomocnika</h1>
+
+<div class="card">
+    <h2>Skład meczowy</h2>
+    <p class="muted" style="margin:0 0 .75rem;">
+        Wyjściowa jedenastka, rezerwa i trener — na podstawie kadry wysłanej
+        przez moduł główny.
+    </p>
+    <a href="{{ url_for('helper.squad_list') }}" class="btn btn-primary">Ustaw skład meczowy</a>
+</div>
+
 <h1>Zgłoś zdarzenie</h1>
 
 <div class="card muted">

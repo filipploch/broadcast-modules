@@ -34,6 +34,7 @@ from app.models.game_event import GameEvent
 from app.models.helper import Helper
 from app.models.helper_event_candidate import HelperEventCandidate
 from app.models.helper_event_submission import HelperEventSubmission
+from app.models.helper_squad_proposal import HelperSquadProposal
 from app.models.commentator import Commentator
 from app.models.game_commentator import GameCommentator
 from app.models.game_referee import GameReferee

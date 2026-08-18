@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Skład meczowy{% endblock %}
+{% block content %}
+<h1>Skład meczowy</h1>
+
+{% if pushes %}
+    {% for p in pushes %}
+    <div class="card">
+        <h2>{{ p.team_label or ('Drużyna #' ~ p.team_id) }}</h2>
+        <p class="muted" style="margin:0 0 .75rem;">
+            {{ p.players|length }} zawodników w kadrze
+            {% if p.coach_name %} · trener: {{ p.coach_name }}{% endif %}
+            · otrzymano {{ p.received_at.strftime('%Y-%m-%d %H:%M') if p.received_at else '—' }}
+        </p>
+        <a href="{{ url_for('helper.squad_assign', squad_push_id=p.id) }}" class="btn btn-primary">Otwórz</a>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="card muted">
+    <p>Brak kadr do przypisania. Poczekaj, aż moduł główny wyśle skład drużyny.</p>
+</div>
+{% endif %}
+{% endblock %}

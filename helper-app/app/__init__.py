@@ -23,9 +23,11 @@ def create_app(config_class=Config):
     from .routes.admin import admin_bp
     from .routes.auth import auth_bp
     from .routes.helper import helper_bp
+    from .routes.relay import relay_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(helper_bp)
+    app.register_blueprint(relay_bp)
 
     with app.app_context():
         db.create_all()

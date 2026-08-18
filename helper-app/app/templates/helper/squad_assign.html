@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Skład: {{ squad_push.team_label or squad_push.team_id }}{% endblock %}
+{% block content %}
+<h1>{{ squad_push.team_label or ('Drużyna #' ~ squad_push.team_id) }}</h1>
+
+<a href="{{ url_for('helper.squad_list') }}" class="btn btn-secondary btn-small">← Powrót do listy</a>
+
+{% if squad_push.status != 'open' %}
+<div class="card" style="background:#d1e7dd;border-color:#a3cfbb;margin-top:1rem;">
+    <p style="margin:0;">
+        ✅ Wysłano do modułu głównego
+        {{ squad_push.submitted_at.strftime('%Y-%m-%d %H:%M') if squad_push.submitted_at else '' }}
+        — czeka na przegląd operatora. Edycja zablokowana.
+    </p>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:1rem;">
+    <form method="post" action="{{ url_for('helper.squad_save', squad_push_id=squad_push.id) }}">
+        <h2>Trener</h2>
+        <label>Nazwisko trenera
+            <input type="text" name="coach_name" value="{{ squad_push.coach_name or '' }}"
+                   {{ 'disabled' if squad_push.status != 'open' else '' }}>
+        </label>
+
+        <h2 style="margin-top:1rem;">
+            Zawodnicy <span id="starters-count" class="muted"></span>
+        </h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nr</th>
+                    <th>Zawodnik</th>
+                    <th>Rola</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sp in squad_push.players %}
+                <tr>
+                    <td>{{ sp.number or '—' }}</td>
+                    <td>{{ sp.last_name }} {{ sp.first_name }}{% if sp.is_goalkeeper %} (B){% endif %}</td>
+                    <td>
+                        <select name="role_{{ sp.id }}" class="role-select"
+                                {{ 'disabled' if squad_push.status != 'open' else '' }}>
+                            <option value="none" {{ 'selected' if sp.role == 'none' else '' }}>—</option>
+                            <option value="starter" {{ 'selected' if sp.role == 'starter' else '' }}>Skład wyjściowy</option>
+                            <option value="substitute" {{ 'selected' if sp.role == 'substitute' else '' }}>Rezerwa</option>
+                        </select>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if squad_push.status == 'open' %}
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">Zapisz zmiany</button>
+        {% endif %}
+    </form>
+</div>
+
+{% if squad_push.status == 'open' %}
+<div class="card">
+    <form method="post" action="{{ url_for('helper.squad_submit', squad_push_id=squad_push.id) }}"
+          onsubmit="return confirm('Wysłać skład do modułu głównego? Nie będzie można go już edytować.');">
+        <button type="submit" class="btn btn-success">Wyślij do modułu głównego</button>
+    </form>
+</div>
+{% endif %}
+
+<script>
+function updateStartersCount() {
+    var selects = document.querySelectorAll('.role-select');
+    var count = 0;
+    selects.forEach(function (s) { if (s.value === 'starter') count++; });
+    var el = document.getElementById('starters-count');
+    if (el) {
+        el.textContent = '(' + count + '/11 w składzie wyjściowym)';
+        el.style.color = count > 11 ? '#dc3545' : '';
+    }
+}
+document.querySelectorAll('.role-select').forEach(function (s) {
+    s.addEventListener('change', updateStartersCount);
+});
+updateStartersCount();
+</script>
+{% endblock %}

@@ -80,7 +80,30 @@
             </button>
             {% endfor %}
 
-    
+            {% if module_name == 'garbarnia' %}
+            <!-- Skład + trener od pomocnika (Helper App, lekki kanał REST) -->
+            <div style="border-top:1px solid #dee2e6;margin-top:.3rem;padding-top:.5rem;display:flex;flex-direction:column;gap:.3rem;">
+                <form method="POST" action="{{ url_for('push_squad_to_helper', team_id=game.home_team_id) }}">
+                    <button type="submit" class="btn btn-secondary btn-small" style="width:100%;text-align:left;">
+                        📤 Kadra do pomocnika: {{ game.home_team.short_name }}
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('push_squad_to_helper', team_id=game.away_team_id) }}">
+                    <button type="submit" class="btn btn-secondary btn-small" style="width:100%;text-align:left;">
+                        📤 Kadra do pomocnika: {{ game.away_team.short_name }}
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('fetch_squad_proposals') }}">
+                    <button type="submit" class="btn btn-secondary btn-small" style="width:100%;text-align:left;">
+                        📥 Sprawdź propozycje od pomocnika
+                    </button>
+                </form>
+                <a href="{{ url_for('list_squad_proposals') }}" class="btn btn-secondary btn-small" style="width:100%;text-align:left;">
+                    📋 Lista propozycji
+                </a>
+            </div>
+            {% endif %}
+
     {% endif %}
 </div>
 

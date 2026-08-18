@@ -15,3 +15,9 @@ class Config:
         os.environ.get('DATABASE_URL', 'sqlite:///helper_app.db')
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Token dla lekkiego kanału REST wywoływanego wychodząco przez moduł
+    # główny (POST push kadry, GET pull propozycji) — osobny od
+    # HELPER_RELAY_TOKEN, zarezerwowanego po stronie modułu głównego dla
+    # przyszłego WSS relay.
+    REST_TOKEN = os.environ.get('HELPER_APP_REST_TOKEN', '')

@@ -573,6 +573,136 @@ def register_routes(app):
         return redirect(url_for('review_helper_candidates', league_id=league_id))
 
     # =========================
+    # SKŁAD + TRENER OD POMOCNIKA (lekki kanał REST, nie WSS relay — patrz
+    # app/managers/helper_squad_client.py)
+    # =========================
+
+    @app.route('/helper-squad/push/<int:team_id>', methods=['POST'])
+    def push_squad_to_helper(team_id):
+        """Wysyła kadrę drużyny (+ aktualnego trenera) do Helper App."""
+        from app.managers.helper_squad_client import HelperSquadClient
+
+        settings = Settings.get_settings()
+        if not settings.current_game_id:
+            flash('Brak wybranego meczu', 'error')
+            return redirect(url_for('game_setup'))
+
+        ok, message = HelperSquadClient().push_squad(settings.current_game_id, team_id)
+        flash(message, 'success' if ok else 'error')
+        return redirect(url_for('game_setup'))
+
+    @app.route('/helper-squad/fetch', methods=['POST'])
+    def fetch_squad_proposals():
+        """Pociąga (GET) nowe propozycje składu/trenera od pomocników."""
+        from app.managers.helper_squad_client import HelperSquadClient
+
+        ok, message, _new_count = HelperSquadClient().fetch_proposals()
+        flash(message, 'success' if ok else 'error')
+        return redirect(url_for('list_squad_proposals'))
+
+    @app.route('/helper-squad/proposals')
+    def list_squad_proposals():
+        """Lista propozycji składu/trenera oczekujących na decyzję operatora."""
+        from app.models.helper_squad_proposal import HelperSquadProposal, STATUS_PENDING
+
+        proposals = (HelperSquadProposal.query
+                     .filter_by(status=STATUS_PENDING)
+                     .order_by(HelperSquadProposal.submitted_at.desc())
+                     .all())
+        return render_template('games/helper_squad_proposals.html', proposals=proposals)
+
+    @app.route('/helper-squad/proposals/<int:proposal_id>')
+    def view_squad_proposal(proposal_id):
+        """Widok diff: aktualny skład meczu vs propozycja pomocnika — operator
+        musi zobaczyć różnicę przed zastosowaniem (bulk-replace kasuje
+        istniejące GamePlayer, więc ślepe zatwierdzenie mogłoby skasować
+        ręczne zmiany zrobione po wysłaniu kadry)."""
+        from app.models.helper_squad_proposal import HelperSquadProposal
+        from app.models.game_player import GamePlayer
+        from app.models.player import Player
+
+        proposal = HelperSquadProposal.query.get_or_404(proposal_id)
+
+        current_roles = {
+            gp.player_id: gp.role
+            for gp in GamePlayer.query.filter_by(
+                game_id=proposal.game_id, team_id=proposal.team_id
+            ).all()
+        }
+        players_by_id = {p.id: p for p in Player.query.filter_by(team_id=proposal.team_id).all()}
+
+        rows = []
+        for item in proposal.players:
+            player = players_by_id.get(item['player_id'])
+            if not player:
+                continue
+            current_role = current_roles.get(item['player_id'], 'none')
+            proposed_role = item.get('role', 'none')
+            rows.append({
+                'player':        player,
+                'current_role':  current_role,
+                'proposed_role': proposed_role,
+                'changed':       current_role != proposed_role,
+            })
+
+        return render_template(
+            'games/helper_squad_proposal_detail.html',
+            proposal=proposal, rows=rows, current_coach=proposal.team.coach,
+        )
+
+    @app.route('/helper-squad/proposals/<int:proposal_id>/apply', methods=['POST'])
+    def apply_squad_proposal(proposal_id):
+        """Zastosuj propozycję: bulk-replace GamePlayer dla (game_id, team_id)
+        — dokładnie wzorem /api/assign/<content_type>/save — + aktualizacja
+        Team.coach jeśli podano nazwisko trenera."""
+        from app.models.helper_squad_proposal import HelperSquadProposal, STATUS_APPROVED
+        from app.models.game_player import GamePlayer
+        from datetime import datetime
+
+        proposal = HelperSquadProposal.query.get_or_404(proposal_id)
+        pg_mgr = GamePlayerManager()
+
+        try:
+            existing = GamePlayer.query.filter_by(
+                game_id=proposal.game_id, team_id=proposal.team_id
+            ).all()
+            for gp in existing:
+                db.session.delete(gp)
+            db.session.commit()
+
+            for item in proposal.players:
+                role = item.get('role')
+                if role in ('starter', 'substitute'):
+                    pg_mgr.assign_player_to_game(item['player_id'], proposal.game_id, role=role)
+
+            if proposal.coach_name:
+                proposal.team.coach = proposal.coach_name
+
+            proposal.status = STATUS_APPROVED
+            proposal.resolved_at = datetime.utcnow()
+            db.session.commit()
+            flash('Zastosowano propozycję składu.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error applying squad proposal {proposal_id}: {e}")
+            flash(f'Błąd stosowania propozycji: {e}', 'error')
+
+        return redirect(url_for('list_squad_proposals'))
+
+    @app.route('/helper-squad/proposals/<int:proposal_id>/reject', methods=['POST'])
+    def reject_squad_proposal(proposal_id):
+        """Odrzuć propozycję — bez zmian w GamePlayer/Team."""
+        from app.models.helper_squad_proposal import HelperSquadProposal, STATUS_REJECTED
+        from datetime import datetime
+
+        proposal = HelperSquadProposal.query.get_or_404(proposal_id)
+        proposal.status = STATUS_REJECTED
+        proposal.resolved_at = datetime.utcnow()
+        db.session.commit()
+        flash('Odrzucono propozycję.', 'success')
+        return redirect(url_for('list_squad_proposals'))
+
+    # =========================
     # SCRAPOWANIE DRUŻYN LIGI (superscore) + dopasowywanie
     # =========================
 

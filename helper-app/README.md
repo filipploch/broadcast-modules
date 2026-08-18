@@ -13,21 +13,34 @@ kontraktem opisanym w `docs/helper-app-design.md` (repo modułu głównego).
   `admin` → `/admin`, `helper` → `/panel`.
 - Panel admina (`/admin`): lista pomocników, dodawanie nowego
   (generuje tymczasowe hasło), włączanie/wyłączanie konta.
-- Panel pomocnika (`/panel`): **statyczny szkic UI** — formularz
-  zgłoszenia zdarzenia (typ, drużyna, komentarz) z mockowanymi opcjami.
+- Panel pomocnika (`/panel`): link do realnej funkcji "Ustaw skład meczowy"
+  + **wciąż statyczny szkic UI** zgłoszenia zdarzenia (typ, drużyna,
+  komentarz) z mockowanymi opcjami.
+- **Skład meczowy (`/panel/squad`, garbarnia)** — pierwsza w pełni działająca
+  funkcja, koniec do końca z modułem głównym. Moduł główny wysyła
+  (`POST /api/relay/squad`) kadrę drużyny (+ aktualnego trenera); pomocnik
+  przypisuje graczy do wyjściowej jedenastki/rezerwy i edytuje trenera;
+  "Wyślij do modułu głównego" pakuje to w propozycję, którą moduł główny
+  odbiera przez (`GET /api/relay/squad/proposals`) i operator zatwierdza
+  albo odrzuca po stronie modułu głównego. Modele: `SquadPush`,
+  `SquadPushPlayer` (`app/models.py`); transport: `app/routes/relay.py`
+  (token `HELPER_APP_REST_TOKEN`, **nie** `HELPER_RELAY_TOKEN` — patrz niżej).
 - `flask create-admin` — interaktywne tworzenie kolejnego admina lokalnie.
 - Auto-bootstrap pierwszego admina z `ADMIN_USERNAME`/`ADMIN_PASSWORD`
   przy starcie (wygodne na Render Hobby bez łatwego dostępu do shella).
 
 ## Czego tu NIE ma (świadomie, na razie)
 
-- **Żadnego realnego połączenia z modułem głównym.** `HelperRelayClient`
-  po stronie modułu głównego już istnieje i czeka na WSS z tokenem
-  (`HELPER_RELAY_TOKEN`) — tu jeszcze nic się do niego nie łączy. Formularz
-  zgłoszenia (`/panel/submit`) tylko pokazuje komunikat "nie wysłano".
-- Push live danych (lista meczów, timeline już zalogowanych zdarzeń,
-  sygnały start/koniec okresu) — panel pomocnika pokazuje dziś tylko
-  zaszyte na sztywno (mock) typy zdarzeń i drużyny "Gospodarze/Goście".
+- **Żadnego WSS połączenia z modułem głównym.** `HelperRelayClient` po
+  stronie modułu głównego istnieje i czeka na WSS z tokenem
+  (`HELPER_RELAY_TOKEN`) — to wciąż niepodłączone i zarezerwowane pod
+  przyszły *live* strumień zdarzeń (gole, faule na bieżąco). Funkcja
+  "Skład meczowy" powyżej **nie czeka na to** — dostała własny, osobny,
+  lekki kanał REST (`app/routes/relay.py`, token `HELPER_APP_REST_TOKEN`),
+  bo z natury jest request/response, nie live stream. Formularz zgłoszenia
+  zdarzenia (`/panel/submit`) nadal tylko pokazuje komunikat "nie wysłano".
+- Push live danych do panelu zgłoszeń zdarzeń (lista meczów, timeline już
+  zalogowanych zdarzeń, sygnały start/koniec okresu) — to wciąż mock.
 - Migracje schematu (Alembic/Flask-Migrate) — tabele powstają przez
   `db.create_all()` przy starcie (idempotentne, nic nie kasuje/zmienia
   istniejących kolumn). Jeśli schemat zacznie się realnie zmieniać w
@@ -35,6 +48,8 @@ kontraktem opisanym w `docs/helper-app-design.md` (repo modułu głównego).
 - Zmiana hasła przy pierwszym logowaniu, reset hasła, self-service dla
   pomocników — dziś hasło tymczasowe pokazuje się adminowi raz przy
   tworzeniu konta.
+- Scoping pomocnik→drużyna — każdy zalogowany pomocnik widzi wszystkie
+  otwarte propozycje składu, niezależnie od meczu/drużyny.
 
 ## Uruchomienie lokalnie
 
@@ -57,9 +72,11 @@ nie będzie żadnego konta — `/login` zawsze odrzuci próbę logowania.
 - Baza: managed PostgreSQL Render, `DATABASE_URL` wstrzykiwany automatycznie
   przez Render przy użyciu `render.yaml` (`fromDatabase`).
 - Start command: `gunicorn run:app`.
-- Ustaw `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` jako zmienne
-  środowiskowe serwisu (w `render.yaml` są oznaczone `sync: false` —
-  Render poprosi o wartość ręcznie przy pierwszym deployu).
+- Ustaw `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`,
+  `HELPER_APP_REST_TOKEN` jako zmienne środowiskowe serwisu (w `render.yaml`
+  są oznaczone `sync: false` — Render poprosi o wartość ręcznie przy
+  pierwszym deployu). `HELPER_APP_REST_TOKEN` musi być identyczny z
+  `HELPER_APP_REST_TOKEN` w konfiguracji modułu głównego (`config.py`).
 
 ## Następne kroki (poza zakresem tego szkieletu)
 

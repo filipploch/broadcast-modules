@@ -1,0 +1,59 @@
+{% extends "base/base.html" %}
+{% block title %}Propozycje składu od pomocnika{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Propozycje składu / trenera od pomocnika</span>
+        <a href="{{ url_for('game_setup') }}" class="btn btn-secondary">← Powrót</a>
+    </div>
+
+    <p style="padding:0 1rem;color:#6c757d;">
+        Propozycje wyjściowej jedenastki, rezerwy i trenera, zgłoszone przez pomocnika
+        (Helper App) i pobrane przyciskiem "Sprawdź propozycje" na stronie meczu.
+        Zatwierdzenie zamienia cały skład drużyny w tym meczu — sprawdź podgląd (diff)
+        przed kliknięciem.
+    </p>
+
+    {% if proposals %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mecz</th>
+                <th>Drużyna</th>
+                <th>Zgłosił</th>
+                <th>Wysłano</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in proposals %}
+            <tr>
+                <td>
+                    {% if p.game %}
+                    {{ p.game.home_team.name if p.game.home_team else '?' }}
+                    vs {{ p.game.away_team.name if p.game.away_team else '?' }}
+                    {% else %}#{{ p.game_id }}{% endif %}
+                </td>
+                <td>{{ p.team.name if p.team else '#' ~ p.team_id }}</td>
+                <td>{{ p.helper.display_name or p.helper.external_id if p.helper else '—' }}</td>
+                <td>{{ p.submitted_at.strftime('%Y-%m-%d %H:%M') if p.submitted_at else '—' }}</td>
+                <td>
+                    <div class="actions" style="flex-direction:column;align-items:stretch;gap:.5rem;">
+                        <a href="{{ url_for('view_squad_proposal', proposal_id=p.id) }}"
+                           class="btn btn-secondary btn-small" style="width:100%;">🔍 Podgląd (diff)</a>
+                        <form method="POST" action="{{ url_for('reject_squad_proposal', proposal_id=p.id) }}">
+                            <button type="submit" class="btn btn-danger btn-small" style="width:100%;">✖ Odrzuć</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align:center;padding:2rem;color:#7f8c8d;">
+        Brak oczekujących propozycji.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
