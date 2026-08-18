@@ -10,14 +10,19 @@
 # oparciem na nim produkcji.
 
 databases:
-  - name: helper-app-db
+  - name: garbarniatv-db
     plan: free
-    databaseName: helper_app
-    user: helper_app
+    databaseName: garbarniatv
+    user: garbarniatv
 
 services:
   - type: web
-    name: helper-app
+    # Wyznacza publiczny adres: https://garbarniatv.onrender.com — o ile ta
+    # nazwa jest wolna globalnie na Render (bardzo prawdopodobne, to
+    # niegeneryczna nazwa). Gdyby jednak była zajęta, Render poprosi o inną
+    # przy tworzeniu serwisu — nazwę można też zmienić ręcznie w dashboardzie
+    # po utworzeniu (Settings → Name).
+    name: garbarniatv
     runtime: python
     rootDir: helper-app
     plan: free
@@ -28,7 +33,7 @@ services:
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: helper-app-db
+          name: garbarniatv-db
           property: connectionString
       - key: ADMIN_USERNAME
         sync: false
