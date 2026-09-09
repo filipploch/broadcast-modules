@@ -54,6 +54,36 @@ def _get_active_scraper_config():
     from core.models.base_active_scraper_config import get_active_scraper_config_model
     return get_active_scraper_config_model()
 
+def _build_cascade(descriptors, subject, url_builder):
+    """Zbuduj listę scraperów do kaskady UI z deskryptorów danego modułu.
+
+    descriptors — lista z modules/<moduł>/app/scraper_ui.py (klucz 'games' /
+                  'teams' / 'players'); patrz tam po opisie pól.
+    subject     — obiekt League (games/teams) albo Team (players), przekazywany
+                  do descriptor['ready'].
+    url_builder — callable(view_name) -> URL (np. lambda v: url_for(v, league_id=...)).
+
+    Zwraca listę dictów {id, label, trigger_url, status_url, checked} tylko dla
+    scraperów gotowych (ready() == True). Renderowane przez
+    templates/partials/scraper_cascade.html + ScraperCascade.registerFromData().
+    """
+    out = []
+    for d in descriptors or []:
+        try:
+            if not d['ready'](subject):
+                continue
+            out.append({
+                'id':          d['id'],
+                'label':       d['label'],
+                'trigger_url': url_builder(d['trigger_view']),
+                'status_url':  d.get('status_url'),
+                'checked':     d.get('checked', True),
+            })
+        except Exception:
+            logger.warning("scraper_ui: pominięto scraper %r (ready()/url_for rzuciło)",
+                           d.get('id'), exc_info=True)
+    return out
+
 def _accepts_param(func, param_name):
     """Czy func deklaruje param_name jako parametr (np. 'coach' — tylko garbarnia)."""
     return param_name in inspect.signature(func).parameters
@@ -198,11 +228,15 @@ def _apply_entity_foreign_id(entity, form):
 # =========================
 from core.managers.team_manager import TeamManager
 
-def register_routes(app, exclude=None, team_manager=None):
+def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
     if team_manager is None:
         team_manager = TeamManager()
-        
+
     exclude = exclude or set()
+    # scraper_ui: {'games': [...], 'teams': [...], 'players': [...]} — deskryptory
+    # scraperów danego modułu (modules/<moduł>/app/scraper_ui.py). Brak => moduł
+    # nie udostępnia kaskady scraperów (puste listy).
+    scraper_ui = scraper_ui or {}
 
     """Rejestruje wspólne trasy w instancji Flask aplikacji."""
     @app.route('/seasons/')
@@ -451,27 +485,18 @@ def register_routes(app, exclude=None, team_manager=None):
         teams = league_manager.get_league_teams(league_id)
         available_teams = league_manager.get_available_teams(league_id)
 
-        # Scrapowanie drużyn z terminarza malopolskizpn.pl (jeśli moduł je
-        # obsługuje i liga ma skonfigurowany URL terminarza dla tego scrapera).
-        has_malopolskizpn_team_scrape = 'scrape_league_teams_malopolskizpn' in current_app.view_functions
-        malopolskizpn_games_url = None
-        if has_malopolskizpn_team_scrape:
-            mzpn_scraper = _get_scraper().get_by_folder('malopolskizpn')
-            if mzpn_scraper:
-                malopolskizpn_games_url = league.get_scraper_url(mzpn_scraper.id, 'games_url')
-
-        # Scrapowanie drużyn z lokalnie zapisanej strony tabeli rozgrywek
-        # laczynaspilka.pl (jeśli moduł je obsługuje) — brak per-ligowego
-        # URL-a do skonfigurowania, plik znajdowany jest po nazwie.
-        has_laczynaspilka_team_scrape = 'scrape_league_teams_laczynaspilka' in current_app.view_functions
+        # Scrapery listy drużyn dostępne dla tej ligi — deskryptory od modułu
+        # (scraper_ui['teams']); patrz templates/partials/scraper_cascade.html.
+        team_scrapers = _build_cascade(
+            scraper_ui.get('teams'), league,
+            lambda v: url_for(v, league_id=league.id),
+        )
 
         return render_template('leagues/teams.html',
                             league=league,
                             teams=teams,
                             available_teams=available_teams,
-                            has_malopolskizpn_team_scrape=has_malopolskizpn_team_scrape,
-                            malopolskizpn_games_url=malopolskizpn_games_url,
-                            has_laczynaspilka_team_scrape=has_laczynaspilka_team_scrape)
+                            team_scrapers=team_scrapers)
 
 
     @app.route('/leagues/<int:league_id>/teams/add', methods=['POST'])
@@ -562,19 +587,14 @@ def register_routes(app, exclude=None, team_manager=None):
             from core.managers import get_helper_relay_manager
             pending_helper_candidates_count = len(get_helper_relay_manager().get_pending_candidates(league_id))
 
-        # Scrapery meczów dostępne dla tej ligi (moduł obsługuje trasę I liga ma
-        # skonfigurowane dane wymagane danemu scraperowi) — do rozwijanej listy
-        # scraperów przy przycisku "Scrapuj mecze" (patrz scraper-cascade.js).
-        has_malopolskizpn_games_scrape = False
-        has_superscore_games_scrape = False
-        if league:
-            if 'scrape_games' in current_app.view_functions:
-                mzpn_scraper = _get_scraper().get_by_folder('malopolskizpn')
-                if mzpn_scraper and league.get_scraper_url(mzpn_scraper.id, 'games_url'):
-                    has_malopolskizpn_games_scrape = True
-            if 'scrape_games_superscore' in current_app.view_functions:
-                if getattr(league, 'superscore_season_id', None):
-                    has_superscore_games_scrape = True
+        # Scrapery meczów dostępne dla tej ligi — do rozwijanej listy przy
+        # przycisku "Scrapuj mecze" (patrz scraper-cascade.js). Deskryptory
+        # pochodzą od modułu (scraper_ui['games']); żaden scraper nie jest tu
+        # zaszyty na sztywno.
+        game_scrapers = _build_cascade(
+            scraper_ui.get('games'), league,
+            lambda v: url_for(v, league_id=league.id),
+        ) if league else []
 
         return render_template('games/list.html',
                             games=games,
@@ -583,8 +603,7 @@ def register_routes(app, exclude=None, team_manager=None):
                             open_game_conflicts_count=open_game_conflicts_count,
                             has_helper_candidates_review=has_helper_candidates_review,
                             pending_helper_candidates_count=pending_helper_candidates_count,
-                            has_malopolskizpn_games_scrape=has_malopolskizpn_games_scrape,
-                            has_superscore_games_scrape=has_superscore_games_scrape)
+                            game_scrapers=game_scrapers)
 
 
     @app.route('/games/<int:game_id>')
@@ -1125,26 +1144,19 @@ def register_routes(app, exclude=None, team_manager=None):
         player_scraper = ActiveScraperConfig.get_active_scraper('player')
         team_scraper_foreign_id = team.get_foreign_id(player_scraper.id) if player_scraper else None
 
-        # Scrapowanie kadry z superscore.live (jeśli moduł je obsługuje i drużyna
-        # ma już przypisany foreign_id od dopasowania drużyn ligi).
-        has_superscore_player_scrape = 'scrape_team_players_superscore' in current_app.view_functions
-        superscore_scraper = _get_scraper().get_by_folder('superscore') if has_superscore_player_scrape else None
-        superscore_team_foreign_id = team.get_foreign_id(superscore_scraper.id) if superscore_scraper else None
-
-        # Scrapowanie kadry z lokalnie zapisanego pliku HTML laczynaspilka.pl,
-        # z przeglądem dopasowań (jeśli moduł je obsługuje i drużyna ma już
-        # przypisane foreign_id dla tego scrapera).
-        has_laczynaspilka_player_scrape = 'scrape_team_players_laczynaspilka' in current_app.view_functions
-        laczynaspilka_scraper = _get_scraper().get_by_folder('laczynaspilka') if has_laczynaspilka_player_scrape else None
-        laczynaspilka_team_foreign_id = team.get_foreign_id(laczynaspilka_scraper.id) if laczynaspilka_scraper else None
+        # Scrapery kadry dostępne dla tej drużyny — deskryptory od modułu
+        # (scraper_ui['players']); patrz templates/partials/scraper_cascade.html.
+        # Osobny przycisk "Pobierz zawodników" (team.team_url / team_scraper_foreign_id)
+        # jest niezależny od kaskady i renderowany dalej w szablonie.
+        player_scrapers = _build_cascade(
+            scraper_ui.get('players'), team,
+            lambda v: url_for(v, team_id=team.id),
+        )
 
         return render_template('players/list.html', team=team, players=players,
                             player_scraper=player_scraper,
                             team_scraper_foreign_id=team_scraper_foreign_id,
-                            has_superscore_player_scrape=has_superscore_player_scrape,
-                            superscore_team_foreign_id=superscore_team_foreign_id,
-                            has_laczynaspilka_player_scrape=has_laczynaspilka_player_scrape,
-                            laczynaspilka_team_foreign_id=laczynaspilka_team_foreign_id)
+                            player_scrapers=player_scrapers)
 
     @app.route('/teams/<int:team_id>/players/create', methods=['GET', 'POST'])
     def create_player(team_id):

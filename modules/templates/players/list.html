@@ -1,9 +1,6 @@
 {% extends "base/base.html" %}
+{% from "partials/scraper_cascade.html" import scraper_cascade %}
 {% block title %}Zawodnicy — {{ team.name }}{% endblock %}
-
-{% set has_laczynaspilka_player_scrape_ready = has_laczynaspilka_player_scrape and laczynaspilka_team_foreign_id %}
-{% set has_superscore_player_scrape_ready = has_superscore_player_scrape and superscore_team_foreign_id %}
-{% set any_player_scraper = has_laczynaspilka_player_scrape_ready or has_superscore_player_scrape_ready %}
 
 {% block content %}
 <div class="card">
@@ -15,23 +12,7 @@
                 Pobierz zawodników
             </button>
             {% endif %}
-            {% if any_player_scraper %}
-            <div class="scraper-cascade">
-                <button type="button" class="btn btn-success cascade-run-btn" id="cascade-run-players" onclick="ScraperCascade.run('players')">
-                    🔍 Scrapuj kadrę
-                </button>
-                <button type="button" class="btn btn-success cascade-toggle-btn" onclick="ScraperCascade.toggleMenu('players')" title="Wybierz scrapery">▾</button>
-                <div class="cascade-menu" id="cascade-menu-players" style="display:none;">
-                    {% if has_laczynaspilka_player_scrape_ready %}
-                    <label><input type="checkbox" value="laczynaspilka" checked> Łączy Nas Piłka</label>
-                    {% endif %}
-                    {% if has_superscore_player_scrape_ready %}
-                    <label><input type="checkbox" value="superscore"> Superscore</label>
-                    {% endif %}
-                </div>
-            </div>
-            <span class="cascade-status" id="cascade-status-players" style="display:none;"></span>
-            {% endif %}
+            {{ scraper_cascade('players', 'Scrapuj kadrę', player_scrapers) }}
             {% if player_scraper and player_scraper.folder == 'laczynaspilka' and team_scraper_foreign_id %}
             <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team_scraper_foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
                 📋 Kopiuj URL
@@ -94,19 +75,8 @@ function scrapeTeamPlayers(teamId) {
         .catch(err => console.error('Scraping request failed:', err));
 }
 
-{% if any_player_scraper %}
-ScraperCascade.register('players', [
-    {% if has_laczynaspilka_player_scrape_ready %}
-    { id: 'laczynaspilka', label: 'Łączy Nas Piłka', run: function () {
-        return ScraperCascade.fetchJson('{{ url_for("scrape_team_players_laczynaspilka", team_id=team.id) }}');
-    } },
-    {% endif %}
-    {% if has_superscore_player_scrape_ready %}
-    { id: 'superscore', label: 'Superscore', run: function () {
-        return ScraperCascade.fetchJson('{{ url_for("scrape_team_players_superscore", team_id=team.id) }}');
-    } },
-    {% endif %}
-], function (results) {
+{% if player_scrapers %}
+ScraperCascade.registerFromData('players', {{ player_scrapers|tojson }}, function (results) {
     window.location.href = '{{ url_for("review_pending_player_matches", team_id=team.id) }}';
 });
 {% endif %}

@@ -46,9 +46,11 @@ def create_app(config_name='default'):
 
         core_broadcast.register_routes(app)
         from app.managers.team_manager import TeamManager as AppTeamManager
+        from app.scraper_ui import SCRAPER_UI
         routes_crud.register_routes(app,
             exclude={'/game-setup'},
-            team_manager=AppTeamManager()
+            team_manager=AppTeamManager(),
+            scraper_ui=SCRAPER_UI,
         )
         core_events.register_events(socketio)
 

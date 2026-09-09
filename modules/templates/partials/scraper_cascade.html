@@ -1,0 +1,31 @@
+{#
+  Kaskada scraperów ("split button": 🔍 <label> + rozwijana lista scraperów).
+
+  Sterowana danymi — lista `scrapers` budowana jest po stronie serwera przez
+  core/routes/routes_crud.py::_build_cascade z deskryptorów danego modułu
+  (modules/<moduł>/app/scraper_ui.py). Renderuje się tylko gdy lista niepusta.
+
+  Rejestrację JS robi wywołujący szablon:
+      ScraperCascade.registerFromData('<key>', {{ scrapers|tojson }}, onComplete)
+
+  Parametry makra:
+    key      — unikalny klucz kaskady na stronie ('games' | 'teams' | 'players')
+    label    — tekst przycisku uruchamiającego (np. 'Scrapuj mecze')
+    scrapers — lista dictów {id, label, trigger_url, status_url, checked}
+#}
+{% macro scraper_cascade(key, label, scrapers) %}
+{% if scrapers %}
+<div class="scraper-cascade">
+    <button type="button" class="btn btn-success cascade-run-btn" id="cascade-run-{{ key }}" onclick="ScraperCascade.run('{{ key }}')">
+        🔍 {{ label }}
+    </button>
+    <button type="button" class="btn btn-success cascade-toggle-btn" onclick="ScraperCascade.toggleMenu('{{ key }}')" title="Wybierz scrapery">▾</button>
+    <div class="cascade-menu" id="cascade-menu-{{ key }}" style="display:none;">
+        {% for s in scrapers %}
+        <label><input type="checkbox" value="{{ s.id }}"{% if s.checked %} checked{% endif %}> {{ s.label }}</label>
+        {% endfor %}
+    </div>
+</div>
+<span class="cascade-status" id="cascade-status-{{ key }}" style="display:none;"></span>
+{% endif %}
+{% endmacro %}

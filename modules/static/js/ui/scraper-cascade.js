@@ -11,6 +11,25 @@ const ScraperCascade = (function () {
         registry[key] = { scrapers: scrapers, onComplete: onComplete };
     }
 
+    // Rejestracja z danych serwera (patrz templates/partials/scraper_cascade.html
+    // + core/routes/routes_crud.py::_build_cascade). Każdy wpis:
+    //   { id, label, trigger_url, status_url }
+    // status_url ustawione => zadanie async (start + polling), inaczej => wywołanie
+    // synchroniczne zwracające JSON.
+    function registerFromData(key, scrapers, onComplete) {
+        register(key, scrapers.map(function (s) {
+            return {
+                id: s.id,
+                label: s.label,
+                run: function () {
+                    return s.status_url
+                        ? runAsyncJobAndPoll(s.trigger_url, s.status_url)
+                        : fetchJson(s.trigger_url);
+                }
+            };
+        }), onComplete);
+    }
+
     function toggleMenu(key) {
         const menu = document.getElementById('cascade-menu-' + key);
         if (!menu) return;
@@ -118,6 +137,7 @@ const ScraperCascade = (function () {
 
     return {
         register: register,
+        registerFromData: registerFromData,
         toggleMenu: toggleMenu,
         run: run,
         fetchJson: fetchJson,

@@ -1,7 +1,6 @@
 {% extends "base/base.html" %}
+{% from "partials/scraper_cascade.html" import scraper_cascade %}
 {% block title %}{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}{% endblock %}
-
-{% set any_game_scraper = has_malopolskizpn_games_scrape or has_superscore_games_scrape %}
 
 {% block content %}
 {% if league %}
@@ -16,23 +15,7 @@
         <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
-                {% if any_game_scraper %}
-                <div class="scraper-cascade">
-                    <button type="button" class="btn btn-success cascade-run-btn" id="cascade-run-games" onclick="ScraperCascade.run('games')">
-                        🔍 Scrapuj mecze
-                    </button>
-                    <button type="button" class="btn btn-success cascade-toggle-btn" onclick="ScraperCascade.toggleMenu('games')" title="Wybierz scrapery">▾</button>
-                    <div class="cascade-menu" id="cascade-menu-games" style="display:none;">
-                        {% if has_malopolskizpn_games_scrape %}
-                        <label><input type="checkbox" value="malopolskizpn" checked> Małopolski ZPN</label>
-                        {% endif %}
-                        {% if has_superscore_games_scrape %}
-                        <label><input type="checkbox" value="superscore" checked> Superscore</label>
-                        {% endif %}
-                    </div>
-                </div>
-                <span class="cascade-status" id="cascade-status-games" style="display:none;"></span>
-                {% endif %}
+                {{ scraper_cascade('games', 'Scrapuj mecze', game_scrapers) }}
                 {% if has_game_conflicts_review %}
                 <a href="{{ url_for('review_game_conflicts', league_id=league.id) }}" class="btn {{ 'btn-danger' if open_game_conflicts_count else 'btn-secondary' }}">
                     ⚠️ Niespójności{% if open_game_conflicts_count %} ({{ open_game_conflicts_count }}){% endif %}
@@ -115,19 +98,8 @@
     var _leagueId = {{ league.id if league else 'null' }};
     var _currentGameId = null;
 
-    {% if any_game_scraper %}
-    ScraperCascade.register('games', [
-        {% if has_malopolskizpn_games_scrape %}
-        { id: 'malopolskizpn', label: 'Małopolski ZPN', run: function () {
-            return ScraperCascade.runAsyncJobAndPoll('{{ url_for("scrape_games", league_id=league.id) }}', '/api/games/scrape/status');
-        } },
-        {% endif %}
-        {% if has_superscore_games_scrape %}
-        { id: 'superscore', label: 'Superscore', run: function () {
-            return ScraperCascade.runAsyncJobAndPoll('{{ url_for("scrape_games_superscore", league_id=league.id) }}', '/api/games/scrape/status');
-        } },
-        {% endif %}
-    ], function (results) {
+    {% if game_scrapers %}
+    ScraperCascade.registerFromData('games', {{ game_scrapers|tojson }}, function (results) {
         refreshGamesTable();
     });
     {% endif %}
