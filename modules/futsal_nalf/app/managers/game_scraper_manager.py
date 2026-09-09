@@ -4,7 +4,9 @@ from flask import session, current_app
 from core.extensions import db
 from app.models.team import Team
 from app.models.game import Game
+from app.models.league import League
 from app.models.scraper import Scraper
+from app.models.settings import Settings
 from app.managers.team_manager import TeamManager
 from app.managers import GameManager
 from datetime import datetime
@@ -45,13 +47,20 @@ class GameScraperManager:
     # Scraping Workflow (Threaded)
     # =========================
 
-    def scrape_games_async(self, league_urls: List[str], league_name: str = '') -> bool:
+    def scrape_games_async(self, league_urls: List[str], league_name: str = '',
+                           season_id: Optional[int] = None) -> bool:
         """
         Start scraping games in a background thread.
 
         Args:
             league_urls: List of URLs to scrape
             league_name: Human-readable league name for socket payloads
+            season_id:   Docelowy sezon, do którego trafią scrapowane mecze.
+                         Terminarz nalffutsal.pl zawiera wiele lig ("Dywizja A",
+                         "Dywizja B", "Puchar Ligi") rozpoznawanych po nazwie —
+                         manager mapuje nazwę na wiersz League TEGO sezonu.
+                         Musi pochodzić od wywołującego (liga, na której kliknięto
+                         "Scrapuj"); brak => fallback na Settings.current_season_id.
 
         Returns:
             True if scraping started, False if already running
@@ -72,7 +81,7 @@ class GameScraperManager:
             app = current_app._get_current_object()
             self._scraping_thread = threading.Thread(
                 target=self._scrape_worker,
-                args=(app, league_urls, league_name),
+                args=(app, league_urls, league_name, season_id),
                 daemon=True
             )
             self._scraping_thread.start()
@@ -83,7 +92,8 @@ class GameScraperManager:
             logger.info(f"Started scraping in background thread for {len(league_urls)} URLs")
             return True
 
-    def _scrape_worker(self, app, league_urls: List[str], league_name: str = ''):
+    def _scrape_worker(self, app, league_urls: List[str], league_name: str = '',
+                       season_id: Optional[int] = None):
         """Background worker — runs in a separate thread."""
         with app.app_context():
             from core.extensions import socketio
@@ -94,7 +104,7 @@ class GameScraperManager:
                 logger.info("Scraping started in thread")
 
                 scraped_games = scraper.scrape_multiple_leagues(league_urls)
-                stats = self._process_scraped_games(scraped_games)
+                stats = self._process_scraped_games(scraped_games, season_id=season_id)
 
                 self._status = {
                     'status': 'completed',
@@ -163,7 +173,8 @@ class GameScraperManager:
     # Processing
     # =========================
 
-    def _process_scraped_games(self, scraped_games: List[Dict[str, str]]) -> Dict[str, int]:
+    def _process_scraped_games(self, scraped_games: List[Dict[str, str]],
+                               season_id: Optional[int] = None) -> Dict[str, int]:
         """
         Process scraped games: update existing games if data changed, insert new ones.
 
@@ -173,6 +184,11 @@ class GameScraperManager:
 
         Args:
             scraped_games: List of game dictionaries from scraper
+            season_id:     Docelowy sezon. Każdy mecz z terminarza niesie NAZWĘ
+                           ligi ("Dywizja A" itd.) — mapujemy ją na wiersz League
+                           tego sezonu (League.name jest unikalne w obrębie
+                           sezonu). Brak => Settings.current_season_id.
+                           Mecze z ligą, której nie ma w tym sezonie, są pomijane.
 
         Returns:
             Statistics dictionary
@@ -182,8 +198,29 @@ class GameScraperManager:
         new_games = []
         scraper_id = _get_scraper_id()
 
+        if season_id is None:
+            season_id = Settings.get_settings().current_season_id
+        if not season_id:
+            raise RuntimeError(
+                "Nie można ustalić sezonu dla scrapowanych meczów "
+                "(brak season_id i Settings.current_season_id)"
+            )
+
+        # {nazwa ligi -> League} w obrębie docelowego sezonu
+        league_by_name = {
+            lg.name: lg for lg in League.query.filter_by(season_id=season_id).all()
+        }
+
         for game_data in scraped_games:
             foreign_id = game_data['foreign_id']
+
+            league = league_by_name.get(game_data['league_name'])
+            if not league:
+                logger.warning(
+                    f"Skipping game foreign_id={foreign_id}: "
+                    f"liga '{game_data['league_name']}' nie istnieje w sezonie {season_id}"
+                )
+                continue
 
             home_team = team_manager.get_team_by_name(game_data['home_team_name'])
             away_team = team_manager.get_team_by_name(game_data['away_team_name'])
@@ -199,7 +236,7 @@ class GameScraperManager:
             home_team_goals = game_data['home_team_goals']
             away_team_goals = game_data['away_team_goals']
             status = game_data['status']
-            league_id = game_data['league_id']
+            league_id = league.id
             parsed_date = datetime.strptime(game_data['date'].replace('T', ' '), date_format)
             round_nr = game_data['round']
 

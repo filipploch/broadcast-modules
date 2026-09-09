@@ -126,20 +126,10 @@ class GameScraper:
             
             # status=0 and goals=None are valid for unstarted matches - do not guard on them
 
-            league_txt = row.find('td', class_='data-league').get_text(strip=True)
-            if not league_txt:
+            league_name = row.find('td', class_='data-league').get_text(strip=True)
+            if not league_name:
                 return None
-            
-            league_dict = {
-                'Dywizja A': 1,
-                'Dywizja B': 2,
-                'Puchar Ligi': 3
-            }
 
-            league_id = league_dict[league_txt]
-            if not league_id:
-                return None
-            
             round_txt = row.find('td', class_='data-day').get_text(strip=True)
             if not round_txt:
                 return None
@@ -166,7 +156,11 @@ class GameScraper:
                 'home_team_goals': home_team_goals,
                 'away_team_goals': away_team_goals,
                 'status': status,
-                'league_id': league_id,
+                # Nazwa ligi z terminarza (kolumna data-league), np. "Dywizja A".
+                # Manager mapuje ją na wiersz League w docelowym sezonie —
+                # NIE zwracamy tu id, żeby scrapowane mecze nie trafiały do ligi
+                # z poprzedniego sezonu (te same nazwy, inne id per sezon).
+                'league_name': league_name,
                 'date': date,
                 'round': round
             }
