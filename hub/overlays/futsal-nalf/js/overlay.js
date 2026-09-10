@@ -1296,6 +1296,16 @@ ws.onmessage = (event) => {
         showContainer(data);
     }
 
+    if (msg.type === 'banner_show') {
+        const data = msg.payload || msg.data;
+        const bannerContainer = document.getElementById('banner-container');
+        bannerContainer.innerHTML = data.source || '';
+        bannerContainer.style.display = 'block';
+        if (data.activation_function && typeof window[data.activation_function] === 'function') {
+            window[data.activation_function]();
+        }
+    }
+
     if (msg.type === 'scoreboard_data') {
         const data = msg.payload || msg.data;
         updateScoreboard(data);
