@@ -417,8 +417,9 @@ function animateWord(
                 return;
             }
 
-            animateScale(svgItems[i], 1, 1.5, duration, () => {
-                animateScale(svgItems[i], 1.5, 1, duration);
+            const idx = i;
+            animateScale(svgItems[idx], 1, 1.5, duration, () => {
+                animateScale(svgItems[idx], 1.5, 1, duration);
             });
 
             i++;
