@@ -7,7 +7,8 @@ function animateWord(
     class2,
     teamName14,
     cellSize,
-    svgCurves
+    svgCurves,
+    onComplete
 ) {
     const container = document.getElementById(elementId);
     if (!container) return;
@@ -752,6 +753,7 @@ function animateWord(
         setTimeout(() => {
             container.innerHTML = "";
             if (elementToHide) elementToHide.style.visibility = "";
+            if (typeof onComplete === "function") onComplete();
         }, duration);
     }
 }

@@ -13,7 +13,14 @@ const SB_HIDE_DURATION_MS = 750;
 function showScoreboard() {
     const container = document.getElementById('scoreboard-container');
     if (!container) return;
-    container.classList.remove('sb-hide');
+
+    // Jeśli 'sb-show' jest już nałożone (np. scoreboard nigdy nie przeszedł
+    // przez hideScoreboard() — tak jest po animacji gola, patrz animate-word.js
+    // finish()/onComplete), samo classList.add('sb-show') nic by nie zrobiło
+    // i animacja wejścia by się nie odtworzyła. Zdejmij obie klasy + wymuś
+    // reflow, żeby @keyframes zawsze wystartowały od nowa.
+    container.classList.remove('sb-hide', 'sb-show');
+    void container.offsetWidth;
     container.classList.add('sb-show');
 
     ['home-team-fouls', 'away-team-fouls'].forEach(id => {

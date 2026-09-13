@@ -1321,7 +1321,9 @@ ws.onmessage = (event) => {
             'class1',
             'class2',
             data.name_14,
-            60);
+            60,
+            undefined,
+            showScoreboard);
     }
 
     if (msg.type === 'reload') {
