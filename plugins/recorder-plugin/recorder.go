@@ -14,12 +14,13 @@ type RecorderManager struct {
 	cameras   map[string]*CameraRecorder // keyed by CameraConfig.ID
 	outputDir string
 	hubClient *HubClient // used to notify main_module on recording start/stop
+	streamer  *StreamManager
 	mu        sync.RWMutex
 }
 
 const (
-	autoRestartDelay   = 3 * time.Second // pauza przed restartem po crashu ffmpeg
-	autoRestartMaxTries = 5              // max prób restartu z rzędu zanim się podda
+	autoRestartDelay    = 3 * time.Second // pauza przed restartem po crashu ffmpeg
+	autoRestartMaxTries = 5               // max prób restartu z rzędu zanim się podda
 )
 
 // NewRecorderManager creates a RecorderManager from the loaded Config.
@@ -29,21 +30,62 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		outputDir: cfg.OutputDir,
 	}
 
+	segCfg := SegmentConfig{
+		MinDuration: time.Duration(cfg.SegmentMinSeconds) * time.Second,
+		MaxDuration: time.Duration(cfg.SegmentMaxSeconds) * time.Second,
+		SignalDelay: time.Duration(cfg.SegmentSignalDelaySeconds) * time.Second,
+	}
+
 	for _, camCfg := range cfg.Cameras {
 		if !camCfg.Enabled {
 			log.Printf("⏭️  Camera %s is disabled — skipping", camCfg.ID)
 			continue
 		}
-		cam := NewCameraRecorder(camCfg, cfg.OutputDir)
+		cam := NewCameraRecorder(camCfg, cfg.OutputDir, segCfg)
 		rm.cameras[camCfg.ID] = cam
 
-		// Capture camCfg.ID for closure
+		// Capture camCfg.ID for the closures below
 		camID := camCfg.ID
 		cam.SetOnUnexpectedStop(func(cameraID string, meta RecordingMeta) {
 			rm.handleUnexpectedStop(cameraID, meta)
 		})
-		_ = camID // used in closure above
-		log.Printf("📷 Camera registered: %s (service: %s)", camCfg.ID, camCfg.ServiceName)
+		cam.SetOnSegmentRotated(func(meta RecordingMeta, reason string) {
+			rm.notifySegmentRotated(camID, meta, reason)
+		})
+		log.Printf("📷 Camera registered: %s (service: %s, segment: min=%s max=%s delay=%s)",
+			camCfg.ID, camCfg.ServiceName, segCfg.MinDuration, segCfg.MaxDuration, segCfg.SignalDelay)
+	}
+
+	loopbacks := make(map[string]string)
+	for _, camCfg := range cfg.Cameras {
+		if camCfg.Enabled && camCfg.LoopbackDevice != "" {
+			loopbacks[camCfg.ID] = camCfg.LoopbackDevice
+		}
+	}
+	streamCfg := StreamConfig{
+		Host:     cfg.StreamWindowsHost,
+		Port:     cfg.StreamPort,
+		Protocol: cfg.StreamProtocol,
+		Codec:    cfg.StreamCodec,
+		Bitrate:  cfg.StreamBitrate,
+	}
+	rm.streamer = NewStreamManager(loopbacks, func(id string) bool {
+		rm.mu.RLock()
+		cam, ok := rm.cameras[id]
+		rm.mu.RUnlock()
+		return ok && cam.IsRecording()
+	}, streamCfg)
+	rm.streamer.SetOnStreamChanged(func(cameraID string, active bool, errMsg string) {
+		rm.notifyStreamChanged(cameraID, active, errMsg)
+	})
+
+	if streamCfg.Host == "" {
+		log.Printf("⏭️  Streaming to Windows disabled — stream_windows_host not set in config")
+	} else if len(loopbacks) == 0 {
+		log.Printf("⏭️  Streaming to Windows configured (host=%s) but no camera has loopback_device set — nothing streamable", streamCfg.Host)
+	} else {
+		log.Printf("📡 Streaming to Windows ready: host=%s port=%d codec=%s cameras=%d",
+			streamCfg.Host, streamCfg.Port, streamCfg.Codec, len(loopbacks))
 	}
 
 	return rm
@@ -70,16 +112,74 @@ func (rm *RecorderManager) notifyRecordingStarted(meta RecordingMeta) {
 		To:   "main-module",
 		Type: "recording_started",
 		Payload: map[string]interface{}{
-			"camera_id":   meta.CameraID,
-			"camera_name": meta.CameraName,
-			"file_name":   meta.FileName,
-			"file_path":   meta.FilePath,
-			"started_at":  meta.StartedAt,
-			"match_id":    meta.MatchID,
-			"period_id":   meta.PeriodID,
+			"camera_id":     meta.CameraID,
+			"camera_name":   meta.CameraName,
+			"file_name":     meta.FileName,
+			"file_path":     meta.FilePath,
+			"started_at":    meta.StartedAt,
+			"match_id":      meta.MatchID,
+			"period_id":     meta.PeriodID,
+			"session_id":    meta.SessionID,
+			"segment_index": meta.SegmentIndex,
 		},
 	})
 	log.Printf("📡 [%s] Notified main_module: recording_started", meta.CameraID)
+}
+
+// notifySegmentRotated sends a segment_rotated event to main_module after a
+// segment has been rotated (new file opened, previous one cleanly closed).
+// reason is "max_duration" or "signal".
+func (rm *RecorderManager) notifySegmentRotated(cameraID string, meta RecordingMeta, reason string) {
+	rm.mu.RLock()
+	hc := rm.hubClient
+	rm.mu.RUnlock()
+
+	if hc == nil {
+		return
+	}
+	_ = hc.Send(&Message{
+		To:   "main-module",
+		Type: "segment_rotated",
+		Payload: map[string]interface{}{
+			"camera_id":     cameraID,
+			"session_id":    meta.SessionID,
+			"segment_index": meta.SegmentIndex,
+			"file_name":     meta.FileName,
+			"file_path":     meta.FilePath,
+			"started_at":    meta.StartedAt,
+			"reason":        reason,
+			"match_id":      meta.MatchID,
+			"period_id":     meta.PeriodID,
+		},
+	})
+	log.Printf("📡 [%s] Notified main_module: segment_rotated (segment %d, reason=%s)",
+		cameraID, meta.SegmentIndex, reason)
+}
+
+// notifyStreamChanged sends a stream_changed event to main_module whenever
+// streaming to Windows starts, is stopped on request, or stops unexpectedly
+// (errMsg non-empty in that last case).
+func (rm *RecorderManager) notifyStreamChanged(cameraID string, active bool, errMsg string) {
+	rm.mu.RLock()
+	hc := rm.hubClient
+	rm.mu.RUnlock()
+
+	if hc == nil {
+		return
+	}
+	payload := map[string]interface{}{
+		"camera_id": cameraID,
+		"active":    active,
+	}
+	if errMsg != "" {
+		payload["error"] = errMsg
+	}
+	_ = hc.Send(&Message{
+		To:      "main-module",
+		Type:    "stream_changed",
+		Payload: payload,
+	})
+	log.Printf("📡 [%s] Notified main_module: stream_changed (active=%v)", cameraID, active)
 }
 
 // notifyRecordingStopped sends a recording_stopped event to main_module.
@@ -146,10 +246,10 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 					To:   "main-module",
 					Type: "recording_restarted",
 					Payload: map[string]interface{}{
-						"camera_id":  cameraID,
-						"attempt":    attempt,
-						"match_id":   meta.MatchID,
-						"period_id":  meta.PeriodID,
+						"camera_id": cameraID,
+						"attempt":   attempt,
+						"match_id":  meta.MatchID,
+						"period_id": meta.PeriodID,
 					},
 				})
 			}
@@ -310,9 +410,87 @@ func (rm *RecorderManager) HandleHubMessage(msg *Message, hubClient *HubClient) 
 			"cameras": rm.Status(),
 		})
 
+	case "mark_segment_end":
+		rm.handleMarkSegmentEnd(msg, hubClient)
+
+	case "start_stream":
+		cameraID, ok := stringField(msg.Payload, "camera_id")
+		if !ok || cameraID == "" {
+			log.Printf("⚠️  start_stream: missing camera_id")
+			rm.replyError(hubClient, msg, "missing camera_id")
+			return
+		}
+		if err := rm.streamer.StartStream(cameraID); err != nil {
+			log.Printf("❌ start_stream [%s]: %v", cameraID, err)
+			rm.replyError(hubClient, msg, err.Error())
+			return
+		}
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"camera_id": cameraID,
+			"streaming": true,
+		})
+
+	case "stop_stream":
+		if err := rm.streamer.StopStream(); err != nil {
+			log.Printf("❌ stop_stream: %v", err)
+			rm.replyError(hubClient, msg, err.Error())
+			return
+		}
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"streaming": false,
+		})
+
 	default:
 		// Not a recording message — caller should handle it
 	}
+}
+
+// handleMarkSegmentEnd processes a "mark_segment_end" hub message — a signal
+// that the current segment should end (subject to SegmentConfig's minimum
+// duration and delay, see CameraRecorder.MarkSegmentEnd).
+//
+// Expected payload:
+//
+//	{"camera_id": "camera1"}   — mark only that camera
+//	{}  or  {"camera_id": "all"} — mark every currently recording camera
+func (rm *RecorderManager) handleMarkSegmentEnd(msg *Message, hubClient *HubClient) {
+	cameraID, hasCameraID := stringField(msg.Payload, "camera_id")
+	single := hasCameraID && cameraID != "" && cameraID != "all"
+
+	rm.mu.RLock()
+	var targets []string
+	if single {
+		if _, ok := rm.cameras[cameraID]; ok {
+			targets = []string{cameraID}
+		}
+	} else {
+		for id := range rm.cameras {
+			targets = append(targets, id)
+		}
+	}
+	rm.mu.RUnlock()
+
+	if single && len(targets) == 0 {
+		log.Printf("⚠️  mark_segment_end: unknown camera: %s", cameraID)
+		rm.replyError(hubClient, msg, "unknown camera: "+cameraID)
+		return
+	}
+
+	results := make(map[string]interface{})
+	for _, id := range targets {
+		rm.mu.RLock()
+		cam := rm.cameras[id]
+		rm.mu.RUnlock()
+
+		if err := cam.MarkSegmentEnd(); err != nil {
+			log.Printf("⚠️  mark_segment_end [%s]: %v", id, err)
+			results[id] = map[string]interface{}{"acknowledged": false, "error": err.Error()}
+			continue
+		}
+		results[id] = map[string]interface{}{"acknowledged": true}
+	}
+
+	rm.replyOK(hubClient, msg, map[string]interface{}{"cameras": results})
 }
 
 // handleRecordingCommand handles the shared recording_command message format,
@@ -470,6 +648,65 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 			"request_id":    requestID,
 			"game_event_id": gameEventID,
 			"cameras":       cameraResults,
+		})
+
+	case "MarkSegmentEnd":
+		// Signal the end of the current segment for the given cameras.
+		// Subject to SegmentConfig's minimum duration and delay — see
+		// CameraRecorder.MarkSegmentEnd. Does not stop recording.
+		results := make(map[string]interface{})
+		for _, camID := range targetCameras {
+			cam, ok := rm.cameras[camID]
+			if !ok {
+				log.Printf("⚠️  recording_command MarkSegmentEnd: unknown camera: %s", camID)
+				results[camID] = map[string]interface{}{"acknowledged": false, "error": "camera not found"}
+				continue
+			}
+			if err := cam.MarkSegmentEnd(); err != nil {
+				log.Printf("⚠️  recording_command MarkSegmentEnd [%s]: %v", camID, err)
+				results[camID] = map[string]interface{}{"acknowledged": false, "error": err.Error()}
+				continue
+			}
+			log.Printf("🔔 recording_command MarkSegmentEnd [%s]: acknowledged", camID)
+			results[camID] = map[string]interface{}{"acknowledged": true}
+		}
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"requestType": requestType,
+			"cameras":     results,
+			"request_id":  requestID,
+		})
+
+	case "StartStream":
+		// Streams exactly one camera to Windows — the first camera in the
+		// "cameras" map with value true. Streaming a different one first
+		// stops the previous one; this does not touch recording.
+		if len(targetCameras) == 0 {
+			rm.replyError(hubClient, msg, "StartStream requires exactly one camera in the cameras map")
+			return
+		}
+		camID := targetCameras[0]
+		if err := rm.streamer.StartStream(camID); err != nil {
+			log.Printf("❌ recording_command StartStream [%s]: %v", camID, err)
+			rm.replyError(hubClient, msg, err.Error())
+			return
+		}
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"requestType": requestType,
+			"camera_id":   camID,
+			"streaming":   true,
+			"request_id":  requestID,
+		})
+
+	case "StopStream":
+		if err := rm.streamer.StopStream(); err != nil {
+			log.Printf("❌ recording_command StopStream: %v", err)
+			rm.replyError(hubClient, msg, err.Error())
+			return
+		}
+		rm.replyOK(hubClient, msg, map[string]interface{}{
+			"requestType": requestType,
+			"streaming":   false,
+			"request_id":  requestID,
 		})
 
 	default:

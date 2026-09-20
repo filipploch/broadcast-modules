@@ -21,6 +21,20 @@ type Config struct {
 	// Recording
 	OutputDir string         `json:"output_dir"` // e.g. /srv/samba/public/recorder
 	Cameras   []CameraConfig `json:"cameras"`
+
+	// Segmentation — see SegmentConfig (camera.go) for exact semantics.
+	SegmentMinSeconds         int `json:"segment_min_seconds"`          // earliest a signal may cut a segment (default 900 = 15 min)
+	SegmentMaxSeconds         int `json:"segment_max_seconds"`          // hard cap per segment (default 1200 = 20 min)
+	SegmentSignalDelaySeconds int `json:"segment_signal_delay_seconds"` // delay applied after a signal becomes actionable (default 10 s)
+
+	// Streaming to Windows — see StreamConfig (streamer.go). Only takes
+	// effect for cameras that also have "loopback_device" set. Leave
+	// stream_windows_host empty to disable streaming entirely.
+	StreamWindowsHost string `json:"stream_windows_host"` // Windows machine IP/hostname — required for streaming
+	StreamPort        int    `json:"stream_port"`         // default 9000
+	StreamProtocol    string `json:"stream_protocol"`     // only "srt" implemented for now
+	StreamCodec       string `json:"stream_codec"`        // "libx264" (default) or e.g. "h264_qsv" if available
+	StreamBitrate     string `json:"stream_bitrate"`      // default "4M"
 }
 
 func main() {
@@ -206,6 +220,8 @@ func loadConfig() Config {
 	log.Printf("   Discovery Port: %d", config.DiscoveryPort)
 	log.Printf("   Output Dir:     %s", config.OutputDir)
 	log.Printf("   Cameras:        %d configured", len(config.Cameras))
+	log.Printf("   Segment:        min=%ds max=%ds signal_delay=%ds",
+		config.SegmentMinSeconds, config.SegmentMaxSeconds, config.SegmentSignalDelaySeconds)
 	if config.HubURL != "" {
 		log.Printf("   Fallback URL:   %s", config.HubURL)
 	}
@@ -215,11 +231,18 @@ func loadConfig() Config {
 
 func defaultConfig() Config {
 	return Config{
-		PluginID:       "recorder-plugin",
-		PluginName:     "Camera Recorder Plugin",
-		DiscoveryPort:  9999,
-		DiscoveryRetry: true,
-		OutputDir:      "/srv/samba/public/recorder",
+		PluginID:                  "recorder-plugin",
+		PluginName:                "Camera Recorder Plugin",
+		DiscoveryPort:             9999,
+		DiscoveryRetry:            true,
+		OutputDir:                 "/srv/samba/public/recorder",
+		SegmentMinSeconds:         900,
+		SegmentMaxSeconds:         1200,
+		SegmentSignalDelaySeconds: 10,
+		StreamPort:                9000,
+		StreamProtocol:            "srt",
+		StreamCodec:               "libx264",
+		StreamBitrate:             "4M",
 		Cameras: []CameraConfig{
 			{ID: "camera1", DeviceName: "camera1", ServiceName: "recorder-camera1.service", Enabled: true},
 			{ID: "camera2", DeviceName: "camera2", ServiceName: "recorder-camera2.service", Enabled: true},
@@ -241,5 +264,31 @@ func applyDefaults(c *Config) {
 	}
 	if c.OutputDir == "" {
 		c.OutputDir = "/srv/samba/public/recorder"
+	}
+	if c.SegmentMinSeconds <= 0 {
+		c.SegmentMinSeconds = 900 // 15 min
+	}
+	if c.SegmentMaxSeconds <= 0 {
+		c.SegmentMaxSeconds = 1200 // 20 min
+	}
+	if c.SegmentSignalDelaySeconds < 0 {
+		c.SegmentSignalDelaySeconds = 10
+	}
+	if c.SegmentMaxSeconds <= c.SegmentMinSeconds {
+		log.Printf("⚠️  segment_max_seconds (%d) ≤ segment_min_seconds (%d) — forcing max = min + 60s",
+			c.SegmentMaxSeconds, c.SegmentMinSeconds)
+		c.SegmentMaxSeconds = c.SegmentMinSeconds + 60
+	}
+	if c.StreamPort == 0 {
+		c.StreamPort = 9000
+	}
+	if c.StreamProtocol == "" {
+		c.StreamProtocol = "srt"
+	}
+	if c.StreamCodec == "" {
+		c.StreamCodec = "libx264"
+	}
+	if c.StreamBitrate == "" {
+		c.StreamBitrate = "4M"
 	}
 }

@@ -5,11 +5,14 @@
   "discovery_retry": true,
   "hub_url": "",
   "output_dir": "/srv/samba/public/recorder",
+  "stream_windows_host": "Lenovo.local",
+  "stream_port": 9000,
   "cameras": [
     {
       "id": "camera1",
       "device_name": "camera1",
       "device_path": "/dev/camera1",
+      "loopback_device": "/dev/video11",
       "service_name": "recorder-camera1.service",
       "enabled": true
     },
@@ -17,6 +20,7 @@
       "id": "camera2",
       "device_name": "camera2",
       "device_path": "/dev/camera2",
+      "loopback_device": "/dev/video12",
       "service_name": "recorder-camera2.service",
       "enabled": true
     },
@@ -24,6 +28,7 @@
       "id": "camera3",
       "device_name": "camera3",
       "device_path": "/dev/camera3",
+      "loopback_device": "/dev/video13",
       "service_name": "recorder-camera3.service",
       "enabled": true
     },
@@ -31,6 +36,7 @@
       "id": "camera4",
       "device_name": "camera4",
       "device_path": "/dev/camera4",
+      "loopback_device": "/dev/video14",
       "service_name": "recorder-camera4.service",
       "enabled": true
     }
