@@ -46,6 +46,13 @@ type CameraConfig struct {
 	// module and this device to already exist — see README/deployment notes.
 	// Leave empty to disable streaming for this camera entirely.
 	LoopbackDevice string `json:"loopback_device,omitempty"`
+
+	// StreamPort, if set, is the port this camera's stream is sent to on the
+	// Windows host — each camera streams concurrently on its own port, so
+	// these must be distinct across cameras. Leave at 0 to auto-assign
+	// sequentially from Config.StreamPort in camera list order (see
+	// NewRecorderManager), which is enough for most setups.
+	StreamPort int `json:"stream_port,omitempty"`
 }
 
 // SegmentConfig controls automatic segment rotation for a recording session.
@@ -73,6 +80,7 @@ type CameraRecorder struct {
 	config    CameraConfig
 	outputDir string
 	segCfg    SegmentConfig
+	codec     string // "libx264" (default) or e.g. "h264_qsv" — see buildFFmpegArgs
 
 	// opMu serializes the "big" state transitions (start / stop / rotate) so
 	// they can never interleave — e.g. a manual stop arriving mid-rotation.
@@ -96,11 +104,17 @@ type CameraRecorder struct {
 }
 
 // NewCameraRecorder creates a CameraRecorder for the given camera config.
-func NewCameraRecorder(cfg CameraConfig, outputDir string, segCfg SegmentConfig) *CameraRecorder {
+// codec selects the recording encoder ("libx264" if empty/unrecognised —
+// see buildFFmpegArgs for what changes per codec).
+func NewCameraRecorder(cfg CameraConfig, outputDir string, segCfg SegmentConfig, codec string) *CameraRecorder {
+	if codec == "" {
+		codec = "libx264"
+	}
 	return &CameraRecorder{
 		config:    cfg,
 		outputDir: outputDir,
 		segCfg:    segCfg,
+		codec:     codec,
 	}
 }
 
@@ -413,18 +427,26 @@ func (cr *CameraRecorder) launchSegment(meta RecordingMeta, sessionID string, se
 //
 // Recording output (always present):
 //
-//	-c:v libx264         — encode to H.264
-//	-preset ultrafast    — lowest CPU usage, acceptable quality
-//	-crf 23              — constant quality (18=near-lossless, 28=lower quality)
-//	-an                  — no audio
-//	-y                   — overwrite output without asking
+//	-c:v <codec>          — encode to H.264 — "libx264" (software, works
+//	                        everywhere) or a hardware encoder such as
+//	                        "h264_qsv" on Intel Quick Sync hardware. The
+//	                        exact rate-control flags differ per codec — see
+//	                        the branches below — but the goal in both cases
+//	                        is "good constant quality at 1080p30", not a
+//	                        fixed bitrate.
+//	-an                   — no audio
+//	-y                    — overwrite output without asking
 //
 // If cfg.LoopbackDevice is set, a second output is added via -filter_complex
 // split — the camera is decoded ONCE, and a raw (uncompressed) copy of the
 // same frames is written to the loopback device alongside the encoded
 // recording. This is what lets StreamManager read a live feed of this camera
 // without opening the (exclusive-access) physical device a second time.
-func buildFFmpegArgs(cfg CameraConfig, filePath string) []string {
+func buildFFmpegArgs(cfg CameraConfig, codec string, filePath string) []string {
+	if codec == "" {
+		codec = "libx264"
+	}
+
 	args := []string{
 		"-f", "v4l2",
 		"-input_format", "mjpeg",
@@ -440,10 +462,36 @@ func buildFFmpegArgs(cfg CameraConfig, filePath string) []string {
 		)
 	}
 
+	args = append(args, "-c:v", codec)
+	switch codec {
+	case "libx264":
+		args = append(args,
+			"-preset", "ultrafast", // lowest CPU usage, acceptable quality
+			"-crf", "23", // constant quality (18=near-lossless, 28=lower quality)
+		)
+	case "h264_qsv":
+		// QSV's analogue of libx264's -crf is -global_quality (ICQ mode) —
+		// variable bitrate targeting a quality level rather than a fixed
+		// rate. "-look_ahead 0" keeps latency/CPU-side buffering low, which
+		// matters less for recording than for streaming but costs nothing.
+		// NOTE: QSV rate-control flags are driver/ffmpeg-build sensitive —
+		// verify this actually produces expected quality/bitrate on the
+		// target machine (intel-media-driver + this ffmpeg build) before
+		// relying on it; the libx264 path above is fully deterministic
+		// software behaviour, this one is not.
+		args = append(args,
+			"-preset", "veryfast",
+			"-global_quality", "23",
+			"-look_ahead", "0",
+		)
+	default:
+		// Unknown/other hardware encoder (e.g. h264_vaapi, h264_nvenc):
+		// pass a sane bitrate-based fallback rather than guessing at
+		// codec-specific quality flags we haven't validated.
+		args = append(args, "-b:v", "6M")
+	}
+
 	args = append(args,
-		"-c:v", "libx264",
-		"-preset", "ultrafast",
-		"-crf", "23",
 		"-g", "30", // keyframe co 30 klatek = co 1 sekundę (przy 30fps)
 		"-keyint_min", "30", // wymusz minimalny interwał keyframe
 		"-force_key_frames", "expr:gte(t,n_forced*1)", // keyframe dokładnie co 1s
@@ -472,7 +520,7 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 		return fmt.Errorf("failed to create output dir: %w", err)
 	}
 
-	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cr.config, filePath)...)
+	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cr.config, cr.codec, filePath)...)
 
 	cmd.Stdout = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
 	cmd.Stderr = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))

@@ -41,7 +41,7 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 			log.Printf("⏭️  Camera %s is disabled — skipping", camCfg.ID)
 			continue
 		}
-		cam := NewCameraRecorder(camCfg, cfg.OutputDir, segCfg)
+		cam := NewCameraRecorder(camCfg, cfg.OutputDir, segCfg, cfg.RecordingCodec)
 		rm.cameras[camCfg.ID] = cam
 
 		// Capture camCfg.ID for the closures below
@@ -52,24 +52,40 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		cam.SetOnSegmentRotated(func(meta RecordingMeta, reason string) {
 			rm.notifySegmentRotated(camID, meta, reason)
 		})
-		log.Printf("📷 Camera registered: %s (service: %s, segment: min=%s max=%s delay=%s)",
-			camCfg.ID, camCfg.ServiceName, segCfg.MinDuration, segCfg.MaxDuration, segCfg.SignalDelay)
+		log.Printf("📷 Camera registered: %s (service: %s, codec: %s, segment: min=%s max=%s delay=%s)",
+			camCfg.ID, camCfg.ServiceName, cam.codec, segCfg.MinDuration, segCfg.MaxDuration, segCfg.SignalDelay)
 	}
 
+	// Every camera with a loopback_device gets its own stream port: an
+	// explicit CameraConfig.StreamPort if set, otherwise the next free port
+	// starting at cfg.StreamPort, assigned in camera list order so the
+	// mapping is stable and predictable from config.json alone.
 	loopbacks := make(map[string]string)
+	ports := make(map[string]int)
+	basePort := cfg.StreamPort
+	if basePort == 0 {
+		basePort = 9000
+	}
+	nextAutoPort := basePort
 	for _, camCfg := range cfg.Cameras {
-		if camCfg.Enabled && camCfg.LoopbackDevice != "" {
-			loopbacks[camCfg.ID] = camCfg.LoopbackDevice
+		if !camCfg.Enabled || camCfg.LoopbackDevice == "" {
+			continue
+		}
+		loopbacks[camCfg.ID] = camCfg.LoopbackDevice
+		if camCfg.StreamPort != 0 {
+			ports[camCfg.ID] = camCfg.StreamPort
+		} else {
+			ports[camCfg.ID] = nextAutoPort
+			nextAutoPort++
 		}
 	}
 	streamCfg := StreamConfig{
 		Host:     cfg.StreamWindowsHost,
-		Port:     cfg.StreamPort,
 		Protocol: cfg.StreamProtocol,
 		Codec:    cfg.StreamCodec,
 		Bitrate:  cfg.StreamBitrate,
 	}
-	rm.streamer = NewStreamManager(loopbacks, func(id string) bool {
+	rm.streamer = NewStreamManager(loopbacks, ports, func(id string) bool {
 		rm.mu.RLock()
 		cam, ok := rm.cameras[id]
 		rm.mu.RUnlock()
@@ -84,8 +100,12 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 	} else if len(loopbacks) == 0 {
 		log.Printf("⏭️  Streaming to Windows configured (host=%s) but no camera has loopback_device set — nothing streamable", streamCfg.Host)
 	} else {
-		log.Printf("📡 Streaming to Windows ready: host=%s port=%d codec=%s cameras=%d",
-			streamCfg.Host, streamCfg.Port, streamCfg.Codec, len(loopbacks))
+		for _, camCfg := range cfg.Cameras {
+			if port, ok := ports[camCfg.ID]; ok {
+				log.Printf("📡 Streaming to Windows ready: %s → %s:%d (codec=%s)",
+					camCfg.ID, streamCfg.Host, port, streamCfg.Codec)
+			}
+		}
 	}
 
 	return rm
@@ -206,6 +226,13 @@ func (rm *RecorderManager) notifyRecordingStopped(cameraID string) {
 func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingMeta) {
 	log.Printf("🔄 [%s] Unexpected stop detected — scheduling auto-restart", cameraID)
 
+	// The camera's own ffmpeg (and with it, the loopback feed) just died, so
+	// its stream to Windows has nothing left to read — stop it too. A
+	// successful auto-restart below re-starts the stream via StartRecord.
+	if err := rm.streamer.StopStream(cameraID); err != nil {
+		log.Printf("⏭️  [%s] auto-stream stop after crash: %v", cameraID, err)
+	}
+
 	// Powiadom main_module z reason="crash"
 	rm.mu.RLock()
 	hc := rm.hubClient
@@ -294,6 +321,15 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 	}
 
 	rm.notifyRecordingStarted(cam.LastMeta())
+
+	// Auto-start this camera's stream to Windows, if configured. Streaming
+	// is best-effort here: a failure (e.g. stream_windows_host unset, or no
+	// loopback_device for this camera) must not fail the recording itself,
+	// so it's only logged, not returned.
+	if err := rm.streamer.StartStream(cameraID); err != nil {
+		log.Printf("⏭️  [%s] auto-stream not started: %v", cameraID, err)
+	}
+
 	return nil
 }
 
@@ -313,6 +349,13 @@ func (rm *RecorderManager) StopRecord(cameraID string) error {
 	}
 
 	rm.notifyRecordingStopped(cameraID)
+
+	// The loopback has no data once recording ffmpeg has stopped, so stop
+	// this camera's stream too (best-effort — no-op if it wasn't streaming).
+	if err := rm.streamer.StopStream(cameraID); err != nil {
+		log.Printf("⏭️  [%s] auto-stream stop: %v", cameraID, err)
+	}
+
 	return nil
 }
 
@@ -331,6 +374,11 @@ func (rm *RecorderManager) StopAll() {
 			log.Printf("⚠️  StopAll [%s]: %v", id, err)
 		}
 	}
+
+	// Belt-and-braces: StopRecord above already stops each camera's stream,
+	// but this catches anything left running (e.g. a manually-started
+	// stream for a camera that was never recording).
+	rm.streamer.StopAllStreams()
 }
 
 // Status returns a snapshot of recording state for all cameras.
@@ -414,35 +462,54 @@ func (rm *RecorderManager) HandleHubMessage(msg *Message, hubClient *HubClient) 
 		rm.handleMarkSegmentEnd(msg, hubClient)
 
 	case "start_stream":
-		cameraID, ok := stringField(msg.Payload, "camera_id")
-		if !ok || cameraID == "" {
-			log.Printf("⚠️  start_stream: missing camera_id")
-			rm.replyError(hubClient, msg, "missing camera_id")
+		// Every configured camera can stream concurrently, so this starts
+		// (or re-starts) any number of them at once. Streaming already
+		// starts automatically with recording — this is for manual control.
+		// payload: {"camera_id": "camera1"} or {"camera_id": "all"} or {}
+		results := make(map[string]interface{})
+		for _, id := range rm.streamTargets(msg.Payload) {
+			if err := rm.streamer.StartStream(id); err != nil {
+				log.Printf("❌ start_stream [%s]: %v", id, err)
+				results[id] = map[string]interface{}{"streaming": false, "error": err.Error()}
+				continue
+			}
+			results[id] = map[string]interface{}{"streaming": true}
+		}
+		if len(results) == 0 {
+			rm.replyError(hubClient, msg, "no matching camera(s) to stream")
 			return
 		}
-		if err := rm.streamer.StartStream(cameraID); err != nil {
-			log.Printf("❌ start_stream [%s]: %v", cameraID, err)
-			rm.replyError(hubClient, msg, err.Error())
-			return
-		}
-		rm.replyOK(hubClient, msg, map[string]interface{}{
-			"camera_id": cameraID,
-			"streaming": true,
-		})
+		rm.replyOK(hubClient, msg, map[string]interface{}{"cameras": results})
 
 	case "stop_stream":
-		if err := rm.streamer.StopStream(); err != nil {
-			log.Printf("❌ stop_stream: %v", err)
-			rm.replyError(hubClient, msg, err.Error())
-			return
+		// payload: {"camera_id": "camera1"} or {"camera_id": "all"} or {}
+		// (defaults to "all" — stopping whatever is currently streaming)
+		results := make(map[string]interface{})
+		for _, id := range rm.streamTargets(msg.Payload) {
+			if err := rm.streamer.StopStream(id); err != nil {
+				log.Printf("❌ stop_stream [%s]: %v", id, err)
+				results[id] = map[string]interface{}{"streaming": true, "error": err.Error()}
+				continue
+			}
+			results[id] = map[string]interface{}{"streaming": false}
 		}
-		rm.replyOK(hubClient, msg, map[string]interface{}{
-			"streaming": false,
-		})
+		rm.replyOK(hubClient, msg, map[string]interface{}{"cameras": results})
 
 	default:
 		// Not a recording message — caller should handle it
 	}
+}
+
+// streamTargets resolves which cameras a start_stream/stop_stream message
+// applies to: a single "camera_id", or every camera known to the streamer
+// (i.e. every enabled camera with a loopback_device configured) when
+// camera_id is "all", empty, or absent.
+func (rm *RecorderManager) streamTargets(payload map[string]interface{}) []string {
+	cameraID, hasCameraID := stringField(payload, "camera_id")
+	if hasCameraID && cameraID != "" && cameraID != "all" {
+		return []string{cameraID}
+	}
+	return rm.streamer.ConfiguredCameras()
 }
 
 // handleMarkSegmentEnd processes a "mark_segment_end" hub message — a signal
@@ -677,35 +744,48 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 		})
 
 	case "StartStream":
-		// Streams exactly one camera to Windows — the first camera in the
-		// "cameras" map with value true. Streaming a different one first
-		// stops the previous one; this does not touch recording.
+		// Streams every camera set to true in the "cameras" map, all
+		// concurrently — this never stops another camera's stream, and
+		// never touches recording. Streaming already starts automatically
+		// when a camera starts recording; this is for manual control.
 		if len(targetCameras) == 0 {
-			rm.replyError(hubClient, msg, "StartStream requires exactly one camera in the cameras map")
+			rm.replyError(hubClient, msg, "StartStream requires at least one camera in the cameras map")
 			return
 		}
-		camID := targetCameras[0]
-		if err := rm.streamer.StartStream(camID); err != nil {
-			log.Printf("❌ recording_command StartStream [%s]: %v", camID, err)
-			rm.replyError(hubClient, msg, err.Error())
-			return
+		results := make(map[string]interface{})
+		for _, camID := range targetCameras {
+			if err := rm.streamer.StartStream(camID); err != nil {
+				log.Printf("❌ recording_command StartStream [%s]: %v", camID, err)
+				results[camID] = map[string]interface{}{"streaming": false, "error": err.Error()}
+				continue
+			}
+			results[camID] = map[string]interface{}{"streaming": true}
 		}
 		rm.replyOK(hubClient, msg, map[string]interface{}{
 			"requestType": requestType,
-			"camera_id":   camID,
-			"streaming":   true,
+			"cameras":     results,
 			"request_id":  requestID,
 		})
 
 	case "StopStream":
-		if err := rm.streamer.StopStream(); err != nil {
-			log.Printf("❌ recording_command StopStream: %v", err)
-			rm.replyError(hubClient, msg, err.Error())
-			return
+		// Stops every camera set to true in the "cameras" map; empty map
+		// stops every currently-configured camera's stream.
+		targets := targetCameras
+		if len(targets) == 0 {
+			targets = rm.streamer.ConfiguredCameras()
+		}
+		results := make(map[string]interface{})
+		for _, camID := range targets {
+			if err := rm.streamer.StopStream(camID); err != nil {
+				log.Printf("❌ recording_command StopStream [%s]: %v", camID, err)
+				results[camID] = map[string]interface{}{"streaming": true, "error": err.Error()}
+				continue
+			}
+			results[camID] = map[string]interface{}{"streaming": false}
 		}
 		rm.replyOK(hubClient, msg, map[string]interface{}{
 			"requestType": requestType,
-			"streaming":   false,
+			"cameras":     results,
 			"request_id":  requestID,
 		})
 

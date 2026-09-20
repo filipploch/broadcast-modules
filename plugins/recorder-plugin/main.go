@@ -22,6 +22,14 @@ type Config struct {
 	OutputDir string         `json:"output_dir"` // e.g. /srv/samba/public/recorder
 	Cameras   []CameraConfig `json:"cameras"`
 
+	// RecordingCodec selects the encoder used for the .mkv recordings —
+	// "libx264" (default, software, works everywhere) or a hardware encoder
+	// such as "h264_qsv" (Intel Quick Sync — recommended once verified
+	// working on the target machine, since it frees the CPU that 4 parallel
+	// libx264 sessions would otherwise saturate). See buildFFmpegArgs
+	// (camera.go) for exactly which flags change per codec.
+	RecordingCodec string `json:"recording_codec"`
+
 	// Segmentation — see SegmentConfig (camera.go) for exact semantics.
 	SegmentMinSeconds         int `json:"segment_min_seconds"`          // earliest a signal may cut a segment (default 900 = 15 min)
 	SegmentMaxSeconds         int `json:"segment_max_seconds"`          // hard cap per segment (default 1200 = 20 min)
@@ -30,8 +38,17 @@ type Config struct {
 	// Streaming to Windows — see StreamConfig (streamer.go). Only takes
 	// effect for cameras that also have "loopback_device" set. Leave
 	// stream_windows_host empty to disable streaming entirely.
+	//
+	// Every camera with a loopback_device streams concurrently, each on its
+	// own port: StreamPort is the base port, auto-assigned sequentially in
+	// camera list order (StreamPort, StreamPort+1, StreamPort+2, ...) to
+	// cameras that don't set their own CameraConfig.StreamPort. Streaming
+	// for a camera starts automatically when that camera starts recording
+	// and stops when it stops — no manual start_stream call is needed for
+	// the normal case of "watch whatever is recording"; start_stream/
+	// stop_stream remain available for manual control per camera.
 	StreamWindowsHost string `json:"stream_windows_host"` // Windows machine IP/hostname — required for streaming
-	StreamPort        int    `json:"stream_port"`         // default 9000
+	StreamPort        int    `json:"stream_port"`         // base port, default 9000
 	StreamProtocol    string `json:"stream_protocol"`     // only "srt" implemented for now
 	StreamCodec       string `json:"stream_codec"`        // "libx264" (default) or e.g. "h264_qsv" if available
 	StreamBitrate     string `json:"stream_bitrate"`      // default "4M"
@@ -219,6 +236,7 @@ func loadConfig() Config {
 	log.Printf("✅ Config loaded from: %s", configPath)
 	log.Printf("   Discovery Port: %d", config.DiscoveryPort)
 	log.Printf("   Output Dir:     %s", config.OutputDir)
+	log.Printf("   Recording:      codec=%s", config.RecordingCodec)
 	log.Printf("   Cameras:        %d configured", len(config.Cameras))
 	log.Printf("   Segment:        min=%ds max=%ds signal_delay=%ds",
 		config.SegmentMinSeconds, config.SegmentMaxSeconds, config.SegmentSignalDelaySeconds)
@@ -236,6 +254,7 @@ func defaultConfig() Config {
 		DiscoveryPort:             9999,
 		DiscoveryRetry:            true,
 		OutputDir:                 "/srv/samba/public/recorder",
+		RecordingCodec:            "libx264",
 		SegmentMinSeconds:         900,
 		SegmentMaxSeconds:         1200,
 		SegmentSignalDelaySeconds: 10,
@@ -264,6 +283,9 @@ func applyDefaults(c *Config) {
 	}
 	if c.OutputDir == "" {
 		c.OutputDir = "/srv/samba/public/recorder"
+	}
+	if c.RecordingCodec == "" {
+		c.RecordingCodec = "libx264"
 	}
 	if c.SegmentMinSeconds <= 0 {
 		c.SegmentMinSeconds = 900 // 15 min
