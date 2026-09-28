@@ -180,18 +180,6 @@ socket.on('flash_msg', (data) => {
 
 
 
-socket.on('recording_status_response', data => {
-    console.log(data);
-});
-
-socket.on('recording_started', cameras => {
-    updateCamerasIndicators(cameras);
-});
-
-socket.on('recording_stopped', cameras => {
-    updateCamerasIndicators(cameras);
-});
-
 socket.on('recording_status_updated', cameras => {
     updateRecordingIndicators(cameras);
 });
