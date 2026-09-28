@@ -415,8 +415,15 @@ func (rm *RecorderManager) HandleShutdownHost(msg *Message, hubClient *HubClient
 	time.Sleep(500 * time.Millisecond)
 
 	log.Println("⚡ Powering off host now")
-	if err := exec.Command("systemctl", "poweroff").Run(); err != nil {
-		log.Printf("❌ systemctl poweroff failed: %v", err)
+	// Plain "systemctl poweroff" goes through polkit, which denies it here:
+	// recorder-plugin runs as a detached background process (no controlling
+	// terminal, no active login session), and polkit's default rules only
+	// authorise power-off for an active/interactive session — even for the
+	// same unprivileged user that works fine over an interactive ssh
+	// session. Going through sudo (see /etc/sudoers.d/recorder-plugin-poweroff
+	// — NOPASSWD for exactly this one command) sidesteps that entirely.
+	if out, err := exec.Command("sudo", "systemctl", "poweroff").CombinedOutput(); err != nil {
+		log.Printf("❌ systemctl poweroff failed: %v — output: %s", err, string(out))
 	}
 }
 
