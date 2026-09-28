@@ -198,7 +198,7 @@ function _buildStreamControllers() {
     </div>
     <div style="display:flex; width:100%;">
         <div id="timer-plugin-icon" style="width:12.5%;"></div>
-        <div id="recorder-plugin-icon" style="width:12.5%;"></div>
+        <div id="recorder-plugin-icon" style="width:12.5%;" ondblclick="onRecorderPluginIconDblClick()"></div>
         <div id="obs-ws-plugin-icon" style="width:12.5%;"></div>
         <div id="replay-plugin-icon" style="width:12.5%;"></div>
         <div id="controller-plugin-icon" style="width:12.5%;"></div>

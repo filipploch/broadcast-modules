@@ -1,0 +1,55 @@
+/* ── #camera-controllers-container — kontroler kamer ──────────────────────
+   Domyślna stylizacja ".field-games" dla obecnych modułów: dwa kontenery
+   jeden nad drugim — górny z trzema przyciskami (L/C/R), dolny z dwoma
+   (M/m) — obie linie mają tę samą łączną szerokość. */
+
+.field-games {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 84px;
+    margin: 2px 0;
+}
+
+.field-games-row {
+    display: grid;
+    gap: 2px;
+}
+
+.field-games-row-top {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.field-games-row-bottom {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.field-camera-btn {
+    box-sizing: border-box;
+    height: 26px;
+    border: 1px solid #9a9a9a;
+    border-radius: 4px;
+    background-color: #3a3a3a;
+    color: #ddd;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.field-camera-btn:hover:not(:disabled) {
+    background-color: #4c4c4c;
+}
+
+.field-camera-btn:disabled {
+    color: dimgray;
+    background-color: lightgray;
+    border-color: #bbb;
+    cursor: not-allowed;
+}
+
+.field-camera-btn.is-active {
+    background-color: chartreuse;
+    border-color: chartreuse;
+    color: #111;
+}

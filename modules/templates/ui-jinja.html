@@ -12,6 +12,7 @@
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/game-field.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/events-controllers.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/overlay-switcher.css') }}">
+	<link rel="stylesheet" href="{{ url_for('static', filename='css/field-games.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/event-edit.css') }}">
 	<style>
 		.game-field-cell     { background-image: url({{ url_for('static', filename='images/field/empty.png') }}) }
@@ -23,7 +24,7 @@
 	<div id="container2">
 
 		<!-- ── Kolumna: status pluginów + nakładki + kontroler zdarzeń ── -->
-		<div style="width:222px; height: 100vh;">
+		<div id="central-controller" style="width:222px; height: 100vh;">
 
 			<div class="top-bar">
 				<button id="nav-to-period-control" class="top-bar-element wingdings"
@@ -56,6 +57,18 @@
 					<div id="scale-screen" class="overlay-switcher screen-container"
 						ondblclick="scaleScreen()"
 						style="background-image: url({{ url_for('static', filename='images/ui/scale.png') }})"></div>
+				</div>
+
+				<div id="camera-controllers-container" class="field-games">
+					<div class="field-games-row field-games-row-top">
+						<button type="button" class="field-camera-btn" data-camera-btn="L" disabled onclick="switchCameraSource('L')">L</button>
+						<button type="button" class="field-camera-btn" data-camera-btn="C" disabled onclick="switchCameraSource('C')">C</button>
+						<button type="button" class="field-camera-btn" data-camera-btn="R" disabled onclick="switchCameraSource('R')">R</button>
+					</div>
+					<div class="field-games-row field-games-row-bottom">
+						<button type="button" class="field-camera-btn is-active" data-camera-btn="M" onclick="switchCameraSource('M')">M</button>
+						<button type="button" class="field-camera-btn" data-camera-btn="m" disabled onclick="switchCameraSource('m')">m</button>
+					</div>
 				</div>
 
 				<div id="events-controllers-container">
@@ -146,6 +159,7 @@
 	<script src="{{ url_for('static', filename='js/pages/ui-jinja.js') }}"></script>
 	<!-- <script src="{{ url_for('static', filename='js/plugins/plugins-states.js') }}"></script> -->
 	<script src="{{ url_for('static', filename='js/plugins/overlay-utils.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/plugins/camera-controllers.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/pages/events-controllers.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/replay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/vendor/joy.js') }}"></script>

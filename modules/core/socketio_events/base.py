@@ -17,6 +17,23 @@ def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
 
+def _send_wol_packet(mac_address):
+    """Broadcasts a Wake-on-LAN magic packet (6x 0xFF + MAC repeated 16x)
+    as a UDP datagram on port 9 — same effect as the usual PowerShell
+    one-liner, done natively so it works regardless of what OS main-module
+    runs on."""
+    import socket as pysocket
+
+    mac_bytes = bytes.fromhex(mac_address.replace(':', '').replace('-', ''))
+    magic_packet = b'\xff' * 6 + mac_bytes * 16
+
+    sock = pysocket.socket(pysocket.AF_INET, pysocket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(pysocket.SOL_SOCKET, pysocket.SO_BROADCAST, 1)
+        sock.sendto(magic_packet, ('255.255.255.255', 9))
+    finally:
+        sock.close()
+
 # Sentinel odróżniający "nie podano" od jawnego None (BRAK) dla team_id w podglądzie edycji.
 _TEAM_ID_NOT_SET = object()
 
@@ -245,6 +262,22 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    @socketio.on('wake_recorder_plugin')
+    def handle_wake_recorder_plugin():
+        # Double-click on #recorder-plugin-icon while it's greyed out (not
+        # connected to the hub) — see onRecorderPluginIconDblClick (index.js).
+        # The Debian box running recorder-plugin has WOL enabled precisely
+        # for this: wake it remotely instead of walking over to it.
+        mac = current_app.config.get('RECORDER_PLUGIN_MAC')
+        if not mac:
+            logger.warning("wake_recorder_plugin: RECORDER_PLUGIN_MAC not configured")
+            return
+        try:
+            _send_wol_packet(mac)
+            logger.info(f"📡 Wake-on-LAN packet sent to recorder-plugin host ({mac})")
+        except Exception as e:
+            logger.error(f"Failed to send WOL packet to {mac}: {e}")
+
     @socketio.on('get_obs_ws_connection')
     def handle_get_obs_ws_connection():
         from core.managers import get_hub_client
@@ -294,6 +327,42 @@ def register_events(socketio):
                 'enabled':     new_enabled,
             })
 
+    # Źródła #camera-controllers-container (.field-games) w scenie "CAMERAS" —
+    # dokładnie jedno z nich jest widoczne naraz, więc włączenie jednego
+    # oznacza wyłączenie pozostałych czterech. Zobacz camera-controllers.js.
+    # CAMERA_CONTROLLER_SOURCES = ('Camera1', 'sCamera1', 'sCamera2', 'sCamera3', 'sCamera4')
+
+    @socketio.on('switch_camera_source')
+    def handle_switch_camera_source(data):
+        from core.managers import get_obs_ws_manager
+        from core.extensions import socketio as _sio
+        scene_name  = data.get('scene_name', 'CAMERAS')
+        source_name = data.get('source_name')
+        source_type = 'OBS_SOURCE_TYPE_INPUT'
+        obs = get_obs_ws_manager()
+        camera_controller_sources = obs.get_scene_item_list(scene_name, source_type=source_type)
+        for _source in camera_controller_sources:
+            print(f"Found source in scene '{scene_name}': {_source}")
+        if source_name not in [source['sourceName'] for source in camera_controller_sources]:
+            return
+
+        
+        for source in camera_controller_sources:
+            name = source['sourceName']
+            item_id = obs.get_scene_item_id(scene_name, name)
+            print(f"Switching source: {name}, item_id: {item_id}, target: {source_name}")
+            if item_id is None:
+                continue
+            if name == source_name:
+                obs.set_scene_item_enabled(scene_name, item_id, True)
+            else:
+                obs.set_scene_item_enabled(scene_name, item_id, False)
+
+        _sio.emit('camera_source_switched', {
+            'scene_name':  scene_name,
+            'source_name': source_name,
+        })
+
     @socketio.on('refresh_overlay_and_switch_scene')
     def handle_refresh_overlay_and_switch_scene():
         from core.managers import get_obs_ws_manager
@@ -329,6 +398,32 @@ def register_events(socketio):
         hub_client = get_hub_client()
         if hub_client:
             hub_client.send_to_plugin('recorder-plugin', 'recording_status', {})
+
+    @socketio.on('get_camera_source_status')
+    def handle_get_camera_source_status():
+        # Companion to handle_switch_camera_source above: that one only fires
+        # camera_source_switched when a switch actually happens, so a client
+        # that (re)loads the panel without ever switching a camera itself
+        # never learns which of the 5 CAMERA_CONTROLLER_SOURCES is actually
+        # live right now — see camera-controllers.js, whose "M" button starts
+        # with is-active hard-coded in the Jinja template as a fallback, same
+        # disabled-buttons bug this mirrors for get_camera_recording_status.
+        from core.managers import get_obs_ws_manager
+        from core.extensions import socketio as _sio
+        scene_name = 'CAMERAS'
+        source_type = 'OBS_SOURCE_TYPE_INPUT'
+        obs = get_obs_ws_manager()
+        camera_controller_sources = obs.get_scene_item_list(scene_name, source_type=source_type)
+        active_source = next(
+            (source['sourceName'] for source in camera_controller_sources if source.get('sceneItemEnabled')),
+            None,
+        )
+        if active_source is None:
+            return
+        _sio.emit('camera_source_switched', {
+            'scene_name':  scene_name,
+            'source_name': active_source,
+        })
 
     # ── Filters ───────────────────────────────────────────────────────────────
 

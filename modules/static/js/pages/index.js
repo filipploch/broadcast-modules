@@ -202,6 +202,15 @@ socket.on('plugins_states', (data) => {
     }
 });
 
+// Dwuklik budzi Debiana z recorder-pluginem przez WOL, ale tylko gdy plugin
+// jest faktycznie odłączony (szara ikona) — jeśli już działa, nie ma czego
+// budzić.
+function onRecorderPluginIconDblClick() {
+    const state = _pluginStates['recorder-plugin'];
+    if (state && state.is_active) return;
+    socket.emit('wake_recorder_plugin');
+}
+
 // ============================================================================
 // WEBSOCKET
 // ============================================================================
