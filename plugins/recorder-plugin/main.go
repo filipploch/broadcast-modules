@@ -30,6 +30,12 @@ type Config struct {
 	// (camera.go) for exactly which flags change per codec.
 	RecordingCodec string `json:"recording_codec"`
 
+	// VaapiDevice is the DRM render node used when RecordingCodec or
+	// StreamCodec is "h264_vaapi" — default "/dev/dri/renderD128". Same
+	// device is shared by recording and streaming; both hwupload from
+	// software frames onto it independently, each in their own process.
+	VaapiDevice string `json:"vaapi_device"`
+
 	// Segmentation — see SegmentConfig (camera.go) for exact semantics.
 	SegmentMinSeconds         int `json:"segment_min_seconds"`          // earliest a signal may cut a segment (default 900 = 15 min)
 	SegmentMaxSeconds         int `json:"segment_max_seconds"`          // hard cap per segment (default 1200 = 20 min)
@@ -236,7 +242,7 @@ func loadConfig() Config {
 	log.Printf("✅ Config loaded from: %s", configPath)
 	log.Printf("   Discovery Port: %d", config.DiscoveryPort)
 	log.Printf("   Output Dir:     %s", config.OutputDir)
-	log.Printf("   Recording:      codec=%s", config.RecordingCodec)
+	log.Printf("   Recording:      codec=%s vaapi_device=%s", config.RecordingCodec, config.VaapiDevice)
 	log.Printf("   Cameras:        %d configured", len(config.Cameras))
 	log.Printf("   Segment:        min=%ds max=%ds signal_delay=%ds",
 		config.SegmentMinSeconds, config.SegmentMaxSeconds, config.SegmentSignalDelaySeconds)
@@ -255,6 +261,7 @@ func defaultConfig() Config {
 		DiscoveryRetry:            true,
 		OutputDir:                 "/srv/samba/public/recorder",
 		RecordingCodec:            "libx264",
+		VaapiDevice:               "/dev/dri/renderD128",
 		SegmentMinSeconds:         900,
 		SegmentMaxSeconds:         1200,
 		SegmentSignalDelaySeconds: 10,
@@ -286,6 +293,9 @@ func applyDefaults(c *Config) {
 	}
 	if c.RecordingCodec == "" {
 		c.RecordingCodec = "libx264"
+	}
+	if c.VaapiDevice == "" {
+		c.VaapiDevice = "/dev/dri/renderD128"
 	}
 	if c.SegmentMinSeconds <= 0 {
 		c.SegmentMinSeconds = 900 // 15 min

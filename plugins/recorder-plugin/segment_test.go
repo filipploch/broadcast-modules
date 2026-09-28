@@ -33,6 +33,7 @@ func TestMarkSegmentEndBeforeRecording(t *testing.T) {
 		t.TempDir(),
 		SegmentConfig{MinDuration: 150 * time.Millisecond, MaxDuration: 400 * time.Millisecond, SignalDelay: 50 * time.Millisecond},
 		"libx264",
+		"",
 	)
 
 	if err := cam.MarkSegmentEnd(); err == nil {
@@ -66,6 +67,7 @@ func TestRotationTimingWithFakeFFmpeg(t *testing.T) {
 		outputDir,
 		segCfg,
 		"libx264",
+		"",
 	)
 
 	rotated := make(chan string, 8)
@@ -163,6 +165,7 @@ func TestMaxDurationRotatesWithoutSignal(t *testing.T) {
 		t.TempDir(),
 		segCfg,
 		"libx264",
+		"",
 	)
 
 	rotated := make(chan string, 8)

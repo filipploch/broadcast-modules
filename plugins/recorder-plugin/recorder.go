@@ -41,7 +41,7 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 			log.Printf("⏭️  Camera %s is disabled — skipping", camCfg.ID)
 			continue
 		}
-		cam := NewCameraRecorder(camCfg, cfg.OutputDir, segCfg, cfg.RecordingCodec)
+		cam := NewCameraRecorder(camCfg, cfg.OutputDir, segCfg, cfg.RecordingCodec, cfg.VaapiDevice)
 		rm.cameras[camCfg.ID] = cam
 
 		// Capture camCfg.ID for the closures below
@@ -80,10 +80,11 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		}
 	}
 	streamCfg := StreamConfig{
-		Host:     cfg.StreamWindowsHost,
-		Protocol: cfg.StreamProtocol,
-		Codec:    cfg.StreamCodec,
-		Bitrate:  cfg.StreamBitrate,
+		Host:        cfg.StreamWindowsHost,
+		Protocol:    cfg.StreamProtocol,
+		Codec:       cfg.StreamCodec,
+		Bitrate:     cfg.StreamBitrate,
+		VaapiDevice: cfg.VaapiDevice,
 	}
 	rm.streamer = NewStreamManager(loopbacks, ports, func(id string) bool {
 		rm.mu.RLock()
@@ -322,13 +323,20 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 
 	rm.notifyRecordingStarted(cam.LastMeta())
 
-	// Auto-start this camera's stream to Windows, if configured. Streaming
-	// is best-effort here: a failure (e.g. stream_windows_host unset, or no
-	// loopback_device for this camera) must not fail the recording itself,
-	// so it's only logged, not returned.
-	if err := rm.streamer.StartStream(cameraID); err != nil {
-		log.Printf("⏭️  [%s] auto-stream not started: %v", cameraID, err)
-	}
+	// Auto-start this camera's stream to Windows, if configured — in the
+	// background, since StreamManager.StartStream can now take a few
+	// seconds (it retries a handful of times if the loopback device isn't
+	// ready as a reader yet — see streamer.go's launch()). Blocking here
+	// would delay recording_started/recording_command responses,
+	// especially when several cameras are started in one command.
+	// Streaming is best-effort: a failure (e.g. stream_windows_host unset,
+	// or no loopback_device for this camera) must not fail the recording
+	// itself, so it's only logged.
+	go func() {
+		if err := rm.streamer.StartStream(cameraID); err != nil {
+			log.Printf("⏭️  [%s] auto-stream not started: %v", cameraID, err)
+		}
+	}()
 
 	return nil
 }

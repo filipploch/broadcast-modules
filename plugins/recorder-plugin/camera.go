@@ -77,10 +77,11 @@ type SegmentConfig struct {
 // can span several consecutive files ("segments"), rotated automatically by
 // rotateSegment — see SegmentConfig.
 type CameraRecorder struct {
-	config    CameraConfig
-	outputDir string
-	segCfg    SegmentConfig
-	codec     string // "libx264" (default) or e.g. "h264_qsv" — see buildFFmpegArgs
+	config      CameraConfig
+	outputDir   string
+	segCfg      SegmentConfig
+	codec       string // "libx264" (default), "h264_qsv", or "h264_vaapi" — see buildFFmpegArgs
+	vaapiDevice string // e.g. "/dev/dri/renderD128" — only used when codec == "h264_vaapi"
 
 	// opMu serializes the "big" state transitions (start / stop / rotate) so
 	// they can never interleave — e.g. a manual stop arriving mid-rotation.
@@ -105,16 +106,21 @@ type CameraRecorder struct {
 
 // NewCameraRecorder creates a CameraRecorder for the given camera config.
 // codec selects the recording encoder ("libx264" if empty/unrecognised —
-// see buildFFmpegArgs for what changes per codec).
-func NewCameraRecorder(cfg CameraConfig, outputDir string, segCfg SegmentConfig, codec string) *CameraRecorder {
+// see buildFFmpegArgs for what changes per codec). vaapiDevice is only used
+// when codec == "h264_vaapi" (defaults to "/dev/dri/renderD128" if empty).
+func NewCameraRecorder(cfg CameraConfig, outputDir string, segCfg SegmentConfig, codec string, vaapiDevice string) *CameraRecorder {
 	if codec == "" {
 		codec = "libx264"
 	}
+	if vaapiDevice == "" {
+		vaapiDevice = "/dev/dri/renderD128"
+	}
 	return &CameraRecorder{
-		config:    cfg,
-		outputDir: outputDir,
-		segCfg:    segCfg,
-		codec:     codec,
+		config:      cfg,
+		outputDir:   outputDir,
+		segCfg:      segCfg,
+		codec:       codec,
+		vaapiDevice: vaapiDevice,
 	}
 }
 
@@ -442,24 +448,47 @@ func (cr *CameraRecorder) launchSegment(meta RecordingMeta, sessionID string, se
 // same frames is written to the loopback device alongside the encoded
 // recording. This is what lets StreamManager read a live feed of this camera
 // without opening the (exclusive-access) physical device a second time.
-func buildFFmpegArgs(cfg CameraConfig, codec string, filePath string) []string {
+//
+// When codec is "h264_vaapi", the [rec] branch additionally gets
+// "format=nv12,hwupload" so the software-decoded MJPEG frames are converted
+// and uploaded to a VAAPI hardware surface before hitting the encoder — the
+// [stream] branch (loopback) stays as plain software frames throughout,
+// since a v4l2 output can't accept a hardware surface reference.
+func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePath string) []string {
 	if codec == "" {
 		codec = "libx264"
 	}
+	useVaapi := codec == "h264_vaapi"
+	if useVaapi && vaapiDevice == "" {
+		vaapiDevice = "/dev/dri/renderD128"
+	}
+	hasLoopback := cfg.LoopbackDevice != ""
 
-	args := []string{
+	var args []string
+	if useVaapi {
+		args = append(args, "-vaapi_device", vaapiDevice)
+	}
+	args = append(args,
 		"-f", "v4l2",
 		"-input_format", "mjpeg",
 		"-video_size", "1920x1080",
 		"-framerate", "30",
 		"-i", cfg.DevicePath,
-	}
+	)
 
-	if cfg.LoopbackDevice != "" {
+	switch {
+	case hasLoopback && useVaapi:
+		args = append(args,
+			"-filter_complex", "[0:v]split=2[rec][stream];[rec]format=nv12,hwupload[rechw]",
+			"-map", "[rechw]",
+		)
+	case hasLoopback:
 		args = append(args,
 			"-filter_complex", "[0:v]split=2[rec][stream]",
 			"-map", "[rec]",
 		)
+	case useVaapi:
+		args = append(args, "-vf", "format=nv12,hwupload")
 	}
 
 	args = append(args, "-c:v", codec)
@@ -484,8 +513,21 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, filePath string) []string {
 			"-global_quality", "23",
 			"-look_ahead", "0",
 		)
+	case "h264_vaapi":
+		// VAAPI's closest analogue to libx264's -crf is -qp (constant QP —
+		// bitrate will vary more with scene complexity than CRF does, since
+		// QP has no perceptual-quality normalisation across content).
+		// -compression_level trades encode speed for bitrate efficiency on
+		// a driver-defined scale (lower = faster, matching "ultrafast" here).
+		// NOTE: like h264_qsv above, VAAPI rate-control flags are
+		// driver/hardware sensitive — verify actual output quality/bitrate
+		// on the target machine before relying on it.
+		args = append(args,
+			"-qp", "23",
+			"-compression_level", "1",
+		)
 	default:
-		// Unknown/other hardware encoder (e.g. h264_vaapi, h264_nvenc):
+		// Unknown/other hardware encoder (e.g. h264_nvenc):
 		// pass a sane bitrate-based fallback rather than guessing at
 		// codec-specific quality flags we haven't validated.
 		args = append(args, "-b:v", "6M")
@@ -503,7 +545,7 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, filePath string) []string {
 		filePath,
 	)
 
-	if cfg.LoopbackDevice != "" {
+	if hasLoopback {
 		args = append(args,
 			"-map", "[stream]",
 			"-f", "v4l2",
@@ -520,7 +562,23 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 		return fmt.Errorf("failed to create output dir: %w", err)
 	}
 
-	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cr.config, cr.codec, filePath)...)
+	// The loopback device is a SECOND output of this same ffmpeg process (see
+	// buildFFmpegArgs) — if it doesn't exist (e.g. v4l2loopback not loaded),
+	// ffmpeg fails to open it at startup and the WHOLE process exits
+	// immediately, taking the actual recording down with it. Recording must
+	// never depend on the streaming-to-Windows side path being healthy, so
+	// drop the loopback output here rather than let ffmpeg discover it's
+	// missing on its own.
+	cfg := cr.config
+	if cfg.LoopbackDevice != "" {
+		if _, err := os.Stat(cfg.LoopbackDevice); err != nil {
+			log.Printf("⚠️  [%s] loopback_device %s not available (%v) — recording without stream mirror this segment",
+				cr.config.ID, cfg.LoopbackDevice, err)
+			cfg.LoopbackDevice = ""
+		}
+	}
+
+	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cfg, cr.codec, cr.vaapiDevice, filePath)...)
 
 	cmd.Stdout = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
 	cmd.Stderr = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))

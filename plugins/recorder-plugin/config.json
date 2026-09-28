@@ -7,6 +7,9 @@
   "output_dir": "/srv/samba/public/recorder",
   "stream_windows_host": "Lenovo.local",
   "stream_port": 9000,
+  "recording_codec": "h264_vaapi",
+  "stream_codec": "h264_vaapi",
+  "vaapi_device": "/dev/dri/renderD128",
   "cameras": [
     {
       "id": "camera1",
