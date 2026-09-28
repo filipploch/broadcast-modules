@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os/exec"
 	"sync"
 	"time"
 )
@@ -387,6 +388,36 @@ func (rm *RecorderManager) StopAll() {
 	// but this catches anything left running (e.g. a manually-started
 	// stream for a camera that was never recording).
 	rm.streamer.StopAllStreams()
+}
+
+// HandleShutdownHost cleanly stops every active recording/stream (so ffmpeg
+// finalises each MKV's Cues index via SIGINT instead of being killed
+// mid-write by the OS shutdown sequence) and then powers off this machine.
+// Triggered from the UI — double-click on the healthy/green
+// #recorder-plugin-icon — via main-module -> hub -> recorder-plugin, as a
+// remote alternative to `ssh` + `sudo shutdown`.
+func (rm *RecorderManager) HandleShutdownHost(msg *Message, hubClient *HubClient) {
+	log.Println("🛑 shutdown_host received — stopping all recordings/streams before poweroff")
+	rm.StopAll()
+
+	// Acknowledge before the process (and machine) disappear — there is no
+	// second chance to reply once poweroff has started.
+	if hubClient != nil {
+		_ = hubClient.Send(&Message{
+			To:      msg.From,
+			Type:    "shutdown_host_response",
+			Payload: map[string]interface{}{"status": "ok"},
+		})
+	}
+
+	// Give the reply a moment to actually leave over the websocket before
+	// the network interface goes down.
+	time.Sleep(500 * time.Millisecond)
+
+	log.Println("⚡ Powering off host now")
+	if err := exec.Command("systemctl", "poweroff").Run(); err != nil {
+		log.Printf("❌ systemctl poweroff failed: %v", err)
+	}
 }
 
 // Status returns a snapshot of recording state for all cameras.

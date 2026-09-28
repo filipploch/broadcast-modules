@@ -278,6 +278,21 @@ def register_events(socketio):
         except Exception as e:
             logger.error(f"Failed to send WOL packet to {mac}: {e}")
 
+    @socketio.on('shutdown_recorder_plugin')
+    def handle_shutdown_recorder_plugin():
+        # Double-click on #recorder-plugin-icon while it's healthy/green —
+        # see onRecorderPluginIconDblClick (index.js). Replaces doing this
+        # by hand over ssh: recorder-plugin stops all recordings/streams
+        # cleanly (SIGINT, not a mid-write kill) and then powers the Debian
+        # box off itself — see HandleShutdownHost in recorder.go.
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if not hub_client:
+            logger.warning("shutdown_recorder_plugin: hub client not available")
+            return
+        hub_client.send_to_plugin('recorder-plugin', 'shutdown_host', {})
+        logger.info("🛑 shutdown_host sent to recorder-plugin")
+
     @socketio.on('get_obs_ws_connection')
     def handle_get_obs_ws_connection():
         from core.managers import get_hub_client

@@ -202,13 +202,19 @@ socket.on('plugins_states', (data) => {
     }
 });
 
-// Dwuklik budzi Debiana z recorder-pluginem przez WOL, ale tylko gdy plugin
-// jest faktycznie odłączony (szara ikona) — jeśli już działa, nie ma czego
-// budzić.
+// Dwuklik na szarej ikonie budzi Debiana z recorder-pluginem przez WOL.
+// Dwuklik na zielonej (is_healthy) ikonie wyłącza go zdalnie — z potwierdzeniem,
+// bo to fizyczne wyłączenie maszyny, a nie tylko przełącznik w UI.
 function onRecorderPluginIconDblClick() {
     const state = _pluginStates['recorder-plugin'];
-    if (state && state.is_active) return;
-    socket.emit('wake_recorder_plugin');
+    if (!state || !state.is_active) {
+        socket.emit('wake_recorder_plugin');
+        return;
+    }
+    if (state.is_healthy) {
+        if (!confirm('Wyłączyć komputer z recorder-pluginem (Debian)?')) return;
+        socket.emit('shutdown_recorder_plugin');
+    }
 }
 
 // ============================================================================

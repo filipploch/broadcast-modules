@@ -196,6 +196,9 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 	case "recording_command":
 		recorder.handleRecordingCommand(msg, hubClient)
 
+	case "shutdown_host":
+		recorder.HandleShutdownHost(msg, hubClient)
+
 	default:
 		log.Printf("📨 Unhandled message type: %s (from: %s)", msg.Type, msg.From)
 	}
