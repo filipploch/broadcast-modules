@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -187,6 +188,22 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 			},
 		})
 
+		// Report our own IP so main_module can keep the sCameraN Media
+		// Sources in OBS pointed at the right address (see
+		// RecorderManager.on_recorder_plugin_info in recorder_manager.py)
+		// instead of a hardcoded IP that breaks on every DHCP lease change.
+		if ip := getLocalIP(); ip != "" {
+			_ = recorder.hubClient.Send(&Message{
+				To:   "main-module",
+				Type: "recorder_plugin_info",
+				Payload: map[string]interface{}{
+					"ip": ip,
+				},
+			})
+		} else {
+			log.Printf("⚠️  Could not determine local IP to report to main_module")
+		}
+
 	case "heartbeat_ack":
 		// nothing to do
 
@@ -220,6 +237,39 @@ func heartbeatLoop(hc *HubClient) {
 			},
 		})
 	}
+}
+
+// getLocalIP returns this machine's non-loopback IPv4 address, or "" if none
+// could be determined. Mirrors hub's own getHubIP() (reverse_discovery.go) —
+// duplicated rather than shared since hub and recorder-plugin are separate
+// Go modules with no common package today.
+func getLocalIP() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+				return ip.String()
+			}
+		}
+	}
+	return ""
 }
 
 // loadConfig reads and validates config.json.

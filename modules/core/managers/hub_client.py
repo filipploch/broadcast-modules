@@ -364,6 +364,10 @@ class HubClient:
                 recorder_manager.on_recording_status_received(msg)
             elif msg_type == 'recording_command_response':
                 recorder_manager.on_recording_command_response(msg)
+            elif msg_type == 'recorder_plugin_info':
+                recorder_manager.on_recorder_plugin_info(msg)
+            elif msg_type == 'segment_rotated':
+                recorder_manager.on_segment_rotated(msg)
 
         if msg_from == 'obs-ws-plugin':
             from core.managers import get_obs_ws_manager

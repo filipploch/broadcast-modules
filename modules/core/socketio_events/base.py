@@ -293,6 +293,15 @@ def register_events(socketio):
         hub_client.send_to_plugin('recorder-plugin', 'shutdown_host', {})
         logger.info("🛑 shutdown_host sent to recorder-plugin")
 
+    @socketio.on('resync_camera_stream_sources')
+    def handle_resync_camera_stream_sources():
+        # Manual re-trigger for ObsWsManager.sync_camera_stream_sources —
+        # normally runs automatically whenever recorder-plugin (re)connects
+        # and reports its IP, this is just for troubleshooting without
+        # waiting for/forcing a reconnect.
+        from core.managers import get_recorder_manager
+        get_recorder_manager().resync_camera_stream_sources()
+
     @socketio.on('get_obs_ws_connection')
     def handle_get_obs_ws_connection():
         from core.managers import get_hub_client

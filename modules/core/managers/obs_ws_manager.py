@@ -181,6 +181,26 @@ class ObsWsManager:
         })
         return result.get('sceneItemEnabled') if result else None
 
+    def get_scene_item_list(self, scene_name:str, source_type: str | None = None) -> list[dict]:
+        """
+        Zwraca listę źródeł w scenie OBS.
+        Każdy element listy to dict:
+            {
+                'sourceName': str,
+                'sceneItemId': int,
+                'sceneItemEnabled': bool,
+            }
+        """
+        result = self.send_obs_request_sync('GetSceneItemList', {
+            'sceneName': scene_name,
+        })
+        if not result:
+            return []
+        items = result.get('sceneItems', [])
+        if source_type:
+            items = [item for item in items if item.get('sourceType') == source_type]
+        return items
+
     def set_scene_item_enabled(self, scene_name: str, scene_item_id: int, enabled: bool):
         self.send_obs_request_sync('SetSceneItemEnabled', {
             'sceneName':        scene_name,
@@ -188,10 +208,74 @@ class ObsWsManager:
             'sceneItemEnabled': enabled,
         })
 
+    def set_input_settings(self, input_name: str, settings: dict, overlay: bool = True):
+        self.send_obs_request_sync('SetInputSettings', {
+            'inputName':     input_name,
+            'inputSettings': settings,
+            'overlay':       overlay,
+        })
+
+    # sCameraN -> port streamowany przez recorder-plugin (StreamManager),
+    # przypisywane kolejno camera1..camera4 od stream_port (domyślnie 9000) —
+    # patrz NewRecorderManager w recorder.go.
+    CAMERA_STREAM_PORTS = {
+        'sCamera1': 9000,
+        'sCamera2': 9001,
+        'sCamera3': 9002,
+        'sCamera4': 9003,
+    }
+
+    # camera_id (recorder-plugin, np. z segment_rotated) -> nazwa źródła OBS.
+    CAMERA_ID_TO_SOURCE = {
+        'camera1': 'sCamera1',
+        'camera2': 'sCamera2',
+        'camera3': 'sCamera3',
+        'camera4': 'sCamera4',
+    }
+
+    def sync_camera_stream_sources(self, host: str):
+        """
+        Ustawia URL SRT każdego źródła Multimedia sCamera1..sCamera4 (scena
+        CAMERAS) na aktualny adres hosta recorder-pluginu, zamiast trzymać
+        sztywne IP ręcznie wpisane w OBS. Wywoływane automatycznie przy
+        każdym (re)połączeniu recorder-pluginu z hubem — patrz
+        RecorderManager.on_recorder_plugin_info.
+        """
+        for source_name, port in self.CAMERA_STREAM_PORTS.items():
+            url = f'srt://{host}:{port}?mode=caller'
+            current_app.logger.info(f'🔄 {source_name} -> {url}')
+            self.set_input_settings(source_name, {
+                'input':         url,
+                'is_local_file': False,
+            })
+
     def refresh_browser_source(self, input_name: str):
         self.send_obs_request_sync('PressInputPropertiesButton', {
             'inputName':    input_name,
             'propertyName': 'refreshnocache',
+        })
+
+    def restart_camera_stream_source(self, camera_id: str):
+        """
+        Zmusza OBS do ponownego połączenia z SRT source'em odpowiadającym
+        danej kamerze recorder-pluginu — potrzebne po każdej rotacji
+        segmentu, bo restart procesu nagrywającego na Debianie zrywa na
+        chwilę zapis do loopbacku, przez co proces streamujący dostaje nowy
+        socket nasłuchujący, a OBS (restart_on_activate=false) sam się do
+        niego nie podłączy. Patrz RecorderManager.on_segment_rotated.
+
+        UWAGA: zakłada, że "restart" to poprawna nazwa przycisku we
+        właściwościach źródła ffmpeg_source dla wejścia sieciowego (nie
+        pliku lokalnego) — do zweryfikowania na żywym OBS, tak jak przy
+        polu "input" w sync_camera_stream_sources.
+        """
+        source_name = self.CAMERA_ID_TO_SOURCE.get(camera_id)
+        if not source_name:
+            return
+        current_app.logger.info(f'🔁 Restarting OBS source {source_name} (camera={camera_id})')
+        self.send_obs_request_sync('PressInputPropertiesButton', {
+            'inputName':    source_name,
+            'propertyName': 'restart',
         })
 
     def set_current_program_scene(self, scene_name: str):

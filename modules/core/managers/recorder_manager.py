@@ -17,7 +17,8 @@ class RecorderManager:
         self.hub_client = hub_client
         self.is_recording = False
         self.recorder_plugin_id = 'recorder-plugin'
-        
+        self.recorder_plugin_ip = None  # ostatnie zgłoszone IP — patrz on_recorder_plugin_info
+
     def on_recorder_online(self):
         """Called when recorder plugin comes online"""
         current_app.logger.info("📹 Recorder plugin online - configuring cameras")
@@ -258,7 +259,61 @@ class RecorderManager:
         self._emit_to_ui('recording_stopped', {
             'camera_id': camera_id,
         })
-    
+
+    def on_recorder_plugin_info(self, msg):
+        """Called when recorder-plugin reports its own IP (sent once right
+        after registering with the hub — see main.go's "registered" case).
+        Pushes that IP into OBS's sCamera1..4 Media Sources (scene CAMERAS)
+        so their SRT URLs stay correct across DHCP lease changes instead of
+        needing a manual edit in OBS every time the Debian box's IP moves.
+        """
+        payload = msg.get('payload', {})
+        ip = payload.get('ip')
+        if not ip:
+            return
+        current_app.logger.info(f"📍 recorder-plugin reported IP: {ip}")
+        self.recorder_plugin_ip = ip
+        self._sync_camera_stream_sources(ip)
+
+    def resync_camera_stream_sources(self):
+        """Re-applies the last known recorder-plugin IP to the sCameraN
+        sources on demand — for manual troubleshooting (e.g. after editing
+        this code, without waiting for recorder-plugin to reconnect)."""
+        if not self.recorder_plugin_ip:
+            current_app.logger.warning("resync_camera_stream_sources: no recorder-plugin IP known yet")
+            return
+        self._sync_camera_stream_sources(self.recorder_plugin_ip)
+
+    def _sync_camera_stream_sources(self, ip):
+        try:
+            from core.managers import get_obs_ws_manager
+            get_obs_ws_manager().sync_camera_stream_sources(ip)
+        except Exception as e:
+            current_app.logger.error(f"Failed to sync camera stream sources: {e}")
+
+    def on_segment_rotated(self, msg):
+        """Called when recorder-plugin rotates a camera's recording segment.
+        Rotating the segment briefly restarts that camera's ffmpeg process,
+        which also writes the v4l2loopback device the SRT stream reads from —
+        so the loopback write side drops out for a moment, the streaming
+        ffmpeg crashes/restarts with a fresh listening socket, and OBS's
+        existing connection to the old socket is left dead (its Media Source
+        has restart_on_activate off, so it never redials on its own).
+        Restarting the matching sCameraN input in OBS right after forces it
+        to reconnect to the new socket, instead of the picture going dark
+        after every rotation (every 15-20 min by default).
+        """
+        payload = msg.get('payload', {})
+        camera_id = payload.get('camera_id')
+        if not camera_id:
+            return
+        current_app.logger.info(f"🔁 Segment rotated for {camera_id} — restarting matching OBS source")
+        try:
+            from core.managers import get_obs_ws_manager
+            get_obs_ws_manager().restart_camera_stream_source(camera_id)
+        except Exception as e:
+            current_app.logger.error(f"Failed to restart camera stream source for {camera_id}: {e}")
+
     def get_camera_status(self):
         """Get recording status"""
         cameras = self._get_enabled_cameras()
