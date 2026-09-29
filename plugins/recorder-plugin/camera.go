@@ -12,6 +12,14 @@ import (
 	"time"
 )
 
+// vaapiColorTagFilter tags frames as HD/BT.709 (tv-range) before hwupload.
+// Setting -color_range/-colorspace as plain output options is silently
+// ignored by ffmpeg's VAAPI encode path — the VUI written to the bitstream
+// reflects the frame's own tags, not the output-level codec context option.
+// setparams stamps those tags onto the frames themselves (no pixel data is
+// touched), so they survive the hwupload and actually reach the VUI.
+const vaapiColorTagFilter = "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv"
+
 // RecordingMeta holds metadata written to JSON files on recording start.
 type RecordingMeta struct {
 	CameraID    string `json:"camera_id"`
@@ -479,7 +487,7 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePat
 	switch {
 	case hasLoopback && useVaapi:
 		args = append(args,
-			"-filter_complex", "[0:v]split=2[rec][stream];[rec]format=nv12,hwupload[rechw]",
+			"-filter_complex", "[0:v]split=2[rec][stream];[rec]format=nv12,"+vaapiColorTagFilter+",hwupload[rechw]",
 			"-map", "[rechw]",
 		)
 	case hasLoopback:
@@ -488,7 +496,7 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePat
 			"-map", "[rec]",
 		)
 	case useVaapi:
-		args = append(args, "-vf", "format=nv12,hwupload")
+		args = append(args, "-vf", "format=nv12,"+vaapiColorTagFilter+",hwupload")
 	}
 
 	args = append(args, "-c:v", codec)
