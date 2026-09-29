@@ -534,6 +534,16 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePat
 	}
 
 	args = append(args,
+		// Wymuś standardowe (HD/BT.709, zakres TV) metadane koloru w VUI.
+		// Bez tego h264_vaapi zostawia nietagowany/pełnozakresowy strumień
+		// (yuvj420p, bt470bg) odmienny od plików nagrywanych przez OBS —
+		// mpv musi przebudować pipeline konwersji YUV→RGB przy przełączaniu
+		// między takim plikiem a nagraniem OBS, co objawia się zawieszoną
+		// klatką podczas powtórki.
+		"-color_range", "tv",
+		"-colorspace", "bt709",
+		"-color_primaries", "bt709",
+		"-color_trc", "bt709",
 		"-g", "30", // keyframe co 30 klatek = co 1 sekundę (przy 30fps)
 		"-keyint_min", "30", // wymusz minimalny interwał keyframe
 		"-force_key_frames", "expr:gte(t,n_forced*1)", // keyframe dokładnie co 1s
