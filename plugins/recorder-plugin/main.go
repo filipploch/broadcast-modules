@@ -193,7 +193,8 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 	case "heartbeat_ack":
 		// nothing to do
 
-	case "start_recording", "stop_recording", "stop_all", "recording_status":
+	case "start_recording", "stop_recording", "stop_all", "recording_status",
+		"mark_segment_end", "start_stream", "stop_stream":
 		recorder.HandleHubMessage(msg, hubClient)
 
 	case "recording_command":
