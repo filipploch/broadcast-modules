@@ -422,10 +422,23 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 		return fmt.Errorf("set speed failed: %w", err)
 	}
 
-	if err := mc.ipc.SendAndWait([]interface{}{
-		"seek", fmt.Sprintf("%.3f", startSec), "absolute+keyframes",
-	}, 10*time.Second); err != nil {
-		log.Printf("⚠️  seek: %v (proceeding anyway)", err)
+	// SendAndWait dla loadfile potwierdza tylko przyjęcie komendy do kolejki,
+	// nie że plik faktycznie już się otworzył (to realne I/O, zwłaszcza po
+	// sieci) — seek wysłany od razu potem trafia czasem na jeszcze nie-
+	// gotowy demuxer i kończy się błędem "error running command". Ponawiamy
+	// krótko, aż się uda.
+	seekArgs := []interface{}{"seek", fmt.Sprintf("%.3f", startSec), "absolute+keyframes"}
+	seekDeadline := time.Now().Add(5 * time.Second)
+	var seekErr error
+	for {
+		seekErr = mc.ipc.SendAndWait(seekArgs, 1*time.Second)
+		if seekErr == nil || !time.Now().Before(seekDeadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if seekErr != nil {
+		log.Printf("⚠️  seek: %v (proceeding anyway)", seekErr)
 	}
 
 	// Czekaj aż plik zostanie załadowany z dysku i seek zakończony.
