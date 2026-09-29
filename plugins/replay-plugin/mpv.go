@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -441,11 +442,14 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 		log.Printf("⚠️  seek: %v (proceeding anyway)", seekErr)
 	}
 
-	// Czekaj aż plik zostanie załadowany z dysku i seek zakończony.
-	// time-pos staje się non-null gdy mpv ma gotową klatkę — dopiero wtedy
-	// odpinamy pauzę, żeby replay_started dotarł do backendu z gwarancją
-	// że OBS window capture ma co wyświetlić.
-	if err := mc.WaitUntilPlaying(10 * time.Second); err != nil {
+	// Czekaj aż time-pos faktycznie osiągnie żądaną pozycję. Samo "niepuste
+	// time-pos" (jak dawniej) już nie wystarcza: bez "start=" w loadfile plik
+	// od razu ma pozycję 0, więc time-pos jest niepuste niemal natychmiast —
+	// dużo wcześniej niż osobna komenda seek zdąży się faktycznie wykonać
+	// (jej potwierdzenie od mpv przychodzi po przyjęciu do kolejki, nie po
+	// realnym zakończeniu). Bez tego odpinaliśmy pauzę na przypadkowej,
+	// przejściowej pozycji zamiast żądanej.
+	if err := mc.WaitUntilSeeked(startSec, 10*time.Second); err != nil {
 		log.Printf("⚠️  %v (proceeding anyway)", err)
 	}
 
@@ -521,22 +525,31 @@ func (mc *MpvController) FrameStepBack() error {
 	return nil
 }
 
-// WaitUntilPlaying polluje time-pos aż mpv załaduje plik i zakończy seek.
-// time-pos staje się non-null gdy mpv ma gotową klatkę (nawet gdy wciąż pauzuje).
-func (mc *MpvController) WaitUntilPlaying(timeout time.Duration) error {
+// seekConvergenceTolerance — jak blisko żądanej pozycji musi być time-pos,
+// żeby uznać seek za zakończony. Musi pokrywać zarówno imprecyzję seeka po
+// klatce kluczowej (do ~1s przy GOP=1s) jak i drobny jitter odczytu.
+const seekConvergenceTolerance = 2.0 // sekundy
+
+// WaitUntilSeeked polluje time-pos aż osiągnie żądaną pozycję (w granicach
+// seekConvergenceTolerance). Samo "time-pos niepuste" nie wystarcza: plik
+// ładowany jest bez "start=", więc ma niepustą pozycję (0) niemal od razu —
+// dużo wcześniej niż osobna komenda seek zdąży faktycznie się wykonać.
+func (mc *MpvController) WaitUntilSeeked(targetSec float64, timeout time.Duration) error {
 	if !mc.isReady() {
 		return fmt.Errorf("mpv IPC not ready")
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		pos, err := mc.ipc.GetProperty("time-pos", 500*time.Millisecond)
-		if err == nil && pos != nil {
-			log.Printf("⏱  mpv time-pos: %v — plik gotowy", pos)
-			return nil
+		raw, err := mc.ipc.GetProperty("time-pos", 500*time.Millisecond)
+		if err == nil && raw != nil {
+			if pos, ok := raw.(float64); ok && math.Abs(pos-targetSec) <= seekConvergenceTolerance {
+				log.Printf("⏱  mpv time-pos: %.3f — plik gotowy (cel %.3f)", pos, targetSec)
+				return nil
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return fmt.Errorf("timeout (%v): mpv nie załadował pliku", timeout)
+	return fmt.Errorf("timeout (%v): mpv nie osiągnął pozycji %.3fs", timeout, targetSec)
 }
 
 func (mc *MpvController) Close() {
