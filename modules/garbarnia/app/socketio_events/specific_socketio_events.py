@@ -367,6 +367,19 @@ def register_events(socketio):
             socketio.emit('error', {'message': str(e)})
             return
 
+        # Bez tego lista "AKCJE" odświeżała się tylko na stronie, z której
+        # dodano zdarzenie (events-controllers.js robi to sam sobie przez
+        # setTimeout po własnym emit) — zdarzenia dodane skądinąd (np.
+        # przyciski kartek na index.html, osobna strona bez dostępu do DOM
+        # monitora) nigdy nie docierały do listy bez ręcznego odświeżenia.
+        # Ten sam broadcast, którego już używa edycja istniejącego zdarzenia
+        # (handle_update_game_event poniżej) — odbiera go każdy podłączony
+        # monitor, niezależnie skąd zdarzenie faktycznie przyszło.
+        socketio.emit('game_event_updated', {
+            'game_event_id': game_event.id,
+            'content_type':  'events',
+        })
+
         hub_client = get_hub_client()
         if hub_client:
             from core.managers.game_camera_manager import GameCameraManager
