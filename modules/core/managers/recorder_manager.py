@@ -241,6 +241,11 @@ class RecorderManager:
             'period_id':   payload.get('period_id'),
         })
 
+        # Point this camera's OBS source at its SRT stream only now that
+        # there's actually something listening on the other end — see
+        # on_recording_stopped for why it gets cleared again below.
+        self._set_camera_stream_active(camera_id, True)
+
     def on_recording_stopped(self, msg):
         """Called by hub_client when recorder-plugin reports recording stopped for a camera."""
         payload = msg.get('payload', {})
@@ -260,12 +265,32 @@ class RecorderManager:
             'camera_id': camera_id,
         })
 
+        # Recording stopped means recorder-plugin's StreamManager stops too
+        # (its SRT listener only runs while the camera is recording — see
+        # StreamManager.StartStream) — clear the OBS source's URL so it
+        # isn't left retrying a connection to nothing every ~10s until the
+        # camera starts recording again.
+        self._set_camera_stream_active(camera_id, False)
+
+    def _set_camera_stream_active(self, camera_id, active):
+        try:
+            from core.managers import get_obs_ws_manager
+            obs = get_obs_ws_manager()
+            obs.set_camera_stream_url(camera_id, self.recorder_plugin_ip if active else None)
+        except Exception as e:
+            current_app.logger.error(f"Failed to update camera stream source for {camera_id}: {e}")
+
     def on_recorder_plugin_info(self, msg):
         """Called when recorder-plugin reports its own IP (sent once right
         after registering with the hub — see main.go's "registered" case).
-        Pushes that IP into OBS's sCamera1..4 Media Sources (scene CAMERAS)
-        so their SRT URLs stay correct across DHCP lease changes instead of
-        needing a manual edit in OBS every time the Debian box's IP moves.
+        Only caches the IP — it's applied to a camera's sCameraN source when
+        that camera actually starts recording (_set_camera_stream_active),
+        not here, so a source with nothing listening on the other end isn't
+        left retrying a connection every ~10s for as long as recorder-plugin
+        stays connected but idle. A camera already recording when this
+        arrives (e.g. main-module restarted mid-match) keeps whatever URL
+        its source already had until its next start/stop — use
+        resync_camera_stream_sources to force it sooner.
         """
         payload = msg.get('payload', {})
         ip = payload.get('ip')
@@ -273,7 +298,6 @@ class RecorderManager:
             return
         current_app.logger.info(f"📍 recorder-plugin reported IP: {ip}")
         self.recorder_plugin_ip = ip
-        self._sync_camera_stream_sources(ip)
 
     def resync_camera_stream_sources(self):
         """Re-applies the last known recorder-plugin IP to the sCameraN

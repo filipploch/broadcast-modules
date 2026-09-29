@@ -188,21 +188,7 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 			},
 		})
 
-		// Report our own IP so main_module can keep the sCameraN Media
-		// Sources in OBS pointed at the right address (see
-		// RecorderManager.on_recorder_plugin_info in recorder_manager.py)
-		// instead of a hardcoded IP that breaks on every DHCP lease change.
-		if ip := getLocalIP(); ip != "" {
-			_ = recorder.hubClient.Send(&Message{
-				To:   "main-module",
-				Type: "recorder_plugin_info",
-				Payload: map[string]interface{}{
-					"ip": ip,
-				},
-			})
-		} else {
-			log.Printf("⚠️  Could not determine local IP to report to main_module")
-		}
+		sendRecorderPluginInfo(recorder.hubClient)
 
 	case "heartbeat_ack":
 		// nothing to do
@@ -236,7 +222,36 @@ func heartbeatLoop(hc *HubClient) {
 				"timestamp": time.Now().Unix(),
 			},
 		})
+
+		// Re-sent on every heartbeat (not just once on "registered") so
+		// main_module always learns our IP within a few seconds of coming
+		// up, regardless of which side restarted more recently — relying
+		// solely on "registered" left main_module's cached IP as nil
+		// forever if IT was the one restarted while we stayed connected,
+		// since we'd already registered long before and never send this
+		// again on our own. See sendRecorderPluginInfo.
+		sendRecorderPluginInfo(hc)
 	}
+}
+
+// sendRecorderPluginInfo reports this machine's IP so main_module can keep
+// the sCameraN Media Sources in OBS pointed at the right address (see
+// RecorderManager.on_recorder_plugin_info in recorder_manager.py) instead of
+// a hardcoded IP that breaks on every DHCP lease change. Called once right
+// after registering with the hub, and then again on every heartbeat.
+func sendRecorderPluginInfo(hc *HubClient) {
+	ip := getLocalIP()
+	if ip == "" {
+		log.Printf("⚠️  Could not determine local IP to report to main_module")
+		return
+	}
+	_ = hc.Send(&Message{
+		To:   "main-module",
+		Type: "recorder_plugin_info",
+		Payload: map[string]interface{}{
+			"ip": ip,
+		},
+	})
 }
 
 // getLocalIP returns this machine's non-loopback IPv4 address, or "" if none

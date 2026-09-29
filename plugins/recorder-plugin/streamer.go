@@ -343,7 +343,11 @@ func buildStreamArgs(codec, vaapiDevice, bitrate, device, dest string) []string 
 		// for a live monitoring feed and buys nothing here (unlike for the
 		// recording file, where this device's default GOP structure is fine
 		// since nobody's watching it live).
-		args = append(args, "-qp", "23", "-compression_level", "1", "-bf", "0")
+		// -async_depth 1: caps the driver's internal pipeline depth at a
+		// single frame in flight (default 2) — another frame-or-so of
+		// latency traded for a little encode parallelism we don't need on a
+		// live feed nobody's grading for dropped frames.
+		args = append(args, "-qp", "23", "-compression_level", "1", "-bf", "0", "-async_depth", "1")
 	case "h264_qsv":
 		args = append(args, "-b:v", bitrate, "-bf", "0")
 	default:
@@ -382,13 +386,15 @@ func (sm *StreamManager) launch(cameraID, device string, port int) error {
 	// never be sm.cfg.Host (that was the original listener-URL bug: using
 	// the peer's hostname as a local bind address).
 	//
-	// latency=50: SRT's own buffer for smoothing out network jitter and
+	// latency=20: SRT's own buffer for smoothing out network jitter and
 	// covering retransmits — defaults to 120ms if unset. Debian and Windows
-	// are on the same LAN here (minimal jitter, no real packet loss to
-	// recover from), so 50ms is comfortably safe and shaves the difference
-	// off end-to-end delay. Raise this back up if the stream ever gets
-	// choppy over a less reliable link (Wi-Fi, a slower/busier network).
-	dest := fmt.Sprintf("srt://0.0.0.0:%d?mode=listener&latency=50", port)
+	// are on the same wired LAN here (negligible jitter, no real packet
+	// loss to recover from), so 20ms is comfortably safe and shaves the
+	// difference off end-to-end delay. Raise this back up (50, then 120) if
+	// the stream ever gets choppy over a less reliable link (Wi-Fi, a
+	// slower/busier network) — that's the actual jitter/loss margin this
+	// buffer exists to protect against.
+	dest := fmt.Sprintf("srt://0.0.0.0:%d?mode=listener&latency=20", port)
 	args := buildStreamArgs(codec, sm.cfg.VaapiDevice, bitrate, device, dest)
 
 	var lastErr error

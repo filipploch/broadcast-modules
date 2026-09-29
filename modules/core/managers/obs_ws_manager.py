@@ -233,21 +233,65 @@ class ObsWsManager:
         'camera4': 'sCamera4',
     }
 
+    # Poprzedni pełny zestaw (-fflags nobuffer -flags low_delay
+    # -analyzeduration 0 -probesize 32) zamroził obraz na jednej klatce —
+    # niemal na pewno przez -probesize 32 (to 32 BAJTY, nie kilobajty —
+    # drastycznie za mało, żeby libavformat stabilnie i w sposób CIĄGŁY
+    # rozpoznawał strumień MPEG-TS) i/lub -analyzeduration 0. Teraz tylko
+    # -fflags nobuffer — sama w sobie nie dotyka wykrywania/analizy
+    # strumienia, tylko każe nie buforować już rozpoznanych pakietów, więc
+    # nie powinna powtórzyć tego problemu. TESTUJ PRZYROSTOWO: jeśli to
+    # przejdzie stabilnie (ciągły obraz, nie tylko "się pojawił"), można
+    # ostrożnie spróbować dołożyć "-flags low_delay" osobno (bezpieczne przy
+    # streamie bez B-klatek, którym tu jest), ale -probesize/-analyzeduration
+    # zostaw w spokoju albo użyj wartości rzędu dziesiątek KB / setek ms, nie
+    # zera.
+    CAMERA_STREAM_FFMPEG_OPTIONS = '-fflags nobuffer'
+
     def sync_camera_stream_sources(self, host: str):
         """
-        Ustawia URL SRT każdego źródła Multimedia sCamera1..sCamera4 (scena
-        CAMERAS) na aktualny adres hosta recorder-pluginu, zamiast trzymać
-        sztywne IP ręcznie wpisane w OBS. Wywoływane automatycznie przy
-        każdym (re)połączeniu recorder-pluginu z hubem — patrz
-        RecorderManager.on_recorder_plugin_info.
+        Ustawia URL SRT KAŻDEGO źródła Multimedia sCamera1..sCamera4 (scena
+        CAMERAS) na dany host, niezależnie od tego czy dana kamera faktycznie
+        teraz nagrywa. Używane tylko do ręcznego resynchronizowania
+        (resync_camera_stream_sources) — w normalnym działaniu URL każdego
+        źródła jest ustawiany/czyszczony per-kamera przez
+        set_camera_stream_url, dopiero gdy ta konkretna kamera zaczyna/
+        kończy nagrywać (patrz RecorderManager._set_camera_stream_active).
         """
         for source_name, port in self.CAMERA_STREAM_PORTS.items():
             url = f'srt://{host}:{port}?mode=caller'
             current_app.logger.info(f'🔄 {source_name} -> {url}')
             self.set_input_settings(source_name, {
-                'input':         url,
-                'is_local_file': False,
+                'input':          url,
+                'is_local_file':  False,
+                'ffmpeg_options': self.CAMERA_STREAM_FFMPEG_OPTIONS,
             })
+
+    def set_camera_stream_url(self, camera_id: str, host: str | None):
+        """
+        Ustawia URL SRT źródła odpowiadającego camera_id na dany host, albo
+        czyści go (pusty input) gdy host is None. Wywoływane przy
+        recording_started/recording_stopped tej kamery — recorder-pluginu
+        StreamManager nasłuchuje SRT tylko podczas nagrywania, więc czyszczenie
+        po zatrzymaniu zapobiega ciągłym nieudanym próbom połączenia OBS co
+        ok. 10s, dopóki kamera znowu nie zacznie nagrywać.
+        """
+        source_name = self.CAMERA_ID_TO_SOURCE.get(camera_id)
+        if not source_name:
+            return
+        port = self.CAMERA_STREAM_PORTS.get(source_name)
+        if not port:
+            return
+        if host:
+            url = f'srt://{host}:{port}?mode=caller'
+        else:
+            url = ''
+        current_app.logger.info(f'🔄 {source_name} -> {url or "(cleared)"}')
+        self.set_input_settings(source_name, {
+            'input':          url,
+            'ffmpeg_options': self.CAMERA_STREAM_FFMPEG_OPTIONS if url else '',
+            'is_local_file': False,
+        })
 
     def refresh_browser_source(self, input_name: str):
         self.send_obs_request_sync('PressInputPropertiesButton', {
