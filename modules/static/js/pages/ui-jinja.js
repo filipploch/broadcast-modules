@@ -339,7 +339,7 @@ function camerasReplaysBtnsGenerator(_gameEvent) {
         btns += `<button type="button"
         class="event-btn event-camera-replay-btn"
         style="background-color:green; color: white; font-weight: 700;"
-        onclick="showReplay('${camera.video_path}', ${camera.replay_start_time}, ${camera.replay_end_time})">
+        onclick="showCameraReplay(${camera.id})">
         ${camera.camera_id.substr(camera.camera_id.length - 1)}</button>`
     });
     return btns
@@ -441,6 +441,17 @@ function showReplay(videoPath, replayStartTime, replayEndTime) {
         'replay_start_time': replayStartTime,
         'replay_end_time': replayEndTime
     }});
+    closeReplaysPopup();
+}
+
+// Powtórka z konkretnej kamery (R:\recorder, plik segmentowany) — w
+// odróżnieniu od showReplay() nie wysyła statycznego video_path z
+// event_cameras wprost, tylko id wiersza: serwer sam wylicza aktualne okno
+// odtwarzania (przez replay_edl_builder), bo mogło ono w międzyczasie
+// przekroczyć granicę rotacji segmentu.
+function showCameraReplay(eventCameraId) {
+    _replayCurrentSpeed = 0.9;
+    socket.emit('request_camera_replay', { event_camera_id: eventCameraId });
     closeReplaysPopup();
 }
 

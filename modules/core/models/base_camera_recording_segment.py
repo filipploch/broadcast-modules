@@ -124,6 +124,23 @@ class BaseCameraRecordingSegmentMixin:
                 .first())
 
     @classmethod
+    def find_range(cls, recorder_camera_id, game_id, wall_clock_start, wall_clock_end):
+        """Wszystkie segmenty tej kamery (w tym meczu) pokrywające się z podanym
+        przedziałem czasu ściennego [wall_clock_start, wall_clock_end], w
+        kolejności chronologicznej. Używane do budowy EDL rozpiętego na kilku
+        plikach, gdy żądany zakres przekracza granicę rotacji segmentu.
+        """
+        return (cls.query
+                .filter(
+                    cls.recorder_camera_id == recorder_camera_id,
+                    cls.game_id == game_id,
+                    cls.started_at <= wall_clock_end,
+                    db.or_(cls.ended_at.is_(None), cls.ended_at >= wall_clock_start),
+                )
+                .order_by(cls.started_at.asc())
+                .all())
+
+    @classmethod
     def cameras_for_game(cls, game_id):
         """Lista distinct recorder_camera_id, które kiedykolwiek nagrywały ten mecz."""
         rows = (db.session.query(cls.recorder_camera_id)

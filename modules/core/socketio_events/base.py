@@ -470,6 +470,30 @@ def register_events(socketio):
         sequence_id = sm.trigger(data['sequence'], data.get('context', {}))
         socketio.emit('sequence_started', {'sequence_id': sequence_id})
 
+    @socketio.on('request_camera_replay')
+    def handle_request_camera_replay(data):
+        """Like trigger_sequence(sequence='replay'), but for a specific
+        camera's EventCamera row: resolves the actual replay window through
+        replay_edl_builder first, so a window spanning a segment-rotation
+        boundary still plays as one continuous clip instead of using the
+        raw (possibly now-stale) video_path the row was created with.
+        """
+        from core.managers import get_sequence_manager
+        from core.models.base_event_camera import get_event_camera_model
+        from core.managers.replay_edl_builder import build_replay_context
+
+        event_camera_id = data.get('event_camera_id')
+        EventCamera = get_event_camera_model()
+        event_camera = EventCamera.query.get(event_camera_id)
+        if not event_camera:
+            current_app.logger.warning(f"request_camera_replay: unknown event_camera_id={event_camera_id!r}")
+            return
+
+        context = build_replay_context(event_camera)
+        sm          = get_sequence_manager()
+        sequence_id = sm.trigger('replay', context)
+        socketio.emit('sequence_started', {'sequence_id': sequence_id})
+
     @socketio.on('stop_sequence')
     def handle_stop_sequence(data):
         from flask_socketio import emit
