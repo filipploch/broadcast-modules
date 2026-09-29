@@ -38,9 +38,9 @@ type Config struct {
 	VaapiDevice string `json:"vaapi_device"`
 
 	// Segmentation — see SegmentConfig (camera.go) for exact semantics.
-	SegmentMinSeconds         int `json:"segment_min_seconds"`          // earliest a signal may cut a segment (default 900 = 15 min)
+	SegmentMinSeconds         int `json:"segment_min_seconds"`          // earliest a signal may cut a segment (default 20s — also the double-trigger debounce window)
 	SegmentMaxSeconds         int `json:"segment_max_seconds"`          // hard cap per segment (default 1200 = 20 min)
-	SegmentSignalDelaySeconds int `json:"segment_signal_delay_seconds"` // delay applied after a signal becomes actionable (default 10 s)
+	SegmentSignalDelaySeconds int `json:"segment_signal_delay_seconds"` // delay applied after a signal becomes actionable (default 2s)
 
 	// Streaming to Windows — see StreamConfig (streamer.go). Only takes
 	// effect for cameras that also have "loopback_device" set. Leave
@@ -330,9 +330,9 @@ func defaultConfig() Config {
 		OutputDir:                 "/srv/samba/public/recorder",
 		RecordingCodec:            "libx264",
 		VaapiDevice:               "/dev/dri/renderD128",
-		SegmentMinSeconds:         900,
+		SegmentMinSeconds:         20,
 		SegmentMaxSeconds:         1200,
-		SegmentSignalDelaySeconds: 10,
+		SegmentSignalDelaySeconds: 2,
 		StreamPort:                9000,
 		StreamProtocol:            "srt",
 		StreamCodec:               "libx264",
@@ -366,13 +366,18 @@ func applyDefaults(c *Config) {
 		c.VaapiDevice = "/dev/dri/renderD128"
 	}
 	if c.SegmentMinSeconds <= 0 {
-		c.SegmentMinSeconds = 900 // 15 min
+		// Debounce przed wielokrotnym cięciem tego samego segmentu (np.
+		// dwuklik na przycisku dodającym event) — patrz MarkSegmentEnd.
+		// Nie 15 min jak dawniej: sygnał "mark_segment_end" jest teraz
+		// wyzwalany przy KAŻDYM evencie meczowym, więc segment musi móc
+		// realnie skrócić się do kilkunastu-kilkudziesięciu sekund.
+		c.SegmentMinSeconds = 20
 	}
 	if c.SegmentMaxSeconds <= 0 {
 		c.SegmentMaxSeconds = 1200 // 20 min
 	}
 	if c.SegmentSignalDelaySeconds < 0 {
-		c.SegmentSignalDelaySeconds = 10
+		c.SegmentSignalDelaySeconds = 2 // sekundy kontekstu po evencie
 	}
 	if c.SegmentMaxSeconds <= c.SegmentMinSeconds {
 		log.Printf("⚠️  segment_max_seconds (%d) ≤ segment_min_seconds (%d) — forcing max = min + 60s",

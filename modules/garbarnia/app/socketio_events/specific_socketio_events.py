@@ -396,6 +396,15 @@ def register_events(socketio):
                 'cameras': cameras,
             })
 
+            # Wczesne zakończenie bieżącego segmentu na wszystkich kamerach —
+            # tak żeby plik obejmujący ten event zamknął się w ciągu kilku
+            # sekund zamiast czekać na naturalną rotację (do 20 min), co
+            # pozwala na szybki, bezpośredni replay/EDL bez skanowania
+            # rosnącego pliku. Puste camera_id = wszystkie nagrywające kamery.
+            # Debounce przed podwójnym cięciem (np. dwuklik) jest już
+            # zapewniony przez MinDuration w recorder-pluginie.
+            hub_client.send_to_plugin('recorder-plugin', 'mark_segment_end', {})
+
     # TODO(UI): brak jeszcze przycisku/formularza "Dodaj zdarzenie wstecznie"
     # — handler gotowy, czeka na podpięcie z UI (lokalizacja formularza do
     # ustalenia). Payload docelowo z formularza: period_id + event_time_delta_s
