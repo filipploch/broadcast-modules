@@ -400,22 +400,19 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 		log.Printf("⚠️  pre-speed: %v", err)
 	}
 
-	// hr-seek=no: seek do najbliższej klatki kluczowej zamiast dokładnej
-	// pozycji. Precyzyjny (exact) seek w pliku, który wciąż rośnie (bieżący
-	// segment recordera), zmusza ffmpeg do sekwencyjnego dekodowania od
-	// punktu zaczepienia — bez znanej końcowej długości pliku nie da się
-	// oszacować pozycji bajtowej z proporcji czas/długość. Koszt rósł wprost
-	// proporcjonalnie do głębokości seeka (~8% pozycji, czyli do ~90s przy
-	// GOP=1s to najwyżej ~1s wcześniejszy start powtórki — nieodczuwalne.
-	if err := mc.ipc.send([]interface{}{"set_property", "hr-seek", "no"}); err != nil {
-		log.Printf("⚠️  pre-hr-seek: %v", err)
-	}
-
-	startArg := fmt.Sprintf("start=%.3f", startSec)
-	// SendAndWait zamiast fire-and-forget: czekamy aż mpv potwierdzi przyjęcie
-	// komendy zanim wyślemy speed — eliminuje potrzebę hardkodowanego sleep(300ms).
+	// Ładujemy BEZ opcji "start=" — ta opcja robi precyzyjny (exact) seek
+	// niezależnie od hr-seek. Pozycję ustawiamy osobną komendą "seek" z
+	// jawną flagą "keyframes" (ten sam mechanizm co FrameStepForward/Back
+	// poniżej), co gwarantuje seek do najbliższej klatki kluczowej zamiast
+	// dokładnej pozycji. Ma to znaczenie w pliku, który wciąż rośnie
+	// (bieżący segment recordera): bez znanej końcowej długości ffmpeg nie
+	// może oszacować pozycji bajtowej z proporcji czas/długość, więc exact
+	// seek zmuszał go do sekwencyjnego dekodowania od punktu zaczepienia —
+	// koszt rósł wprost proporcjonalnie do głębokości seeka (do ~90s przy
+	// pozycji 17 min w 20-minutowym segmencie). Przy GOP=1s odtworzenie
+	// może zacząć się do ~1s wcześniej niż żądana pozycja — nieodczuwalne.
 	if err := mc.ipc.SendAndWait([]interface{}{
-		"loadfile", videoPath, "replace", 0, startArg,
+		"loadfile", videoPath, "replace",
 	}, 5*time.Second); err != nil {
 		return fmt.Errorf("loadfile failed: %w", err)
 	}
@@ -423,6 +420,12 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 
 	if err := mc.ipc.send([]interface{}{"set_property", "speed", speed}); err != nil {
 		return fmt.Errorf("set speed failed: %w", err)
+	}
+
+	if err := mc.ipc.SendAndWait([]interface{}{
+		"seek", fmt.Sprintf("%.3f", startSec), "absolute+keyframes",
+	}, 10*time.Second); err != nil {
+		log.Printf("⚠️  seek: %v (proceeding anyway)", err)
 	}
 
 	// Czekaj aż plik zostanie załadowany z dysku i seek zakończony.
