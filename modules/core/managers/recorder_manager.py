@@ -325,13 +325,51 @@ class RecorderManager:
         has restart_on_activate off, so it never redials on its own).
         Restarting the matching sCameraN input in OBS right after forces it
         to reconnect to the new socket, instead of the picture going dark
-        after every rotation (every 15-20 min by default).
+        after every rotation (every 15-20 min by default, or earlier if
+        triggered by an event — see MarkSegmentEnd on the plugin side).
+
+        Also closes the previous camera_recording_segment row and opens one
+        for the new segment (same as on_recording_started) — without this,
+        find_at()/RecordingLookupManager only ever see a camera's FIRST
+        segment of a recording, making any lookup wrong for the rest of the
+        match once at least one rotation has happened.
         """
+        from datetime import datetime
         payload = msg.get('payload', {})
         camera_id = payload.get('camera_id')
         if not camera_id:
             return
-        current_app.logger.info(f"🔁 Segment rotated for {camera_id} — restarting matching OBS source")
+        current_app.logger.info(
+            f"🔁 Segment rotated for {camera_id} → {payload.get('file_name')} "
+            f"(reason={payload.get('reason')}) — restarting matching OBS source"
+        )
+
+        reported_started_at = None
+        started_at_ms = payload.get('started_at')
+        if started_at_ms:
+            try:
+                reported_started_at = datetime.utcfromtimestamp(int(started_at_ms) / 1000)
+            except (TypeError, ValueError):
+                current_app.logger.warning(f"segment_rotated: invalid started_at={started_at_ms!r}")
+
+        try:
+            from core.models.base_camera_recording_segment import get_camera_recording_segment_model
+            CameraRecordingSegment = get_camera_recording_segment_model()
+            match_id  = payload.get('match_id') or None
+            period_id = payload.get('period_id') or None
+            CameraRecordingSegment.start_segment(
+                recorder_camera_id=camera_id,
+                game_id=int(match_id) if match_id else None,
+                period_id=int(period_id) if period_id else None,
+                file_name=payload.get('file_name'),
+                file_path=payload.get('file_path'),
+                reported_started_at=reported_started_at,
+            )
+        except RuntimeError:
+            pass  # moduł nie rejestruje tego modelu — nic do zrobienia
+        except Exception as e:
+            current_app.logger.error(f"Failed to persist camera_recording_segment (rotate): {e}")
+
         try:
             from core.managers import get_obs_ws_manager
             get_obs_ws_manager().restart_camera_stream_source(camera_id)
