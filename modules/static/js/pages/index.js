@@ -813,11 +813,29 @@ function onReverseButtonClick() {
 // ============================================================================
 
 
+// Domyślna pozycja na boisku gdy nie ma zaznaczonej komórki (np. kartka z
+// tego panelu, gdzie w ogóle nie ma siatki boiska do klikania) — musi być
+// realna wartość, bo ui-jinja.js:'events' pomija cały wiersz zdarzenia gdy
+// event_place jest null (fieldSvgGenerator wywaliłby się na null). Ta sama
+// logika co getDefaultGoalCellID w events-controllers.js (siatka 15x9,
+// bramka lewa = kolumna A, prawa = ostatnia kolumna, środkowy rząd) — nie
+// da się stamtąd zaimportować, bo events-controllers.js jest ładowane tylko
+// na stronie monitora (ui-jinja.html), nie na tej (index.html).
+function _getDefaultEventCellID(isHome, isGoal, isReversed) {
+    const fieldCols = 15;
+    const fieldRows = 9;
+    const midRow    = Math.ceil(fieldRows / 2);
+    const lastCol   = String.fromCharCode(65 + fieldCols - 1); // 'O'
+    const nearGoal  = isReversed ? `${lastCol}${midRow}` : `A${midRow}`;
+    const farGoal   = isReversed ? `A${midRow}`          : `${lastCol}${midRow}`;
+    return (isGoal === isHome) ? farGoal : nearGoal;
+}
+
 function addTeamEvent(teamType, eventName) {
     socket.emit('add_game_event_to_db', {
         team_type:        teamType,
         event_type:       eventName,
-        selected_cell_id: null,
+        selected_cell_id: _getDefaultEventCellID(teamType === 'home', eventName === 'Bramka', appState.isReversed),
     });
 }
 
