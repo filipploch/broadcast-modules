@@ -400,6 +400,17 @@ func (mc *MpvController) LoadAndPlay(videoPath string, startMs, endMs int64, spe
 		log.Printf("⚠️  pre-speed: %v", err)
 	}
 
+	// hr-seek=no: seek do najbliższej klatki kluczowej zamiast dokładnej
+	// pozycji. Precyzyjny (exact) seek w pliku, który wciąż rośnie (bieżący
+	// segment recordera), zmusza ffmpeg do sekwencyjnego dekodowania od
+	// punktu zaczepienia — bez znanej końcowej długości pliku nie da się
+	// oszacować pozycji bajtowej z proporcji czas/długość. Koszt rósł wprost
+	// proporcjonalnie do głębokości seeka (~8% pozycji, czyli do ~90s przy
+	// GOP=1s to najwyżej ~1s wcześniejszy start powtórki — nieodczuwalne.
+	if err := mc.ipc.send([]interface{}{"set_property", "hr-seek", "no"}); err != nil {
+		log.Printf("⚠️  pre-hr-seek: %v", err)
+	}
+
 	startArg := fmt.Sprintf("start=%.3f", startSec)
 	// SendAndWait zamiast fire-and-forget: czekamy aż mpv potwierdzi przyjęcie
 	// komendy zanim wyślemy speed — eliminuje potrzebę hardkodowanego sleep(300ms).
