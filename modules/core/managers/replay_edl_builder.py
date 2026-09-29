@@ -21,8 +21,15 @@ def _edl_dir():
     for these tiny control-plane files. Deliberately NOT on R:\\recorder:
     writing there would add extra load/SMB traffic to the already-loaded
     Debian recorder host for no benefit.
+
+    Default resolved relative to current_app.root_path (modules/<module>/app),
+    same pattern as REPLAY_PLUGIN_CONFIG in sequences.py — repo-root/modules/temp
+    is already covered by .gitignore's **/temp/** so these never get committed.
     """
-    path = current_app.config.get('REPLAY_EDL_DIR', r'C:\BroadcastTemp\replay-edl')
+    path = current_app.config.get(
+        'REPLAY_EDL_DIR',
+        os.path.abspath(os.path.join(current_app.root_path, '..', '..', '..', 'modules', 'temp', 'replay-edl'))
+    )
     os.makedirs(path, exist_ok=True)
     return path
 
