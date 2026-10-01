@@ -6,6 +6,26 @@ import time
 from datetime import datetime
 
 
+def _none_to_empty_string(value):
+    """Recursively replace Python None (JSON null) with "" inside a payload.
+
+    Overlays (hub/overlays/*) are plain JS reading these payloads straight
+    off the WebSocket, often via template-literal interpolation like
+    `${player.number}` — when the value is null (e.g. a player with no
+    squad number assigned yet), that renders the literal text "null" in the
+    browser-source overlay instead of a blank. This only ever touches an
+    actual None; a field someone deliberately set to the STRING "null" is a
+    different value entirely and passes through untouched.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        return {k: _none_to_empty_string(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_none_to_empty_string(v) for v in value]
+    return value
+
+
 class HubClient:
     """WebSocket client for Hub communication"""
 
@@ -176,6 +196,18 @@ class HubClient:
         try:
             if 'timestamp' not in message:
                 message['timestamp'] = datetime.utcnow().isoformat()
+
+            # Sanitize None -> "" only for class-broadcasts (to: "broadcast:<class>")
+            # — that's the overlay/display pipeline (every module, current and
+            # future, funnels through broadcast_to_class() or a raw send() with
+            # this "to" shape — see e.g. sequence_manager's 'broadcast:overlay_receiver'
+            # steps). Plugin-targeted control messages (send_to_plugin, generic
+            # 'broadcast' to all plugins, or a direct plugin "to") are left
+            # untouched — those are machine-read commands, not display data, and
+            # a None there can be meaningful (e.g. an optional parameter).
+            to = message.get('to')
+            if isinstance(to, str) and to.startswith('broadcast:') and 'payload' in message:
+                message['payload'] = _none_to_empty_string(message['payload'])
 
             with self._lock:
                 self.ws.send(json.dumps(message))
