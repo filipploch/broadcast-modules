@@ -1,0 +1,45 @@
+/* Wywiad — "belka" z imieniem i nazwiskiem rozmówcy + opisem i zdjęciem.
+   Kontener (.interview-container) jest pokazywany/ukrywany generycznym
+   mechanizmem show_overlay_container (patrz overlay.js: getContainerType/
+   showContainer) — to tylko ramka/tło. Właściwa karta (.interview-content)
+   zaczyna i zostaje display:none niezależnie od kontenera, odkrywana
+   dopiero jawnym sygnałem show_interview (patrz overlay.js: ws.onmessage) —
+   dzięki temu operator może otworzyć kontener wcześniej i pokazywać/chować
+   kartę wielokrotnie w trakcie jednego wywiadu.
+
+   Wygląd (box tekstu, zdjęcie w kwadracie) ma być tożsamy z paskiem akcji
+   (#action_info_container w action.css) — dlatego poniżej nie definiujemy
+   własnego tła/obramowania/rozmiaru zdjęcia: te reguły żyją w action.css na
+   klasach .action_square/.info-container-icon/.info-container-text, którymi
+   buildInterviewContainerContent() oznacza wygenerowane elementy. Tu
+   zostaje tylko: pozycjonowanie karty w kontenerze i specyficzna dla
+   wywiadu kolorystyka imienia/opisu. */
+
+.interview-container {
+    pointer-events: none;
+}
+
+.interview-content {
+    display: none;
+    align-items: center;
+    gap: 20px;
+}
+
+.interview-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.interview-name {
+    color: red;
+    font-size: 40px;
+    font-weight: 700;
+}
+
+.interview-description {
+    background-color: rgba(255,0,0,0.8);
+    color: #ffffff;
+    font-size: 35px;
+    padding: 0 1em;
+}

@@ -44,6 +44,7 @@ const _MONITOR_TAB_DEFS = {
     games:         { label: 'MECZE',  action: () => showUiMonitorContent('games') },
     banners:       { label: 'BANERY',    action: () => showUiMonitorContent('banners') },
     backgrounds:   { label: 'TŁA',       action: () => showUiMonitorContent('backgrounds') },
+    interview:     { label: 'WYWIAD',    action: () => showUiMonitorContent('interview') },
 };
 
 function buildMonitorControls() {
@@ -302,15 +303,18 @@ function gameEventInfoBtnGenerator(_gameEvent) {
             id="path1"
             style="stroke-width:1" />
         </svg>`;
-    if(_gameEvent.is_reported === true && _gameEvent.player_id === null){
-        return `<button type="button" class="event-btn events-info-btn" style="background-color:red; padding: 1px 3.6px;"
-        onclick="showInfo(${_gameEvent.id}, ${_gameEvent.team_id})">${whiteIcon}</button>`
-    } else if (_gameEvent.is_reported === true) {
-        return `<button type="button" class="event-btn events-info-btn" style="background-color:green; padding: 1px 3.6px;"
-        onclick="showInfo(${_gameEvent.id}, ${_gameEvent.player_id})">${whiteIcon}</button>`
-    } else {
+    if(_gameEvent.is_reported !== true){
         return ''
     }
+    if(_gameEvent.player_id === null){
+        // Zawodnik niewybrany — przycisk nieklikalny (nie ma kogo pokazać na pasku akcji).
+        return `<button type="button" class="event-btn events-info-btn" disabled
+        style="background-color:red; padding: 1px 3.6px; opacity:0.6; cursor:default;">${whiteIcon}</button>`
+    }
+    const isActive = _gameEvent.is_active === true;
+    return `<button type="button" class="event-btn events-info-btn" data-game-event-id="${_gameEvent.id}"
+    style="background-color:${isActive ? 'green' : 'gray'}; padding: 1px 3.6px;"
+    onclick="toggleGameEventDisplay(${_gameEvent.id})">${whiteIcon}</button>`
 }
 
 
@@ -455,9 +459,21 @@ function showCameraReplay(eventCameraId) {
     closeReplaysPopup();
 }
 
-function showInfo(_gameEventId, _teamId) {
-    socket.emit('show_info', {game_event_id: _gameEventId, team_id: _teamId});
+function toggleGameEventDisplay(_gameEventId) {
+    socket.emit('toggle_game_event_info', {game_event_id: _gameEventId});
 }
+
+// Odświeża kolor przycisków .events-info-btn po manualnym toggle (z tej
+// karty) albo po automatycznym zamknięciu na overlayu (patrz
+// hub_client.py: notification_auto_hidden) — bez przebudowy całej tabeli
+// (to zresetowałoby filtry/scroll), tylko przekolorowanie.
+socket.on('game_event_display_updated', data => {
+    document.querySelectorAll('.events-info-btn[data-game-event-id]').forEach(btn => {
+        const id = parseInt(btn.dataset.gameEventId, 10);
+        const isActive = id === data.active_game_event_id;
+        btn.style.backgroundColor = isActive ? 'green' : 'gray';
+    });
+});
 
 // function showReplay(videoPath, replayStartTime, replayEndTime) {
 //     socket.emit('show_replay', {
@@ -1364,6 +1380,9 @@ socket.on('show_ui_monitor_content', data => {
         uiMonitorContent.append(eventsTypeSelectorsContainer);
         uiMonitorContent.append(gameEventsContainer);
         uiMonitorContent.dataset.isEventsUpdateBlocked = 'false';
+    } else if (data.content_type === 'interview') {
+        uiMonitorContent.innerHTML = '';
+        buildInterviewTab(uiMonitorContent, data.participants);
     } else if(data.content_type === 'edit_event') {
         const eventsTypes = data.events_types;
         const gameEvent = data.game_event;

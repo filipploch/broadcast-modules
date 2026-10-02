@@ -43,6 +43,9 @@ class BaseGameEventMixin:
     # Visibility flag — False means the event is hidden from the AKCJE view
     is_visible = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
 
+    # Currently displayed on the overlay action bar — at most one True per game_id
+    is_active = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -155,6 +158,7 @@ class BaseGameEventMixin:
             'has_camera_data':     self.has_camera_data,
             'event_cameras':       [gc.to_dict() for gc in self.event_cameras],
             'is_visible':          self.is_visible,
+            'is_active':           self.is_active,
             'created_at':          self.created_at.isoformat() if self.created_at else None,
             'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
         }

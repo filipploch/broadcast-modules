@@ -19,9 +19,9 @@ function fieldSvgStr(module, x, y, color) {
 
 const MODULE_REGISTRY = {
     garbarnia: {
-        monitorTabs: ['events', 'substitutions', 'games', 'banners', 'backgrounds'],
+        monitorTabs: ['events', 'substitutions', 'games', 'banners', 'backgrounds', 'interview'],
     },
     futsal_nalf: {
-        monitorTabs: ['events', 'games', 'banners', 'backgrounds'],
+        monitorTabs: ['events', 'games', 'banners', 'backgrounds', 'interview'],
     },
 };

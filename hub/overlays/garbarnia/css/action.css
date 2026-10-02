@@ -4,15 +4,25 @@
 }
 
 #action_info_container{
+    display: none;
+}
+
+/* Pozycja/rozmiar "paska powiadomień" na ekranie — wspólna dla obu
+   konsumentów generatora (patrz overlay.js: generateInfoContainer), nie
+   osobno dla #action_info_container i .interview-content, żeby oba
+   renderowały się w TYM SAMYM miejscu i zmieniały się razem przy zmianie
+   nazwy stylingClass. Klasę dokłada JS (buildActionInfoContainerContent/
+   buildInterviewContainerContent) jako `${stylingClass}-container`. */
+.match-notification-container{
 /*    width: 1920px;*/
 	position: absolute;
     left: 50%;
-    transform: translateX(-56%);
+/*    transform: translateX(-56%); */
+    transform: translateX(-50%);
 	bottom: 100px;
 	height: 100px;
     text-align: center;
     overflow: hidden;
-    display: none;
 }
 
 .action_square{
@@ -24,7 +34,11 @@
 
 
 
-#action_info_text
+/* Wspólny wygląd "boxa tekstowego" — udostępniony generycznej klasie
+   .info-container-text (patrz overlay.js: buildActionInfoContainerContent/
+   buildInterviewContainerContent), nie tylko #action_info_text, żeby karta
+   wywiadu dziedziczyła dokładnie ten sam wygląd co pasek akcji. */
+.info-container-text
 {
     position: relative;
     display: inline-block;
@@ -33,9 +47,7 @@
 	font-weight: 500;
 	letter-spacing: 1px;
     background-color: rgba(255,255,255,0.7);
-/*    margin: 0em 1em;*/
-
-/*	top: 3px;*/
+    min-width: 40vw;
 }
 
 .action_minute{
@@ -86,7 +98,10 @@
 /*    width: 133px;*/
 }
 
-#action_icon img{
+/* Jak wyżej: wspólne dla #action_icon img i .info-container-icon (karta
+   wywiadu) — zdjęcie wypełnia cały kwadrat .action_square, bez własnego
+   kadrowania/zaokrąglenia. */
+.info-container-icon{
     width: 100%;
     height: 100%;
 }
@@ -95,71 +110,39 @@
     color: rgba(255,255,255,0);
 }
 
-#action_icon img{
-    animation: matchActionBarImage 11s ease 0s 1 normal both;
+/* Wejście/wyjście ikony i tła tekstu — wspólne dla #action_info_container
+   (pasek akcji, patrz overlay.js: handler 'show_info') i .interview-content
+   (karta wywiadu, patrz interview.css), generowanych przez
+   generateInfoContainer(). Klasy nakładane na generyczne znaczniki
+   .info-container-icon/.info-container-text (patrz
+   showNotificationContainer/hideNotificationContainer w overlay.js), nie na
+   id/klasy specyficzne dla konkretnego kontenera — stąd fade dla ikony,
+   "pieczątka" scaleY dla tła tekstu, rozbite na SEPARATE enter/exit (ten sam
+   @keyframes odtworzony w drugą stronę przez animation-direction: reverse),
+   bo czas wyświetlenia zależy od wywołującego (pasek akcji: stały timer
+   11.1s; wywiad: do własnego hide_interview albo tego samego timera).
+   Każdy nowy "timed notification" na overlayu może użyć tych samych czterech
+   klas — wystarczy podać inną nazwę stylingClass przy generateInfoContainer
+   i przygotować analogiczny komplet *-icon-enter/exit, *-text-enter/exit. */
+
+.match-notification-icon-enter {
+	animation: matchNotificationIconFade 400ms ease both;
+}
+.match-notification-icon-exit {
+	animation: matchNotificationIconFade 400ms ease reverse both;
+}
+@keyframes matchNotificationIconFade {
+	from { opacity: 0; }
+	to   { opacity: 1; }
 }
 
-
-@keyframes matchActionBarImage {
-	0% {
-		opacity: 0;
-	}
-
-	10% {
-		opacity: 1;
-	}
-	90% {
-		opacity: 1;
-	}
-
-	100% {
-		opacity: 0;
-	}
+.match-notification-text-enter {
+	animation: matchNotificationTextStamp 400ms ease both;
 }
-
-#action_info_text {
-    animation: matchActionBarTextBackground 10s ease 200ms 1 normal both;
+.match-notification-text-exit {
+	animation: matchNotificationTextStamp 400ms ease reverse both;
 }
-
-
-@keyframes matchActionBarTextBackground {
-	0% {
-		transform: scaleY(0);
-		opacity: 0;
-	}
-
-	5% {
-		transform: scaleY(1);
-		opacity: 1;
-	}
-	90% {
-		transform: scaleY(1);
-        opacity: 1;
-	}
-
-	100% {
-		transform: scaleY(0);
-        opacity: 0;
-	}
-}
-
-.action-content{
-    animation: matchActionBarText 500ms ease 8s 1 normal both;
-}
-
-@keyframes matchActionBarText {
-	0% {
-		opacity: 0;
-	}
-
-	5% {
-		opacity: 1;
-	}
-	95% {
-		opacity: 1;
-	}
-
-	100% {
-		opacity: 0;
-	}
+@keyframes matchNotificationTextStamp {
+	from { transform: scaleY(0); opacity: 0; }
+	to   { transform: scaleY(1); opacity: 1; }
 }

@@ -1,0 +1,118 @@
+/* Zakładka "WYWIAD" — lista uczestników + modal dodawania. */
+
+#interview-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+
+#interview-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.interview-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+	color: black;
+}
+
+.interview-modal {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px 24px;
+    width: 420px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.interview-type-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0;
+}
+
+.interview-type-btn {
+    padding: 6px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #f8f9fa;
+    cursor: pointer;
+}
+
+.interview-type-btn.active {
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+}
+
+.interview-name-field {
+    position: relative;
+    margin: 10px 0;
+}
+
+.interview-name-field input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.interview-name-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 6px 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10001;
+}
+
+.interview-suggestion {
+    padding: 8px 10px;
+    cursor: pointer;
+    color: black;
+}
+
+.interview-suggestion:hover {
+    background: #f8f9fa;
+}
+
+.interview-team-options {
+    margin: 10px 0;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.interview-description-source {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.interview-modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.interview-modal-actions button {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    cursor: pointer;
+}

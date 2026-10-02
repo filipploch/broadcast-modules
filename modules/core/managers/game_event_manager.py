@@ -423,6 +423,48 @@ class GameEventManager:
         GameEvent = _get_game_event()
         return GameEvent.query.get(game_event_id)
 
+    # ── Wyświetlanie na pasku akcji (overlay) ───────────────────────────
+    # Te same pojedyncze-aktywne semantyki co InterviewManager.toggle: klik
+    # na aktywnym zdarzeniu = zgaś; klik na innym = zgaś poprzednie, zapal
+    # nowe (co najwyżej jedno is_active=True per game_id). Payload do
+    # 'show_info' wymaga GamePlayerManager, który jest managerem
+    # specyficznym dla modułu (nie core) — stąd ta metoda tylko mutuje stan
+    # i wysyła 'hide_info' gdy gasi; właściwe 'show_info' (z pełnym
+    # payloadem) wysyła wołający (socketio handler w module) po otrzymaniu
+    # action == 'shown'.
+
+    def toggle_active(self, game_event_id: int):
+        GameEvent = _get_game_event()
+        game_event = self.get_game_event_by_id(game_event_id)
+        if not game_event:
+            return None
+
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+
+        if game_event.is_active:
+            game_event.is_active = False
+            db.session.commit()
+            if hub_client:
+                hub_client.send_to_plugin('stream-overlay', 'hide_info', {})
+            return {'action': 'hidden', 'game_event_id': game_event.id, 'previous_active_id': None}
+
+        previous = GameEvent.query.filter_by(game_id=game_event.game_id, is_active=True).first()
+        previous_id = previous.id if previous else None
+        if previous:
+            previous.is_active = False
+        game_event.is_active = True
+        db.session.commit()
+        return {'action': 'shown', 'game_event_id': game_event.id, 'previous_active_id': previous_id}
+
+    def deactivate(self, game_event_id: int):
+        """Gasi is_active bez wysyłania żadnego sygnału do huba — overlay już
+        się sam ukrył (auto-hide), to tylko domknięcie stanu w DB/UI."""
+        game_event = self.get_game_event_by_id(game_event_id)
+        if game_event and game_event.is_active:
+            game_event.is_active = False
+            db.session.commit()
+
     def update_game_event(self, game_event_id: int, event_id: int = None, game_time: int = None,
                         replay_end_time: int = None, replay_start_time: int = None, video_path: str = None,
                         event_place: str = None, team_id=_NOT_SET, player_id=_NOT_SET,

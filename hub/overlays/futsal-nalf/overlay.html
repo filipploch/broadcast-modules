@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/specific.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/overlay-container.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard-new.css">
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/interview.css">
 </head>
 <body>
     <div id="empty-container" style="display: none;"></div>
@@ -65,20 +66,7 @@
             </div>
         </div>
         <div id="animationArea"><span style="color: rgba(255,255,255,0)">.</span></div>
-		<div id="action_info_container">
-			<div class="action_square" id="action_icon"><img id="action_icon_img"></div>
-			<div id="action_info_text">
-				<div class="action_minute"><span id="action_time"></span></div>
-				<div id="action_player">
-                    <span id="action_player_name"></span>
-                    <span id="action_player_team_short_name"></span>
-                </div>
-				<div class="action_minute invisible_text"></div>
-				<div class="cleaner"></div>
-				<div id="action_team_name"></div>
-			</div>
-			<div class="action_square"><p></p></div>
-		</div>
+		<div id="action_info_container"></div>
         <div id="substitutions-container" style="display: none;">
             <div id="substitutions">
                 <div id="substitution-header" class="substitution substitution-row"></div>
@@ -99,6 +87,7 @@
     </div>
     <div id="banner-container" style="display:none; position: absolute; left: 710px; bottom:0px; overflow: hidden; width: 500px; height: 100px; margin:0; padding:0; z-index: 999999;"></div>
     <div id="start-container" class="start-container info-container overlay-container" style="display: none;"></div>
+    <div id="interview-container" class="interview-container info-container overlay-container" style="display: none;"></div>
     <div id="break-container" class="break-container info-container overlay-container" style="display: none;"></div>
     <div id="home-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
     <div id="away-team-squad-container" class="squad-container info-container overlay-container" style="display: none;"></div>
@@ -119,6 +108,7 @@
 	<script src="/overlays/futsal-nalf/js/overlay.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 	<script src="/overlays/futsal-nalf/js/banners/functions.js"></script>
+
 
 
 </body>

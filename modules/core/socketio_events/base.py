@@ -649,6 +649,67 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    # ── Wywiad (interview) ──────────────────────────────────────────────────────
+
+    def _emit_interview_participants_updated():
+        from core.extensions import socketio as _sio
+        from core.managers.interview_manager import InterviewManager
+        Settings = _get_settings()
+        game_id = Settings.get_settings().current_game_id
+        participants = InterviewManager().list_for_game(game_id) if game_id else []
+        _sio.emit('interview_participants_updated', {'participants': participants})
+
+    @socketio.on('search_interview_person')
+    def handle_search_interview_person(data):
+        from core.extensions import socketio as _sio
+        from core.managers.interview_manager import InterviewManager
+        results = InterviewManager().search_people(
+            data.get('query', ''), data.get('interview_type')
+        )
+        _sio.emit('interview_person_results', {'results': results})
+
+    @socketio.on('add_interview_participant')
+    def handle_add_interview_participant(data):
+        from core.managers.interview_manager import InterviewManager
+        Settings = _get_settings()
+        game_id = Settings.get_settings().current_game_id
+        if not game_id:
+            return
+        InterviewManager().add(
+            game_id=game_id,
+            interview_type=data.get('interview_type'),
+            name=data.get('name', ''),
+            description=data.get('description', ''),
+            image_path=data.get('image_path'),
+            matched_player_id=data.get('matched_player_id'),
+            matched_referee_id=data.get('matched_referee_id'),
+            matched_commentator_id=data.get('matched_commentator_id'),
+            matched_team_id=data.get('matched_team_id'),
+            use_team_crest=data.get('use_team_crest', False),
+        )
+        _emit_interview_participants_updated()
+
+    @socketio.on('remove_interview_participant')
+    def handle_remove_interview_participant(data):
+        from core.managers.interview_manager import InterviewManager
+        InterviewManager().remove(data.get('id'))
+        _emit_interview_participants_updated()
+
+    @socketio.on('reset_interview_participants')
+    def handle_reset_interview_participants(data):
+        from core.managers.interview_manager import InterviewManager
+        Settings = _get_settings()
+        game_id = Settings.get_settings().current_game_id
+        if game_id:
+            InterviewManager().reset(game_id)
+        _emit_interview_participants_updated()
+
+    @socketio.on('toggle_interview_participant')
+    def handle_toggle_interview_participant(data):
+        from core.managers.interview_manager import InterviewManager
+        InterviewManager().toggle(data.get('id'))
+        _emit_interview_participants_updated()
+
     # ── Servo (cam-head) ──────────────────────────────────────────────────────
 
     @socketio.on('get_servo_heads')
@@ -809,6 +870,16 @@ def _handle_core_content(content_type, data):
             'content_type': 'events',
             'events_types': events_types,
             'game_events':  game_events,
+        }
+
+    elif content_type == 'interview':
+        from core.managers.interview_manager import InterviewManager
+        Settings = _get_settings()
+        game_id = Settings.get_settings().current_game_id
+        participants = InterviewManager().list_for_game(game_id) if game_id else []
+        return {
+            'content_type': 'interview',
+            'participants': participants,
         }
 
     elif content_type == 'edit_event':

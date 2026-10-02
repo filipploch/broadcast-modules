@@ -400,32 +400,42 @@ def register_events(socketio):
             hub_client.send_to_plugin('recorder-plugin', 'mark_segment_end', {})
 
 
-    @socketio.on('show_info')
-    def handle_show_info(data):
-        # from core.managers.game_event_manager import GameEventManager
-        # from core.managers.game_player_manager import GamePlayerManager
-
+    @socketio.on('toggle_game_event_info')
+    def handle_toggle_game_event_info(data):
         gm  = GameEventManager()
         gpm = GamePlayerManager()
 
-        game_event  = gm.get_game_event_by_id(data.get('game_event_id'))
-        ged         = game_event.to_dict()
-        game_player = gpm.get_game_player_by_player_id(ged['player_id'])
-        gpd         = game_player.to_dict()
+        result = gm.toggle_active(data.get('game_event_id'))
+        if not result:
+            return
 
-        hub_client = get_hub_client()
-        if hub_client:
-            hub_client.send_to_plugin('stream-overlay', 'show_info', {
-                'event_type_id':       ged['event_id'],
-                'event_name':          ged['event_name'],
-                'event_image_path':    ged['event_image_path'],
-                'team_name':           ged['team_name'],
-                'team_name_14':        ged['team_name_14'],
-                'player_number':       ged['player_number'],
-                'player_name':         ged['player_name'],
-                'player_team_short_name': gpd['team_short_name'],
-                'game_time':           ged['game_time'],
-                'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
+        if result['action'] == 'shown':
+            game_event  = gm.get_game_event_by_id(result['game_event_id'])
+            ged         = game_event.to_dict()
+            game_player = gpm.get_game_player_by_player_id(ged['player_id'])
+            gpd         = game_player.to_dict() if game_player else {}
+
+            hub_client = get_hub_client()
+            if hub_client:
+                hub_client.send_to_plugin('stream-overlay', 'show_info', {
+                    'game_event_id':       game_event.id,
+                    'event_type_id':       ged['event_id'],
+                    'event_name':          ged['event_name'],
+                    'event_image_path':    ged['event_image_path'],
+                    'team_name':           ged['team_name'],
+                    'team_name_14':        ged['team_name_14'],
+                    'player_number':       ged['player_number'],
+                    'player_name':         ged['player_name'],
+                    'player_team_short_name': gpd.get('team_short_name'),
+                    'game_time':           ged['game_time'],
+                    'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
+                })
+            socketio.emit('game_event_display_updated', {
+                'active_game_event_id': result['game_event_id'],
+            })
+        else:
+            socketio.emit('game_event_display_updated', {
+                'active_game_event_id': None,
             })
 
 

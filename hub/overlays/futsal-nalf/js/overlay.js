@@ -47,6 +47,7 @@ function getContainerType(container) {
     const classList = container.classList;
 
     if (classList.contains('start-container')) return 'start';
+    if (classList.contains('interview-container')) return 'interview';
     if (classList.contains('squad-container')) return 'squad';
     if (classList.contains('break-container')) return 'break';
     if (classList.contains('game-container')) return 'game';
@@ -97,6 +98,15 @@ function showContainer(_data) {
         expandStartContainer(_data, true);
         prepareToOpenContainer(openContainer, targetContainer);
         activateElementsAfterTime('break-content', 2500, 'flex');
+    } else if (containerType === 'interview') {
+        // Karta (.interview-content) startuje i zostaje display:none — nie
+        // odkrywamy jej tu automatycznie (w odróżnieniu od innych typów).
+        // Widoczność steruje wyłącznie show_interview/hide_interview, żeby
+        // operator mógł otworzyć ten kontener raz i pokazywać/chować kartę
+        // wielokrotnie w trakcie jednego wywiadu.
+        generateInfoContainer('interview-content', 'match-notification');
+        if (_data) updateInterviewData(_data);
+        prepareToOpenContainer(openContainer, targetContainer);
     } else if (containerType === 'shootout') {
         expandShootoutContainer(_data);
         prepareToOpenContainer(openContainer, targetContainer);
@@ -963,6 +973,265 @@ function expandStartContainer(_gameData, _break = false) {
     _startContainer.appendChild(startContainer);
 }
 
+// ── Generyczny generator "paska powiadomień" ────────────────────────────
+// #action_info_container (belka eventów meczowych, patrz handler 'show_info'
+// niżej) i .interview-content (karta wywiadu) mają tę samą rolę: ikona +
+// blok tekstu, pokazywane na chwilę z animacją wejścia/wyjścia. Zamiast
+// dwóch niezależnych implementacji, oba generowane są przez jedno wejście —
+// generateInfoContainer(containerName, stylingClass) — które samo
+// dobiera właściwy "budowniczy treści" wg nazwy kontenera. Klasa
+// stylizująca (2. argument) nie zmienia TEGO builder-a: decyduje tylko o
+// tym, jakie klasy enter/exit (patrz showNotificationContainer/
+// hideNotificationContainer niżej) zostaną użyte przy pokazywaniu/chowaniu —
+// więc przygotowanie nowego kompletu klas CSS (np. "inna-animacja-icon-enter/
+// exit", "inna-animacja-text-enter/exit") i podanie jej nazwy w obu
+// wywołaniach generatora od razu zmienia wygląd/zachowanie OBU kontenerów
+// naraz, bez dotykania JS.
+function generateInfoContainer(containerName, stylingClass) {
+    if (containerName === 'action_info_container') {
+        return buildActionInfoContainerContent(stylingClass);
+    }
+    if (containerName === 'interview-content') {
+        return buildInterviewContainerContent(stylingClass);
+    }
+    console.error(`generateInfoContainer: nieznany containerName "${containerName}"`);
+    return null;
+}
+
+// Buduje wnętrze #action_info_container od zera (ikona w kwadracie, blok
+// tekstu z minutą/zawodnikiem/drużyną, kwadrat-wypełniacz na symetrię) —
+// identyczna struktura co dotąd statyczny HTML w overlay.html, tylko teraz
+// generowana przy każdym 'show_info'. Elementy, które handler 'show_info'
+// musi później wypełnić danymi, zachowują swoje stałe id.
+function buildActionInfoContainerContent(stylingClass) {
+    let container = document.getElementById('action_info_container');
+    if (!container) return null;
+    container.innerHTML = '';
+    container.dataset.stylingClass = stylingClass;
+    addClassName(container, `${stylingClass}-container`);
+
+    let iconSquare = document.createElement('div');
+    addClassName(iconSquare, 'action_square');
+    iconSquare.id = 'action_icon';
+    let iconImg = document.createElement('img');
+    iconImg.id = 'action_icon_img';
+    addClassName(iconImg, 'info-container-icon');
+    iconSquare.appendChild(iconImg);
+
+    let infoText = document.createElement('div');
+    infoText.id = 'action_info_text';
+    addClassName(infoText, 'info-container-text');
+
+    let minuteEl = document.createElement('div');
+    addClassName(minuteEl, 'action_minute');
+    let timeSpan = document.createElement('span');
+    timeSpan.id = 'action_time';
+    minuteEl.appendChild(timeSpan);
+
+    let playerEl = document.createElement('div');
+    playerEl.id = 'action_player';
+    let playerNameSpan = document.createElement('span');
+    playerNameSpan.id = 'action_player_name';
+    let playerTeamSpan = document.createElement('span');
+    playerTeamSpan.id = 'action_player_team_short_name';
+    playerEl.appendChild(playerNameSpan);
+    playerEl.appendChild(playerTeamSpan);
+
+    let minuteInvisible = document.createElement('div');
+    addClassName(minuteInvisible, 'action_minute');
+    addClassName(minuteInvisible, 'invisible_text');
+
+    let cleaner = document.createElement('div');
+    addClassName(cleaner, 'cleaner');
+
+    let teamNameEl = document.createElement('div');
+    teamNameEl.id = 'action_team_name';
+
+    infoText.appendChild(minuteEl);
+    infoText.appendChild(playerEl);
+    infoText.appendChild(minuteInvisible);
+    infoText.appendChild(cleaner);
+    infoText.appendChild(teamNameEl);
+
+    let spacerSquare = document.createElement('div');
+    addClassName(spacerSquare, 'action_square');
+    spacerSquare.appendChild(document.createElement('p'));
+
+    container.appendChild(iconSquare);
+    container.appendChild(infoText);
+    container.appendChild(spacerSquare);
+
+    return container;
+}
+
+// Buduje szkielet karty wywiadu (zdjęcie, imię i nazwisko, opis) w
+// #interview-container, tą samą "powłoką" co pasek akcji (kwadrat z ikoną +
+// kwadrat-wypełniacz, patrz .action_square) — stąd wspólne klasy
+// .info-container-icon/.info-container-text (czytane przez
+// showNotificationContainer/hideNotificationContainer). Karta
+// (.interview-content) zostaje display:none — jej widoczność i treść są
+// sterowane osobnymi sygnałami hub (show_interview/hide_interview/
+// update_interview, patrz ws.onmessage), nie tym wywołaniem — to tylko
+// przygotowuje puste miejsce pod te dane.
+function buildInterviewContainerContent(stylingClass) {
+    let container = document.getElementById('interview-container');
+    if (!container) return null;
+    container.innerHTML = '';
+
+    let content = document.createElement('div');
+    addClassName(content, 'interview-content');
+    content.dataset.stylingClass = stylingClass;
+    addClassName(content, `${stylingClass}-container`);
+
+    let iconSquare = document.createElement('div');
+    addClassName(iconSquare, 'action_square');
+    let iconImg = document.createElement('img');
+    addClassName(iconImg, 'interview-image');
+    addClassName(iconImg, 'info-container-icon');
+    iconSquare.appendChild(iconImg);
+
+    let infoText = document.createElement('div');
+    addClassName(infoText, 'interview-text');
+    addClassName(infoText, 'info-container-text');
+    let name = document.createElement('div');
+    addClassName(name, 'interview-name');
+    let description = document.createElement('div');
+    addClassName(description, 'interview-description');
+    infoText.appendChild(name);
+    infoText.appendChild(description);
+
+    let spacerSquare = document.createElement('div');
+    addClassName(spacerSquare, 'action_square');
+    spacerSquare.appendChild(document.createElement('p'));
+
+    content.appendChild(iconSquare);
+    content.appendChild(infoText);
+    content.appendChild(spacerSquare);
+    container.appendChild(content);
+
+    return content;
+}
+
+// Podmienia zdjęcie/imię-nazwisko/opis w już zbudowanej karcie wywiadu, bez
+// zmiany jej widoczności. Każde pole jest aktualizowane tylko jeśli zostało
+// przekazane — dzięki temu sygnał może podmienić np. samo zdjęcie.
+function updateInterviewData(_data) {
+    let container = document.getElementById('interview-container');
+    if (!container) return;
+    let image = container.querySelector('.interview-image');
+    let name = container.querySelector('.interview-name');
+    let description = container.querySelector('.interview-description');
+
+    if (image && _data.image !== undefined) {
+        // rootApp: ścieżki obrazków (domyślne ikony typu, herb drużyny) są
+        // względne, tak jak home_team_logo w expandStartContainer — stąd ten
+        // sam prefiks.
+        image.src = _data.image ? `${rootApp}${_data.image}` : '';
+    }
+    if (name && _data.name !== undefined) {
+        name.innerText = _data.name || '';
+    }
+    if (description && _data.description !== undefined) {
+        description.innerText = _data.description || '';
+    }
+}
+
+// ── Pokazywanie/chowanie z animacją — wspólne dla obu kontenerów ────────
+// stylingClass musi być tą samą nazwą podaną przy generateInfoContainer —
+// to ona wskazuje, których klas enter/exit (zdefiniowanych w action.css)
+// użyć. Timer auto-chowania przechowywany jest na samym elemencie
+// (contentEl._notifAutoHideTimer), nie w zmiennej modułowej, żeby ta sama
+// funkcja mogła bezpiecznie obsługiwać kilka różnych kontenerów naraz.
+const NOTIFICATION_EXIT_ANIM_MS = 400; // zgodne z match-notification-*-exit w action.css
+
+// identity (opcjonalny): {kind: 'action_info'|'interview', id: <game_event_id|participant_id>}
+// — potrzebny tylko po to, żeby przy AUTOMATYCZNYM zamknięciu (upłynięcie
+// autoHideMs, bez ingerencji operatora) overlay mógł odesłać sygnał
+// overlay->hub->backend->UI z informacją "to id właśnie przestało się
+// wyświetlać" (patrz notifyNotificationAutoHidden). Manualne zamknięcie
+// (hide_info/hide_interview z admina) NIE przechodzi przez ten mechanizm —
+// backend już wie o zmianie stanu, bo to on ją zainicjował.
+function showNotificationContainer(contentEl, stylingClass, displayValue, autoHideMs, identity) {
+    if (!contentEl) return;
+    clearTimeout(contentEl._notifAutoHideTimer);
+    let icon = contentEl.querySelector('.info-container-icon');
+    let text = contentEl.querySelector('.info-container-text');
+
+    contentEl.style.display = displayValue;
+
+    // Restart animacji wejścia nawet jeśli element już miał klasę exit
+    // (np. szybkie ponowne show po hide) — bez resetu animation+reflow
+    // przeglądarka czasem nie odtworzy animacji od nowa.
+    if (icon) { removeClassName(icon, `${stylingClass}-icon-exit`); icon.style.animation = 'none'; }
+    if (text) { removeClassName(text, `${stylingClass}-text-exit`); text.style.animation = 'none'; }
+    void contentEl.offsetHeight; // reflow
+    if (icon) { icon.style.animation = ''; addClassName(icon, `${stylingClass}-icon-enter`); }
+    if (text) { text.style.animation = ''; addClassName(text, `${stylingClass}-text-enter`); }
+
+    if (autoHideMs) {
+        contentEl._notifAutoHideTimer = setTimeout(() => {
+            hideNotificationContainer(contentEl, stylingClass);
+            notifyNotificationAutoHidden(identity);
+        }, autoHideMs);
+    }
+}
+
+// Odsyła do backendu (przez hub, adresowanie 'main-module' — tak samo jak
+// request_game_data) informację, że dana notyfikacja sama się zamknęła, bo
+// operator nie zrobił tego ręcznie. Backend na tej podstawie przestawia
+// stan w adminie (zielony->szary) bez czekania na kolejną interakcję.
+function notifyNotificationAutoHidden(identity) {
+    if (!identity || identity.id === undefined || identity.id === null) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+        from: overlayId,
+        to: 'main-module',
+        type: 'notification_auto_hidden',
+        payload: identity,
+    }));
+}
+
+function hideNotificationContainer(contentEl, stylingClass) {
+    if (!contentEl) return;
+    clearTimeout(contentEl._notifAutoHideTimer);
+    contentEl._notifAutoHideTimer = null;
+    if (contentEl.style.display === 'none') return;
+    let icon = contentEl.querySelector('.info-container-icon');
+    let text = contentEl.querySelector('.info-container-text');
+
+    // Ten sam reset animation+reflow co w showNotificationContainer: klasa
+    // exit używa tego samego @keyframes co enter (tylko reverse), więc samo
+    // podmienienie klas bez restartu bywa przez przeglądarkę zignorowane —
+    // element po prostu zamiera w ostatnim stanie, a po timeoucie "ucina"
+    // się do display:none bez animacji.
+    if (icon) { removeClassName(icon, `${stylingClass}-icon-enter`); icon.style.animation = 'none'; }
+    if (text) { removeClassName(text, `${stylingClass}-text-enter`); text.style.animation = 'none'; }
+    void contentEl.offsetHeight; // reflow
+    if (icon) { icon.style.animation = ''; addClassName(icon, `${stylingClass}-icon-exit`); }
+    if (text) { text.style.animation = ''; addClassName(text, `${stylingClass}-text-exit`); }
+
+    setTimeout(() => {
+        contentEl.style.display = 'none';
+    }, NOTIFICATION_EXIT_ANIM_MS);
+}
+
+// Auto-chowanie karty wywiadu, jeśli operator sam nie wywoła hide_interview
+// (tak samo jak pasek akcji w handlerze 'show_info' niżej — tam również
+// 11.1s). Tutaj timer restartowany przy każdym show_interview, bo wywiad
+// może zostać odsłonięty wielokrotnie.
+const INTERVIEW_AUTO_HIDE_MS = 11100;
+
+function showInterviewContent(_data) {
+    let content = document.querySelector('#interview-container .interview-content');
+    let identity = { kind: 'interview', id: _data && _data.participant_id };
+    showNotificationContainer(content, 'match-notification', 'flex', INTERVIEW_AUTO_HIDE_MS, identity);
+}
+
+function hideInterviewContent() {
+    let content = document.querySelector('#interview-container .interview-content');
+    hideNotificationContainer(content, 'match-notification');
+}
+
 function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo, _coach) {
     let squadContainer = document.getElementById(_containerId);
     squadContainer.innerHTML = '';
@@ -1296,6 +1565,23 @@ ws.onmessage = (event) => {
         showContainer(data);
     }
 
+    // Wywiad: podmiana treści (zdjęcie/imię-nazwisko/opis) i pokazywanie/
+    // chowanie karty niezależnie od otwierania/zamykania samego kontenera
+    // (patrz generateInfoContainer/buildInterviewContainerContent oraz
+    // showContainer 'interview').
+    if (msg.type === 'update_interview') {
+        const data = msg.payload || msg.data;
+        updateInterviewData(data);
+    }
+
+    if (msg.type === 'show_interview') {
+        showInterviewContent(msg.payload || msg.data);
+    }
+
+    if (msg.type === 'hide_interview') {
+        hideInterviewContent();
+    }
+
     if (msg.type === 'banner_show') {
         const data = msg.payload || msg.data;
         const bannerContainer = document.getElementById('banner-container');
@@ -1390,34 +1676,31 @@ ws.onmessage = (event) => {
 
     if (msg.type === 'show_info') {
         let data = msg.payload;
-        let actionInfoContainer = document.querySelector('#action_info_container');
-        let actionInfoElements = document.querySelectorAll('.action_square');
-        let actionImgElement = document.querySelector('#action_icon_img');
-        let actionInfoTextElement = document.querySelector('#action_info_text');
-        let actionTimeElements = document.querySelectorAll('.action_minute');
-        let actionTimeElement = document.querySelector('#action_time');
-        let actionPlayerInfoElement = document.querySelector('#action_player_name');
-        let actionPlayerTeamShortNameElement = document.querySelector('#action_player_team_short_name');
-        let actionTeamNameElement = document.querySelector('#action_team_name');
+        let actionInfoContainer = generateInfoContainer('action_info_container', 'match-notification');
+        if (actionInfoContainer) {
+            let actionImgElement = actionInfoContainer.querySelector('#action_icon_img');
+            let actionTimeElement = actionInfoContainer.querySelector('#action_time');
+            let actionPlayerInfoElement = actionInfoContainer.querySelector('#action_player_name');
+            let actionPlayerTeamShortNameElement = actionInfoContainer.querySelector('#action_player_team_short_name');
+            let actionTeamNameElement = actionInfoContainer.querySelector('#action_team_name');
 
-        actionImgElement.src = '';
-        actionImgElement.src = `${rootApp}${data.event_image_path}`;
-        actionTimeElement.textContent = '';
-        actionTimeElement.textContent = (data.period_limit_s !== undefined)
-            ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
-            : FutsalFormatters.formatElapsedTime(data.game_time, 0, { 'format': 'min', 'unit': 's' });
-        actionPlayerInfoElement.textContent = '';
-        actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
-        actionPlayerTeamShortNameElement.textContent = '';
-        actionPlayerTeamShortNameElement.textContent =
-            actionPlayerTeamShortNameElementGenerator(data.player_team_short_name ?? '', data.event_type_id);
-        actionTeamNameElement.textContent = '';
-        actionTeamNameElement.textContent = data.team_name ?? '';
+            actionImgElement.src = `${rootApp}${data.event_image_path}`;
+            actionTimeElement.textContent = (data.period_limit_s !== undefined)
+                ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
+                : FutsalFormatters.formatElapsedTime(data.game_time, 0, { 'format': 'min', 'unit': 's' });
+            actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
+            actionPlayerTeamShortNameElement.textContent =
+                actionPlayerTeamShortNameElementGenerator(data.player_team_short_name ?? '', data.event_type_id);
+            actionTeamNameElement.textContent = data.team_name ?? '';
 
-        actionInfoContainer.style.display = 'block';
-        setTimeout(() => {
-            actionInfoContainer.style.display = 'none';
-        }, 11100);
+            showNotificationContainer(actionInfoContainer, 'match-notification', 'block', 11100,
+                { kind: 'action_info', id: data.game_event_id });
+        }
+    }
+
+    if (msg.type === 'hide_info') {
+        let actionInfoContainer = document.getElementById('action_info_container');
+        hideNotificationContainer(actionInfoContainer, 'match-notification');
     }
 
     if (msg.type === 'results' || msg.type === 'table' || msg.type === 'virtual_table') {

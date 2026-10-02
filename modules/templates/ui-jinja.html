@@ -14,6 +14,7 @@
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/overlay-switcher.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/field-games.css') }}">
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/event-edit.css') }}">
+	<link rel="stylesheet" href="{{ url_for('static', filename='css/interview-tab.css') }}">
 	<style>
 		.game-field-cell     { background-image: url({{ url_for('static', filename='images/field/empty.png') }}) }
 	</style>
@@ -57,6 +58,9 @@
 					<div id="scale-screen" class="overlay-switcher screen-container"
 						ondblclick="scaleScreen()"
 						style="background-image: url({{ url_for('static', filename='images/ui/scale.png') }})"></div>
+					<div id="overlay-interview" class="overlay-switcher screen-container"
+						ondblclick="showOverlay('interview-container')"
+						style="background-image: url({{ url_for('static', filename='images/ui/interview.png') }})"></div>
 				</div>
 
 				<div id="camera-controllers-container" class="field-games">
@@ -157,6 +161,7 @@
 	<script src="{{ url_for('static', filename='js/ui/ui-modal.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/ui/event-popup.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/pages/ui-jinja.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui/interview-tab.js') }}"></script>
 	<!-- <script src="{{ url_for('static', filename='js/plugins/plugins-states.js') }}"></script> -->
 	<script src="{{ url_for('static', filename='js/plugins/overlay-utils.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/plugins/camera-controllers.js') }}"></script>

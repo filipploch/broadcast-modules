@@ -382,6 +382,24 @@ class HubClient:
             game_manager = GameManager()
             if msg_type == 'request_game_data':
                 game_manager.handle_request_game_data(msg)
+            elif msg_type == 'notification_auto_hidden':
+                # Overlay sam ukrył pasek akcji/kartę wywiadu (upłynął czas,
+                # operator nie zrobił tego ręcznie) — bez tego sygnału admin
+                # UI zostałby ze "sztucznie" zielonym przyciskiem/"W", mimo
+                # że na overlayu nic już się nie wyświetla.
+                from core.extensions import socketio
+                kind = payload.get('kind')
+                if kind == 'action_info':
+                    from core.managers.game_event_manager import GameEventManager
+                    GameEventManager().deactivate(payload.get('id'))
+                    socketio.emit('game_event_display_updated', {'active_game_event_id': None})
+                elif kind == 'interview':
+                    from core.managers.interview_manager import InterviewManager
+                    im = InterviewManager()
+                    game_id = im.deactivate(payload.get('id'))
+                    if game_id is not None:
+                        socketio.emit('interview_participants_updated',
+                                       {'participants': im.list_for_game(game_id)})
 
         elif msg_from == 'recorder-plugin':
             from core.managers import get_recorder_manager

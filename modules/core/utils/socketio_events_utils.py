@@ -104,4 +104,9 @@ def generate_show_overlay_data(data):
             })
         case 'empty-container':
             pass
+        case 'interview-container':
+            # Brak dodatkowych danych do dociągnięcia tutaj — treść karty
+            # (zdjęcie/imię-nazwisko/opis) przychodzi osobnym sygnałem
+            # update_interview, nie przy otwieraniu kontenera.
+            pass
     return data
