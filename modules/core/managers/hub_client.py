@@ -371,6 +371,18 @@ class HubClient:
                 if servo_manager:
                     servo_manager.on_head_offline(plugin_id)
 
+        elif msg_type == 'styling_class_applied':
+            # Odpowiedź huba na 'apply_styling_class' — przekazujemy wynik do
+            # admina, żeby UI mogło pokazać sukces/błąd (np. brak pliku
+            # style.css dla wybranej klasy, zła ścieżka itp.).
+            from core.extensions import socketio
+            socketio.emit('styling_class_applied', {
+                'overlay_dir':   payload.get('overlay_dir'),
+                'styling_class': payload.get('styling_class'),
+                'success':       payload.get('success'),
+                'error':         payload.get('error'),
+            })
+
         elif msg_type == 'health_status':
             from core.managers import get_plugin_manager
             plugin_manager = get_plugin_manager()

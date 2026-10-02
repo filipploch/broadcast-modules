@@ -459,6 +459,31 @@ function showCameraReplay(eventCameraId) {
     closeReplaysPopup();
 }
 
+// ── Styl overlayu (stylingClass) ────────────────────────────────────────
+function applyOverlayStylingClass() {
+    const input = document.getElementById('overlay-styling-class-input');
+    const stylingClass = (input.value || '').trim();
+    socket.emit('set_overlay_styling_class', { styling_class: stylingClass });
+}
+
+function resetOverlayStylingClass() {
+    const input = document.getElementById('overlay-styling-class-input');
+    input.value = '';
+    socket.emit('set_overlay_styling_class', { styling_class: '' });
+}
+
+socket.on('styling_class_applied', data => {
+    const status = document.getElementById('overlay-styling-class-status');
+    if (!status) return;
+    if (data.success) {
+        status.textContent = data.styling_class ? `Zastosowano: ${data.styling_class}` : 'Przywrócono podstawowy';
+        status.style.color = 'lightgreen';
+    } else {
+        status.textContent = `Błąd: ${data.error}`;
+        status.style.color = 'red';
+    }
+});
+
 function toggleGameEventDisplay(_gameEventId) {
     socket.emit('toggle_game_event_info', {game_event_id: _gameEventId});
 }

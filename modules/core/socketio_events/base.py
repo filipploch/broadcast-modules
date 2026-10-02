@@ -649,6 +649,32 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    # ── Styl overlayu (stylingClass) ────────────────────────────────────────────
+    # Przełączanie "skinu" overlayu: hub (nie Flask) kopiuje pliki na swoim
+    # dysku (patrz hub/styling.go: handleApplyStylingClass) z
+    # hub/overlays/<OVERLAY_DIR_NAME>/style/<styling_class>/{css,js}/ do
+    # stałego slotu hub/overlays/<OVERLAY_DIR_NAME>/{css/style-override.css,
+    # js/style-override.js}, który overlay.html ładuje zawsze, po
+    # mechanizmie podstawowym — więc overlay.html nigdy nie wymaga zmian.
+    # styling_class='' (albo brak) = powrót do mechanizmu podstawowego
+    # (hub zeruje oba pliki slotu, nic nie kopiuje).
+
+    @socketio.on('set_overlay_styling_class')
+    def handle_set_overlay_styling_class(data):
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if not hub_client:
+            return
+        hub_client.send({
+            'from': current_app.config['MODULE_ID'],
+            'to': 'hub',
+            'type': 'apply_styling_class',
+            'payload': {
+                'overlay_dir':   current_app.config['OVERLAY_DIR_NAME'],
+                'styling_class': data.get('styling_class') or '',
+            },
+        })
+
     # ── Wywiad (interview) ──────────────────────────────────────────────────────
 
     def _emit_interview_participants_updated():

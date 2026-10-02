@@ -34,6 +34,11 @@ class Config:
     OVERLAY_DIR = '../../hub/overlays/futsal-nalf'
     HUB_CSS_DIR = 'hub/overlays/futsal-nalf/css/'
     HUB_JS_DIR = 'hub/overlays/futsal-nalf/js/'
+    # Nazwa folderu overlayu w hubie (hub/overlays/<nazwa>/) — wysyłana w
+    # sygnale apply_styling_class, żeby hub wiedział, którego folderu dotyczy
+    # przełączenie stylu. Osobny klucz od OVERLAY_DIR (ścieżka względna z
+    # modułu) — hub pracuje ze ścieżkami względnymi do SIEBIE, nie do modułu.
+    OVERLAY_DIR_NAME = 'futsal-nalf'
     SPECIFIC_JS_FILE = f'modules/{MODULE_NAME}/static/specific.js'
     SPECIFIC_CSS_FILE = f'modules/{MODULE_NAME}/static/specific.css'
 

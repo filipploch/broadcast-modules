@@ -22,6 +22,14 @@
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/overlay-container.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/scoreboard-new.css">
     <link rel="stylesheet" href="/overlays/futsal-nalf/css/interview.css">
+    <!-- Generyczny fallback dla kontenerów bez override (patrz
+         overlay.js: renderGenericContent) — mechanizm podstawowy. -->
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/generic-container.css">
+    <!-- Stały "slot" na styl wybrany w UI (stylingClass) — zawsze ten sam
+         plik, ładowany jako OSTATNI, żeby jego reguły (ta sama specyficzność
+         co w mechanizmie podstawowym) wygrywały w kaskadzie. Hub podmienia
+         TREŚĆ tego pliku (patrz hub/styling.go), nigdy tę ścieżkę. -->
+    <link rel="stylesheet" href="/overlays/futsal-nalf/css/style-override.css">
 </head>
 <body>
     <div id="empty-container" style="display: none;"></div>
@@ -108,6 +116,10 @@
 	<script src="/overlays/futsal-nalf/js/overlay.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 	<script src="/overlays/futsal-nalf/js/banners/functions.js"></script>
+    <!-- Stały "slot" na styl wybrany w UI (stylingClass) — jak wyżej w css,
+         ładowany jako OSTATNI skrypt, żeby funkcje o tych samych nazwach co
+         w mechanizmie podstawowym (override_<containerId>) go przedefiniowały. -->
+    <script src="/overlays/futsal-nalf/js/style-override.js"></script>
 
 
 

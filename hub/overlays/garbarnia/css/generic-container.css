@@ -1,0 +1,49 @@
+/* Generyczny, funkcjonalny (ale nieostylowany) fallback renderowania treści
+   kontenera, gdy brak jest override_<containerId>_open — patrz
+   overlay.js: renderGenericContent/renderGenericTable/renderGenericRecord.
+   To jest TYLKO siatka bezpieczeństwa dla nowo dodanych kontenerów, nie
+   docelowy wygląd — ten definiuje się w style/<stylingClass>/. */
+
+.generic-container-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    padding: 20px 28px;
+    border-radius: 8px;
+    font-family: sans-serif;
+    font-size: 18px;
+    max-width: 80vw;
+    max-height: 80vh;
+    overflow: auto;
+}
+
+.generic-container-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.generic-container-table th,
+.generic-container-table td {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 4px 10px;
+    text-align: left;
+}
+
+.generic-container-record {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    margin: 0;
+}
+
+.generic-container-record dt {
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+.generic-container-record dd {
+    margin: 0;
+}

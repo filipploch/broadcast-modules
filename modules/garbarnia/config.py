@@ -31,9 +31,14 @@ class Config:
     PLUGINS_DIR = '../../plugins'
     SEQUENCES_PATH = f'{MODULE_NAME}/app/sequences/sequences.py'
     REPLAY_EXPORT_DIR = f'{MODULE_NAME}/app/data'
-    OVERLAY_DIR = '../../hub/overlays/futsal-nalf'
-    HUB_CSS_DIR = 'hub/overlays/futsal-nalf/css/'
-    HUB_JS_DIR = 'hub/overlays/futsal-nalf/js/'
+    OVERLAY_DIR = '../../hub/overlays/garbarnia'
+    HUB_CSS_DIR = 'hub/overlays/garbarnia/css/'
+    HUB_JS_DIR = 'hub/overlays/garbarnia/js/'
+    # Nazwa folderu overlayu w hubie (hub/overlays/<nazwa>/) — wysyłana w
+    # sygnale apply_styling_class, żeby hub wiedział, którego folderu dotyczy
+    # przełączenie stylu. Osobny klucz od OVERLAY_DIR (ścieżka względna z
+    # modułu) — hub pracuje ze ścieżkami względnymi do SIEBIE, nie do modułu.
+    OVERLAY_DIR_NAME = 'garbarnia'
     SPECIFIC_JS_FILE = f'modules/{MODULE_NAME}/static/specific.js'
     SPECIFIC_CSS_FILE = f'modules/{MODULE_NAME}/static/specific.css'
     TEMP_DIR = f'/data/temp/'

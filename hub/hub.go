@@ -167,6 +167,8 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleGetPluginStatus(msg)
 	case "subscribe":
 		h.handleSubscribe(msg)
+	case "apply_styling_class":
+		h.handleApplyStylingClass(msg)
 	case "request_scene_map":
 		// Main module asks obs-ws-plugin to re-send its scene map
 		// (used when obs-ws-plugin was already online before main module started).

@@ -143,6 +143,15 @@
 			</div>
 			<div id="servo-controller" style="display: none;">
 			</div>
+			<!-- Styl overlayu (stylingClass) — przełącza "skin" overlayu tego
+			     modułu; faktyczne kopiowanie plików robi hub (patrz
+			     hub/styling.go), Flask tylko wysyła sygnał przez huba. -->
+			<div id="overlay-styling-controller">
+				<input type="text" id="overlay-styling-class-input" placeholder="styl (np. nalf)">
+				<button type="button" onclick="applyOverlayStylingClass()">Zastosuj</button>
+				<button type="button" onclick="resetOverlayStylingClass()">Podstawowy</button>
+				<span id="overlay-styling-class-status"></span>
+			</div>
 		</div>
 
 	</div>

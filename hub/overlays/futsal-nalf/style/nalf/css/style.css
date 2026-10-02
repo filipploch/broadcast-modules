@@ -1,0 +1,5 @@
+/* Motyw "nalf" — na razie puste. Mechanizm podstawowy (baseline) w overlay.js
+   jeszcze nie ma rejestru kontenerów z hookiem override — to osobny krok.
+   Gdy powstanie, CSS specyficzny dla wyglądu kontenerów futsal-nalf (dzisiejsza
+   zawartość squad.css/results.css/table.css/shootout.css itp.) przeniesie się
+   tutaj, a te pliki w folderze roboczym staną się generycznym fallbackiem. */

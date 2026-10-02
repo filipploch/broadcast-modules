@@ -63,6 +63,86 @@ function getContainerType(container) {
     return 'none';
 }
 
+// ── Mechanizm podstawowy: hook override + generyczny fallback ───────────
+// Dodanie NOWEGO kontenera (nowy div w overlay.html) nie wymaga ŻADNEJ
+// zmiany w tym pliku: showContainer/closeContainer najpierw sprawdzają, czy
+// motyw (style-override.js) zdefiniował window.override_<containerId>_open
+// / _close — jeśli tak, ten kontener jest w całości pod jego kontrolą.
+// Jeśli nie, a containerType nie jest jednym ze znanych typów (squad/start/
+// break/results/table/virtual-table/shootout/game), treść renderowana jest
+// generycznie (renderGenericContent — tabela dla tablicy, lista
+// klucz:wartość dla obiektu) i pokazywana/chowana prostym fade
+// (prepareToOpenContainer/closeDefaultContainer, już generyczne). Wywiad
+// (interview) ma własny, odrębny mechanizm (generateInfoContainer) i nie
+// przechodzi przez ten hook.
+function resolveContainerOverride(containerId, phase) {
+    const fn = window[`override_${containerId}_${phase}`];
+    return typeof fn === 'function' ? fn : null;
+}
+
+function renderGenericContent(container, data) {
+    container.innerHTML = '';
+    if (data === undefined || data === null) return;
+    const wrapper = document.createElement('div');
+    addClassName(wrapper, 'generic-container-content');
+    if (Array.isArray(data)) {
+        wrapper.appendChild(renderGenericTable(data));
+    } else if (typeof data === 'object') {
+        wrapper.appendChild(renderGenericRecord(data));
+    } else {
+        wrapper.textContent = String(data);
+    }
+    container.appendChild(wrapper);
+}
+
+function renderGenericTable(rows) {
+    const table = document.createElement('table');
+    addClassName(table, 'generic-container-table');
+    if (rows.length && typeof rows[0] === 'object' && rows[0] !== null) {
+        const keys = Object.keys(rows[0]);
+        const headRow = document.createElement('tr');
+        keys.forEach(k => {
+            const th = document.createElement('th');
+            th.textContent = k;
+            headRow.appendChild(th);
+        });
+        table.appendChild(headRow);
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            keys.forEach(k => {
+                const td = document.createElement('td');
+                const v = row[k];
+                td.textContent = (v === null || v === undefined) ? '' : String(v);
+                tr.appendChild(td);
+            });
+            table.appendChild(tr);
+        });
+    } else {
+        rows.forEach(item => {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.textContent = String(item);
+            tr.appendChild(td);
+            table.appendChild(tr);
+        });
+    }
+    return table;
+}
+
+function renderGenericRecord(obj) {
+    const dl = document.createElement('dl');
+    addClassName(dl, 'generic-container-record');
+    Object.entries(obj).forEach(([k, v]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = k;
+        const dd = document.createElement('dd');
+        dd.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+    });
+    return dl;
+}
+
 function showContainer(_data) {
     let containerId = _data.container_id;
 
@@ -78,6 +158,14 @@ function showContainer(_data) {
     }
 
     const containerType = getContainerType(targetContainer);
+
+    if (containerType !== 'interview') {
+        const overrideOpen = resolveContainerOverride(containerId, 'open');
+        if (overrideOpen) {
+            overrideOpen(containerId, _data, targetContainer);
+            return;
+        }
+    }
 
     let delayTime = 2000;
     if (containerType === 'none') {
@@ -130,6 +218,9 @@ function showContainer(_data) {
         delayTime += prepareToOpenContainer(openContainer, targetContainer);
         activateElementsAfterTime('results-content', delayTime, 'flex');
     } else {
+        // Nieznany typ (nowy kontener bez override) — generyczny, ale
+        // funkcjonalnie poprawny fallback.
+        renderGenericContent(targetContainer, _data);
         prepareToOpenContainer(openContainer, targetContainer);
     }
 
@@ -178,6 +269,21 @@ function closeContainer(_container) {
     let container = _container;
     let containerType = getContainerType(container);
     let animationDuration = 1000;
+
+    if (containerType !== 'interview') {
+        const overrideClose = resolveContainerOverride(container.id, 'close');
+        if (overrideClose) {
+            // Override może opcjonalnie zwrócić własny czas trwania (ms) —
+            // jeśli nie, używamy domyślnego 1000ms jak reszta mechanizmu.
+            const customDuration = overrideClose(container);
+            const duration = (typeof customDuration === 'number') ? customDuration : animationDuration;
+            setTimeout(() => {
+                clearAnimations(container);
+                container.style.display = 'none';
+            }, duration);
+            return;
+        }
+    }
 
     console.log(`containerType: ${containerType}`);
     switch (containerType) {
