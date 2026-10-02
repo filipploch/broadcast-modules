@@ -5,7 +5,9 @@
     "music_start": 2
   },
   "CAMERAS": {
-    "Camera1": 1
+    "AUDIO_SOURCES": 2,
+    "Camera1": 1,
+    "sCamera1": 3
   },
   "EMPTY": {},
   "END_SCREEN": {

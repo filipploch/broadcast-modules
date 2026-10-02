@@ -1,9 +1,9 @@
 .class1 {
     color: lightgray;
-    background-color: navy;
+    background-color: rgb(52, 21, 21);
 }
 
 .class2 {
-    color: navy;
+    color: rgb(52, 21, 21);
     background-color: lightgray;
 }

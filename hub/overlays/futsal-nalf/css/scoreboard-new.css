@@ -155,17 +155,18 @@
 }
 
 #main-timer-display {
-    flex: 2;
-    background: linear-gradient(180deg, #dddddd 0%, #c8c8c8 100%);
-    font-size: 27px;
-    color: black;
-    text-align: center;
-    border-radius: 10px 10px 0 0;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: monospace;
+  flex: 2;
+  background: linear-gradient(180deg, #dddddd 0%, #c8c8c8 100%);
+  font-size: 24px;
+  color: black;
+  text-align: center;
+  border-radius: 10px 10px 0 0;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  padding-bottom: 7px;
 }
 
 .fouls-container {
@@ -267,8 +268,8 @@
 
 #animationArea {
     position: absolute !important;
-    top: 27px;
-    right: 30px;
+    top: 70px;
+    right: 40px;
     padding: 0;
     margin: 0;
     font-family: 'Arial Black';

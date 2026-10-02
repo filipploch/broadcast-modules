@@ -141,6 +141,20 @@ class BaseCameraRecordingSegmentMixin:
                 .all())
 
     @classmethod
+    def all_for_camera_game(cls, recorder_camera_id, game_id):
+        """Wszystkie segmenty tej kamery w tym meczu, od pierwszego do
+        bieżącego (włącznie z wciąż otwartym), w kolejności chronologicznej —
+        bez filtrowania po czasie. Używane do zbudowania JEDNEJ wirtualnej osi
+        czasu obejmującej całe dotychczasowe nagranie (patrz
+        replay_edl_builder.build_replay_context) zamiast tylko segmentów
+        pokrywających wąskie okno pojedynczego eventu.
+        """
+        return (cls.query
+                .filter_by(recorder_camera_id=recorder_camera_id, game_id=game_id)
+                .order_by(cls.started_at.asc())
+                .all())
+
+    @classmethod
     def cameras_for_game(cls, game_id):
         """Lista distinct recorder_camera_id, które kiedykolwiek nagrywały ten mecz."""
         rows = (db.session.query(cls.recorder_camera_id)
