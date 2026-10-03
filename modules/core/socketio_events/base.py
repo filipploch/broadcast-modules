@@ -657,10 +657,12 @@ def register_events(socketio):
     # js/style-override.js}, który overlay.html ładuje zawsze, po
     # mechanizmie podstawowym — więc overlay.html nigdy nie wymaga zmian.
     # styling_class='' (albo brak) = powrót do mechanizmu podstawowego
-    # (hub zeruje oba pliki slotu, nic nie kopiuje).
+    # (hub zeruje oba pliki slotu, nic nie kopiuje). Wybór robi się przez
+    # zakładkę "MOTYWY" (/layouts/) — select_layout dostaje layout_id,
+    # ustawia is_active w tabeli layouts (LayoutManager.select) i tłumaczy
+    # wybrany rekord na nazwę styling_class wysyłaną do huba.
 
-    @socketio.on('set_overlay_styling_class')
-    def handle_set_overlay_styling_class(data):
+    def _send_apply_styling_class(styling_class):
         from core.managers import get_hub_client
         hub_client = get_hub_client()
         if not hub_client:
@@ -671,9 +673,15 @@ def register_events(socketio):
             'type': 'apply_styling_class',
             'payload': {
                 'overlay_dir':   current_app.config['OVERLAY_DIR_NAME'],
-                'styling_class': data.get('styling_class') or '',
+                'styling_class': styling_class or '',
             },
         })
+
+    @socketio.on('select_layout')
+    def handle_select_layout(data):
+        from core.managers.layout_manager import LayoutManager
+        selected = LayoutManager().select(data.get('layout_id') or None)
+        _send_apply_styling_class(selected.name if selected else '')
 
     # ── Wywiad (interview) ──────────────────────────────────────────────────────
 

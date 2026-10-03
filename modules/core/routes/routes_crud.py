@@ -2040,8 +2040,17 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
     @app.route('/common-data/')
     def common_data():
- 
+
         return render_template('common-data.html')
+
+    @app.route('/layouts/')
+    def list_layouts():
+        from core.managers.layout_manager import LayoutManager
+        layout_manager = LayoutManager()
+        layouts = layout_manager.get_all()
+        active = layout_manager.get_active()
+        return render_template('layouts/list.html', layouts=layouts,
+                                active_layout_id=active.id if active else None)
 
 
     @app.route('/game-period-choice')

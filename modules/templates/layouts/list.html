@@ -1,0 +1,31 @@
+{% extends "base/base.html" %}
+{% block title %}Motywy{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Motywy</span>
+        <div class="actions">
+            <a href="{{ url_for('common_data') }}" class="btn btn-secondary">⬅ Wstecz</a>
+        </div>
+    </div>
+    <!-- Przełączanie "skinu" overlayu: hub (nie Flask) kopiuje pliki na swoim
+         dysku (patrz hub/styling.go: handleApplyStylingClass) z
+         hub/overlays/<OVERLAY_DIR_NAME>/style/<styling_class>/{css,js}/ do
+         stałego slotu, który overlay.html ładuje zawsze, po mechanizmie
+         podstawowym. Wybór pustej pozycji = powrót do mechanizmu
+         podstawowego (hub zeruje slot, nic nie kopiuje). -->
+    <div id="overlay-styling-controller">
+        <select id="overlay-styling-class-select" onchange="applyOverlayStylingClass()">
+            <option value=""></option>
+            {% for layout in layouts %}
+            <option value="{{ layout.id }}"{% if layout.id == active_layout_id %} selected{% endif %}>{{ layout.name }}</option>
+            {% endfor %}
+        </select>
+        <span id="overlay-styling-class-status"></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/ui/layouts.js') }}"></script>
+{% endblock %}

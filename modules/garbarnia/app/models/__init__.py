@@ -47,3 +47,4 @@ from app.models.background_image import BackgroundImage
 from app.models.stadium_camera_position import StadiumCameraPosition
 from app.models.camera_position_calibration import CameraPositionCalibration
 from app.models.game_gopro_setup import GameGoProSetup
+from app.models.layout import Layout
