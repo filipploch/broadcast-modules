@@ -462,6 +462,21 @@ function showCameraReplay(eventCameraId) {
 // Styl overlayu (stylingClass) — przeniesiony do osobnej karty "MOTYWY"
 // (patrz /layouts/, static/js/ui/layouts.js).
 
+// Podświetla na zielono .overlay-switcher odpowiadający aktualnie
+// widocznemu głównemu kontenerowi overlayu — sygnał przychodzi od
+// overlay.js przez hub->backend (patrz hub_client.py:
+// active_container_changed) przy każdej zmianie widoczności i raz po
+// (ponownym) wczytaniu overlayu. container_id='' / null = nic nie jest
+// widoczne -> podświetlony #overlay-off (data-container-id=""). Przełączniki
+// bez atrybutu data-container-id (np. #scale-screen) nie są tym w ogóle
+// dotykane.
+socket.on('active_container_changed', data => {
+    const activeId = data.container_id || '';
+    document.querySelectorAll('.overlay-switcher[data-container-id]').forEach(el => {
+        el.style.backgroundColor = (el.dataset.containerId === activeId) ? 'green' : '';
+    });
+});
+
 function toggleGameEventDisplay(_gameEventId) {
     socket.emit('toggle_game_event_info', {game_event_id: _gameEventId});
 }

@@ -412,6 +412,15 @@ class HubClient:
                     if game_id is not None:
                         socketio.emit('interview_participants_updated',
                                        {'participants': im.list_for_game(game_id)})
+            elif msg_type == 'active_container_changed':
+                # Overlay informuje, który główny kontener (.overlay-container)
+                # jest teraz widoczny — czysty relay, bez zapisu w DB (stan
+                # efemeryczny), żeby admin UI podświetlił właściwy
+                # .overlay-switcher. container_id=None = nic nie jest widoczne.
+                from core.extensions import socketio
+                socketio.emit('active_container_changed', {
+                    'container_id': payload.get('container_id'),
+                })
 
         elif msg_from == 'recorder-plugin':
             from core.managers import get_recorder_manager

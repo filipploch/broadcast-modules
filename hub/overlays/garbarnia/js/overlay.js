@@ -245,6 +245,22 @@ function prepareToOpenContainer(callback, param) {
 
 function openContainer(container) {
     container.style.display = 'flex';
+    notifyActiveContainerChanged(container.id);
+}
+
+// Informuje backend (przez hub, adresowanie 'main-module' — jak
+// request_game_data) o aktualnie widocznym głównym kontenerze, żeby admin
+// UI mógł podświetlić odpowiedni .overlay-switcher na zielono.
+// containerId=null oznacza "nic nie jest pokazywane" (po zamknięciu, przed
+// ewentualnym otwarciem kolejnego — patrz openContainer/closeContainer).
+function notifyActiveContainerChanged(containerId) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+        from: overlayId,
+        to: 'main-module',
+        type: 'active_container_changed',
+        payload: { container_id: containerId },
+    }));
 }
 
 function openGameContainer(container) {
@@ -280,6 +296,7 @@ function closeContainer(_container) {
             setTimeout(() => {
                 clearAnimations(container);
                 container.style.display = 'none';
+                notifyActiveContainerChanged(null);
             }, duration);
             return;
         }
@@ -326,6 +343,7 @@ function closeContainer(_container) {
         // Usuń tymczasowe animacje
         clearAnimations(container);
         container.style.display = 'none';
+        notifyActiveContainerChanged(null);
     }, animationDuration);
 }
 
@@ -2254,6 +2272,11 @@ ws.onmessage = (event) => {
             from: overlayId,
             to: 'main-module'
         }));
+
+        // Świeży load overlayu — wszystkie kontenery startują display:none
+        // w HTML, więc "aktywny" jest none. Jeśli admin UI akurat czeka na
+        // odświeżenie, od razu dostaje poprawny (zgaszony) stan.
+        notifyActiveContainerChanged(null);
 
         setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
