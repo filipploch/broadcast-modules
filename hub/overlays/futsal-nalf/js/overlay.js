@@ -164,28 +164,8 @@ function showContainer(_data) {
         }
     }
 
-    let delayTime = 2000;
     if (containerType === 'none') {
         prepareToOpenContainer();
-    } else if (containerType === 'squad') {
-        let teamName = _data.team_name;
-        let teamShortName = _data.team_short_name;
-        let teamSquad = _data.team_squad;
-        let teamLogo = _data.logo;
-        let teamCoach;
-        if (_data.coach !== 'undefined') { teamCoach = _data.coach; } else { teamCoach = null; }
-        expandSquadContainer(containerId, teamName, teamShortName, teamSquad, teamLogo, teamCoach);
-        let addedDelayTime = prepareToOpenContainer(openContainer, targetContainer);
-        delayTime += addedDelayTime;
-        activateElementsAfterTime('squad-content', delayTime);
-    } else if (containerType === 'start') {
-        expandStartContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
-        activateElementsAfterTime('start-content', 2500, 'flex');
-    } else if (containerType === 'break') {
-        expandStartContainer(_data, true);
-        prepareToOpenContainer(openContainer, targetContainer);
-        activateElementsAfterTime('break-content', 2500, 'flex');
     } else if (containerType === 'interview') {
         // Karta (.interview-content) startuje i zostaje display:none — nie
         // odkrywamy jej tu automatycznie (w odróżnieniu od innych typów).
@@ -195,24 +175,13 @@ function showContainer(_data) {
         generateInfoContainer('interview-content', 'match-notification');
         if (_data) updateInterviewData(_data);
         prepareToOpenContainer(openContainer, targetContainer);
-    } else if (containerType === 'shootout') {
-        expandShootoutContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
-        // activateElementsAfterTime('break-content', 2500, 'flex');
-    } else if (containerType === 'results') {
-        expandResultsContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
-    } else if (containerType === 'table') {
-        expandTableContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
-    } else if (containerType === 'virtual-table') {
-        expandVirtualTableContainer(_data);
-        prepareToOpenContainer(openContainer, targetContainer);
     } else if (containerType === 'game') {
         prepareToOpenContainer(openContainer, targetContainer);
     } else {
-        // Nieznany typ (nowy kontener bez override) — generyczny, ale
-        // funkcjonalnie poprawny fallback.
+        // squad/start/break/results/table/virtual-table/shootout: dziś
+        // zawsze obsługiwane przez motyw "nalf" (patrz override hook
+        // powyżej) — ta gałąź to czysty fallback na wypadek wyczyszczenia
+        // stylingClass (mechanizm podstawowy, generyczny render + fade).
         renderGenericContent(targetContainer, _data);
         prepareToOpenContainer(openContainer, targetContainer);
     }
@@ -270,32 +239,11 @@ function closeContainer(_container) {
             animationDuration = 1400;
             setTimeout(() => closeDefaultContainer(container), 400);
             break;
-        case 'squad':
-            closeSquadContainer(container);
-            console.log('closeSquadContainer()');
-            break;
-        case 'start':
-            closeStartContainer(container);
-            console.log('closeStartContainer()');
-            break;
-        case 'break':
-            closeBreakContainer(container);
-            console.log('closeBreakContainer()');
-            break;
-        case 'results':
-            closeResultsContainer(container);
-            console.log('closeResultsContainer()');
-            break;
-        case 'table':
-            closeTableContainer(container);
-            console.log('closeTableContainer()');
-            break;
-        case 'virtual-table':
-            if (_resultsTimer2 !== null) { clearTimeout(_resultsTimer2); _resultsTimer2 = null; }
-            closeVirtualTableContainer(container);
-            console.log('closeVirtualTableContainer()');
-            break;
         default:
+            // squad/start/break/results/table/virtual-table/shootout mają
+            // dziś zawsze override (motyw "nalf", patrz hook powyżej) —
+            // trafienie tutaj dla nich oznacza brak aktywnego motywu, więc
+            // generyczny fade jest poprawnym mechanizmem podstawowym.
             closeDefaultContainer(container);
             console.log('closeDefaultContainer()');
             break;
@@ -596,35 +544,10 @@ function animateTableSwapHorizontal(container, officialRows, virtualRows) {
     });
 }
 
-// ── Animacja zamiany pozycji (virtual_table) ──────────────────────────────
-
-function animateTableSwap(container, officialRows, virtualRows) {
-    const rowEls = Array.from(container.querySelectorAll('[data-team-name14]'));
-    const indexMap = {};
-    rowEls.forEach((el, i) => { indexMap[el.dataset.teamName14] = i; });
-
-    virtualRows.forEach((itemB, indexB) => {
-        const indexA = indexMap[itemB.team_name14];
-        if (indexA === undefined) return;
-        const el = rowEls[indexA];
-
-        const ptsEl = el.querySelector('.results-points');
-        if (ptsEl) ptsEl.textContent = itemB.points;
-        const standingEl = el.querySelector('.results-standing');
-        if (standingEl) standingEl.textContent = indexB + 1;
-
-        if (indexA !== indexB) {
-            const translateY = (indexB - indexA) * el.offsetHeight;
-            el.style.animation = 'none';
-            el.style.transform = 'translateY(0px)';
-            void el.offsetWidth;
-            el.style.transform = `translateY(${translateY}px)`;
-            el.classList.remove('promotion', 'degradation');
-            if (indexB < indexA) el.classList.add('promotion');
-            else el.classList.add('degradation');
-        }
-    });
-}
+// animateTableSwap przeniesiona (jako nalfAnimateTableSwap) do
+// style/nalf/js/style.js — była używana tylko przez expandVirtualTableContainer,
+// który też się tam przeniósł. animateTableSwapHorizontal (mini-widget
+// #results-table-container) zostaje tutaj, to inna, niezależna funkcja.
 
 // ── Główna funkcja wyświetlania ───────────────────────────────────────────
 
@@ -692,153 +615,11 @@ function showInResultsTableContainer(type, payload) {
 
 // ── KONIEC WYNIKI / TABELA ────────────────────────────────────────────────
 
-function closeSquadContainer(container) {
-    let logo = container.querySelector('img');
-    let players = container.querySelectorAll('.squad-player-row');
-    let infoBody = container.querySelector('.info-body');
-    let infoHead = container.querySelector('.info-head');
-    logo.style.animation = `fadeOut 250ms ease both`;
-    players.forEach(player => {
-        player.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
-    });
-    infoBody.style.setProperty('animation', 'fadeOut', 'important');
-    infoBody.style.animationDuration = '750ms';
-    infoBody.style.animationDelay = '250ms';
-    infoBody.style.animationFillMode = 'both';
-    infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-}
-
-function closeStartContainer(container) {
-    // Trzy grafiki: herby drużyn i logo ligi → fadeOut
-    let logos = container.querySelectorAll('#start-home-team-logo img, #start-league-logo img, #start-away-team-logo img');
-    logos.forEach(logo => {
-        logo.style.animation = `fadeOut 250ms ease both`;
-    });
-    // Elementy rotate (nazwy drużyn) → rotateHideElement reverse
-    let rotateElements = container.querySelectorAll('.rotate-show-element1');
-    rotateElements.forEach(el => {
-        el.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
-    });
-    // Body → collapseHeight
-    let startBody = container.querySelector('.start-body');
-    if (startBody) {
-        startBody.style.setProperty('animation', 'collapseHeight', 'important');
-        startBody.style.animationDuration = '750ms';
-        startBody.style.animationDelay = '250ms';
-        startBody.style.animationFillMode = 'both';
-    }
-    // Head → rotateHideElement reverse
-    let infoHead = container.querySelector('.info-head');
-    if (infoHead) {
-        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-    }
-}
-
-function closeBreakContainer(container) {
-    // Dwa herby drużyn + wynik (zastąpił logo ligi) → fadeOut
-    let logos = container.querySelectorAll('#start-home-team-logo img, #start-away-team-logo img');
-    logos.forEach(logo => {
-        logo.style.animation = `fadeOut 250ms ease both`;
-    });
-    let result = container.querySelector('#start-league-logo');
-    if (result) {
-        result.style.animation = `fadeOut 250ms ease both`;
-    }
-    // Wiersze strzelców → rotateHideElement reverse
-    let scorerRows = container.querySelectorAll('.break-scorer-element');
-    scorerRows.forEach(row => {
-        row.style.animation = `rotateHideElement 250ms ease 0ms 1 reverse both`;
-    });
-    // Body → collapseHeight
-    let startBody = container.querySelector('.start-body');
-    if (startBody) {
-        startBody.style.setProperty('animation', 'collapseHeight', 'important');
-        startBody.style.animationDuration = '750ms';
-        startBody.style.animationDelay = '250ms';
-        startBody.style.animationFillMode = 'both';
-    }
-    // Head → rotateHideElement reverse
-    let infoHead = container.querySelector('.info-head');
-    if (infoHead) {
-        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-    }
-}
-
-function closeResultsContainer(container) {
-    let rows = container.querySelectorAll('.results-row');
-    rows.forEach(row => {
-        row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
-    });
-    let body = container.querySelector('.info-body');
-    if (body) {
-        body.style.setProperty('animation', 'collapseHeight', 'important');
-        body.style.animationDuration = '750ms';
-        body.style.animationDelay = '250ms';
-        body.style.animationFillMode = 'both';
-    }
-    let infoHead = container.querySelector('.info-head');
-    if (infoHead) {
-        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-    }
-}
-
-function closeTableContainer(container) {
-    let rows = container.querySelectorAll('.results-row');
-    rows.forEach(row => {
-        row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
-    });
-    let body = container.querySelector('.info-body');
-    if (body) {
-        body.style.setProperty('animation', 'collapseHeight', 'important');
-        body.style.animationDuration = '750ms';
-        body.style.animationDelay = '250ms';
-        body.style.animationFillMode = 'both';
-    }
-    let infoHead = container.querySelector('.info-head');
-    if (infoHead) {
-        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-    }
-}
-
-function closeVirtualTableContainer(container) {
-    const rowEls = Array.from(container.querySelectorAll('[data-team-name14]'));
-
-    if (rowEls.length > 0) {
-        const parent = rowEls[0].parentNode;
-
-        // Oblicz aktualne pozycje wizualne (naturalny offsetTop + translateY z animateTableSwap)
-        const withPos = rowEls.map(el => {
-            const m = (el.style.transform || '').match(/translateY\(([-\d.]+)px\)/);
-            const ty = m ? parseFloat(m[1]) : 0;
-            return { el, visualTop: el.offsetTop + ty };
-        });
-        withPos.sort((a, b) => a.visualTop - b.visualTop);
-
-        // Przearanżuj DOM do porządku wirtualnego i wyzeruj transform —
-        // rzędy wizualnie stoją w tym samym miejscu, ale już bez translateY
-        withPos.forEach(({ el }) => {
-            el.style.transform = '';
-            el.classList.remove('promotion', 'degradation');
-            parent.appendChild(el);
-        });
-    }
-
-    // Identyczna animacja jak closeTableContainer()
-    container.querySelectorAll('.results-row').forEach(row => {
-        row.style.animation = 'rotateHideElement 250ms ease 0ms 1 reverse both';
-    });
-    const body = container.querySelector('.info-body');
-    if (body) {
-        body.style.setProperty('animation', 'collapseHeight', 'important');
-        body.style.animationDuration = '750ms';
-        body.style.animationDelay = '250ms';
-        body.style.animationFillMode = 'both';
-    }
-    const infoHead = container.querySelector('.info-head');
-    if (infoHead) {
-        infoHead.style.animation = 'rotateHideElement 250ms ease 750ms 1 reverse both';
-    }
-}
+// closeSquadContainer/closeStartContainer/closeBreakContainer/
+// closeResultsContainer/closeTableContainer/closeVirtualTableContainer
+// przeniesione do style/nalf/js/style.js (motyw "nalf") — zarejestrowane
+// tam jako override_<containerId>_close. Brak override (styling_class
+// wyczyszczony) spada na closeDefaultContainer poniżej.
 
 function closeDefaultContainer(container) {
     container.style.animation = `fadeOut 500ms ease forwards`;
@@ -856,228 +637,10 @@ function clearAnimations(container) {
     });
 }
 
-function expandStartBottomSpecificContainer(_headerText, _arr) {
-    let html = '';
-    if (_arr.length === 0) {
-        return html;
-    } else {
-        let header = `
-                <div class="start-bottom-header specific-colors">${_headerText}</div>
-            `;
-        html += header;
-        _body = '';
-        _arr.forEach(el => {
-            let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
-            _body += _bodyElement;
-        });
-        html += _body;
-        return html;
-    }
-}
-
-function expandStartBottomInfoContainer(_gameData) {
-    let wrapper = document.createElement('div');
-    wrapper.id = 'start-bottom-info-container';
-    let currentDate = getCurrentDate();
-    let stadium = _gameData.stadium;
-    let commentators = _gameData.commentators;
-    let referees = _gameData.referees;
-    let dateAndStadiumContainer = document.createElement('div');
-    addClassName(dateAndStadiumContainer, 'start-bottom-info-element');
-    dateAndStadiumContainer.style.animationDelay = '2000ms';
-    let refereesContainer = document.createElement('div');
-    addClassName(refereesContainer, 'start-bottom-info-element');
-    refereesContainer.style.animationDelay = '9000ms';
-    let commentatorsContainer = document.createElement('div');
-    addClassName(commentatorsContainer, 'start-bottom-info-element');
-    commentatorsContainer.style.animationDelay = '16000ms';
-    let redereesContainerHeadText = 'Arbiter';
-    if (referees.length > 1) redereesContainerHeadText = 'Sędziowie';
-    refereesContainer.innerHTML = expandStartBottomSpecificContainer(redereesContainerHeadText, referees);
-    commentatorsContainer.innerHTML = expandStartBottomSpecificContainer('Komentarz', commentators);
-    let address1Element = document.createElement('div');
-    addClassName(address1Element, 'start-bottom-header');
-    addClassName(address1Element, 'specific-colors');
-    address1Element.innerText = stadium.name;
-    let address2Element = document.createElement('div');
-    addClassName(address2Element, 'start-bottom-header');
-    addClassName(address2Element, 'specific-colors');
-    address2Element.innerText = stadium.address;
-    let currentDateElement = document.createElement('div');
-    addClassName(currentDateElement, 'start-bottom-body');
-    currentDateElement.innerText = currentDate;
-    dateAndStadiumContainer.appendChild(address1Element);
-    dateAndStadiumContainer.appendChild(address2Element);
-    dateAndStadiumContainer.appendChild(currentDateElement);
-
-    wrapper.appendChild(dateAndStadiumContainer);
-    wrapper.appendChild(refereesContainer);
-    wrapper.appendChild(commentatorsContainer);
-    return wrapper;
-}
-
-function generateScorersList(_scorers) {
-    let wrapper = document.createElement('div');
-    addClassName(wrapper, 'break-scorers-wrapper');
-    _scorers.forEach((scorer, index) => {
-        let _row = document.createElement('div');
-        addClassName(_row, 'break-scorer-element');
-        addClassName(_row, 'specific-colors');
-        addClassName(_row, `rotate-show-element${index}`);
-        let firstName = document.createElement('span');
-        addClassName(firstName, 'break-scorer-first-name');
-        let lastName = document.createElement('span');
-        addClassName(lastName, 'break-scorer-last-name');
-        let goalTimeContainer = document.createElement('span');
-        addClassName(goalTimeContainer, 'break-goal-time');
-        firstName.innerText = scorer.player_first_name ?? '';
-        lastName.innerText = scorer.player_last_name ?? '';
-        goalTimeContainer.innerText = '';
-        let goals = scorer.goals;
-        goals.forEach(goal => {
-            let displayedMinute = goal.minute;
-            if (goal.added_time > 0) displayedMinute += `+${goal.added_time}`
-            if (goal.is_own_goal === true) {
-                goalTimeContainer.innerText += `(s)${displayedMinute}' `;
-            } else {
-                goalTimeContainer.innerText += `${displayedMinute}' `;
-            }
-        });
-        _row.appendChild(firstName);
-        _row.appendChild(lastName);
-        _row.appendChild(goalTimeContainer);
-        wrapper.appendChild(_row);
-    });
-    return wrapper;
-}
-
-function expandStartContainer(_gameData, _break = false) {
-    let data = _gameData;
-    const targetId = _break ? 'break-container' : 'start-container';
-    let _startContainer = document.getElementById(targetId);
-    _startContainer.innerHTML = '';
-    let startContainer = document.createElement('div');
-    startContainer.style.display = 'block';
-    let infoHead = document.createElement('div');
-    addClassName(infoHead, 'rotate-show-element0');
-    addClassName(infoHead, 'animated-element');
-    addClassName(infoHead, 'info-head');
-    addClassName(infoHead, 'specific-colors');
-    let leagueTitleElement = document.createElement('div');
-    addClassName(leagueTitleElement, 'start-container-league-title');
-    leagueTitleElement.innerText = setLeagueName();
-    let roundTitleElement = document.createElement('div');
-    addClassName(roundTitleElement, 'start-container-round-title');
-    roundTitleElement.innerText = data.round_name ?? '';
-    infoHead.appendChild(leagueTitleElement);
-    infoHead.appendChild(roundTitleElement);
-    startContainer.appendChild(infoHead);
-
-    let startBody = document.createElement('div');
-    addClassName(startBody, 'info-body');
-    addClassName(startBody, 'start-body');
-    addClassName(startBody, 'animated-element');
-    startBody.style.display = 'flex';
-
-    let startBodyLogosContainer = document.createElement('div');
-    startBodyLogosContainer.style.display = 'none';
-    addClassName(startBodyLogosContainer, 'start-content');
-    addClassName(startBodyLogosContainer, 'break-content');
-
-    let homeTeamLogoContainer = document.createElement('div');
-    homeTeamLogoContainer.style.display = 'flex';
-    homeTeamLogoContainer.id = 'start-home-team-logo';
-    addClassName(homeTeamLogoContainer, 'start-logo');
-    let homeTeamLogoImg = document.createElement('img');
-    homeTeamLogoImg.src = rootApp + `${data.home_team_logo}`;
-    addClassName(homeTeamLogoImg, 'drop-shadow');
-    homeTeamLogoContainer.appendChild(homeTeamLogoImg);
-    let leagueLogoContainer = document.createElement('div');
-    leagueLogoContainer.id = 'start-league-logo';
-    leagueLogoContainer.style.display = 'flex';
-    let leagueLogoImg = document.createElement('img');
-    leagueLogoImg.src = rootApp + setLeagueLogo();
-    addClassName(leagueLogoImg, 'drop-shadow');
-    leagueLogoContainer.appendChild(leagueLogoImg);
-    let awayTeamLogoContainer = document.createElement('div');
-    awayTeamLogoContainer.style.display = 'flex';
-    awayTeamLogoContainer.id = 'start-away-team-logo';
-    addClassName(awayTeamLogoContainer, 'start-logo');
-    let awayTeamLogoImg = document.createElement('img');
-    awayTeamLogoImg.src = rootApp + `${data.away_team_logo}`;
-    addClassName(awayTeamLogoImg, 'drop-shadow');
-    awayTeamLogoContainer.appendChild(awayTeamLogoImg);
-
-    startBodyLogosContainer.appendChild(homeTeamLogoContainer);
-    startBodyLogosContainer.appendChild(leagueLogoContainer);
-    startBodyLogosContainer.appendChild(awayTeamLogoContainer);
-
-    startBody.appendChild(startBodyLogosContainer);
-
-    if (_break === true) {
-        startBodyLogosContainer.style.height = '200px';
-        startBodyLogosContainer.style.paddingTop = '20px';
-        leagueLogoImg.remove();
-        leagueLogoContainer.innerText = _gameData.result;
-        let scorersContainer = document.createElement('div');
-        scorersContainer.id = 'scorers-container';
-        scorersContainer.style.display = 'none';
-        addClassName(scorersContainer, 'break-content');
-
-        let homeTeamScorersContainer = document.createElement('div');
-        homeTeamScorersContainer.id = 'home-team-scorers-container';
-        addClassName(homeTeamScorersContainer, 'team-scorers-container');
-        let homeTeamScorers = _gameData.home_team_scorers.scorers;
-        let homeTeamScorersWrapper = generateScorersList(homeTeamScorers);
-        homeTeamScorersContainer.appendChild(homeTeamScorersWrapper);
-
-        let awayTeamScorersContainer = document.createElement('div');
-        awayTeamScorersContainer.id = 'away-team-scorers-container';
-        addClassName(awayTeamScorersContainer, 'team-scorers-container');
-        let awayTeamScorers = _gameData.away_team_scorers.scorers;
-        let awayTeamScorersWrapper = generateScorersList(awayTeamScorers);
-        awayTeamScorersContainer.appendChild(awayTeamScorersWrapper);
-
-        scorersContainer.appendChild(homeTeamScorersContainer);
-        scorersContainer.appendChild(awayTeamScorersContainer);
-
-        startBody.appendChild(scorersContainer);
-    } else {
-
-        let startBodyTeamsContainer = document.createElement('div');
-        startBodyTeamsContainer.style.display = 'none';
-        addClassName(startBodyTeamsContainer, 'start-content');
-        startBodyTeamsContainer.id = 'start-teams-container';
-        let startBodyTeamsInternalElement = document.createElement('div');
-        startBodyTeamsInternalElement.style.width = '950px';
-        startBodyTeamsInternalElement.style.textAlign = 'center';
-
-        let homeTeamNameElement = document.createElement('div');
-        addClassName(homeTeamNameElement, 'start-team');
-        addClassName(homeTeamNameElement, 'specific-colors');
-        addClassName(homeTeamNameElement, 'rotate-show-element1');
-        homeTeamNameElement.innerText = data.home_team_name ?? '';
-        let awayTeamNameElement = document.createElement('div');
-        addClassName(awayTeamNameElement, 'start-team');
-        addClassName(awayTeamNameElement, 'specific-colors');
-        addClassName(awayTeamNameElement, 'rotate-show-element1');
-        awayTeamNameElement.innerText = data.away_team_name ?? '';
-        startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
-        startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
-        startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
-        startBody.appendChild(startBodyTeamsContainer);
-
-        let startBottom = document.createElement('div');
-        startBottom.id = 'start-bottom-container';
-        let bottomInfoContainer = expandStartBottomInfoContainer(_gameData);
-        startBottom.appendChild(bottomInfoContainer);
-        startBody.appendChild(startBottom);
-
-    }
-
-    startContainer.appendChild(startBody);
-    _startContainer.appendChild(startContainer);
-}
+// expandStartBottomSpecificContainer/expandStartBottomInfoContainer/
+// generateScorersList/expandStartContainer przeniesione do
+// style/nalf/js/style.js (motyw "nalf") — zarejestrowane tam jako
+// override_start-container_open / override_break-container_open.
 
 // ── Generyczny generator "paska powiadomień" ────────────────────────────
 // #action_info_container (belka eventów meczowych, patrz handler 'show_info'
@@ -1338,163 +901,10 @@ function hideInterviewContent() {
     hideNotificationContainer(content, 'match-notification');
 }
 
-function expandSquadContainer(_containerId, _teamName, _teamShortName, _arr, _logo, _coach) {
-    let squadContainer = document.getElementById(_containerId);
-    squadContainer.innerHTML = '';
-    let infoHead = document.createElement('div');
-    addClassName(infoHead, 'rotate-show-element0');
-    addClassName(infoHead, 'animated-element');
-    addClassName(infoHead, 'info-head');
-    addClassName(infoHead, 'specific-colors');
-    infoHead.dataset.animationOrder = '1';
-    let spanTeamName = document.createElement('span');
-    spanTeamName.innerHTML = _teamName;
-    addClassName(spanTeamName, 'main-head-text');
-    let spanTeamShortName = document.createElement('span');
-    spanTeamShortName.innerHTML = ` (${_teamShortName})`;
-    addClassName(spanTeamShortName, 'squad-team-short-name');
-    infoHead.appendChild(spanTeamName);
-    infoHead.appendChild(spanTeamShortName);
-    squadContainer.appendChild(infoHead);
-    let infoBody = document.createElement('div');
-    addClassName(infoBody, 'info-body');
-    addClassName(infoBody, 'animated-element');
-    infoBody.dataset.animationOrder = '2';
-    let infoBodyLeft = document.createElement('div');
-    addClassName(infoBodyLeft, 'info-body-left');
-    let infoBodyRight = document.createElement('div');
-    addClassName(infoBodyRight, 'info-body-right');
-    let teamSquadContent = createTeamSquad(_arr, _logo, _coach);
-    teamSquadContent.style.display = 'none';
-    addClassName(teamSquadContent, 'squad-content');
-    let teamLogo = document.createElement('img');
-    addClassName(teamLogo, 'squad-content');
-    addClassName(teamLogo, 'squad-team-logo');
-    addClassName(teamLogo, 'drop-shadow');
-    addClassName(teamLogo, 'animated-element');
-    teamLogo.dataset.animationOrder = '3';
-    teamLogo.src = rootApp + _logo;
-    teamLogo.style.display = 'none';
-    infoBodyLeft.appendChild(teamSquadContent);
-    infoBodyRight.appendChild(teamLogo);
-    infoBody.appendChild(infoBodyLeft);
-    infoBody.appendChild(infoBodyRight);
-    squadContainer.appendChild(infoBody);
-}
-
-function expandResultsContainer(_data) {
-    let resultsContainer = document.getElementById('results-container');
-    resultsContainer.innerHTML = '';
-    let infoHead = document.createElement('div');
-    addClassName(infoHead, 'rotate-show-element0');
-    addClassName(infoHead, 'animated-element');
-    addClassName(infoHead, 'info-head');
-    addClassName(infoHead, 'specific-colors');
-    let spanHeadText = document.createElement('span');
-    spanHeadText.innerHTML = 'WYNIKI';
-    addClassName(spanHeadText, 'main-head-text');
-    infoHead.appendChild(spanHeadText);
-    resultsContainer.appendChild(infoHead);
-    let infoBody = document.createElement('div');
-    addClassName(infoBody, 'info-body');
-    let resultsContent = document.createElement('div');
-    addClassName(resultsContent, 'results-content');
-    addClassName(resultsContent, 'animated-element');
-    resultsContent.dataset.animationOrder = '1';
-    buildResultsContent(resultsContent, _data.games, true);
-    infoBody.appendChild(resultsContent);
-    resultsContainer.appendChild(infoBody);
-}
-
-function expandTableContainer(_data) {
-    let tableContainer = document.getElementById('table-container');
-    tableContainer.innerHTML = '';
-    let infoHead = document.createElement('div');
-    addClassName(infoHead, 'rotate-show-element0');
-    addClassName(infoHead, 'animated-element');
-    addClassName(infoHead, 'info-head');
-    addClassName(infoHead, 'specific-colors');
-    let spanHeadText = document.createElement('span');
-    spanHeadText.innerHTML = 'TABELA';
-    addClassName(spanHeadText, 'main-head-text');
-    infoHead.appendChild(spanHeadText);
-    tableContainer.appendChild(infoHead);
-    let infoBody = document.createElement('div');
-    addClassName(infoBody, 'info-body');
-    let tableContent = document.createElement('div');
-    addClassName(tableContent, 'results-content');
-    addClassName(tableContent, 'animated-element');
-    tableContent.dataset.animationOrder = '1';
-    buildTableContent(tableContent, _data.rows || [], 'TABELA', true);
-    infoBody.appendChild(tableContent);
-    tableContainer.appendChild(infoBody);
-}
-
-
-function expandVirtualTableContainer(_data) {
-    if (_resultsTimer2 !== null) { clearTimeout(_resultsTimer2); _resultsTimer2 = null; }
-
-    let tableContainer = document.getElementById('virtual-table-container');
-    tableContainer.innerHTML = '';
-
-    let infoHead = document.createElement('div');
-    addClassName(infoHead, 'rotate-show-element0');
-    addClassName(infoHead, 'animated-element');
-    addClassName(infoHead, 'info-head');
-    addClassName(infoHead, 'specific-colors');
-    let spanHeadText = document.createElement('span');
-    spanHeadText.innerHTML = 'TABELA WIRTUALNA';
-    addClassName(spanHeadText, 'main-head-text');
-    infoHead.appendChild(spanHeadText);
-    tableContainer.appendChild(infoHead);
-
-    let infoBody = document.createElement('div');
-    addClassName(infoBody, 'info-body');
-    let tableContent = document.createElement('div');
-    addClassName(tableContent, 'results-content');
-    addClassName(tableContent, 'animated-element');
-    tableContent.dataset.animationOrder = '1';
-    const official = _data.official || [];
-    const virtual  = _data.virtual  || [];
-    buildTableContent(tableContent, official, 'TABELA', true);
-    infoBody.appendChild(tableContent);
-    tableContainer.appendChild(infoBody);
-
-    if (virtual.length > 0) {
-        _resultsTimer2 = setTimeout(() => {
-            _resultsTimer2 = null;
-            animateTableSwap(tableContent, official, virtual);
-        }, 8000);
-    }
-}
-
-function createTeamSquad(_arr, _logo) {
-    var squadContent = document.createElement('div');
-    addClassName(squadContent, 'team-squad-content');
-    addClassName(squadContent, 'squad-content');
-    squadContent.innerHTML = '';
-
-    _arr.forEach(function (element, index) {
-        var goalkeeper = '';
-        var captain = '';
-        if (element.is_goalkeeper === true) {
-            goalkeeper = ' (B) '
-        }
-        if (element.is_captain === true) {
-            captain = ' (C) '
-        }
-        var squadPlayerRow = document.createElement('div');
-        addClassName(squadPlayerRow, 'squad-player-row');
-        addClassName(squadPlayerRow, 'specific-colors');
-        addClassName(squadPlayerRow, 'rotate-show-element');
-        addClassName(squadPlayerRow, `rotate-show-element${index}`);
-        addClassName(squadPlayerRow, 'animated-element');
-        squadPlayerRow.dataset.animationOrder = '3';
-        squadPlayerRow.innerHTML = `<span class="squad-player-number">${element.number}</span><span class="squad-player-name">${element.player_name}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
-        squadContent.appendChild(squadPlayerRow);
-    });
-    return squadContent;
-}
+// expandSquadContainer/expandResultsContainer/expandTableContainer/
+// expandVirtualTableContainer/createTeamSquad przeniesione do
+// style/nalf/js/style.js (motyw "nalf") — zarejestrowane tam jako
+// override_<containerId>_open.
 
 // updateFoulsElement zdefiniowana w scoreboard.js (FOULS_DISPLAY_MODE: badge/dots)
 
