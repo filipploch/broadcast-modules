@@ -2049,8 +2049,20 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         layout_manager = LayoutManager()
         layouts = layout_manager.get_all()
         active = layout_manager.get_active()
+
+        # Skan folderu style/ wykonujemy prosto z Flaska (odczyt
+        # filesystemu), bez rundy przez huba — hub jest potrzebny tylko do
+        # OPERACJI ZAPISU (kopiowanie/tworzenie plików motywu), odczyt listy
+        # podfolderów nie modyfikuje niczego i Flask ma do nich ten sam
+        # dostęp lokalny co hub.
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[3]
+        style_dir = repo_root / 'hub' / 'overlays' / current_app.config['OVERLAY_DIR_NAME'] / 'style'
+        unknown_folders = layout_manager.list_unregistered_style_folders(style_dir)
+
         return render_template('layouts/list.html', layouts=layouts,
-                                active_layout_id=active.id if active else None)
+                                active_layout_id=active.id if active else None,
+                                unknown_folders=unknown_folders)
 
 
     @app.route('/game-period-choice')

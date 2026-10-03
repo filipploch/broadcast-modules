@@ -683,6 +683,48 @@ def register_events(socketio):
         selected = LayoutManager().select(data.get('layout_id') or None)
         _send_apply_styling_class(selected.name if selected else '')
 
+    @socketio.on('register_layout')
+    def handle_register_layout(data):
+        # Folder motywu już istnieje na dysku (np. utworzony ręcznie) —
+        # tylko dopisujemy brakujący rekord w bazie, zero operacji na
+        # plikach/hubie.
+        name = (data.get('name') or '').strip()
+        if not name:
+            return
+        from core.managers.layout_manager import LayoutManager
+        LayoutManager().create(name)
+        socketio.emit('layout_created', {'new_name': name, 'success': True, 'error': None})
+
+    @socketio.on('create_layout')
+    def handle_create_layout(data):
+        # Nowy motyw — pusty albo skopiowany z innego. Rekord w bazie
+        # dopisuje hub_client po potwierdzeniu sukcesu przez huba
+        # (msg_type == 'styling_class_created'), nie tutaj.
+        name = (data.get('name') or '').strip()
+        if not name:
+            return
+        source_name = ''
+        source_layout_id = data.get('source_layout_id')
+        if source_layout_id:
+            from core.managers.layout_manager import LayoutManager
+            source = LayoutManager().get_by_id(source_layout_id)
+            source_name = source.name if source else ''
+
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if not hub_client:
+            return
+        hub_client.send({
+            'from': current_app.config['MODULE_ID'],
+            'to': 'hub',
+            'type': 'create_styling_class',
+            'payload': {
+                'overlay_dir': current_app.config['OVERLAY_DIR_NAME'],
+                'new_name':    name,
+                'source_name': source_name,
+            },
+        })
+
     # ── Wywiad (interview) ──────────────────────────────────────────────────────
 
     def _emit_interview_participants_updated():

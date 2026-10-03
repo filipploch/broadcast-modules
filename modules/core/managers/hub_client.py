@@ -383,6 +383,23 @@ class HubClient:
                 'error':         payload.get('error'),
             })
 
+        elif msg_type == 'styling_class_created':
+            # Odpowiedź huba na 'create_styling_class' (nowy motyw —
+            # pusty albo skopiowany z innego). Dopiero po potwierdzonym
+            # sukcesie zapisujemy rekord w tabeli layouts — jeśli hub nie
+            # zdołał utworzyć folderu, w bazie nie ma sieroty bez plików.
+            from core.extensions import socketio
+            success = payload.get('success')
+            new_name = payload.get('new_name')
+            if success:
+                from core.managers.layout_manager import LayoutManager
+                LayoutManager().create(new_name)
+            socketio.emit('layout_created', {
+                'new_name': new_name,
+                'success':  success,
+                'error':    payload.get('error'),
+            })
+
         elif msg_type == 'health_status':
             from core.managers import get_plugin_manager
             plugin_manager = get_plugin_manager()

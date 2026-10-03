@@ -94,6 +94,91 @@ func (h *Hub) replyStylingClassResult(msg *Message, success bool, errMsg string)
 	}
 }
 
+// handleCreateStylingClass creates a brand-new theme folder:
+// ./overlays/<overlay_dir>/style/<new_name>/{css/style.css,js/style.js}.
+// With source_name set, both files are copied from that existing theme
+// (same semantics as copyStyleFile: a missing source file becomes empty).
+// Without source_name, both files are created with a short header comment
+// only — an empty scaffold, since we can't guess which containers a future
+// theme will want to override.
+func (h *Hub) handleCreateStylingClass(msg *Message) {
+	overlayDir, _ := msg.Payload["overlay_dir"].(string)
+	newName, _ := msg.Payload["new_name"].(string)
+	sourceName, _ := msg.Payload["source_name"].(string)
+
+	if overlayDir == "" || !safeTokenPattern.MatchString(overlayDir) {
+		h.replyStylingClassCreated(msg, false, fmt.Sprintf("nieprawidłowy overlay_dir: %q", overlayDir))
+		return
+	}
+	if newName == "" || !safeTokenPattern.MatchString(newName) {
+		h.replyStylingClassCreated(msg, false, fmt.Sprintf("nieprawidłowa nazwa motywu: %q", newName))
+		return
+	}
+
+	destDir := filepath.Join("overlays", overlayDir, "style", newName)
+	if _, err := os.Stat(destDir); err == nil {
+		h.replyStylingClassCreated(msg, false, fmt.Sprintf("motyw %q już istnieje", newName))
+		return
+	}
+
+	destCSS := filepath.Join(destDir, "css", "style.css")
+	destJS := filepath.Join(destDir, "js", "style.js")
+
+	if sourceName != "" {
+		if !safeTokenPattern.MatchString(sourceName) {
+			h.replyStylingClassCreated(msg, false, fmt.Sprintf("nieprawidłowa nazwa motywu źródłowego: %q", sourceName))
+			return
+		}
+		srcCSS := filepath.Join("overlays", overlayDir, "style", sourceName, "css", "style.css")
+		srcJS := filepath.Join("overlays", overlayDir, "style", sourceName, "js", "style.js")
+		if err := copyStyleFile(srcCSS, destCSS); err != nil {
+			h.replyStylingClassCreated(msg, false, err.Error())
+			return
+		}
+		if err := copyStyleFile(srcJS, destJS); err != nil {
+			h.replyStylingClassCreated(msg, false, err.Error())
+			return
+		}
+	} else {
+		cssHeader := fmt.Sprintf("/* Motyw \"%s\" — style.css specyficzny dla kontenerów tego motywu. */\n", newName)
+		jsHeader := fmt.Sprintf("// Motyw \"%s\" — style.js specyficzny dla kontenerów tego motywu.\n", newName)
+		if err := writeFileEnsureDir(destCSS, []byte(cssHeader)); err != nil {
+			h.replyStylingClassCreated(msg, false, err.Error())
+			return
+		}
+		if err := writeFileEnsureDir(destJS, []byte(jsHeader)); err != nil {
+			h.replyStylingClassCreated(msg, false, err.Error())
+			return
+		}
+	}
+
+	log.Printf("🎨 Styling class '%s' created for %s (source: %q)", newName, overlayDir, sourceName)
+	h.replyStylingClassCreated(msg, true, "")
+}
+
+func (h *Hub) replyStylingClassCreated(msg *Message, success bool, errMsg string) {
+	reply := NewMessage("hub", msg.From, "styling_class_created", map[string]interface{}{
+		"overlay_dir": msg.Payload["overlay_dir"],
+		"new_name":    msg.Payload["new_name"],
+		"success":     success,
+		"error":       errMsg,
+	})
+	data, err := reply.ToJSON()
+	if err != nil {
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.MainModule != nil && h.MainModule.IsActive {
+		select {
+		case h.MainModule.Send <- data:
+		default:
+			log.Printf("⚠️  styling_class_created: main module send buffer full")
+		}
+	}
+}
+
 // copyStyleFile copies src -> dst, creating the destination directory if
 // needed. A missing src (the theme doesn't override this particular file)
 // is not an error — it's treated like an empty file, i.e. "this file

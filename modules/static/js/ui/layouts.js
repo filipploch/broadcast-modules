@@ -18,3 +18,33 @@ socket.on('styling_class_applied', data => {
         status.style.color = 'red';
     }
 });
+
+// Folder motywu znaleziony na dysku bez rekordu w bazie (patrz skan w
+// list_layouts()) — tu tylko dopisujemy brakujący rekord, folder już
+// istnieje, więc hub nie jest w to zaangażowany.
+function registerExistingLayout(name) {
+    socket.emit('register_layout', { name });
+}
+
+// Nowy motyw: pusty albo skopiowany z innego — obie ścieżki idą przez
+// huba (hub/styling.go: handleCreateStylingClass), bo to on jest
+// właścicielem zapisu w folderze style/.
+function createLayout() {
+    const nameInput = document.getElementById('new-layout-name');
+    const sourceSelect = document.getElementById('new-layout-source');
+    const name = (nameInput.value || '').trim();
+    if (!name) return;
+    socket.emit('create_layout', { name, source_layout_id: sourceSelect.value || null });
+}
+
+socket.on('layout_created', data => {
+    if (data.success) {
+        location.reload();
+    } else {
+        const status = document.getElementById('new-layout-status');
+        if (status) {
+            status.textContent = `Błąd: ${data.error}`;
+            status.style.color = 'red';
+        }
+    }
+});

@@ -23,6 +23,31 @@
         </select>
         <span id="overlay-styling-class-status"></span>
     </div>
+
+    {% if unknown_folders %}
+    <div id="unknown-layout-folders">
+        <p>Znaleziono foldery w <code>style/</code> bez rekordu w bazie:</p>
+        {% for folder in unknown_folders %}
+        <div class="actions">
+            <span>{{ folder }}</span>
+            <button type="button" class="btn btn-secondary" onclick="registerExistingLayout('{{ folder }}')">Dodaj do bazy</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="new-layout-form">
+        <p>Nowy motyw:</p>
+        <input type="text" id="new-layout-name" placeholder="nazwa nowego motywu">
+        <select id="new-layout-source">
+            <option value="">— pusty —</option>
+            {% for layout in layouts %}
+            <option value="{{ layout.id }}">na podstawie: {{ layout.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-primary" onclick="createLayout()">Utwórz</button>
+        <span id="new-layout-status"></span>
+    </div>
 </div>
 {% endblock %}
 
