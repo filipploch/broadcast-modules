@@ -1,11 +1,8 @@
-.full-table {
-    width: 61% !important;
-}
-
-@keyframes collapseHeightCentered {
-    0%   { transform: translate(-50%, -50%) scaleY(1); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scaleY(0); opacity: 0; }
-}
+/* .full-table, @keyframes collapseHeightCentered i .results-table-* (pełna
+   tabela) przeniesione do style/garbarnia/css/style.css (motyw
+   "garbarnia") — .results/.results-row/.promotion/.degradation/
+   #results-header/#table-header poniżej ZOSTAJĄ tutaj: są współdzielone z
+   mini-widgetem #results-table-container (buildResultsContentGame). */
 
 .results{
     position: absolute;
@@ -125,62 +122,8 @@
     row-gap: 3px;
 }
 
-/* ── Tabela pełna (results-container / table-container) ──────────────────── */
-.results-table-row {
-    display: flex;
-    align-items: center;
-    transition: transform 1s ease;
-}
-
-.results-table-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 6.5px;
-  text-align: center;
-  white-space: nowrap;
-  flex-shrink: 0;
-  width: 86px !important;
-}
-
-.results-table-standing {
-    justify-content: right !important;
-    width: 53px !important;
-    padding-left: 30px !important;
-    padding-right: 5px !important;
-}
-
-.results-table-name {
-    flex: 1;
-    flex-shrink: 1;
-    justify-content: flex-start;
-    text-align: left;
-    padding-left: 10px;
-    width: 200px !important;
-}
-
-.results-table-name-header {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}
-
-.results-table-indicator {
-    background: linear-gradient(to bottom, #ffffff, #909090);
-    width: 25px !important;
-    height: 82%;
-    margin: 0;
-    position: absolute;
-    left: 0px;
-    clip-path: polygon(33% 0, 100% 0, 53% 100%, 0 100%);
-}
-
-.results-table-indicator.promotion {
-    background: linear-gradient(to bottom, #baffbeb0, #20fa48a8) !important;
-}
-
-.results-table-indicator.degradation {
-    background: linear-gradient(to bottom, #fda8a8af, #ff3a3aa8) !important;
-}
+/* .results-table-* (pełna tabela results-container/table-container) —
+   przeniesione do style/garbarnia/css/style.css (motyw "garbarnia"). */
 
 .results-cell {
     flex: 1;
