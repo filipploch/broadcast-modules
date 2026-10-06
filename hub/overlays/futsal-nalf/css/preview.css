@@ -122,8 +122,8 @@ body {
 	width: auto;
 	max-width: 275px;
 	aspect-ratio: 1;
-	// max-height: 275px;
-	filter: drop-shadow(0px 10px 20px gray);
+	max-height: 275px;
+	filter: drop-shadow(0px 0px 10px #ffffff);
 	padding: 40px 0 0 0;
 }
 
