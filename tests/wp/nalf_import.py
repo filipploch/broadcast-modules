@@ -30,7 +30,7 @@ def import_season(season_id, league_ids, with_players, log=print):
         tmap[t["id"]] = r["id"]
     log(f"  druzyny: {len(tmap)}")
     # zawodnicy
-    pmap = {}
+    pmap = {}; pfails = []
     if with_players:
         players_src = []
         for lg in league_ids:
@@ -39,10 +39,13 @@ def import_season(season_id, league_ids, with_players, log=print):
         for p in players_src:
             if p["id"] in seen: continue
             seen.add(p["id"])
-            r = api("POST", "players", {"title": p["title"]["rendered"], "status": "publish", "number": p.get("number") or "",
-                    "teams": _pmap(tmap, p.get("teams") or []), "leagues": list(loc_league.values()), "seasons": [loc_season]})
-            pmap[p["id"]] = r["id"]
-        log(f"  zawodnicy: {len(pmap)}")
+            body = {"title": p["title"]["rendered"], "status": "publish",
+                    "teams": _pmap(tmap, p.get("teams") or []), "leagues": list(loc_league.values()), "seasons": [loc_season]}
+            if str(p.get("number") or "").isdigit(): body["number"] = int(p["number"])
+            r = api("POST", "players", body)
+            if "id" in r: pmap[p["id"]] = r["id"]
+            else: pfails.append((p["id"], str(r)[:150]))
+        log(f"  zawodnicy: {len(pmap)}, bledow: {len(pfails)}")
     # mecze
     events = []
     for lg in league_ids:
@@ -57,13 +60,13 @@ def import_season(season_id, league_ids, with_players, log=print):
                 "leagues": [loc_league[e["_lg"]]], "seasons": [loc_season], "teams": tm, "meta": {"bm_source": "nalf", "bm_source_id": str(e["id"])}}
         if e.get("minutes"): body["minutes"] = int(e["minutes"])
         if res: body["results"] = res
-        if with_players and e.get("performance"):
-            body["performance"] = {str(tmap[int(t)]): {("0" if p == "0" else str(pmap[int(p)])): v for p, v in rows.items() if p == "0" or int(p) in pmap}
+        if with_players and isinstance(e.get("performance"), dict) and e["performance"]:
+            body["performance"] = {str(tmap[int(t)]): {("0" if p == "0" else str(pmap[int(p)])): v for p, v in rows.items() if p == "0" or int(p) in pmap} if isinstance(rows, dict) else {}
                                    for t, rows in e["performance"].items() if t != "0" and int(t) in tmap}
             body["players"] = [pmap[p] if p else 0 for p in e.get("players") or [] if p == 0 or p in pmap]
         r = api("POST", "events", body)
         if "id" in r: emap[e["id"]] = r["id"]
         else: fails.append((e["id"], str(r)[:150]))
     log(f"  mecze: {len(emap)} zapisanych, {len(fails)} bledow")
-    return {"season": loc_season, "leagues": loc_league, "tmap": tmap, "pmap": pmap, "emap": emap, "events": events, "fails": fails,
+    return {"season": loc_season, "leagues": loc_league, "tmap": tmap, "pmap": pmap, "emap": emap, "events": events, "fails": fails + pfails,
             "teams_src": teams_src, "seconds": time.time() - t0, "local_calls": common.calls - calls0, "nalf_requests": nalf.stats["requests"] - n0}
