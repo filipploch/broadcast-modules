@@ -1,3 +1,4 @@
+from core.managers import session_manager
 
 def _get_game():
     from core.models.base_game import get_game_model
@@ -32,7 +33,7 @@ def generate_show_overlay_data(data):
     from core.models.base_settings import get_settings_model
     Settings = get_settings_model()
     settings = Settings.get_settings()
-    current_game_data = _get_game().query.get(settings.current_game_id).to_dict()
+    current_game_data = _get_game().query.get(session_manager.current_game_id()).to_dict()
     container_id = data.get('container_id')
     home_team_coach = None
     away_team_coach = None
@@ -78,7 +79,7 @@ def generate_show_overlay_data(data):
         case 'break-container':
             from core.managers.game_event_manager import GameEventManager
             manager = GameEventManager()
-            scorers = _get_dict(manager.get_goals_summary(game_id=settings.current_game_id))
+            scorers = _get_dict(manager.get_goals_summary(game_id=session_manager.current_game_id()))
             data.update({
                 'round_name': _round_nr_to_round_name(current_game_data['round'], current_game_data['league_name']),
                 'result': current_game_data['score_string'],

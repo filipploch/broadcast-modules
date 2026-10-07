@@ -8,6 +8,8 @@ Każdy moduł rejestruje te trasy przez:
     from core.routes import broadcast as core_broadcast
     core_broadcast.register_routes(app)
 """
+from core.managers import session_manager
+from core.managers.timer_manager import current_timers_for_game
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.managers.season_manager import SeasonManager
@@ -78,17 +80,12 @@ def register_routes(app, exclude=None):
 
     @app.route('/api/settings/current-timers')
     def api_current_timers():
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        timers = Settings.get_current_timers()
-        return jsonify(timers)
+        return jsonify(current_timers_for_game())
 
     @app.route('/api/settings/current-timers/clear', methods=['POST'])
     def api_clear_current_timers():
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        Settings.clear_timers()
-        return jsonify({'success': True, 'message': 'Timers cleared'})
+        # Od E1 zegary są wyliczane z okresu i GameTimer, nie przechowywane; endpoint zostaje jako pusta operacja.
+        return jsonify({'success': True, 'message': 'No-op: timers are derived from the current period'})
 
     @app.route('/api/replay-export/current', methods=['POST'])
     def api_replay_export_current():
@@ -165,12 +162,12 @@ def register_routes(app, exclude=None):
         Period = _get_period()
     
         settings = Settings.get_settings()
-        current_timers = settings.get_current_timers()
+        current_timers = current_timers_for_game()
     
         # Get period details if exists
         period_data = None
-        if settings.current_period_id:
-            period = Period.query.get(settings.current_period_id)
+        if session_manager.current_period_id():
+            period = Period.query.get(session_manager.current_period_id())
             if period:
                 period_data = {
                     "id": period.id,
@@ -185,8 +182,8 @@ def register_routes(app, exclude=None):
     
         # Get game details if exists
         game_data = None
-        if settings.current_game_id:
-            game = Game.query.get(settings.current_game_id)
+        if session_manager.current_game_id():
+            game = Game.query.get(session_manager.current_game_id())
             if game:
                 game_data = {
                     "id": game.id,
@@ -198,14 +195,52 @@ def register_routes(app, exclude=None):
             is_reversed = True
     
         return jsonify({
-            "current_season_id": settings.current_season_id,
-            "current_game_id": settings.current_game_id,
-            "current_period_id": settings.current_period_id,
+            "current_season_id": session_manager.current_season_id(),
+            "current_game_id": session_manager.current_game_id(),
+            "current_period_id": session_manager.current_period_id(),
             "current_timers": current_timers,
             "period": period_data,
             "game": game_data,
-            "is_reversed": is_reversed
+            "is_reversed": is_reversed,
+            "session": session_manager.describe()
         })
+
+    # ── Sesja transmisji (E1) ────────────────────────────────────────────────
+    def _session_response(action, **kwargs):
+        from core.extensions import socketio
+        try:
+            getattr(session_manager, action)(**kwargs)
+        except session_manager.SessionError as e:
+            return jsonify({'success': False, 'error': str(e), 'session': session_manager.describe()}), 409
+        state = session_manager.describe()
+        socketio.emit('session_state', state)
+        return jsonify({'success': True, 'session': state})
+
+    @app.route('/api/session')
+    def api_session():
+        """Stan sesji transmisji: {'open': False} albo status, aktywny mecz, okres, stan OBS i kolejka."""
+        return jsonify(session_manager.describe())
+
+    @app.route('/api/session/open', methods=['POST'])
+    def api_session_open():
+        return _session_response('open_session')
+
+    @app.route('/api/session/go-on-air', methods=['POST'])
+    def api_session_go_on_air():
+        """Ręczne przejście 'na antenie' (uzupełnienie automatu: start streamu/nagrywania w OBS)."""
+        if session_manager.get_open_session() is None:
+            return jsonify({'success': False, 'error': 'Brak otwartej sesji transmisji.', 'session': {'open': False}}), 409
+        return _session_response('go_on_air')
+
+    @app.route('/api/session/next-game', methods=['POST'])
+    def api_session_next_game():
+        """Jawna akcja 'następny mecz': kończy aktywny mecz i aktywuje następny z kolejki; stream trwa dalej."""
+        return _session_response('next_game')
+
+    @app.route('/api/session/close', methods=['POST'])
+    def api_session_close():
+        """Zamknięcie sesji — wyłącznie ręczne; nigdy automatycznie po zatrzymaniu streamu."""
+        return _session_response('close_session')
 
     @app.route('/api/stadium-camera-positions')
     def api_stadium_camera_positions():

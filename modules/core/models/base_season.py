@@ -68,13 +68,6 @@ class BaseSeasonMixin:
         from core.models.base_game import BaseGameMixin
         return _get_game().query.join(League).filter(League.season_id == self.id).count()
     
-    @property
-    def set_newest_season_as_current():
-        Season = _get_season()
-        newest_season = Season.query.order_by(Season.number.desc()).first()
-        Settings = _get_settings()
-        Settings.set_current_season(newest_season.id)
-
     def to_dict(self):
         """Convert to dictionary"""
         return {

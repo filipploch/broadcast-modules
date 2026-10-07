@@ -141,11 +141,15 @@ class ObsWsManager:
             output_active = response_data.get('outputActive', False)
             state = 'active' if output_active else 'disabled'
             self._emit_to_ui('obs_stream_state', {'state': state})
+            if output_active:
+                self._session_update('on_obs_stream_started')
         elif request_id == 'ui-obs-record-status':
             response_data = payload.get('responseData', {})
             output_active = response_data.get('outputActive', False)
             state = 'active' if output_active else 'disabled'
             self._emit_to_ui('obs_record_state', {'state': state})
+            if output_active:
+                self._session_update('on_obs_recording_started')
         elif request_id.startswith('sync-request-'):
             self._handle_sync_request(payload=payload)
         else:
@@ -327,6 +331,24 @@ class ObsWsManager:
             'sceneName': scene_name,
         })
 
+    def _session_update(self, action, **kwargs):
+        """Zdarzenia OBS → stan sesji transmisji (start streamu/nagrywania ustawia 'na antenie'; zatrzymanie NIE zamyka sesji).
+
+        Błąd w sesji nie może przerwać obsługi zdarzenia OBS. Po zmianie UI dostaje 'session_state'.
+        """
+        try:
+            from core.managers import session_manager
+            before = session_manager.get_open_session()
+            before_status = before.status if before else None
+            getattr(session_manager, action)(**kwargs)
+            after = session_manager.get_open_session()
+            if after is not None:
+                self._emit_to_ui('session_state', session_manager.describe())
+                if before_status != after.status:
+                    current_app.logger.info(f'📡 Sesja transmisji: {before_status} → {after.status} ({action})')
+        except Exception as e:
+            current_app.logger.error(f'session {action} failed: {e}')
+
     def on_obs_event(self, msg):
         payload    = msg.get('payload')
         event_type = payload.get('eventType')
@@ -348,9 +370,11 @@ class ObsWsManager:
                     self._emit_to_ui('obs_stream_state', {'state': 'changing'})
                 case 'OBS_WEBSOCKET_OUTPUT_STARTED':
                     self._emit_to_ui('obs_stream_state', {'state': 'active'})
+                    self._session_update('on_obs_stream_started')
                 case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
                     self._emit_to_ui('obs_stream_state', {'state': 'disabled'})
                     current_app.logger.warning('⚠️  OBS stream stopped unexpectedly')
+                    self._session_update('update_obs_state', streaming=False)   # sesji nie zamykamy
 
         if event_type == 'RecordStateChanged':
             from core.models.base_settings import get_settings_model
@@ -372,6 +396,7 @@ class ObsWsManager:
                             '(upgrade OBS WebSocket to ≥5.5.4 to fix this)'
                         )
                     self._emit_to_ui('obs_record_state', {'state': 'active'})
+                    self._session_update('on_obs_recording_started')
                 case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
                     obs_record_filepath = event_data.get('outputPath', '')
                     if obs_record_filepath:
@@ -383,6 +408,12 @@ class ObsWsManager:
                     else:
                         Settings.set_obs_record_filepath('')
                     self._emit_to_ui('obs_record_state', {'state': 'disabled'})
+                    self._session_update('update_obs_state', recording=False)   # sesji nie zamykamy
+
+        if event_type == 'CurrentProgramSceneChanged':
+            scene = (event_data or {}).get('sceneName')
+            if scene:
+                self._session_update('update_obs_state', scene=scene)
 
         if event_type == 'SceneItemEnableStateChanged':
             scene_name    = event_data.get('sceneName')

@@ -1,3 +1,4 @@
+from core.managers import session_manager
 # core/sequences/steps.py
 
 
@@ -233,8 +234,8 @@ def start_recording(cameras: dict = None, delay_ms: int = 0) -> dict:
     # przypisany do właściwego meczu/okresu (patrz recorder_manager.on_recording_started).
     Settings = get_settings_model()
     settings = Settings.get_settings()
-    match_id  = str(settings.current_game_id) if settings.current_game_id else None
-    period_id = str(settings.current_period_id) if settings.current_period_id else None
+    match_id  = str(session_manager.current_game_id()) if session_manager.current_game_id() else None
+    period_id = str(session_manager.current_period_id()) if session_manager.current_period_id() else None
 
     return {
         "target": "broadcast",

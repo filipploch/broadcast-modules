@@ -12,6 +12,57 @@ def _get_gametimer():
 
 
 
+def current_timers_for_game(game_id=None, period=None):
+    """Dane zegarów dla panelu i timer-recovery.js (dawniej Settings.current_timers) — wyliczane, nie przechowywane.
+
+    Zegar główny: z bieżącego okresu meczu (session_manager.select_period_for_game: identyfikator, limit, opis) i
+    jego rekordu GameTimer (stan; upływ tylko dla okresu zakończonego). Bez rekordu: 'running' dla okresu trwającego, w przeciwnym razie 'idle'.
+    Kary: lista ZAWSZE pusta, jak dotąd — GameTimer nie zwraca parent_id, więc odtwarzanie kar z baz daje zegary-widma;
+    wyświetlanie kar w panelu idzie dotychczasowym źródłem (reload_penalty_timers). Odtwarzanie kar po awarii: E2.
+    Zwraca {'main': {...} | None, 'penalties': {'home': [], 'away': []}} — ten sam kształt co dawny JSON.
+    period: okres, którego zegar ma opisać (domyślnie bieżący okres panelu); strona '/' podaje okres do sterowania.
+    """
+    from core.managers import session_manager
+    empty = {'main': None, 'penalties': {'home': [], 'away': []}}
+    if game_id is None:
+        game_id = session_manager.current_game_id()
+    if game_id is None:
+        return empty
+    if period is None:
+        period = session_manager.select_period_for_game(game_id)
+    if period is None or not period.main_timer_name:
+        return empty
+    GameTimer = _get_gametimer()
+    gt = GameTimer.query.filter_by(plugin_timer_id=period.main_timer_name).first()
+    from core.models.base_period import get_period_model
+    Period = get_period_model()
+    if gt is not None and gt.state in GameTimer.VALID_STATES and gt.state != GameTimer.STATE_REMOVED:
+        state = gt.state
+    else:
+        state = 'running' if period.status == Period.STATUS_PENDING else 'idle'
+    # 'elapsed_time' jak dotąd: 0 dla okresu niezakończonego (timer-recovery.js tworzy wtedy zegar z initial_time okresu),
+    # a dla zakończonego — zamrożony upływ (robiło to zakończenie okresu). Surowy upływ trwającego okresu NIE może tu trafić:
+    # skrypt odtwarzania traktuje elapsed_time jako initial_time zegara i gubiłby przesunięcie okresu (np. 20 min w 2. połowie).
+    elapsed = (gt.elapsed_time_ms or 0) if (gt is not None and period.status == Period.STATUS_FINISHED) else 0
+    return {
+        'main': {
+            'timer_id':       period.main_timer_name,
+            'timer_type':     'independent',
+            'initial_time':   period.initial_time,
+            'limit':          period.limit,
+            'pause_at_limit': period.pause_at_limit,
+            'state':          state,
+            'elapsed_time':   elapsed,
+            'metadata': {
+                'description': period.description,
+                'period':      period.period_order,
+                'timer_class': 'main',
+            },
+        },
+        'penalties': {'home': [], 'away': []},
+    }
+
+
 class TimerManager:
     """Manages communication with Timer Plugin and caches timer states."""
 
@@ -450,15 +501,39 @@ class TimerManager:
             self._handle_main_timer_created(timer_id, initial_time, limit,
                                             state, metadata)
 
+    def _period_for_timer(self, timer_id):
+        """Okres, do którego należy zegar — wyłącznie z identyfikatora zegara (nie z 'aktualnego okresu').
+
+        Zegar główny: okres o main_timer_name == timer_id. Zegar kary: okres zegara nadrzędnego (parent_id z rejestru
+        zegarów, a po restarcie modułu z istniejącego rekordu GameTimer). Zwraca obiekt okresu albo None.
+        """
+        from core.models.base_period import get_period_model
+        Period = get_period_model()
+        period = Period.query.filter_by(main_timer_name=timer_id).first()
+        if period is not None:
+            return period
+        with self.lock:
+            parent_id = (self.timers.get(timer_id) or {}).get('parent_id')
+        if parent_id:
+            period = Period.query.filter_by(main_timer_name=parent_id).first()
+            if period is not None:
+                return period
+        gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
+        if gt is not None and gt.period_id is not None:
+            return Period.query.get(gt.period_id)
+        return None
+
     def _handle_main_timer_created(self, timer_id, initial_time, limit,
                                    state, metadata):
         from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        settings  = Settings.get_settings()
-        game_id   = settings.current_game_id
-        period_id = settings.current_period_id
+        period = self._period_for_timer(timer_id)
+        if period is None:
+            current_app.logger.warning(
+                f'Potwierdzenie zegara {timer_id} nie pasuje do żadnego okresu (main_timer_name) — pomijam')
+            return
+        game_id   = period.game_id
+        period_id = period.id
 
         # Zapisz/zaktualizuj rekord w game_timers
         gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
@@ -480,35 +555,8 @@ class TimerManager:
 
         db.session.commit()
 
-        # Zsynchronizuj settings.current_timers — to jest źródło prawdy dla UI/timer-plugin
-        # przy starcie okresu period_manager.start_period() już woła Settings.update_main_timer(),
-        # ale robimy to tu ponownie żeby zagwarantować spójność po asynchronicznym potwierdzeniu
-        # z pluginu (on_timer_created może nadejść z opóźnieniem po zmianie period_id w settings).
-        # Plugin responses (timer_created / timer_ensured) don't echo pause_at_limit
-        # back, so metadata is always {}. Read the authoritative value from the DB
-        # period; fall back to metadata for timers not linked to a period.
-        pause_at_limit = metadata.get('pause_at_limit')
-        if pause_at_limit is None and period_id is not None:
-            try:
-                from core.models.base_period import get_period_model
-                period_obj = get_period_model().query.get(period_id)
-                if period_obj is not None:
-                    pause_at_limit = period_obj.pause_at_limit
-            except Exception:
-                pass
-        if pause_at_limit is None:
-            pause_at_limit = True
-        main_timer_data = {
-            'timer_id':      timer_id,
-            'timer_type':    'independent',
-            'initial_time':  initial_time,
-            'limit':         limit,
-            'pause_at_limit': pause_at_limit,
-            'state':         GameTimer.STATE_IDLE,
-            'elapsed_time':  0,
-            'metadata':      metadata,
-        }
-        Settings.update_main_timer(main_timer_data)
+        # Panel i timer-recovery.js dostają dane zegara wyliczone z Period + GameTimer
+        # (current_timers_for_game); nie ma osobnej kopii w Settings, więc nie ma czego synchronizować.
 
         self._emit_to_ui('timer_created', {
             'timer_id': timer_id, 'elapsed_time': 0,
@@ -518,11 +566,13 @@ class TimerManager:
     def _handle_penalty_timer_created(self, timer_id, limit, state, metadata):
         from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        settings  = Settings.get_settings()
-        game_id   = settings.current_game_id
-        period_id = settings.current_period_id
+        period = self._period_for_timer(timer_id)
+        if period is None:
+            current_app.logger.warning(
+                f'Potwierdzenie zegara kary {timer_id} nie pasuje do żadnego okresu (zegar nadrzędny) — pomijam')
+            return
+        game_id   = period.game_id
+        period_id = period.id
 
         team         = 'home' if timer_id.startswith('penalty_home') else 'away'
         main_gt      = self.get_active_main_timer(period_id)

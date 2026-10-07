@@ -5,3 +5,4 @@ python-socketio==5.10.0
 websocket-client==1.7.0
 requests==2.31.0
 beautifulsoup4==4.12.3
+Flask-Migrate==4.1.0

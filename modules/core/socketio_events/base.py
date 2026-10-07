@@ -8,6 +8,7 @@ Rejestracja:
     from core.socketio_events import base as core_events
     core_events.register_events(socketio)
 """
+from core.managers import session_manager
 import logging
 from flask import current_app
 
@@ -211,8 +212,8 @@ def register_events(socketio):
             Settings = _get_settings()
             settings = Settings.get_settings()
             logger.info('get_camera_assignments: settings=%s', settings)
-            if settings and settings.current_game_id:
-                cameras = GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+            if settings and session_manager.current_game_id():
+                cameras = GameCameraManager().get_cameras_dict_for_game(session_manager.current_game_id())
             else:
                 cameras = {device: False for device in HDMI_TO_DEVICE.values()}
             logger.info('get_camera_assignments: cameras=%s', cameras)
@@ -232,8 +233,8 @@ def register_events(socketio):
             from core.managers.game_camera_manager import GameCameraManager
             Settings = _get_settings()
             settings = Settings.get_settings()
-            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
-                       if settings and settings.current_game_id else None)
+            cameras = (GameCameraManager().get_cameras_dict_for_game(session_manager.current_game_id())
+                       if settings and session_manager.current_game_id() else None)
             step = start_recording(cameras=cameras)
             hub_client.send({
                 'from': current_app.config['MODULE_ID'],
@@ -252,8 +253,8 @@ def register_events(socketio):
             from core.managers.game_camera_manager import GameCameraManager
             Settings = _get_settings()
             settings = Settings.get_settings()
-            cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
-                       if settings and settings.current_game_id else None)
+            cameras = (GameCameraManager().get_cameras_dict_for_game(session_manager.current_game_id())
+                       if settings and session_manager.current_game_id() else None)
             step = stop_recording(cameras=cameras)
             hub_client.send({
                 'from': current_app.config['MODULE_ID'],
@@ -731,7 +732,7 @@ def register_events(socketio):
         from core.extensions import socketio as _sio
         from core.managers.interview_manager import InterviewManager
         Settings = _get_settings()
-        game_id = Settings.get_settings().current_game_id
+        game_id = session_manager.current_game_id()
         participants = InterviewManager().list_for_game(game_id) if game_id else []
         _sio.emit('interview_participants_updated', {'participants': participants})
 
@@ -748,7 +749,7 @@ def register_events(socketio):
     def handle_add_interview_participant(data):
         from core.managers.interview_manager import InterviewManager
         Settings = _get_settings()
-        game_id = Settings.get_settings().current_game_id
+        game_id = session_manager.current_game_id()
         if not game_id:
             return
         InterviewManager().add(
@@ -775,7 +776,7 @@ def register_events(socketio):
     def handle_reset_interview_participants(data):
         from core.managers.interview_manager import InterviewManager
         Settings = _get_settings()
-        game_id = Settings.get_settings().current_game_id
+        game_id = session_manager.current_game_id()
         if game_id:
             InterviewManager().reset(game_id)
         _emit_interview_participants_updated()
@@ -925,7 +926,7 @@ def _handle_core_content(content_type, data):
         from core.managers.game_manager import GameManager
         Settings = _get_settings()
         settings = Settings.get_settings()
-        game = GameManager().get_game_by_id(settings.current_game_id)
+        game = GameManager().get_game_by_id(session_manager.current_game_id())
         
         gem        = GameEventManager()
         event_mgr  = EventManager()
@@ -935,7 +936,7 @@ def _handle_core_content(content_type, data):
         events_types = [e.to_dict() for e in event_mgr.get_all_events()]
         game_events  = []
         for period in game.get_periods_list():
-            period_events = gem.get_events_for_game(settings.current_game_id,
+            period_events = gem.get_events_for_game(session_manager.current_game_id(),
                                                     period_id=period.id,
                                                     include_hidden=include_hidden)
             if period_events:
@@ -951,7 +952,7 @@ def _handle_core_content(content_type, data):
     elif content_type == 'interview':
         from core.managers.interview_manager import InterviewManager
         Settings = _get_settings()
-        game_id = Settings.get_settings().current_game_id
+        game_id = session_manager.current_game_id()
         participants = InterviewManager().list_for_game(game_id) if game_id else []
         return {
             'content_type': 'interview',
@@ -1008,7 +1009,7 @@ def _handle_core_content(content_type, data):
 
         # Domyślnie: liga aktualnie transmitowanego meczu
         if league_id is None:
-            current_game = GameManager().get_game_by_id(settings.current_game_id)
+            current_game = GameManager().get_game_by_id(session_manager.current_game_id())
             league_id = current_game.league_id if current_game else None
 
         # Zakładki ligowe ograniczone do JEDNEGO sezonu — sezonu wybranej

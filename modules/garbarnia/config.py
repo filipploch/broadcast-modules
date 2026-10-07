@@ -1,5 +1,8 @@
 import os
 
+# Folder tego modułu (modules/<moduł>/): ścieżki plików modułu liczone od położenia plików, nie od bieżącego folderu startu
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
@@ -18,8 +21,8 @@ class Config:
     APP_PORT = 8081
 
     SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver', 'obs_messages_receiver', 'servo_events', 'gopro_events']
-    REQUIRED_PLUGINS = ['timer-plugin', 'recorder-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'cam-head-1']
-
+    # BM_REQUIRED_PLUGINS=timer-plugin,... zawęża listę (próby na sucho z samym timer-pluginem); domyślnie pełna lista
+    REQUIRED_PLUGINS = [p for p in os.environ.get('BM_REQUIRED_PLUGINS', '').split(',') if p] or ['timer-plugin', 'recorder-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'cam-head-1']
     # MAC karty sieciowej Debiana z recorder-pluginem — do zdalnego
     # wybudzania przez WOL (dwuklik na #recorder-plugin-icon gdy offline).
     RECORDER_PLUGIN_MAC = '6c:2b:59:f4:29:85'
@@ -29,8 +32,8 @@ class Config:
 
     HUB_EXECUTABLE = '../../hub/hub.exe'
     PLUGINS_DIR = '../../plugins'
-    SEQUENCES_PATH = f'{MODULE_NAME}/app/sequences/sequences.py'
-    REPLAY_EXPORT_DIR = f'{MODULE_NAME}/app/data'
+    SEQUENCES_PATH = os.path.join(_MODULE_DIR, 'app', 'sequences', 'sequences.py')
+    REPLAY_EXPORT_DIR = os.path.join(_MODULE_DIR, 'app', 'data')
     OVERLAY_DIR = '../../hub/overlays/garbarnia'
     HUB_CSS_DIR = 'hub/overlays/garbarnia/css/'
     HUB_JS_DIR = 'hub/overlays/garbarnia/js/'
@@ -77,6 +80,13 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO = False
 
 
+class TestingConfig(Config):
+    """Testy automatyczne (tests/modules): baza z BM_TEST_DATABASE_URL, bez startu menedżerów i połączenia z HUB-em."""
+    TESTING = True
+    DEBUG = False
+    SQLALCHEMY_DATABASE_URI = os.environ.get('BM_TEST_DATABASE_URL') or 'sqlite:///:memory:'
+
+
 class ProductionConfig(Config):
     DEBUG = False
 
@@ -84,5 +94,6 @@ class ProductionConfig(Config):
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
+    'testing': TestingConfig,
     'default': DevelopmentConfig
 }

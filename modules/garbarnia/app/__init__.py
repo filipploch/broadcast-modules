@@ -18,6 +18,12 @@ def create_app(config_name='default'):
     from config import config
     app.config.from_object(config[config_name])
 
+    # Uruchomienie modułu na bazie niezgodnej z wersją migracji: jeden czytelny komunikat zamiast serii wyjątków.
+    # Tylko development/production; polecenia migracji (flask db, migrate_db.py) używają innych konfiguracji.
+    if config_name in ('development', 'production') and not app.config.get('TESTING'):
+        from core.utils.schema_check import ensure_schema_current
+        ensure_schema_current(app, Path(__file__).resolve().parent.parent / 'migrations')
+
     logging.basicConfig(
         level=logging.DEBUG if app.debug else logging.ERROR,
         format='%(asctime)s [%(levelname)s] %(message)s',
@@ -81,7 +87,8 @@ def create_app(config_name='default'):
             from app.managers import initialize_all_managers
             initialize_all_managers(app)
 
-    threading.Thread(target=init_managers, daemon=True).start()
+    if not app.config.get('TESTING'):
+        threading.Thread(target=init_managers, daemon=True).start()
 
     app.logger.info("✅ Application initialized")
     return app

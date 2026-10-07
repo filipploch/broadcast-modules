@@ -16,6 +16,7 @@ Format każdego CSV:
     (czasy w sekundach, zaokrąglone w górę — gotowe do użycia przez ffmpeg/player)
 """
 
+from core.managers import session_manager
 import csv
 import math
 import logging
@@ -56,7 +57,7 @@ class ReplayExportManager:
 
     def export_current_game(self) -> dict:
         """
-        Eksportuje powtórki aktualnie wybranego meczu (settings.current_game_id).
+        Eksportuje powtórki aktualnie wybranego meczu (session_manager.current_game_id()).
 
         Przeznaczone do wywołania z sekwencji (po stop_recording) lub z UI
         jako operacja "wyeksportuj bieżący mecz".
@@ -67,10 +68,10 @@ class ReplayExportManager:
         from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
         settings = Settings.get_settings()
-        game_id  = settings.current_game_id
+        game_id  = session_manager.current_game_id()
 
         if not game_id:
-            msg = "Brak aktualnie wybranego meczu (settings.current_game_id is None)"
+            msg = "Brak aktualnie wybranego meczu (session_manager.current_game_id() is None)"
             logger.warning(f"[ReplayExport] {msg}")
             return {'game_id': None, 'folder': None, 'files_saved': 0,
                     'errors': [msg]}
