@@ -30,6 +30,9 @@ def create_app(config_name='default'):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
+    from core.utils.logs import setup_file_logging
+    setup_file_logging('garbarnia', testing=bool(app.config.get('TESTING')) or config_name not in ('development', 'production'))
+
     from core.extensions import db, socketio, migrate
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
