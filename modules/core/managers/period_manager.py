@@ -180,15 +180,32 @@ class PeriodManager:
         """
         return self.update_period(period_id, status=status)
 
+    @staticmethod
+    def _remove_other_main_timers(period, timer_manager):
+        """Usuwa z pluginu zegary główne pozostałych okresów meczu, o ile plugin może je mieć
+        (zegar jest w rejestrze menedżera albo ma rekord GameTimer)."""
+        from core.models.base_game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        others = _get_period().query.filter(
+            _get_period().game_id == period.game_id, _get_period().id != period.id).all()
+        for other in others:
+            name = other.main_timer_name
+            if not name or name == period.main_timer_name:
+                continue
+            known = name in timer_manager.timers or                 GameTimer.query.filter_by(plugin_timer_id=name).first() is not None
+            if known:
+                timer_manager.remove_timer(name)
+
     def start_period(self, period_id: int):
         """
         Start a period (set status to PENDING) and setup timers
         
         This method:
         1. Sets period status to PENDING
-        2. Creates/updates main timer in Settings (state: idle, NOT started)
-        3. Restores penalty timers if they exist (for periods > 1)
-        4. Removes penalty timers with limit_reached status
+        2. Removes from the plugin the main timers of the game's other periods (exactly one main timer at a time)
+        3. Ensures the main timer of this period exists in the plugin (state: idle, NOT started)
+        4. Restores penalty timers if they exist (for periods > 1)
+        5. Removes penalty timers with limit_reached status
         """
         from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
@@ -201,21 +218,10 @@ class PeriodManager:
         self._notify_helper_relay_period(period, 'started')
 
         timer_manager = get_timer_manager()
-        
-        # Prepare main timer data
-        main_timer_data = {
-            "timer_id": period.main_timer_name,
-            "timer_type": "independent",
-            "initial_time": period.initial_time,
-            "limit": period.limit,
-            "pause_at_limit": period.pause_at_limit,
-            "state": "idle",
-            "metadata": {
-                "description": period.description,
-                "period": period.period_order,
-                "timer_class": "main"
-            }
-        }
+
+        # Jeden zegar główny naraz: usuń z pluginu zegary główne pozostałych okresów tego meczu
+        # (dawniej robiła to trasa startu okresu na podstawie Settings.current_timers.main).
+        self._remove_other_main_timers(period, timer_manager)
         
         # If this is not the first period, handle penalty timers
         if period.period_order > 1:
@@ -260,9 +266,6 @@ class PeriodManager:
                     "timer_class": "main"
                 }
             )
-
-            # Update main timer in Settings
-            Settings.update_main_timer(main_timer_data)
 
             # Recreate penalty timers as dependent on new period's main timer.
             # Czas pozostały liczymy tym samym wzorem co overlay/derived-variable
@@ -333,9 +336,6 @@ class PeriodManager:
                 }
             )
 
-            # Update main timer in Settings
-            Settings.update_main_timer(main_timer_data)
-        
         # DO NOT start the timer automatically - leave it in idle state
         # User will start it manually from UI
 
@@ -383,11 +383,9 @@ class PeriodManager:
         
         This method:
         1. Stops all running timers
-        2. Updates timer states in Settings with current elapsed times
+        2. Freezes the final elapsed time of this period's main timer in game_timers
         3. Sets period status to FINISHED
         """
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
         from core.managers import get_timer_manager
         from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
@@ -397,33 +395,28 @@ class PeriodManager:
             return None
 
         timer_manager = get_timer_manager()
-        current_timers = Settings.get_current_timers()
 
-        # Stop main timer if running
-        main_timer = current_timers.get("main")
-        if main_timer and main_timer.get("timer_id"):
-            timer_state = timer_manager.get_timer_state(main_timer["timer_id"])
+        # Zegar główny TEGO okresu (z main_timer_name, nie z "aktualnego zegara"): zatrzymaj, jeśli biegnie
+        main_name = period.main_timer_name
+        if main_name:
+            timer_state = timer_manager.get_timer_state(main_name)
             if timer_state and timer_state.get("state") == "running":
-                timer_manager.pause_timer(main_timer["timer_id"])
-
-            # Update main timer with current state
-            if timer_state:
-                main_timer["state"] = timer_state.get("state", "paused")
-                main_timer["elapsed_time"] = timer_state.get("elapsed_time", main_timer.get("elapsed_time", 0))
-                Settings.update_main_timer(main_timer)
+                timer_manager.pause_timer(main_name)
 
             # Zamroź finalny elapsed w tabeli game_timers — to na tej podstawie
             # PeriodManager.start_period() przelicza czas pozostały przenoszonych
             # kar (patrz GameTimer.penalty_remaining_ms), niezależnie od tego,
             # czy asynchroniczna synchronizacja z pluginu (_sync_db_timer)
             # zdąży dotrzeć zanim operator wystartuje kolejną część.
-            main_gt = GameTimer.query.filter_by(
-                game_id=period.game_id, period_id=period_id,
-                timer_type=GameTimer.TYPE_MAIN,
-            ).first()
-            if main_gt:
-                main_gt.elapsed_time_ms = main_timer.get("elapsed_time", 0) or 0
-                db.session.commit()
+            # Bez stanu z pluginu zostaje wartość z bazy (nie zerujemy jej).
+            if timer_state:
+                main_gt = GameTimer.query.filter_by(
+                    game_id=period.game_id, period_id=period_id,
+                    timer_type=GameTimer.TYPE_MAIN,
+                ).first()
+                if main_gt:
+                    main_gt.elapsed_time_ms = timer_state.get("elapsed_time", main_gt.elapsed_time_ms) or 0
+                    db.session.commit()
 
         # Zatrzymaj (best-effort) aktywne kary tej części — ich przeniesienie
         # do kolejnej części obsługuje PeriodManager.start_period().

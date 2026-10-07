@@ -4,7 +4,7 @@ Zasady (docs/koncepcja-wp-sportspress.md, pkt 9):
   1. Aktualny mecz to aktywny mecz otwartej sesji. Brak otwartej sesji jest poprawnym stanem (current_game_id() == None).
   2. Sezon i rozgrywki nie są przechowywane osobno; wynikają z meczu.
   3. Otwarcie sesji, zmiana meczu i zamknięcie sesji to pojedyncze transakcje (jeden commit; przy błędzie rollback).
-  6. Aktualny okres wynika ze statusów okresów meczu; nie jest nigdzie zapisany.
+  6. Aktualny okres wynika ze statusów okresów meczu (select_period_for_game); nie jest nigdzie zapisany.
 
 Sesja przechodzi w "na antenie" automatycznie, gdy OBS zgłosi start streamu albo nagrywania (on_obs_stream_started /
 on_obs_recording_started), albo ręcznie (go_on_air). Zamknięcie sesji jest wyłącznie ręczne (close_session) i nigdy
@@ -63,16 +63,26 @@ def current_season_id():
 
 
 def select_period_for_game(game_id):
-    """Okres 'bieżący' dla meczu wyliczony ze statusów: trwający → pierwszy nierozpoczęty → ostatni zakończony → None."""
+    """Okres 'bieżący' dla meczu wyliczony ze statusów: trwający → ostatni zakończony → pierwszy nierozpoczęty → None.
+
+    Zgodnie z dotychczasowym zachowaniem panelu: w przerwie między okresami (jeden zakończony, następny jeszcze
+    nie ruszył) bieżący pozostaje okres zakończony, a nie następny nierozpoczęty. Dzięki temu miejsca używające
+    'bieżącego okresu' (panel, sekwencje, zmiany w garbarni) w przerwie widzą to samo co przed E1; zdarzenia meczu
+    nie trafiają do nierozpoczętego okresu (zdarzenia dodaje się tylko do okresu trwającego).
+    """
     from core.models.base_period import get_period_model
     Period = get_period_model()
     periods = Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
-    for status in (Period.STATUS_PENDING, Period.STATUS_NOT_STARTED):
-        for p in periods:
-            if p.status == status:
-                return p
+    for p in periods:
+        if p.status == Period.STATUS_PENDING:
+            return p
     finished = [p for p in periods if p.status == Period.STATUS_FINISHED]
-    return finished[-1] if finished else None
+    if finished:
+        return finished[-1]
+    for p in periods:
+        if p.status == Period.STATUS_NOT_STARTED:
+            return p
+    return None
 
 
 def current_period():

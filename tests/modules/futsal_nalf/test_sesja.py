@@ -155,13 +155,16 @@ class Sesja(unittest.TestCase):
         self._periods(self.ids['g1'])
         sm.activate_game(self.ids['g1'])
         p1, p2 = Period.query.filter_by(game_id=self.ids['g1']).order_by(Period.period_order).all()
-        self.assertEqual(sm.current_period_id(), p1.id)       # pierwszy nierozpoczety
+        self.assertEqual(sm.current_period_id(), p1.id)       # nic nie ruszylo: pierwszy nierozpoczety
         p1.status = Period.STATUS_PENDING
         db.session.commit()
         self.assertEqual(sm.current_period_id(), p1.id)       # trwajacy
         p1.status = Period.STATUS_FINISHED
         db.session.commit()
-        self.assertEqual(sm.current_period_id(), p2.id)       # nastepny nierozpoczety
+        self.assertEqual(sm.current_period_id(), p1.id)       # przerwa: ostatnio zakonczony (jak dotychczasowy panel)
+        p2.status = Period.STATUS_PENDING
+        db.session.commit()
+        self.assertEqual(sm.current_period_id(), p2.id)       # trwajacy drugi
         p2.status = Period.STATUS_FINISHED
         db.session.commit()
         self.assertEqual(sm.current_period_id(), p2.id)       # wszystkie zakonczone: ostatni

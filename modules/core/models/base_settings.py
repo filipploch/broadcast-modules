@@ -1,7 +1,7 @@
 """BaseSettingsMixin — abstrakcyjna klasa bazowa dla ustawień aplikacji.
 
 Singleton (zawsze jeden wiersz, id=1). Od etapu E1 zawiera wyłącznie ustawienia aplikacji niezwiązane
-z aktualnym meczem: sezon wybrany do przeglądania list (browse_season_id), timery (do końca E1),
+z aktualnym meczem: sezon wybrany do przeglądania list (browse_season_id),
 odwrócenie tablicy wyników, ścieżka nagrania OBS (w E2 przechodzi do stanu sesji).
 
 Aktualny mecz, okres, sezon meczu i seria rzutów karnych NIE są tu przechowywane: wynikają z aktywnego meczu
@@ -23,7 +23,6 @@ class BaseSettingsMixin:
     def browse_season_id(cls):
         return db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)
 
-    current_timers         = db.Column(db.Text,    nullable=True)
     is_scoreboard_reversed = db.Column(db.Boolean, default=False)
     obs_record_filepath    = db.Column(db.String(500), nullable=True)
 
@@ -77,60 +76,13 @@ class BaseSettingsMixin:
     def get_obs_record_filepath(cls):
         return cls.get_settings().obs_record_filepath
 
-    # ── Timery ────────────────────────────────────────────────────────────────
+    # ── Zegary ────────────────────────────────────────────────────────────────
+    # Od E1 zegary nie są przechowywane w Settings: wylicza je core.managers.timer_manager.current_timers_for_game()
+    # z bieżącego okresu i GameTimer. Poniżej tylko odczyt zgodności (usunąć w E2).
     @classmethod
     def get_current_timers(cls):
-        s = cls.get_settings()
-        if not s.current_timers:
-            return {'main': None, 'penalties': {'home': [], 'away': []}}
-        try:
-            return json.loads(s.current_timers)
-        except (json.JSONDecodeError, TypeError):
-            return {'main': None, 'penalties': {'home': [], 'away': []}}
-
-    @classmethod
-    def set_current_timers(cls, timers_data):
-        s = cls.get_settings()
-        s.current_timers = json.dumps(timers_data)
-        s.updated_at = datetime.utcnow()
-        db.session.commit()
-
-    @classmethod
-    def update_main_timer(cls, timer_data):
-        timers = cls.get_current_timers()
-        timers['main'] = timer_data
-        cls.set_current_timers(timers)
-
-    @classmethod
-    def add_penalty_timer(cls, team, timer_data):
-        timers = cls.get_current_timers()
-        timers.setdefault('penalties', {'home': [], 'away': []})
-        timers['penalties'][team].append(timer_data)
-        cls.set_current_timers(timers)
-
-    @classmethod
-    def update_penalty_timer(cls, timer_id, timer_data):
-        timers = cls.get_current_timers()
-        for side in ('home', 'away'):
-            for i, p in enumerate(timers.get('penalties', {}).get(side, [])):
-                if p.get('timer_id') == timer_id:
-                    timers['penalties'][side][i] = timer_data
-                    break
-        cls.set_current_timers(timers)
-
-    @classmethod
-    def remove_limit_reached_penalties(cls):
-        timers = cls.get_current_timers()
-        for side in ('home', 'away'):
-            timers['penalties'][side] = [
-                p for p in timers['penalties'].get(side, [])
-                if p.get('state') != 'limit_reached'
-            ]
-        cls.set_current_timers(timers)
-
-    @classmethod
-    def clear_timers(cls):
-        cls.set_current_timers({'main': None, 'penalties': {'home': [], 'away': []}})
+        from core.managers.timer_manager import current_timers_for_game
+        return current_timers_for_game()
 
     # ── Warstwa zgodności (tylko odczyt) — usunąć w E2 ────────────────────────
     # Aktualny mecz/okres/seria karnych to stan sesji transmisji, nie ustawienia aplikacji.

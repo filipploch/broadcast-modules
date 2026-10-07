@@ -9,6 +9,7 @@ Każdy moduł rejestruje te trasy przez:
     core_broadcast.register_routes(app)
 """
 from core.managers import session_manager
+from core.managers.timer_manager import current_timers_for_game
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.managers.season_manager import SeasonManager
@@ -79,17 +80,12 @@ def register_routes(app, exclude=None):
 
     @app.route('/api/settings/current-timers')
     def api_current_timers():
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        timers = Settings.get_current_timers()
-        return jsonify(timers)
+        return jsonify(current_timers_for_game())
 
     @app.route('/api/settings/current-timers/clear', methods=['POST'])
     def api_clear_current_timers():
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        Settings.clear_timers()
-        return jsonify({'success': True, 'message': 'Timers cleared'})
+        # Od E1 zegary są wyliczane z okresu i GameTimer, nie przechowywane; endpoint zostaje jako pusta operacja.
+        return jsonify({'success': True, 'message': 'No-op: timers are derived from the current period'})
 
     @app.route('/api/replay-export/current', methods=['POST'])
     def api_replay_export_current():
@@ -166,7 +162,7 @@ def register_routes(app, exclude=None):
         Period = _get_period()
     
         settings = Settings.get_settings()
-        current_timers = settings.get_current_timers()
+        current_timers = current_timers_for_game()
     
         # Get period details if exists
         period_data = None

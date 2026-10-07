@@ -36,8 +36,8 @@ with app.app_context():
     ok = {"broadcast_sessions", "session_games"} <= t
     cols, row = settings_cols()
     print("kolumny settings po upgrade:", cols)
-    ok &= "browse_season_id" in cols and not ({"current_game_id", "current_period_id", "current_season_id", "current_shootout_id"} & set(cols))
-    flask_migrate.downgrade(directory=str(REPO / "modules" / module / "migrations"), revision="-2")
+    ok &= "browse_season_id" in cols and not ({"current_game_id", "current_period_id", "current_season_id", "current_shootout_id", "current_timers"} & set(cols))
+    flask_migrate.downgrade(directory=str(REPO / "modules" / module / "migrations"), revision="-3")
     v, t = state(); print("po downgrade:", v, "tabele sesji:", {"broadcast_sessions", "session_games"} & t)
     ok &= not ({"broadcast_sessions", "session_games"} & t)
     print("kolumny settings po downgrade:", settings_cols()[0])

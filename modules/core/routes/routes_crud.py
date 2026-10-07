@@ -5,6 +5,7 @@ from core.managers.league_manager import LeagueManager
 from core.managers.game_manager import GameManager
 # from core.managers.team_manager import TeamManager
 from core.managers import session_manager
+from core.managers.timer_manager import current_timers_for_game
 from core.managers.camera_manager import CameraManager
 from core.managers.game_camera_manager import GameCameraManager
 # from core.models.base_team import get_team_model
@@ -807,38 +808,8 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
         try:
             # Zmiana meczu = jedna transakcja menedżera sesji (otwiera sesję w przygotowaniu, jeśli nie ma otwartej).
-            # Okres, sezon meczu i seria karnych wynikają z aktywnego meczu, więc nic więcej nie trzeba zapisywać.
-            # Zegary (Settings.current_timers) czyszczone są do czasu przeniesienia ich w ostatnim kroku E1.
-            Settings.clear_timers()
+            # Okres, sezon meczu, seria karnych i dane zegara wynikają z aktywnego meczu, więc nic więcej nie trzeba zapisywać.
             session_manager.activate_game(game_id)
-
-            # Aktualny okres wyliczony ze statusów: trwający → pierwszy nierozpoczęty → ostatni zakończony.
-            selected_period = session_manager.select_period_for_game(game_id)
-
-            if selected_period:
-                # Przywróć referencję timera dla każdego stanu okresu —
-                # clear_timers() skasowało ją, a index potrzebuje prawidłowego
-                # timer_id. Dla PENDING: stan 'running' (timer działa w pluginie,
-                # WebSocket zsynchronizuje elapsed_time). Dla pozostałych: 'idle'.
-                if selected_period.main_timer_name:
-                    timer_state = (
-                        'running'
-                        if selected_period.status == Period.STATUS_PENDING
-                        else 'idle'
-                    )
-                    Settings.update_main_timer({
-                        'timer_id':       selected_period.main_timer_name,
-                        'timer_type':     'independent',
-                        'initial_time':   selected_period.initial_time,
-                        'limit':          selected_period.limit,
-                        'pause_at_limit': selected_period.pause_at_limit,
-                        'state':          timer_state,
-                        'metadata': {
-                            'description': selected_period.description,
-                            'period':      selected_period.period_order,
-                            'timer_class': 'main',
-                        },
-                    })
 
             flash(f'Wybrano mecz do transmisji: {game.home_team.short_name} vs {game.away_team.short_name}', 'success')
 
@@ -1833,8 +1804,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                         'away': Team.query.get(game.away_team_id),
                     }
 
-            current_timers = settings.get_current_timers()
-            main_timer = current_timers.get('main')
+            main_timer = current_timers_for_game()['main']
 
         # Fallback: brak current_period_id, ale mecz jest wybrany.
         # Stosuje tę samą logikę co select_game_for_broadcast:
@@ -2391,19 +2361,13 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                     return redirect(url_for('game_period_choice'))
 
         try:
-            # WAŻNA KOLEJNOŚĆ:
-            # 1. Najpierw usuń poprzedni timer (jeśli istnieje)
-            timer_manager = get_timer_manager()
-            current_timers = Settings.get_current_timers()
-            previous_main = current_timers.get('main')
-            if previous_main and previous_main.get('timer_id'):
-                timer_manager.remove_timer(previous_main['timer_id'])
-
-            # 2. Uruchom okres — create_timer wysyła wiadomość do pluginu; potwierdzenie z pluginu znajduje okres
+            # WAŻNA KOLEJNOŚĆ (zegary): PeriodManager.start_period() najpierw usuwa z pluginu zegary główne pozostałych
+            # okresów meczu (dawniej robiła to ta trasa przez Settings.current_timers.main), potem tworzy zegar tego okresu.
+            # 1. Uruchom okres — create_timer wysyła wiadomość do pluginu; potwierdzenie z pluginu znajduje okres
             #    po identyfikatorze zegara (main_timer_name), więc nie ma wyścigu z "aktualnym okresem".
             period_manager.start_period(period_id)
 
-            # 3. Jeśli to pierwsza część, ustaw mecz jako trwający
+            # 2. Jeśli to pierwsza część, ustaw mecz jako trwający
             if period.period_order == 1:
                 game.set_live()
                 db.session.commit()
@@ -2427,7 +2391,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         """
         Main UI dashboard with Jinja2 rendering
     
-        Renders timers server-side from Settings.current_timers
+        Renders timers server-side from current_timers_for_game() (Period + GameTimer)
         JavaScript only handles WebSocket updates, not timer creation
         """
         Settings = _get_settings()
@@ -2459,7 +2423,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 }
     
             # Get current timers from Settings
-            current_timers = settings.get_current_timers()
+            current_timers = current_timers_for_game()
             main_timer = current_timers.get('main')
             home_penalties = current_timers.get('penalties')['home']
             away_penalties = current_timers.get('penalties')['away']
