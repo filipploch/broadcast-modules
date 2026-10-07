@@ -77,6 +77,13 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO = False
 
 
+class TestingConfig(Config):
+    """Testy automatyczne (tests/modules): baza z BM_TEST_DATABASE_URL, bez startu menedżerów i połączenia z HUB-em."""
+    TESTING = True
+    DEBUG = False
+    SQLALCHEMY_DATABASE_URI = os.environ.get('BM_TEST_DATABASE_URL') or 'sqlite:///:memory:'
+
+
 class ProductionConfig(Config):
     DEBUG = False
 
@@ -84,5 +91,6 @@ class ProductionConfig(Config):
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
+    'testing': TestingConfig,
     'default': DevelopmentConfig
 }

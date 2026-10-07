@@ -81,7 +81,8 @@ def create_app(config_name='default'):
             from app.managers import initialize_all_managers
             initialize_all_managers(app)
 
-    threading.Thread(target=init_managers, daemon=True).start()
+    if not app.config.get('TESTING'):
+        threading.Thread(target=init_managers, daemon=True).start()
 
     app.logger.info("✅ Application initialized")
     return app
