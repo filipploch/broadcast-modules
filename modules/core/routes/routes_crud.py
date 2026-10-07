@@ -1784,7 +1784,6 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
         Settings = _get_settings()
         settings = Settings.get_settings()
-        current_period_id = session_manager.current_period_id()
         Period = _get_period()
         Game = _get_game()
         Team = _get_team()
@@ -1794,61 +1793,19 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         teams  = {'home': None, 'away': None}
         main_timer = None
 
-        if current_period_id:
-            period = Period.query.filter_by(id=current_period_id).first()
-            if period:
-                game = Game.query.get(period.game_id)
-                if game:
-                    teams = {
-                        'home': Team.query.get(game.home_team_id),
-                        'away': Team.query.get(game.away_team_id),
-                    }
-
-            main_timer = current_timers_for_game()['main']
-
-        # Fallback: brak current_period_id, ale mecz jest wybrany.
-        # Stosuje tę samą logikę co select_game_for_broadcast:
-        # aktywny → pierwszy nierozpoczęty → ostatni zakończony.
-        if game is None and session_manager.current_game_id():
-            game = Game.query.get(session_manager.current_game_id())
+        # Strona sterowania zegarem pokazuje okres do sterowania: trwający → pierwszy nierozpoczęty → ostatni zakończony
+        # (session_manager.select_period_for_control). W przerwie to następna część z przyciskiem Start.
+        game_id = session_manager.current_game_id()
+        if game_id:
+            game = Game.query.get(game_id)
             if game:
                 teams = {
                     'home': Team.query.get(game.home_team_id),
                     'away': Team.query.get(game.away_team_id),
                 }
-                _all_periods = Period.query.filter_by(
-                    game_id=game.id
-                ).order_by(Period.period_order).all()
-
-                period = next(
-                    (p for p in _all_periods if p.status == Period.STATUS_PENDING), None
-                )
-                if not period:
-                    period = next(
-                        (p for p in _all_periods if p.status == Period.STATUS_NOT_STARTED), None
-                    )
-                if not period:
-                    _finished = [p for p in _all_periods if p.status == Period.STATUS_FINISHED]
-                    if _finished:
-                        period = _finished[-1]
-
-                if period and period.main_timer_name and main_timer is None:
-                    _timer_state = (
-                        'running' if period.status == Period.STATUS_PENDING else 'idle'
-                    )
-                    main_timer = {
-                        'timer_id':       period.main_timer_name,
-                        'timer_type':     'independent',
-                        'initial_time':   period.initial_time,
-                        'limit':          period.limit,
-                        'pause_at_limit': period.pause_at_limit,
-                        'state':          _timer_state,
-                        'metadata': {
-                            'description': period.description,
-                            'period':      period.period_order,
-                            'timer_class': 'main',
-                        },
-                    }
+                period = session_manager.select_period_for_control(game_id)
+                if period is not None:
+                    main_timer = current_timers_for_game(game_id, period=period)['main']
 
         is_shootout_active = session_manager.current_shootout() is not None
 
@@ -2255,6 +2212,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                         hub_client.broadcast_to_class('game_data_receiver',
                                                       'scoreboard_data', payload)
 
+            # Start części (np. 2. połowy) przełącza interfejs: panel /ui przeładowuje się na nowy okres
+            # (tak jak po starcie z okna wyboru części).
+            from core.extensions import socketio
+            socketio.emit('reload_ui_dashboard')
             return jsonify({'ok': True})
         except Exception as e:
             logger.error(f"API error starting period {period_id}: {e}")

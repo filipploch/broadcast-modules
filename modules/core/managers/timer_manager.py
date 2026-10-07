@@ -12,7 +12,7 @@ def _get_gametimer():
 
 
 
-def current_timers_for_game(game_id=None):
+def current_timers_for_game(game_id=None, period=None):
     """Dane zegarów dla panelu i timer-recovery.js (dawniej Settings.current_timers) — wyliczane, nie przechowywane.
 
     Zegar główny: z bieżącego okresu meczu (session_manager.select_period_for_game: identyfikator, limit, opis) i
@@ -20,6 +20,7 @@ def current_timers_for_game(game_id=None):
     Kary: lista ZAWSZE pusta, jak dotąd — GameTimer nie zwraca parent_id, więc odtwarzanie kar z baz daje zegary-widma;
     wyświetlanie kar w panelu idzie dotychczasowym źródłem (reload_penalty_timers). Odtwarzanie kar po awarii: E2.
     Zwraca {'main': {...} | None, 'penalties': {'home': [], 'away': []}} — ten sam kształt co dawny JSON.
+    period: okres, którego zegar ma opisać (domyślnie bieżący okres panelu); strona '/' podaje okres do sterowania.
     """
     from core.managers import session_manager
     empty = {'main': None, 'penalties': {'home': [], 'away': []}}
@@ -27,7 +28,8 @@ def current_timers_for_game(game_id=None):
         game_id = session_manager.current_game_id()
     if game_id is None:
         return empty
-    period = session_manager.select_period_for_game(game_id)
+    if period is None:
+        period = session_manager.select_period_for_game(game_id)
     if period is None or not period.main_timer_name:
         return empty
     GameTimer = _get_gametimer()

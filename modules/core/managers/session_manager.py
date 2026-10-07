@@ -85,6 +85,24 @@ def select_period_for_game(game_id):
     return None
 
 
+def select_period_for_control(game_id):
+    """Okres wyświetlany na stronie sterowania zegarem ('/' = index): trwający → pierwszy nierozpoczęty → ostatni zakończony.
+
+    To dawna reguła wyboru meczu i zapasowa reguła strony '/', używana wtedy, gdy wskaźnik okresu był pusty (np. po zakończeniu okresu
+    przyciskiem 'Zakończ' w oknie wyboru części). W przerwie strona pokazuje więc NASTĘPNĄ, nierozpoczętą część z przyciskiem
+    'Start'. Panel (select_period_for_game) w przerwie zostaje na ostatnio zakończonym okresie.
+    """
+    from core.models.base_period import get_period_model
+    Period = get_period_model()
+    periods = Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
+    for status in (Period.STATUS_PENDING, Period.STATUS_NOT_STARTED):
+        for p in periods:
+            if p.status == status:
+                return p
+    finished = [p for p in periods if p.status == Period.STATUS_FINISHED]
+    return finished[-1] if finished else None
+
+
 def current_period():
     gid = current_game_id()
     return select_period_for_game(gid) if gid else None

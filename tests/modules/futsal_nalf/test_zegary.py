@@ -209,6 +209,61 @@ class PrzerwaMiedzyOkresami(ZegaryBase):
         self.assertEqual(GameEvent.query.filter_by(period_id=p2.id).count(), 0)
         self.assertEqual(GameEvent.query.count(), 0)
 
+    # -- strona sterowania zegarem ('/') w przerwie pokazuje NASTEPNA czesc z przyciskiem Start (regresja: UI nie przechodzilo dalej)
+    def _page_vars(self, url):
+        import re, json
+        html = self.client.get(url).get_data(as_text=True)
+        per = re.search(r"var period\s*=\s*(\{.*?\});", html, re.S)
+        mt = re.search(r"var main_timer\s*=\s*(\{.*?\});", html, re.S)
+        can = re.search(r"var period_can_start\s*=\s*(\w+)", html)
+        return (json.loads(per.group(1)) if per else None, json.loads(mt.group(1)) if mt else None, can.group(1) if can else None)
+
+    def test_strona_sterowania_w_przerwie_pokazuje_nastepna_czesc_po_zakonczeniu_przyciskiem_w_oknie_wyboru(self):
+        p1, p2 = self.periods(self.ids['g1'])
+        self.sm.activate_game(self.ids['g1'])
+        self.client.post(f"/api/period/{p1.id}/start")
+        self.client.get(f"/period/{p1.id}/finish")                      # 'Zakoncz' w oknie wyboru czesci (trasa formularza)
+        period, main_timer, _ = self._page_vars('/')
+        self.assertEqual((period['id'], period['status']), (p2.id, p2.STATUS_NOT_STARTED))
+        self.assertEqual((main_timer['timer_id'], main_timer['state']), (p2.main_timer_name, 'idle'))
+        self.assertEqual(main_timer['initial_time'], p2.initial_time)
+
+    def test_strona_sterowania_w_przerwie_pokazuje_nastepna_czesc_po_zakonczeniu_dwuklikiem(self):
+        p1, p2 = self.periods(self.ids['g1'])
+        self.sm.activate_game(self.ids['g1'])
+        self.client.post(f"/api/period/{p1.id}/start")
+        self.assertTrue(self.client.post(f"/api/period/{p1.id}/finish").get_json()['ok'])
+        period, main_timer, _ = self._page_vars('/')
+        self.assertEqual(period['id'], p2.id)
+        self.assertEqual(main_timer['timer_id'], p2.main_timer_name)
+        ui_period, _, _ = self._page_vars('/ui')                        # panel /ui w przerwie zostaje na zakonczonej czesci
+        self.assertEqual((ui_period['id'], ui_period['status']), (p1.id, p1.STATUS_FINISHED))
+
+    def test_start_drugiej_czesci_ze_strony_sterowania_przelacza_ui(self):
+        """Operator w przerwie widzi na '/' czesc 2 z przyciskiem Start; start (API) przelacza obie strony na czesc 2."""
+        p1, p2 = self.periods(self.ids['g1'])
+        self.sm.activate_game(self.ids['g1'])
+        self.client.post(f"/api/period/{p1.id}/start")
+        self.client.get(f"/period/{p1.id}/finish")
+        period, _, _ = self._page_vars('/')
+        self.assertEqual(period['id'], p2.id)                           # id czesci do wystartowania bierze window.period.id
+        self.assertTrue(self.client.post(f"/api/period/{period['id']}/start").get_json()['ok'])
+        for url in ('/', '/ui'):
+            per, mt, _ = self._page_vars(url)
+            self.assertEqual((per['id'], per['status']), (p2.id, p2.STATUS_PENDING), url)
+
+    def test_strona_sterowania_przed_startem_i_w_trakcie_bez_zmian(self):
+        p1, p2 = self.periods(self.ids['g1'])
+        self.sm.activate_game(self.ids['g1'])
+        self.assertEqual(self._page_vars('/')[0]['id'], p1.id)          # przed startem: czesc 1
+        self.client.post(f"/api/period/{p1.id}/start")
+        self.assertEqual(self._page_vars('/')[0]['id'], p1.id)          # w trakcie: trwajaca
+        self.pm.start_period if False else None
+        self.client.get(f"/period/{p1.id}/finish")
+        self.client.post(f"/api/period/{p2.id}/start")
+        self.client.get(f"/period/{p2.id}/finish")
+        self.assertEqual(self._page_vars('/')[0]['id'], p2.id)          # po zakonczeniu wszystkich: ostatnia
+
     def test_po_starcie_nastepnego_okresu_wskazuje_trwajacy(self):
         p1, p2 = self._do_przerwy()
         self.pm.start_period(p2.id)
