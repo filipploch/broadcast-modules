@@ -75,7 +75,34 @@ class WyliczoneZegary(ZegaryBase):
             gt.state, gt.elapsed_time_ms = state, elapsed
             db.session.commit()
             main = current_timers_for_game()['main']
-            self.assertEqual((main['state'], main['elapsed_time']), (state, elapsed))
+            self.assertEqual(main['state'], state)
+            # okres niezakonczony: elapsed_time = 0 (timer-recovery.js uzyje initial_time okresu, nie surowego uplywu)
+            self.assertEqual(main['elapsed_time'], 0)
+            self.assertEqual(main['initial_time'], p1.initial_time)
+        self.pm.set_period_status(p1.id, p1.STATUS_FINISHED)                  # zakonczony: zamrozony upyw jak dotad
+        gt = GameTimer.query.filter_by(plugin_timer_id=p1.main_timer_name).first()
+        gt.state, gt.elapsed_time_ms = 'paused', 754000
+        db.session.commit()
+        main = current_timers_for_game()['main']
+        self.assertEqual((main['state'], main['elapsed_time']), ('paused', 754000))
+
+    def test_okres_z_przesunieciem_nie_gubi_initial_time(self):
+        """Regresja z proby z pluginem: w 2. polowie (initial_time 20 min) surowy upyw w 'elapsed_time' kasowalby przesuniecie."""
+        from core.managers.timer_manager import current_timers_for_game
+        from core.extensions import db
+        from app.models import GameTimer
+        self.sm.activate_game(self.ids['g1'])
+        p1, p2 = self.periods(self.ids['g1'])
+        p2.initial_time = 1200000
+        db.session.commit()
+        self.pm.set_period_status(p1.id, p1.STATUS_FINISHED)
+        self.pm.set_period_status(p2.id, p2.STATUS_PENDING)
+        db.session.add(GameTimer(game_id=p2.game_id, period_id=p2.id, timer_type='main', plugin_timer_id=p2.main_timer_name,
+                                 state='running', elapsed_time_ms=3000))
+        db.session.commit()
+        main = current_timers_for_game()['main']
+        recovery_initial = main.get('elapsed_time') or main.get('initial_time') or 0       # dokladnie jak timer-recovery.js
+        self.assertEqual(recovery_initial, 1200000)
 
     def test_api_zwraca_ten_sam_ksztalt_co_dawny_json(self):
         self.sm.activate_game(self.ids['g1'])

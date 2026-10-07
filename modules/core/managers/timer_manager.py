@@ -16,7 +16,7 @@ def current_timers_for_game(game_id=None):
     """Dane zegarów dla panelu i timer-recovery.js (dawniej Settings.current_timers) — wyliczane, nie przechowywane.
 
     Zegar główny: z bieżącego okresu meczu (session_manager.select_period_for_game: identyfikator, limit, opis) i
-    jego rekordu GameTimer (stan, upływ). Bez rekordu: 'running' dla okresu trwającego, w przeciwnym razie 'idle'.
+    jego rekordu GameTimer (stan; upływ tylko dla okresu zakończonego). Bez rekordu: 'running' dla okresu trwającego, w przeciwnym razie 'idle'.
     Kary: lista ZAWSZE pusta, jak dotąd — GameTimer nie zwraca parent_id, więc odtwarzanie kar z baz daje zegary-widma;
     wyświetlanie kar w panelu idzie dotychczasowym źródłem (reload_penalty_timers). Odtwarzanie kar po awarii: E2.
     Zwraca {'main': {...} | None, 'penalties': {'home': [], 'away': []}} — ten sam kształt co dawny JSON.
@@ -35,10 +35,13 @@ def current_timers_for_game(game_id=None):
     from core.models.base_period import get_period_model
     Period = get_period_model()
     if gt is not None and gt.state in GameTimer.VALID_STATES and gt.state != GameTimer.STATE_REMOVED:
-        state, elapsed = gt.state, gt.elapsed_time_ms or 0
+        state = gt.state
     else:
         state = 'running' if period.status == Period.STATUS_PENDING else 'idle'
-        elapsed = 0
+    # 'elapsed_time' jak dotąd: 0 dla okresu niezakończonego (timer-recovery.js tworzy wtedy zegar z initial_time okresu),
+    # a dla zakończonego — zamrożony upływ (robiło to zakończenie okresu). Surowy upływ trwającego okresu NIE może tu trafić:
+    # skrypt odtwarzania traktuje elapsed_time jako initial_time zegara i gubiłby przesunięcie okresu (np. 20 min w 2. połowie).
+    elapsed = (gt.elapsed_time_ms or 0) if (gt is not None and period.status == Period.STATUS_FINISHED) else 0
     return {
         'main': {
             'timer_id':       period.main_timer_name,
