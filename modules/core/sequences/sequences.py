@@ -1,4 +1,5 @@
 # core/sequences/sequences.py
+from core.managers import session_manager
 from core.sequences.steps import (
     obs_mute, obs_switch_scene, overlay_show, overlay_play_animation,
     set_replay_file, restart_replay, set_replay_start_time,
@@ -164,8 +165,8 @@ def _get_current_cameras():
     from core.models.base_settings import get_settings_model
     Settings = get_settings_model()
     settings = Settings.get_settings()
-    if settings and settings.current_game_id:
-        return GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
+    if settings and session_manager.current_game_id():
+        return GameCameraManager().get_cameras_dict_for_game(session_manager.current_game_id())
     return None
 
 

@@ -450,15 +450,41 @@ class TimerManager:
             self._handle_main_timer_created(timer_id, initial_time, limit,
                                             state, metadata)
 
+    def _period_for_timer(self, timer_id):
+        """Okres, do którego należy zegar — wyłącznie z identyfikatora zegara (nie z 'aktualnego okresu').
+
+        Zegar główny: okres o main_timer_name == timer_id. Zegar kary: okres zegara nadrzędnego (parent_id z rejestru
+        zegarów, a po restarcie modułu z istniejącego rekordu GameTimer). Zwraca obiekt okresu albo None.
+        """
+        from core.models.base_period import get_period_model
+        Period = get_period_model()
+        period = Period.query.filter_by(main_timer_name=timer_id).first()
+        if period is not None:
+            return period
+        with self.lock:
+            parent_id = (self.timers.get(timer_id) or {}).get('parent_id')
+        if parent_id:
+            period = Period.query.filter_by(main_timer_name=parent_id).first()
+            if period is not None:
+                return period
+        gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
+        if gt is not None and gt.period_id is not None:
+            return Period.query.get(gt.period_id)
+        return None
+
     def _handle_main_timer_created(self, timer_id, initial_time, limit,
                                    state, metadata):
         from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
         from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
-        settings  = Settings.get_settings()
-        game_id   = settings.current_game_id
-        period_id = settings.current_period_id
+        period = self._period_for_timer(timer_id)
+        if period is None:
+            current_app.logger.warning(
+                f'Potwierdzenie zegara {timer_id} nie pasuje do żadnego okresu (main_timer_name) — pomijam')
+            return
+        game_id   = period.game_id
+        period_id = period.id
 
         # Zapisz/zaktualizuj rekord w game_timers
         gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
@@ -518,11 +544,13 @@ class TimerManager:
     def _handle_penalty_timer_created(self, timer_id, limit, state, metadata):
         from core.models.base_game_timer import get_game_timer_model
         GameTimer = get_game_timer_model()
-        from core.models.base_settings import get_settings_model
-        Settings = get_settings_model()
-        settings  = Settings.get_settings()
-        game_id   = settings.current_game_id
-        period_id = settings.current_period_id
+        period = self._period_for_timer(timer_id)
+        if period is None:
+            current_app.logger.warning(
+                f'Potwierdzenie zegara kary {timer_id} nie pasuje do żadnego okresu (zegar nadrzędny) — pomijam')
+            return
+        game_id   = period.game_id
+        period_id = period.id
 
         team         = 'home' if timer_id.startswith('penalty_home') else 'away'
         main_gt      = self.get_active_main_timer(period_id)

@@ -8,6 +8,7 @@ Każdy moduł rejestruje te trasy przez:
     from core.routes import broadcast as core_broadcast
     core_broadcast.register_routes(app)
 """
+from core.managers import session_manager
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.managers.season_manager import SeasonManager
@@ -169,8 +170,8 @@ def register_routes(app, exclude=None):
     
         # Get period details if exists
         period_data = None
-        if settings.current_period_id:
-            period = Period.query.get(settings.current_period_id)
+        if session_manager.current_period_id():
+            period = Period.query.get(session_manager.current_period_id())
             if period:
                 period_data = {
                     "id": period.id,
@@ -185,8 +186,8 @@ def register_routes(app, exclude=None):
     
         # Get game details if exists
         game_data = None
-        if settings.current_game_id:
-            game = Game.query.get(settings.current_game_id)
+        if session_manager.current_game_id():
+            game = Game.query.get(session_manager.current_game_id())
             if game:
                 game_data = {
                     "id": game.id,
@@ -198,13 +199,14 @@ def register_routes(app, exclude=None):
             is_reversed = True
     
         return jsonify({
-            "current_season_id": settings.current_season_id,
-            "current_game_id": settings.current_game_id,
-            "current_period_id": settings.current_period_id,
+            "current_season_id": session_manager.current_season_id(),
+            "current_game_id": session_manager.current_game_id(),
+            "current_period_id": session_manager.current_period_id(),
             "current_timers": current_timers,
             "period": period_data,
             "game": game_data,
-            "is_reversed": is_reversed
+            "is_reversed": is_reversed,
+            "session": session_manager.describe()
         })
 
     @app.route('/api/stadium-camera-positions')

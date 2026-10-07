@@ -4,6 +4,7 @@ from core.managers.season_manager import SeasonManager
 from core.managers.league_manager import LeagueManager
 from core.managers.game_manager import GameManager
 # from core.managers.team_manager import TeamManager
+from core.managers import session_manager
 from core.managers.camera_manager import CameraManager
 from core.managers.game_camera_manager import GameCameraManager
 # from core.models.base_team import get_team_model
@@ -805,44 +806,16 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             return redirect(url_for('edit_game', game_id=game_id))
 
         try:
-            # Resetuj stan poprzedniego meczu przed ustawieniem nowego.
-            # Kolejność ma znaczenie: najpierw czyścimy pola zależne (period, timers, shootout),
-            # potem ustawiamy nowy game_id — unikamy chwilowej niespójności w settings.
-            Settings.set_current_period(None)
+            # Zmiana meczu = jedna transakcja menedżera sesji (otwiera sesję w przygotowaniu, jeśli nie ma otwartej).
+            # Okres, sezon meczu i seria karnych wynikają z aktywnego meczu, więc nic więcej nie trzeba zapisywać.
+            # Zegary (Settings.current_timers) czyszczone są do czasu przeniesienia ich w ostatnim kroku E1.
             Settings.clear_timers()
-            Settings.set_current_shootout(None)
-            Settings.set_current_game(game_id)
+            session_manager.activate_game(game_id)
 
-            # Wybrany mecz może należeć do innej ligi/sezonu niż dotychczas
-            # transmitowany — dopasuj current_season_id, żeby np. pasek zakładek
-            # ligowych (zakładka MECZE) pokazywał ligi właściwego sezonu.
-            league = league_manager.get_league_by_id(game.league_id)
-            if league:
-                Settings.set_current_season(league.season_id)
-
-            # Auto-dobór okresu: aktywny → pierwszy nierozpoczęty → ostatni zakończony
-            periods = Period.query.filter_by(game_id=game_id).order_by(Period.period_order).all()
-            selected_period = None
-
-            for p in periods:
-                if p.status == Period.STATUS_PENDING:
-                    selected_period = p
-                    break
-
-            if not selected_period:
-                for p in periods:
-                    if p.status == Period.STATUS_NOT_STARTED:
-                        selected_period = p
-                        break
-
-            if not selected_period:
-                finished = [p for p in periods if p.status == Period.STATUS_FINISHED]
-                if finished:
-                    selected_period = finished[-1]
+            # Aktualny okres wyliczony ze statusów: trwający → pierwszy nierozpoczęty → ostatni zakończony.
+            selected_period = session_manager.select_period_for_game(game_id)
 
             if selected_period:
-                Settings.set_current_period(selected_period.id)
-
                 # Przywróć referencję timera dla każdego stanu okresu —
                 # clear_timers() skasowało ją, a index potrzebuje prawidłowego
                 # timer_id. Dla PENDING: stan 'running' (timer działa w pluginie,
@@ -1840,7 +1813,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
         Settings = _get_settings()
         settings = Settings.get_settings()
-        current_period_id = settings.current_period_id
+        current_period_id = session_manager.current_period_id()
         Period = _get_period()
         Game = _get_game()
         Team = _get_team()
@@ -1866,8 +1839,8 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         # Fallback: brak current_period_id, ale mecz jest wybrany.
         # Stosuje tę samą logikę co select_game_for_broadcast:
         # aktywny → pierwszy nierozpoczęty → ostatni zakończony.
-        if game is None and settings.current_game_id:
-            game = Game.query.get(settings.current_game_id)
+        if game is None and session_manager.current_game_id():
+            game = Game.query.get(session_manager.current_game_id())
             if game:
                 teams = {
                     'home': Team.query.get(game.home_team_id),
@@ -1907,7 +1880,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                         },
                     }
 
-        is_shootout_active = bool(getattr(settings, 'current_shootout_id', None))
+        is_shootout_active = session_manager.current_shootout() is not None
 
         period_can_start = False
         if period and period.status == Period.STATUS_NOT_STARTED:
@@ -1939,10 +1912,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         Settings = _get_settings()
         Game = _get_game()
         settings = Settings.get_settings()
-        if not settings.current_game_id:
+        if not session_manager.current_game_id():
             return jsonify({'error': 'Brak wybranego meczu'}), 400
 
-        game = Game.query.get(settings.current_game_id)
+        game = Game.query.get(session_manager.current_game_id())
         if not game:
             return jsonify({'error': 'Nie znaleziono meczu'}), 404
 
@@ -2078,8 +2051,8 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         periods  = []
         penalty  = None
 
-        if settings.current_game_id:
-            game = Game.query.get(settings.current_game_id)
+        if session_manager.current_game_id():
+            game = Game.query.get(session_manager.current_game_id())
             if game:
                 periods = Period.query.filter_by(game_id=game.id).all()
                 penalty = game.shootout
@@ -2114,10 +2087,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 'cameras':      [],
             }
 
-            if settings.current_game_id:
+            if session_manager.current_game_id():
                 Game = _get_game()
                 Period = _get_period()
-                game = Game.query.get(settings.current_game_id)
+                game = Game.query.get(session_manager.current_game_id())
                 if game:
                     periods  = Period.query.filter_by(game_id=game.id).all()
                     shootout = game.shootout
@@ -2155,7 +2128,6 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             shootout_manager = ShootoutManager()
             if game.shootout:
                 shootout_manager.delete_shootout(game.shootout.id)
-            Settings.set_current_shootout(None)
             flash('Zresetowano konkurs rzutów karnych', 'success')
         except Exception as e:
             logger.error(f"Error resetting shootout: {e}")
@@ -2206,8 +2178,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 # Odśwież obiekt żeby załadować nową relację
                 db.session.refresh(game)
 
-            # Ustaw jako aktywny konkurs w Settings
-            Settings.set_current_shootout(game.shootout.id)
+            # Konkurs jest 'aktualny' dopóki istnieje rekord Shootout aktywnego meczu (session_manager.current_shootout)
 
             flash('Rozpoczęto konkurs rzutów karnych.', 'success')
             from core.extensions import socketio
@@ -2241,9 +2212,6 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         try:
             # Finish the period
             period_manager.finish_period(period_id)
-        
-            # Clear actual period in settings
-            Settings.set_current_period(None)
         
             # Check if this was the last period
             game = Game.query.get(period.game_id)
@@ -2288,9 +2256,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 return jsonify({'error': 'Poprzedni okres nie został zakończony'}), 400
 
         try:
-            # current_period_id musi być ustawiony przed start_period
-            # (on_timer_created odczytuje go przy potwierdzeniu z pluginu)
-            Settings.set_current_period(period_id)
+            # Okres wynika ze statusów; potwierdzenie zegara z pluginu znajduje okres po main_timer_name
             period_manager.start_period(period_id)
 
             # Jeśli wynik meczu jest null, inicjalizuj do 0 i rozgłoś
@@ -2433,15 +2399,11 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             if previous_main and previous_main.get('timer_id'):
                 timer_manager.remove_timer(previous_main['timer_id'])
 
-            # 2. Ustaw current_period_id w Settings PRZED start_period,
-            #    żeby on_timer_created() mógł odczytać prawidłowy period_id
-            #    przy potwierdzeniu z pluginu (unikamy race condition: period_id=None).
-            Settings.set_current_period(period_id)
-
-            # 3. Teraz uruchom okres — create_timer wysyła wiadomość do pluginu
+            # 2. Uruchom okres — create_timer wysyła wiadomość do pluginu; potwierdzenie z pluginu znajduje okres
+            #    po identyfikatorze zegara (main_timer_name), więc nie ma wyścigu z "aktualnym okresem".
             period_manager.start_period(period_id)
 
-            # 4. Jeśli to pierwsza część, ustaw mecz jako trwający
+            # 3. Jeśli to pierwsza część, ustaw mecz jako trwający
             if period.period_order == 1:
                 game.set_live()
                 db.session.commit()
@@ -2474,12 +2436,20 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         Period = _get_period()
     
         settings = Settings.get_settings()
-        current_period_id = settings.current_period_id
-    
+        current_period_id = session_manager.current_period_id()
+
+        # Brak otwartej sesji / aktywnego meczu to poprawny stan: wróć do wyboru meczu
+        if session_manager.current_game_id() is None:
+            flash('Brak wybranego meczu do transmisji. Wybierz mecz.', 'info')
+            return redirect(url_for('game_setup'))
+
+        # Konkurs rzutów karnych trwa (istnieje rekord Shootout aktywnego meczu) → widok konkursu
+        shootout_active = session_manager.current_shootout() is not None
+
         # Get current period
         period = None
         game = None
-        if current_period_id:
+        if current_period_id and not shootout_active:
             period = Period.query.filter_by(id=current_period_id).first()
             if period:
                 game = Game.query.get(period.game_id)
@@ -2507,7 +2477,7 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                                 teams=teams,
                                 penalties=penalties)
         else:
-            current_game_id = settings.current_game_id
+            current_game_id = session_manager.current_game_id()
         
             game = Game.query.get(current_game_id)
             teams = {

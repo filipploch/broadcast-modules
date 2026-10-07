@@ -179,11 +179,10 @@ def init_database():
 
             settings = Settings(
                 id=1,
-                current_season_id=1,
-                current_game_id=1
+                browse_season_id=1
             )
             db.session.add(settings)
-            print(f"      ✅ Default settings (Season: {season.name}, Game: {game.id})")
+            print(f"      ✅ Default settings (Season: {season.name})")
 
             # ========== COMMIT ALL ==========
             print("\n💾 Step 4: Committing to database...")

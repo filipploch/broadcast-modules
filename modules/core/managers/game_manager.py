@@ -1,4 +1,5 @@
 """Match Manager - CRUD operations for games (games)"""
+from core.managers import session_manager
 from core.extensions import db
 from core.managers import get_hub_client
 from datetime import datetime
@@ -531,7 +532,7 @@ class GameManager:
         from core.managers import get_timer_manager
 
         settings        = Settings.get_settings()
-        current_game_id = settings.current_game_id
+        current_game_id = session_manager.current_game_id()
         current_game    = _get_game().query.get(current_game_id).to_dict()
         msg_from        = msg.get('from', '')
 

@@ -40,15 +40,39 @@ class WyborMeczu(unittest.TestCase):
             self.assertIsNone(harness.settings(APP).current_game_id)
 
     def test_nowy_sezon_bez_meczow_nie_zmienia_transmisji(self):
-        """Blad 'nowy sezon bez meczow': utworzenie sezonu nie moze wplywac na aktualny mecz ani jego sezon."""
+        """Blad 'nowy sezon bez meczow': utworzenie sezonu nie moze wplywac na sesje, aktualny mecz ani jego sezon,
+        ani na domyslny sezon przegladania list (sezon wybrany do przegladania to osobne ustawienie interfejsu)."""
+        import core.managers.session_manager as sm
         self._prepare_and_select(self.ids["g1"])
         with APP.app_context():
             from app.models import Season
             from core.extensions import db
+            session_id = sm.current_session_id()
             db.session.add(Season(number=31, name="Wiosna 2026")); db.session.commit()
             s = harness.settings(APP)
-            self.assertEqual(s.current_game_id, self.ids["g1"])
-            self.assertEqual(s.current_season_id, self.ids["season"])
+            self.assertEqual(sm.current_session_id(), session_id)
+            self.assertEqual(sm.current_game_id(), self.ids["g1"])
+            self.assertEqual(sm.current_season_id(), self.ids["season"])      # sezon meczu wynika z meczu
+            self.assertIsNone(s.browse_season_id)                              # nikt nie wybral sezonu do przegladania
+            self.assertEqual(s.current_season_id, self.ids["season"])         # domyslny widok list: sezon meczu, nie pusty nowy sezon
+
+    def test_sezon_przegladania_to_osobne_ustawienie(self):
+        import core.managers.session_manager as sm
+        with APP.app_context():
+            from app.models import Season
+            from core.extensions import db
+            s2 = Season(number=31, name="Wiosna 2026"); db.session.add(s2); db.session.commit()
+            s = harness.settings(APP)
+            s.set_browse_season(s2.id)                                         # operator wybiera sezon do przegladania
+            self.assertEqual(harness.settings(APP).current_season_id, s2.id)
+            self.assertIsNone(sm.current_game_id()); self.assertIsNone(sm.get_open_session())   # transmisji to nie dotyczy
+            self._select_in_ctx(self.ids["g1"])
+            self.assertEqual(sm.current_season_id(), self.ids["season"])      # sezon meczu z meczu
+            self.assertEqual(harness.settings(APP).current_season_id, s2.id)  # wybor meczu nie zmienia sezonu przegladania
+
+    def _select_in_ctx(self, game_id):
+        self.client.get(f"/games/{game_id}/prepare-broadcast")
+        self.client.get(f"/games/{game_id}/select-broadcast")
 
 
 if __name__ == "__main__":
