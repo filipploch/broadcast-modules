@@ -267,8 +267,8 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	cmd.Env = append(os.Environ(), config.Env...)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PLUGIN_ID=%s", pluginID))
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = processOutput
+	cmd.Stderr = processOutput
 
 	// Start process
 	if err := cmd.Start(); err != nil {

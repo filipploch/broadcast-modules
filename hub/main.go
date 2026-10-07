@@ -6,9 +6,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
+	logFile, logErr := setupLogFile(logsDir(), time.Now())
+	if logErr != nil {
+		log.Printf("⚠️  Nie można otworzyć pliku logu (logi tylko w konsoli): %v", logErr)
+	} else {
+		defer logFile.Close()
+		log.Printf("📝 Log HUB-a: %s", logFile.Name())
+	}
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("🚀 BROADCAST HUB STARTING")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
