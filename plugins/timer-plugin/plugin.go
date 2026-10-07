@@ -3,6 +3,8 @@ package timer
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -16,6 +18,10 @@ type Plugin struct {
 	config    PluginConfig
 	running   bool
 	mu        sync.Mutex
+
+	// Wynik wczytania pliku stanu przy starcie (none / restored / stale / corrupt) i liczba odtworzonych zegarów.
+	stateStatus   LoadStatus
+	restoredCount int
 }
 
 // PluginConfig holds plugin configuration
@@ -29,6 +35,10 @@ type PluginConfig struct {
 	UpdateInterval    int    `json:"update_interval_ms"`
 	BroadcastInterval int    `json:"broadcast_interval_ms"`
 	HeartbeatInterval int    `json:"heartbeat_interval_ms"`
+
+	// Zapis stanu zegarów (E2a). StateDir domyślnie: folder `state` obok pliku wykonywalnego pluginu.
+	StateDir         string `json:"state_dir"`
+	StateMaxAgeHours int    `json:"state_max_age_hours"` // 0 = domyślnie 12 godzin
 }
 
 // NewPlugin creates a new Timer plugin
@@ -61,6 +71,10 @@ func (p *Plugin) Start() error {
 		go p.startHeartbeat()
 	}
 
+	// Odtworzenie zegarów z dysku (po awarii pluginu) i włączenie zapisu stanu; po połączeniu z HUB-em,
+	// bo zdarzenia z czasu przestoju (limit, koniec kary) są od razu wysyłane.
+	p.restoreState()
+
 	// Start message handler
 	p.running = true
 	go p.handleMessages()
@@ -74,6 +88,7 @@ func (p *Plugin) Stop() error {
 	log.Printf("⏹️  Stopping Timer Plugin: %s", p.ID)
 
 	p.running = false
+	p.manager.Close()
 
 	// Close Hub connection
 	if p.hubClient != nil {
@@ -200,7 +215,14 @@ func (p *Plugin) buildTimerConfig(msg *Message, timerID string) TimerConfig {
 		config.UpdateInterval = time.Duration(p.config.UpdateInterval) * time.Millisecond
 	}
 
-	config.Callbacks = &Callbacks{
+	config.Callbacks = p.timerCallbacks()
+
+	return config
+}
+
+// timerCallbacks zwraca wspólne wywołania zwrotne zegarów (tworzonych poleceniem i odtwarzanych z dysku).
+func (p *Plugin) timerCallbacks() *Callbacks {
+	return &Callbacks{
 		OnStart: func(_ time.Duration, id string) {
 			p.broadcastTimerStarted(id, id, 0)
 		},
@@ -214,8 +236,47 @@ func (p *Plugin) buildTimerConfig(msg *Message, timerID string) TimerConfig {
 			p.broadcastLimitReached(id, id, 0)
 		},
 	}
+}
 
-	return config
+// statePath zwraca ścieżkę pliku stanu: state_dir z konfiguracji albo `state` obok pliku wykonywalnego
+// (nie zależy od bieżącego folderu).
+func (p *Plugin) statePath() string {
+	dir := p.config.StateDir
+	if dir == "" {
+		if exe, err := os.Executable(); err == nil {
+			dir = filepath.Join(filepath.Dir(exe), "state")
+		} else {
+			dir = "state"
+		}
+	}
+	return filepath.Join(dir, "timers.json")
+}
+
+// restoreState wczytuje plik stanu, odtwarza zegary (z doliczonym przestojem) i włącza zapis przy zmianach.
+func (p *Plugin) restoreState() {
+	path := p.statePath()
+	maxAge := DefaultStateMaxAge
+	if p.config.StateMaxAgeHours > 0 {
+		maxAge = time.Duration(p.config.StateMaxAgeHours) * time.Hour
+	}
+
+	now := time.Now()
+	file, status, err := LoadStateFile(path, now, maxAge)
+	p.stateStatus = status
+	switch status {
+	case LoadRestored:
+		ids := p.manager.Restore(file, now, p.timerCallbacks())
+		p.restoredCount = len(ids)
+		log.Printf("♻️  Odtworzono %d zegarów z %s (zapis z %s)", len(ids), path, time.UnixMilli(file.SavedAtMs).Format("2006-01-02 15:04:05"))
+	case LoadStale:
+		log.Printf("⚠️  Plik stanu zegarów %s jest starszy niż %v: ignoruję, start bez zegarów", path, maxAge)
+	case LoadCorrupt:
+		log.Printf("❌ Plik stanu zegarów %s jest uszkodzony (%v): odłożony na bok, start bez zegarów", path, err)
+	default:
+		log.Printf("ℹ️  Brak pliku stanu zegarów (%s): start bez zegarów", path)
+	}
+
+	p.manager.EnablePersistence(path)
 }
 
 func (p *Plugin) handleCreateTimer(msg *Message) {
@@ -527,6 +588,9 @@ func (p *Plugin) handleGetAllTimers(msg *Message) {
 		Payload: map[string]interface{}{
 			"timers": states,
 			"count":  len(states),
+			// Skąd pochodzi stan po starcie pluginu: none / restored / stale / corrupt (moduł zapisuje to w logu przy awaryjnym odtwarzaniu)
+			"state_status":   string(p.stateStatus),
+			"restored_count": p.restoredCount,
 		},
 	})
 }
