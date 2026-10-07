@@ -36,6 +36,7 @@ from app.models.referee import Referee
 from app.models.game_player import GamePlayer
 from app.models.game_timer import GameTimer
 from app.models.settings import Settings
+from app.models.broadcast_session import BroadcastSession, SessionGame
 from app.models.shootout import Shootout
 from app.models.shootout_kick import ShootoutKick
 from app.models.banner import Banner
