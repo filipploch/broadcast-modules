@@ -30,3 +30,4 @@
 config.h
 **/docs/**
 plugins/recorder-plugin/samba/
+wp-local/
