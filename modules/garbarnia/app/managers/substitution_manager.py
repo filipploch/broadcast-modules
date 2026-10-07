@@ -26,6 +26,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Zmiana w przerwie dostaje czas początku następnej części + 1 s (pierwsza minuta części w grafice: ceil(sekundy / 60))
+BREAK_SUBSTITUTION_OFFSET_MS = 1000
+
+
 class SubstitutionItem(NamedTuple):
     """Para zawodników do zmiany wielokrotnej."""
     player_in_id:  int
@@ -51,8 +55,10 @@ def _resolve_live_period(game_id: int, game_time_ms: int):
     """Okres i czas gry dla zmiany wykonanej "na żywo" (bez jawnie podanego okresu). Zwraca (period_id, game_time_ms).
 
     - okres trwa: ten okres, czas jak dotąd (przysłany z panelu);
-    - przerwa (jest okres zakończony, żaden nie trwa): NASTĘPNY nierozpoczęty okres i game_time_ms = jego initial_time,
-      czyli zmiana dokonana na początku części po przerwie (czas z panelu jest w przerwie pomijany);
+    - przerwa (jest okres zakończony, żaden nie trwa): NASTĘPNY nierozpoczęty okres i game_time_ms = jego initial_time
+      + 1000 ms, czyli zmiana dokonana w pierwszej minucie części po przerwie (czas z panelu jest w przerwie pomijany).
+      Grafika liczy minutę jako ceil(sekundy / 60), więc dokładnie initial_time dałby minutę ostatnią poprzedniej części
+      (45' zamiast 46'); +1 s jest wewnątrz pierwszej minuty (decyzja właściciela; wzór w grafice bez zmian);
     - wszystkie okresy zakończone: czytelny błąd (mecz zakończony); wyjątek: trwa konkurs rzutów karnych tego meczu,
       wtedy zmiana jest zapisana bez okresu (jak opisuje make_substitution);
     - przed rozpoczęciem pierwszego okresu (nic jeszcze nie ruszyło): bez zmian — okres wskazany jak dotąd
@@ -66,7 +72,7 @@ def _resolve_live_period(game_id: int, game_time_ms: int):
     if any(p.status == Period.STATUS_FINISHED for p in periods):
         upcoming = next((p for p in periods if p.status == Period.STATUS_NOT_STARTED), None)
         if upcoming is not None:
-            return upcoming.id, upcoming.initial_time
+            return upcoming.id, upcoming.initial_time + BREAK_SUBSTITUTION_OFFSET_MS
         from app.models.game import Game
         game = Game.query.get(game_id)
         if game is not None and game.shootout is not None:
@@ -92,8 +98,8 @@ class SubstitutionManager:
         """
         Wykonaj pojedynczą zmianę zawodnika (nowa, jednoelementowa grupa).
 
-        Okres i czas wyznacza _resolve_live_period: w przerwie zmiana trafia do NASTĘPNEGO okresu z czasem równym jego
-        initial_time. Gdy None (rzuty karne) — zmiana zapisana bez powiązania z okresem.
+        Okres i czas wyznacza _resolve_live_period: w przerwie zmiana trafia do NASTĘPNEGO okresu z czasem jego
+        initial_time + 1 s. Gdy None (rzuty karne) — zmiana zapisana bez powiązania z okresem.
 
         Raises:
             ValueError przy błędach walidacji
@@ -221,7 +227,7 @@ class SubstitutionManager:
         Numer grupy jest przekazywany z zewnątrz — obliczony raz przed pętlą.
 
         period_id: jawnie podany okres (mechanizm "wstecznie") albo None — wtedy okres i czas wyznacza
-        _resolve_live_period (zwykły, żywy flow; w przerwie następny okres i jego initial_time).
+        _resolve_live_period (zwykły, żywy flow; w przerwie następny okres i jego initial_time + 1 s).
         """
         if period_id is None:
             period_id, game_time_ms = _resolve_live_period(game_id, game_time_ms)

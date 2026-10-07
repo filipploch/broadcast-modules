@@ -1,6 +1,6 @@
 """E1: zmiany zawodnikow w garbarni "na zywo" — okres i czas wyznacza _resolve_live_period (substitution_manager):
   - okres trwa: ten okres, czas z panelu;
-  - przerwa: NASTEPNY nierozpoczety okres, game_time_ms = jego initial_time (czas z panelu pomijany);
+  - przerwa: NASTEPNY nierozpoczety okres, game_time_ms = jego initial_time + 1000 ms (czas z panelu pomijany);
   - mecz zakonczony: czytelny blad (wyjatek: trwa konkurs rzutow karnych -> zmiana bez okresu);
   - przed rozpoczeciem 1. okresu: bez zmian (okres 1, czas z panelu).
 Regula bieznego okresu dla panelu (session_manager.select_period_for_game) pozostaje: trwajacy -> ostatnio zakonczony -> pierwszy.
@@ -14,6 +14,7 @@ APP, TMP = harness.boot("garbarnia")
 REPO = pathlib.Path(__file__).resolve().parents[3]
 
 HALF = 2700000          # polowa 45 min w testach (jak mecz IV ligi)
+BREAK_OFFSET = 1000     # zmiana w przerwie: initial_time nastepnej czesci + 1 s
 
 
 def overlay_header_time(game_time_ms, period_end_s):
@@ -76,11 +77,11 @@ class ZmianyNaZywo(unittest.TestCase):
         self.assertEqual((s.period_id, s.game_time_ms), (self.p1.id, 600000))
 
     # -- przerwa
-    def test_przerwa_zmiana_w_nastepnym_okresie_z_jego_initial_time(self):
+    def test_przerwa_zmiana_w_nastepnym_okresie_z_jego_initial_time_plus_1s(self):
         self.pm.start_period(self.p1.id)
         self.pm.finish_period(self.p1.id)
         s = self._sub(game_time_ms=2650000)                   # czas z panelu (np. 44:10) jest w przerwie pomijany
-        self.assertEqual((s.period_id, s.game_time_ms), (self.p2.id, HALF))
+        self.assertEqual((s.period_id, s.game_time_ms), (self.p2.id, HALF + BREAK_OFFSET))
 
     def test_przerwa_nie_zmienia_roli_okresu_nastepnego_ani_jego_statusu(self):
         from app.models import Period
@@ -96,7 +97,7 @@ class ZmianyNaZywo(unittest.TestCase):
         subs = self.mgr.make_substitution_group(
             self.ids['g1'], self.team,
             [SubstitutionItem(self.players[2], self.players[0]), SubstitutionItem(self.players[3], self.players[1])], 777)
-        self.assertEqual({(x.period_id, x.game_time_ms) for x in subs}, {(self.p2.id, HALF)})
+        self.assertEqual({(x.period_id, x.game_time_ms) for x in subs}, {(self.p2.id, HALF + BREAK_OFFSET)})
 
     # -- po przerwie, w drugim okresie: jak dotad
     def test_drugi_okres_trwa_czas_z_panelu(self):
@@ -162,11 +163,11 @@ class ZmianyNaZywo(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         return calls[0].args[2]
 
-    def test_show_substitution_w_przerwie_wysyla_czas_poczatku_nastepnej_czesci(self):
+    def test_show_substitution_w_przerwie_wysyla_czas_wewnatrz_pierwszej_minuty_nastepnej_czesci(self):
         self.pm.start_period(self.p1.id)
         self.pm.finish_period(self.p1.id)
         payload = self._show(self._sub(game_time_ms=2650000))
-        self.assertEqual(payload['game_time_ms'], HALF)
+        self.assertEqual(payload['game_time_ms'], HALF + BREAK_OFFSET)
         self.assertEqual(payload['period_end_s'], 2 * HALF // 1000)     # koniec NASTEPNEJ czesci (do formatowania doliczonego)
 
     def test_zrodlo_formatowania_w_grafice_zgodne_z_portem_w_tescie(self):
@@ -177,22 +178,27 @@ class ZmianyNaZywo(unittest.TestCase):
         self.assertIn("var totalSec   = Math.floor((data.game_time_ms || 0) / 1000);", sub)
         self.assertIn("formatGameTimeDisplay(totalSec, periodEndS)", sub)
 
-    def test_grafika_pokazuje_dzis_dla_czasu_rownego_initial_time_ostatnia_minute_poprzedniej_czesci(self):
-        """UDOKUMENTOWANE OGRANICZENIE: grafika liczy minute jako ceil(sekundy / 60), wiec czas rowny dokladnie 45:00 to '45\\'', a nie '46\\'' (pierwsza minuta
-        drugiej polowy)."""
-        self.pm.start_period(self.p1.id)
-        self.pm.finish_period(self.p1.id)
-        payload = self._show(self._sub())
-        self.assertEqual(overlay_header_time(payload['game_time_ms'], payload['period_end_s']), "45'")
-
-    @unittest.expectedFailure
-    def test_grafika_pokazuje_pierwsza_minute_czesci_po_przerwie(self):
-        """Oczekiwanie wlasciciela: zmiana w przerwie ma byc pokazana jako dokonana w pierwszej minucie czesci po przerwie ('46\\'').
-        Przy game_time_ms rownym dokladnie initial_time grafika pokazuje '45\\'' — wymaga decyzji (patrz raport)."""
+    def test_grafika_pokazuje_pierwsza_minute_czesci_po_przerwie_2x45(self):
+        """Wlasciciel: zmiana w przerwie = pierwsza minuta czesci po przerwie (46' przy 2x45)."""
         self.pm.start_period(self.p1.id)
         self.pm.finish_period(self.p1.id)
         payload = self._show(self._sub())
         self.assertEqual(overlay_header_time(payload['game_time_ms'], payload['period_end_s']), "46'")
+
+    def test_grafika_pokazuje_pierwsza_minute_czesci_po_przerwie_2x40(self):
+        self.p1.limit = self.p2.limit = 2400000
+        self.p2.initial_time = 2400000
+        self.db.session.commit()
+        self.pm.start_period(self.p1.id)
+        self.pm.finish_period(self.p1.id)
+        payload = self._show(self._sub())
+        self.assertEqual(overlay_header_time(payload['game_time_ms'], payload['period_end_s']), "41'")
+
+    def test_znane_ograniczenie_wzoru_grafiki_na_granicy_minuty(self):
+        """Do E2 (bez naprawiania): ceil(sekundy/60) na DOKLADNEJ granicy minuty daje minute o 1 mniejsza niz konwencja pilkarska
+        (45:00 -> 45', a pierwsza minuta 2. polowy to 46'). Dlatego czas zmiany w przerwie to initial_time + 1 s."""
+        self.assertEqual(overlay_header_time(HALF, 2 * HALF // 1000), "45'")
+        self.assertEqual(overlay_header_time(HALF + 1000, 2 * HALF // 1000), "46'")
 
 
 if __name__ == "__main__":
