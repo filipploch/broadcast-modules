@@ -904,12 +904,17 @@ def _module_content_handler(content_type, data):
             )
             for p in pairs
         ]
-        SubstitutionManager().make_substitution_group(
-            game_id=game.id,
-            team_id=team_id,
-            items=items,
-            game_time_ms=game_time_ms,
-        )
+        try:
+            SubstitutionManager().make_substitution_group(
+                game_id=game.id,
+                team_id=team_id,
+                items=items,
+                game_time_ms=game_time_ms,
+            )
+        except ValueError as e:
+            # np. mecz zakończony (brak okresu), nieprawidłowa para zawodników — pokaż operatorowi czytelny komunikat
+            from core.extensions import socketio as _sio
+            _sio.emit('error', {'message': str(e)})
         # Po zatwierdzeniu wróć do widoku listy zmian z pełnymi danymi
         return _module_content_handler('substitutions', {})
 
