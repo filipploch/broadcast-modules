@@ -39,6 +39,7 @@
                 <a href="{{ url_for('list_games') }}" {% if request.endpoint == 'list_games' %}class="active"{% endif %}>Mecze</a>
                 <a href="{{ url_for('list_teams') }}">Zespoły</a> -->
             </nav>
+            <div id="session-bar" class="session-bar session-none"></div>
         </div>
     </header>
     <main class="container">
@@ -63,6 +64,7 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/session.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui/modal.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui/logos.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui/scraper-cascade.js') }}"></script>

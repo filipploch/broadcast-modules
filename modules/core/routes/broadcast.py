@@ -209,6 +209,43 @@ def register_routes(app, exclude=None):
             "session": session_manager.describe()
         })
 
+    # ── Sesja transmisji (E1) ────────────────────────────────────────────────
+    def _session_response(action, **kwargs):
+        from core.extensions import socketio
+        try:
+            getattr(session_manager, action)(**kwargs)
+        except session_manager.SessionError as e:
+            return jsonify({'success': False, 'error': str(e), 'session': session_manager.describe()}), 409
+        state = session_manager.describe()
+        socketio.emit('session_state', state)
+        return jsonify({'success': True, 'session': state})
+
+    @app.route('/api/session')
+    def api_session():
+        """Stan sesji transmisji: {'open': False} albo status, aktywny mecz, okres, stan OBS i kolejka."""
+        return jsonify(session_manager.describe())
+
+    @app.route('/api/session/open', methods=['POST'])
+    def api_session_open():
+        return _session_response('open_session')
+
+    @app.route('/api/session/go-on-air', methods=['POST'])
+    def api_session_go_on_air():
+        """Ręczne przejście 'na antenie' (uzupełnienie automatu: start streamu/nagrywania w OBS)."""
+        if session_manager.get_open_session() is None:
+            return jsonify({'success': False, 'error': 'Brak otwartej sesji transmisji.', 'session': {'open': False}}), 409
+        return _session_response('go_on_air')
+
+    @app.route('/api/session/next-game', methods=['POST'])
+    def api_session_next_game():
+        """Jawna akcja 'następny mecz': kończy aktywny mecz i aktywuje następny z kolejki; stream trwa dalej."""
+        return _session_response('next_game')
+
+    @app.route('/api/session/close', methods=['POST'])
+    def api_session_close():
+        """Zamknięcie sesji — wyłącznie ręczne; nigdy automatycznie po zatrzymaniu streamu."""
+        return _session_response('close_session')
+
     @app.route('/api/stadium-camera-positions')
     def api_stadium_camera_positions():
         stadium_id = request.args.get('stadium_id', type=int)
