@@ -1,6 +1,7 @@
 """E1: start czesci (np. 2. polowy) przez API przeladowuje UI (zdarzenie reload_ui_dashboard), jak start z okna wyboru czesci.
 
 Sprawdzamy wywolanie socketio.emit (klient testowy Flask-SocketIO nie odbiera rozgloszen emitowanych spoza handlera)."""
+import re
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -64,6 +65,27 @@ class ReloadUiPoStarcieCzesci(unittest.TestCase):
     def test_start_z_okna_wyboru_czesci_nadal_przeladowuje_ui(self):
         r, n = self._post('get', f"/period/{self.p1.id}/start")
         self.assertEqual(n, 1)
+
+    def _ui_period(self):
+        import json
+        html = self.client.get('/ui').get_data(as_text=True)
+        return json.loads(re.search(r"var period\s*=\s*(\{.*?\});", html, re.S).group(1))
+
+    def test_start_drugiej_czesci_przyciskiem_z_listy_przeladowuje_ui_i_ui_pokazuje_czesc_2(self):
+        self.client.get(f"/period/{self.p1.id}/start")
+        self.client.get(f"/period/{self.p1.id}/finish")
+        self.assertEqual(self._ui_period()['id'], self.p1.id)                 # przerwa: panel na zakonczonej czesci 1
+        r, n = self._post('get', f"/period/{self.p2.id}/start")
+        self.assertEqual(n, 1)
+        self.assertEqual(self._ui_period()['id'], self.p2.id)
+
+    def test_start_drugiej_czesci_dwuklikiem_w_panelu_ui_pokazuje_czesc_2(self):
+        self.client.post(f"/api/period/{self.p1.id}/start")
+        self.client.post(f"/api/period/{self.p1.id}/finish")
+        r, n = self._post('post', f"/api/period/{self.p2.id}/start")
+        self.assertEqual(n, 1)
+        ui = self._ui_period()
+        self.assertEqual((ui['id'], ui['status']), (self.p2.id, self.p2.STATUS_PENDING))
 
 
 if __name__ == "__main__":
