@@ -1,5 +1,8 @@
 import os
 
+# Folder tego modułu (modules/<moduł>/): ścieżki plików modułu liczone od położenia plików, nie od bieżącego folderu startu
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
@@ -29,8 +32,8 @@ class Config:
 
     HUB_EXECUTABLE = '../../hub/hub.exe'
     PLUGINS_DIR = '../../plugins'
-    SEQUENCES_PATH = f'{MODULE_NAME}/app/sequences/sequences.py'
-    REPLAY_EXPORT_DIR = f'{MODULE_NAME}/app/data'
+    SEQUENCES_PATH = os.path.join(_MODULE_DIR, 'app', 'sequences', 'sequences.py')
+    REPLAY_EXPORT_DIR = os.path.join(_MODULE_DIR, 'app', 'data')
     OVERLAY_DIR = '../../hub/overlays/futsal-nalf'
     HUB_CSS_DIR = 'hub/overlays/futsal-nalf/css/'
     HUB_JS_DIR = 'hub/overlays/futsal-nalf/js/'
