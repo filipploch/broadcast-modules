@@ -61,6 +61,11 @@ func (p *Plugin) Start() error {
 		return fmt.Errorf("failed to connect to Hub: %w", err)
 	}
 
+	// running musi być ustawione ZANIM ruszą pętle w tle: pętla heartbeatu kończy się, gdy running == false.
+	// (Wcześniej ustawiano je na końcu Start(); po dodaniu odtwarzania stanu pętla zdążała się skończyć i plugin
+	// nie wysyłał heartbeatów, więc HUB co minutę uznawał go za martwego i restartował.)
+	p.running = true
+
 	// Start auto-reconnect if enabled
 	if p.config.AutoReconnect {
 		go p.hubClient.AutoReconnect(p.config.MaxReconnects)
@@ -76,7 +81,6 @@ func (p *Plugin) Start() error {
 	p.restoreState()
 
 	// Start message handler
-	p.running = true
 	go p.handleMessages()
 
 	log.Printf("✅ Timer Plugin started successfully")
