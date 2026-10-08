@@ -124,20 +124,22 @@ def register_events(socketio):
             game_obj = Game.query.get(settings.current_game_id) if settings.current_game_id else None
             game = game_obj.to_dict() if game_obj else None
 
-            shootout_obj = Shootout.query.get(settings.current_shootout_id) if settings.current_shootout_id else None
-            _data = {
-                'home_team_short_name': game['home_team_short_name'],
-                'away_team_short_name': game['away_team_short_name'],
-            }
-            if shootout_obj:
-                shootout = shootout_obj.to_dict() if shootout_obj else None
-                _data.update({
-                    'home_team_shootouts': shootout['home_team_shootouts'],
-                    'away_team_shootouts': shootout['away_team_shootouts'],
-                    'score_string': shootout['score_string']
-                })
+            # Bez otwartej sesji (albo bez meczu) nie ma czego pokazać: pomijamy, zamiast sięgać do pustego meczu.
+            if game:
+                shootout_obj = Shootout.query.get(settings.current_shootout_id) if settings.current_shootout_id else None
+                _data = {
+                    'home_team_short_name': game['home_team_short_name'],
+                    'away_team_short_name': game['away_team_short_name'],
+                }
+                if shootout_obj:
+                    shootout = shootout_obj.to_dict() if shootout_obj else None
+                    _data.update({
+                        'home_team_shootouts': shootout['home_team_shootouts'],
+                        'away_team_shootouts': shootout['away_team_shootouts'],
+                        'score_string': shootout['score_string']
+                    })
 
-            socketio.emit('shootout_initial_data', _data)
+                socketio.emit('shootout_initial_data', _data)
 
 
 
