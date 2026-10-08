@@ -109,6 +109,31 @@ class NiedostarczonePolecenia(unittest.TestCase):
             'connected_plugins': {'timer-plugin': {'is_active': True}}, 'plugin_health': {}}})
         self.assertFalse(self._events('plugins_states')[-1]['timer-plugin']['unreachable'])
 
+    def test_prosba_o_restart_idzie_do_hub_a_tylko_dla_obslugiwanych_pluginow(self):
+        self.assertTrue(self.hub.request_plugin_restart('timer-plugin'))
+        sent = self._sent()[-1]
+        self.assertEqual((sent['to'], sent['type'], sent['payload']), ('hub', 'restart_plugin', {'plugin_id': 'timer-plugin'}))
+        n = len(self._sent())
+        self.assertFalse(self.hub.request_plugin_restart('stream-overlay'))
+        self.assertFalse(self.hub.request_plugin_restart('cokolwiek'))
+        self.assertEqual(len(self._sent()), n)
+
+    def test_restart_dziala_mimo_ze_plugin_jest_uznany_za_rozlaczony(self):
+        # polecenie restartu idzie do HUB-a, nie do pluginu, wiec nie podlega odrzucaniu dla rozlaczonych
+        self.hub.plugin_online['timer-plugin'] = False
+        self.assertTrue(self.hub.request_plugin_restart('timer-plugin'))
+
+    def test_wynik_restartu_trafia_do_panelu(self):
+        import core.extensions as ext
+        emitted = []
+        orig = ext.socketio.emit
+        ext.socketio.emit = lambda name, data=None, **kw: emitted.append((name, data))
+        try:
+            self.hub._handle_message({'type': 'plugin_restart_result', 'payload': {'plugin_id': 'timer-plugin', 'ok': False, 'error': 'x'}})
+        finally:
+            ext.socketio.emit = orig
+        self.assertEqual(emitted, [('plugin_restart_result', {'plugin_id': 'timer-plugin', 'ok': False, 'error': 'x'})])
+
 
 if __name__ == "__main__":
     unittest.main()

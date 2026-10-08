@@ -373,6 +373,17 @@ class HubClient:
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
 
+        elif msg_type == 'plugin_restart_result':
+            self._log("info" if payload.get('ok') else "error",
+                      f"Restart pluginu {payload.get('plugin_id')}: "
+                      f"{'ok' if payload.get('ok') else payload.get('error')}")
+            from core.extensions import socketio
+            socketio.emit('plugin_restart_result', {
+                'plugin_id': payload.get('plugin_id'),
+                'ok':        bool(payload.get('ok')),
+                'error':     payload.get('error'),
+            })
+
         elif msg_type == 'plugin_online':
             # Legacy alias — kept for backward compatibility with older hub builds.
             plugin_id = payload.get('plugin_id')
@@ -714,6 +725,22 @@ class HubClient:
     # =========================================================================
     # POLECENIA DO NIEOBECNYCH PLUGINÓW
     # =========================================================================
+
+    # Pluginy, które operator może uruchomić ponownie z panelu (nakładkę odświeża OBS: etap E2d).
+    RESTARTABLE_PLUGINS = ('timer-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'recorder-plugin')
+
+    def request_plugin_restart(self, plugin_id):
+        """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""
+        if plugin_id not in self.RESTARTABLE_PLUGINS:
+            self._log("warning", f"Restart pluginu {plugin_id} nie jest obsługiwany")
+            return False
+        self._log("info", f"Prośba o restart pluginu {plugin_id}")
+        return self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'restart_plugin',
+            'payload': {'plugin_id': plugin_id}
+        })
 
     def _sync_plugin_online(self, health_payload):
         """Aktualizuje wiedzę o obecności pluginów z okresowego raportu HUB-a (health_status).

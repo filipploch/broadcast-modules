@@ -263,6 +263,17 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    @socketio.on('restart_plugin')
+    def handle_restart_plugin(data):
+        # Przycisk "Uruchom ponownie" przy ikonie pluginu w panelu (index.js).
+        from core.managers import get_hub_client
+        plugin_id = (data or {}).get('plugin_id')
+        hub_client = get_hub_client()
+        if not hub_client or not hub_client.request_plugin_restart(plugin_id):
+            socketio.emit('plugin_restart_result', {
+                'plugin_id': plugin_id, 'ok': False,
+                'error': 'Restart nie został wysłany (brak połączenia z HUB-em albo plugin nieobsługiwany)'})
+
     @socketio.on('wake_recorder_plugin')
     def handle_wake_recorder_plugin():
         # Double-click on #recorder-plugin-icon while it's greyed out (not
