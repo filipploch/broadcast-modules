@@ -5,6 +5,8 @@ import threading
 import time
 from datetime import datetime
 
+from core.managers.context import ContextFilter, current_context
+
 
 def _none_to_empty_string(value):
     """Recursively replace Python None (JSON null) with "" inside a payload.
@@ -42,6 +44,13 @@ class HubClient:
         self.required_plugins = []
         # Co modul wie o obecnosci pluginow w HUB-ie: {plugin_id: True/False}. Brak wpisu = nie wiadomo.
         self.plugin_online = {}
+        # Pluginy, które od startu modułu dały znak życia (połączenie, wiadomość, raport HUB-a): tylko dla nich
+        # brak odpowiedzi jest awarią i pokazuje pasek w panelu. Plugin, który nie odpowiada od startu, ma tylko szarą ikonę.
+        self.plugin_seen = set()
+        # Czy OBS działa (stan z obs-ws-plugin): przy zamkniętym OBS brak nakładki jest normalny i nie daje paska.
+        self.obs_running = False
+        # Filtr kontekstu (E2c): odrzuca komunikaty pluginów ze starej sesji, meczu albo innego modułu.
+        self.context_filter = ContextFilter()
         self._should_reconnect = True  # Kontrola reconnect
         self._reconnect_delay = 3  # Sekundy między próbami
 
@@ -239,22 +248,44 @@ class HubClient:
             'payload': payload
         })
 
-    def send_to_plugin(self, plugin_id, msg_type, payload):
+    def current_context(self, period_id=None):
+        """Kontekst transmisji (moduł, sesja, mecz, okres) wyliczony z bazy; None, gdy nie da się go ustalić."""
+        if not self.app:
+            return None
+        try:
+            with self.app.app_context():
+                from flask import current_app
+                return current_context(current_app.config.get('MODULE_NAME'), period_id)
+        except Exception as e:
+            self._log("error", f"Nie udało się ustalić kontekstu transmisji: {e}")
+            return None
+
+    def send_to_plugin(self, plugin_id, msg_type, payload, context=None):
         """Send message to specific plugin.
+
+        Do polecenia dołączany jest kontekst transmisji (moduł, sesja, mecz, okres); plugin odsyła go w odpowiedziach.
 
         Zwraca False także wtedy, gdy moduł wie, że plugin jest rozłączony: polecenie
         nie jest wtedy wysyłane (HUB i tak nie miałby adresata), a w panelu pojawia się komunikat.
         """
         if self.plugin_online.get(plugin_id) is False:
-            self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
-            self._report_unreachable(plugin_id, msg_type)
+            if self._should_flag_unreachable(plugin_id):
+                self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
+                self._report_unreachable(plugin_id, msg_type)
+            else:
+                # Plugin nie odpowiada od startu albo to nakładka przy zamkniętym OBS: bez paska, tylko stan na ikonie.
+                self._log("debug", f"Plugin {plugin_id} niedostępny — polecenie {msg_type} pominięte")
             return False
-        return self.send({
+        message = {
             'from': self.module_id,
             'to': plugin_id,
             'type': msg_type,
             'payload': payload
-        })
+        }
+        context = context or self.current_context()
+        if context:
+            message['context'] = context
+        return self.send(message)
 
     # ✅ NEW: Subscribe to classes
     def subscribe_to_classes(self, classes):
@@ -315,6 +346,12 @@ class HubClient:
             msg_from = msg.get('from', 'unknown')
             # self._log("debug", f"Received: {msg_type} from {msg_from}")
 
+            # Spóźnione komunikaty ze starej sesji / meczu / innego modułu są odrzucane (E2c).
+            # Komunikaty od samego HUB-a oraz bez kontekstu przechodzą.
+            if msg.get('context') and msg_from != 'hub' and not self._context_accepted(msg):
+                return
+            self._note_plugin_alive(msg)
+
             # Handle message in app context
             if self.app:
                 with self.app.app_context():
@@ -338,6 +375,17 @@ class HubClient:
 
         except Exception as e:
             self._log("error", f"Error processing message: {e}", exc_info=True)
+
+    def _context_accepted(self, msg):
+        """Porównuje kontekst komunikatu z bieżącym; przy niezgodności zapisuje jeden wpis w logu z powodem."""
+        expected = self.current_context()
+        if expected is None:
+            return True        # nie da się ustalić kontekstu: nie gubimy komunikatu
+        ok, reason = self.context_filter.check(msg.get('context'), expected)
+        if not ok:
+            self.context_filter.rejected += 1
+            self._log("warning", f"Odrzucono komunikat {msg.get('type')} od {msg.get('from')}: {reason}")
+        return ok
 
     def _handle_message(self, msg):
         """Handle specific message types"""
@@ -365,6 +413,10 @@ class HubClient:
 
             if plugin_id:
                 self.plugin_online[plugin_id] = (status == 'connected')
+                if status == 'connected':
+                    self.plugin_seen.add(plugin_id)
+                elif plugin_id == 'obs-ws-plugin':
+                    self.obs_running = False
 
             if status == 'connected':
                 self._report_reachable(plugin_id)
@@ -495,6 +547,7 @@ class HubClient:
         if msg_from == 'obs-ws-plugin':
             from core.managers import get_obs_ws_manager
             obs_ws_manager = get_obs_ws_manager()
+            self._note_obs(msg_type, payload)
             if msg_type == 'obs_status':
                 obs_ws_manager.on_obs_status(msg)
             elif msg_type == 'obs_response':
@@ -748,6 +801,33 @@ class HubClient:
             'payload': {'plugin_id': plugin_id}
         })
 
+    def _should_flag_unreachable(self, plugin_id):
+        """Czy brak pluginu ma dać pasek w panelu.
+
+        - nakładka (stream-overlay): tylko gdy OBS działa (według obs-ws-plugin), bo przy zamkniętym OBS jej brak jest normalny;
+        - pozostałe pluginy wymagane: tylko jeśli od startu modułu dały znak życia (plugin działał i przestał odpowiadać);
+          plugin, który nie odpowiada od startu, pokazuje tylko szarą ikonę."""
+        if plugin_id == 'stream-overlay':
+            return self.obs_running
+        return plugin_id in self.required_plugins and plugin_id in self.plugin_seen
+
+    def _note_plugin_alive(self, msg):
+        """Wiadomość od pluginu dowodzi, że jest połączony (np. nakładka prosząca o dane zaraz po starcie OBS):
+        nie odrzucamy wtedy odpowiedzi do niego tylko dlatego, że HUB nie zgłosił jego połączenia."""
+        sender = msg.get('from')
+        if not sender or sender in ('hub', 'main-module', self.module_id):
+            return
+        self.plugin_seen.add(sender)
+        if self.plugin_online.get(sender) is not True:
+            self.plugin_online[sender] = True
+            self._report_reachable(sender)
+
+    def _note_obs(self, msg_type, payload):
+        if msg_type == 'obs_status':
+            self.obs_running = (payload.get('status') == 'connected')
+        elif msg_type in ('obs_response', 'obs_event', 'obs_scene_map'):
+            self.obs_running = True       # odpowiedź albo zdarzenie z OBS dowodzi, że działa
+
     def _sync_plugin_online(self, health_payload):
         """Aktualizuje wiedzę o obecności pluginów z okresowego raportu HUB-a (health_status).
 
@@ -755,7 +835,12 @@ class HubClient:
         connected = (health_payload or {}).get('connected_plugins') or {}
         for plugin_id in set(self.required_plugins) | set(self.plugin_online):
             info = connected.get(plugin_id)
-            self.plugin_online[plugin_id] = bool(info and info.get('is_active', False))
+            alive = bool(info and info.get('is_active', False))
+            self.plugin_online[plugin_id] = alive
+            if alive:
+                self.plugin_seen.add(plugin_id)
+        if not self.plugin_online.get('obs-ws-plugin', True):
+            self.obs_running = False
 
     def _on_undelivered(self, payload):
         """HUB nie miał adresata dla polecenia (plugin nie odpowiada)."""
@@ -764,8 +849,11 @@ class HubClient:
         if not plugin_id:
             return
         self.plugin_online[plugin_id] = False
-        self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
-        self._report_unreachable(plugin_id, command)
+        if self._should_flag_unreachable(plugin_id):
+            self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
+            self._report_unreachable(plugin_id, command)
+        else:
+            self._log("debug", f"Polecenie {command} nie dotarło do pluginu {plugin_id} (bez paska w panelu)")
         if plugin_id == 'timer-plugin':
             try:
                 from core.managers import get_timer_manager

@@ -730,6 +730,7 @@ func (h *Hub) notifyUndelivered(msg *Message) {
 		"command":         msg.Type,
 		"command_payload": msg.Payload,
 	})
+	report.Context = msg.Context
 	data, err := report.ToJSON()
 	if err != nil {
 		return

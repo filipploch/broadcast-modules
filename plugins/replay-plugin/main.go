@@ -112,6 +112,26 @@ type Plugin struct {
 	// Jeśli kanał pełny i worker zajęty — żądanie jest droppowane.
 	seekFwdCh  chan struct{}
 	seekBackCh chan struct{}
+
+	// replayCtx: kontekst transmisji z polecenia replay_play bieżącej (lub ostatniej) powtórki. Niosą go zdarzenia tej powtórki
+	// (replay_started, replay_paused, replay_done...), więc późne zdarzenie po zmianie meczu zostanie odrzucone przez moduł.
+	replayCtx map[string]interface{}
+}
+
+func (p *Plugin) setReplayContext(ctx map[string]interface{}) {
+	p.mu.Lock()
+	p.replayCtx = ctx
+	p.mu.Unlock()
+}
+
+// sendReplay wysyła wiadomość z kontekstem bieżącej powtórki (bez kontekstu, gdy moduł go nie przysłał).
+func (p *Plugin) sendReplay(m *Message) {
+	if m.Context == nil {
+		p.mu.Lock()
+		m.Context = p.replayCtx
+		p.mu.Unlock()
+	}
+	p.hub.Send(m)
 }
 
 func NewPlugin(cfg Config) *Plugin {
@@ -272,7 +292,7 @@ func (p *Plugin) finishReplay(source string, payload map[string]interface{}) {
 	// Najpierw informujemy backend, żeby ukrył źródło Replay w OBS.
 	// Faktyczne zatrzymanie/pauza mpv następuje dopiero po TransitionLeadMs,
 	// dzięki czemu ukrycie źródła wyprzedza koniec powtórki.
-	p.hub.Send(&Message{
+	p.sendReplay(&Message{
 		To:      "main-module",
 		Type:    "replay_done",
 		Payload: payload,
@@ -331,6 +351,7 @@ func (p *Plugin) messageLoop() {
 			log.Printf("✅ Zarejestrowano w hubie jako %s", p.cfg.PluginID)
 
 		case "replay_play":
+			p.setReplayContext(msg.Context)
 			go p.handlePlay(msg.Payload)
 
 		case "replay_speed":
@@ -354,7 +375,7 @@ func (p *Plugin) messageLoop() {
 					log.Printf("⚠️  Pause: %v", err)
 					return
 				}
-				p.hub.Send(&Message{
+				p.sendReplay(&Message{
 					To:   "main-module",
 					Type: "replay_paused",
 					Payload: map[string]interface{}{},
@@ -368,7 +389,7 @@ func (p *Plugin) messageLoop() {
 					log.Printf("⚠️  Resume: %v", err)
 					return
 				}
-				p.hub.Send(&Message{
+				p.sendReplay(&Message{
 					To:   "main-module",
 					Type: "replay_resumed",
 					Payload: map[string]interface{}{},
@@ -415,7 +436,7 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 	}
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		log.Printf("❌ replay_play: plik nie istnieje: %s", videoPath)
-		p.hub.Send(&Message{
+		p.sendReplay(&Message{
 			To:   "main-module",
 			Type: "replay_error",
 			Payload: map[string]interface{}{
@@ -455,7 +476,7 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 		p.manualMode = false
 		p.cancelAutoEndTimerLocked()
 		p.mu.Unlock()
-		p.hub.Send(&Message{
+		p.sendReplay(&Message{
 			To:   "main-module",
 			Type: "replay_error",
 			Payload: map[string]interface{}{
@@ -466,7 +487,7 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 		return
 	}
 
-	p.hub.Send(&Message{
+	p.sendReplay(&Message{
 		To:   "main-module",
 		Type: "replay_started",
 		Payload: map[string]interface{}{
@@ -477,7 +498,7 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 		},
 	})
 	// replay_state zachowany dla kompatybilności wstecznej
-	p.hub.Send(&Message{
+	p.sendReplay(&Message{
 		To:   "main-module",
 		Type: "replay_state",
 		Payload: map[string]interface{}{
@@ -515,7 +536,7 @@ func (p *Plugin) handlePlay(payload map[string]interface{}) {
 			p.mu.Unlock()
 
 			log.Printf("⏱  replay auto end — sending replay_done")
-			p.hub.Send(&Message{
+			p.sendReplay(&Message{
 				To:   "main-module",
 				Type: "replay_done",
 				Payload: map[string]interface{}{

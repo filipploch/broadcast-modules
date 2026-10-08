@@ -221,6 +221,29 @@ class TimerManager:
                 timer['state'] = previous
         current_app.logger.warning(f'↩️  Polecenie {command} dla {timer_id} nie dotarło do timer-pluginu: stan wycofany do {previous}')
 
+    def on_game_leaving(self, session_id, game_id):
+        """Mecz przestaje być bieżący: pauzuje jego biegnące zegary główne w pluginie (z kontekstem tego meczu), żeby nie biegły
+        bez nadzoru, i dopuszcza na chwilę odpowiedzi z jego kontekstu (zapis stanu zegara w bazie)."""
+        from core.models.base_game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        context = {'module': current_app.config.get('MODULE_NAME'), 'session_id': session_id,
+                   'game_id': game_id, 'period_id': None}
+        self.hub_client.context_filter.allow_closing(context)
+        running = GameTimer.query.filter(
+            GameTimer.game_id == game_id,
+            GameTimer.timer_type == GameTimer.TYPE_MAIN,
+            GameTimer.state == GameTimer.STATE_RUNNING,
+        ).all()
+        for gt in running:
+            if not gt.plugin_timer_id:
+                continue
+            self.hub_client.send_to_plugin(self.timer_plugin_id, 'pause_timer', {'timer_id': gt.plugin_timer_id},
+                                           context=dict(context, period_id=gt.period_id))
+            with self.lock:
+                if gt.plugin_timer_id in self.timers:
+                    self.timers[gt.plugin_timer_id]['state'] = 'paused'
+            current_app.logger.info(f'⏸️  Zmiana meczu: pauza zegara {gt.plugin_timer_id} meczu {game_id}')
+
     def pause_timer(self, timer_id):
         success = self.hub_client.send_to_plugin(
             self.timer_plugin_id, 'pause_timer', {'timer_id': timer_id}

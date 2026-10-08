@@ -281,7 +281,7 @@ class RzutyKarneIWyborMeczu(ZegaryBase):
     def _hub_calls(self, game_id):
         self.hub.reset_mock()
         self.client.get(f"/games/{game_id}/select-broadcast")
-        return [(c[0], c.args[:2]) for c in self.hub.method_calls]
+        return [(c[0], c.args[:2]) for c in self.hub.method_calls if not c[0].startswith('context_filter')]   # filtr kontekstu to ksiegowosc modulu, nie polecenie na antene
 
     def test_wybor_meczu_z_zakonczonym_konkursem_niczego_nie_wysyla_na_antene(self):
         from core.extensions import db

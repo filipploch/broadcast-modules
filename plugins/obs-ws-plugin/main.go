@@ -300,6 +300,7 @@ func (p *Plugin) routeHubToOBS() {
 				p.hubClient.Send(&hub.Message{
 					From:    p.config.Plugin.ID,
 					To:      "main-module",
+					Context: msg.Context,
 					Type:    "obs_scene_map",
 					Payload: map[string]interface{}{"scene_map": p.sceneMap.toRaw()},
 				})
@@ -326,7 +327,7 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 	if !p.obsClient.IsConnected() {
 		log.Printf("⚠️  OBS not connected, cannot forward command")
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+			From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_error",
 			Payload: map[string]interface{}{
 				"error": "OBS not connected", "command": msg.Payload,
 			},
@@ -338,7 +339,7 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 	if !ok || requestType == "" {
 		log.Printf("⚠️  obs_command missing requestType")
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+			From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_error",
 			Payload: map[string]interface{}{"error": "obs_command payload must contain requestType"},
 		})
 		return
@@ -355,7 +356,7 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 		if err != nil {
 			log.Printf("❌ Cannot resolve source name: %v", err)
 			p.hubClient.Send(&hub.Message{
-				From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+				From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_error",
 				Payload: map[string]interface{}{
 					"error":       err.Error(),
 					"requestType": requestType,
@@ -370,7 +371,7 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 	if err != nil {
 		log.Printf("❌ OBS request failed (%s): %v", requestType, err)
 		p.hubClient.Send(&hub.Message{
-			From: p.config.Plugin.ID, To: msg.From, Type: "obs_error",
+			From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_error",
 			Payload: map[string]interface{}{
 				"error": err.Error(), "requestType": requestType,
 			},
@@ -380,7 +381,7 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 
 	log.Printf("✅ OBS response received for %s", requestType)
 	p.hubClient.Send(&hub.Message{
-		From: p.config.Plugin.ID, To: msg.From, Type: "obs_response",
+		From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_response",
 		Payload: map[string]interface{}{
 			"requestType":  requestType,
 			"requestID":    requestID,

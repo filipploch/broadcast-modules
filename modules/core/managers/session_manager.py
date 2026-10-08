@@ -125,6 +125,18 @@ def _commit():
     db.session.commit()
 
 
+def _before_leaving(entry):
+    """Zanim mecz przestanie być bieżący (zmiana meczu, następny mecz, zamknięcie sesji), moduł kończy jego sprawy w pluginach
+    (pauza biegnącego zegara) i dopuszcza na chwilę odpowiedzi z jego kontekstu. Błąd tu nie przerywa zmiany meczu."""
+    if entry is None:
+        return
+    try:
+        from core.managers import get_timer_manager
+        get_timer_manager().on_game_leaving(entry.session_id, entry.game_id)
+    except Exception:
+        logger.exception('Nie udało się zakończyć spraw meczu %s w pluginach przed zmianą meczu', entry.game_id)
+
+
 def _release_active(entry, now):
     """Aktywny wpis przestaje być aktywny: zakończony, jeśli mecz się skończył, w przeciwnym razie wraca do kolejki."""
     from core.models.base_game import get_game_model
@@ -199,6 +211,7 @@ def activate_game(game_id, auto_open=True):
         if previous is not None and previous.game_id == game_id:
             return previous
         if previous is not None:
+            _before_leaving(previous)
             _release_active(previous, now)
             db.session.flush()           # zwolnij active_slot zanim ustawimy nowy (UNIQUE)
         entry = SessionGame.query.filter_by(session_id=session.id, game_id=game_id).first()
@@ -229,6 +242,7 @@ def next_game():
         now = datetime.utcnow()
         current = get_active_entry(session)
         if current is not None:
+            _before_leaving(current)
             current.active_slot = None
             current.status = SessionGame.STATUS_FINISHED
             current.ended_at = now
@@ -293,6 +307,7 @@ def close_session():
         now = datetime.utcnow()
         active = get_active_entry(session)
         if active is not None:
+            _before_leaving(active)
             _release_active(active, now)
         session.status = Session.STATUS_FINISHED
         session.open_slot = None

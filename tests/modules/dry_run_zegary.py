@@ -12,6 +12,11 @@ C i D (E2a): plugin sam odtwarza zegar z pliku stanu (czas scienny + przestoj); 
      i zapisuje ostrzezenie w logu modulu.
   F. (E2b) polecenie do zabitego timer-pluginu: panel dostaje komunikat raz, stan zegara bez zmian, komunikat znika po powrocie
      pluginu; potem restart pluginu z panelu (poza limitem) i zegar biegnie dalej.
+  H. (stala zasada prob) po starcie pluginy pracuja co najmniej 3 minuty bez zadnego restartu (/status HUB-a: restarts == 0)
+     i bez timeoutow heartbeatu w logu HUB-a. Sprawdzane PRZED scenariuszami z zabijaniem pluginu.
+  I. (E2c) nakladka uruchomiona pozniej (np. po starcie OBS) dostaje pelny biezacy stan: dane meczu, kary i zegar zatrzymany.
+  G. (E2c) zmiana meczu przy biegnacym zegarze: modul wstrzymuje zegar starego meczu PRZED zmiana (odpowiedz pluginu z kontekstem
+     starego meczu jest przyjeta i stan trafia do bazy), a pozniejsze zdarzenia tego zegara (kontekst starego meczu) sa odrzucane.
 Wymaga wolnych portow 8080 i 8081 oraz braku uruchomionych hub.exe / timer-plugin.exe (wersja transmisyjna musi byc wylaczona).
 """
 import json, os, pathlib, shutil, socket, sqlite3, subprocess, sys, threading, time, urllib.request
@@ -238,6 +243,8 @@ def scenarios(panel, db_path):
     panel.emit("timer_start", {"timer_id": n2})
     time.sleep(3)
 
+    stability_check()
+
     say("\n== C. Zabicie timer-pluginu w trakcie BIEGNACEGO okresu 2")
     t = panel.timers()
     say(f"(wpis zegara w pluginie: { [x for x in t if x.get('timer_id') == n2] })")
@@ -268,6 +275,132 @@ def scenarios(panel, db_path):
     bad = list((DRY / "state").glob("timers.json.bad-*"))
     say(f"uszkodzony plik odlozony na bok: {'TAK' if bad else 'NIE'} ({len(bad)})")
     scenario_f(panel, n2)
+    scenario_i(panel, n2)
+    scenario_g(panel, db_path, gid, n2)
+
+
+def hub_status():
+    with urllib.request.urlopen("http://127.0.0.1:8080/status", timeout=5) as r:
+        return json.loads(r.read().decode())
+
+
+def stability_check(min_uptime_s=180):
+    """Stala zasada prob: po starcie wszystkie pluginy lokalne pracuja >= 3 minuty z zerowa liczba restartow."""
+    say("\n== H. Stabilnosc: pluginy pracuja co najmniej 3 minuty bez restartu (/status HUB-a)")
+    deadline = time.time() + 420
+    while True:
+        st = hub_status()
+        local = st["plugin_manager"]["local_plugins"]
+        uptime = min((p.get("uptime_s", 0) for p in local.values()), default=0)
+        if uptime >= min_uptime_s or time.time() > deadline:
+            break
+        time.sleep(5)
+    rows = {pid: (p.get("status"), p.get("restarts"), p.get("uptime_s")) for pid, p in local.items()}
+    say(f"/status HUB-a po {uptime} s: {rows}")
+    log = (LOGS / "hub.log").read_text(encoding="utf-8", errors="replace") if (LOGS / "hub.log").exists() else ""
+    timeouts = log.count("heartbeat timeout")
+    connected = set(st.get("connected_plugins", []))
+    ok = (uptime >= min_uptime_s and bool(local)
+          and all(p.get("status") == "online" and p.get("restarts") == 0 for p in local.values())
+          and set(local) <= connected and timeouts == 0)
+    say(f"timeouty heartbeatu w logu HUB-a: {timeouts}; polaczone pluginy: {sorted(connected)}")
+    say(f"WYNIK H: {'ZALICZONY' if ok else 'NIEZALICZONY'} (uptime >= {min_uptime_s} s, restarts == 0, status online, brak timeoutow)")
+    return ok
+
+
+def scenario_i(panel, timer_id):
+    say("\n== I. Nakladka uruchomiona pozniej dostaje pelny biezacy stan (E2c)")
+    import websocket
+    panel.emit("timer_pause", {"timer_id": timer_id})          # zegar zatrzymany: nie wysyla tickow
+    time.sleep(1.5)
+
+    def connect_overlay():
+        ws = websocket.create_connection("ws://127.0.0.1:8080/ws", timeout=5)
+        ws.send(json.dumps({"type": "register", "from": "stream-overlay", "to": "hub",
+                            "payload": {"id": "stream-overlay", "component_type": "overlay", "type": "overlay"}}))
+        for _ in range(10):
+            if json.loads(ws.recv()).get("type") == "registered":
+                break
+        ws.send(json.dumps({"type": "subscribe", "from": "stream-overlay", "to": "hub",
+                            "payload": {"class": ["timer", "overlay", "timer_update_receiver", "timer_state_receiver", "game_data_receiver"]}}))
+        return ws
+
+    ws = connect_overlay()                                    # OBS byl otwarty...
+    time.sleep(1)
+    ws.close()                                                # ...potem zamkniety: modul dostaje 'rozlaczony'
+    time.sleep(1.5)
+    panel.events.clear()
+    ws = connect_overlay()                                    # start OBS: nakladka wraca (HUB nie zglasza tego modulowi)
+    ws.send(json.dumps({"type": "request_game_data", "from": "stream-overlay", "to": "main-module"}))
+    got = {}
+    end = time.time() + 5
+    ws.settimeout(1)
+    while time.time() < end:
+        try:
+            m = json.loads(ws.recv())
+        except Exception:
+            continue
+        if m.get("type") in ("game_data", "penalty_state", "timer_updated"):
+            got.setdefault(m["type"], m)
+    ws.close()
+    gd = (got.get("game_data") or {}).get("payload") or {}
+    tu = (got.get("timer_updated") or {}).get("payload") or {}
+    say(f"nakladka dostala: {sorted(got)}; wynik w danych meczu: {gd.get('home_team_goals')}:{gd.get('away_team_goals')}; "
+        f"zegar: {tu.get('timer_id')} {tu.get('elapsed_time')} ms, {tu.get('state')}")
+    ok = ("game_data" in got and "penalty_state" in got and tu.get("timer_id") == timer_id and tu.get("state") == "paused"
+          and "home_team_goals" in gd and not [e for e in panel.events if e[0] == "plugin_unreachable"])
+    say(f"WYNIK I: {'ZALICZONY' if ok else 'NIEZALICZONY'} (dane meczu, kary i zegar zatrzymany dotarly do nakladki, bez paska w panelu)")
+
+
+def timer_db_state(db_path, timer_id):
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute("select state from game_timers where plugin_timer_id=?", (timer_id,)).fetchone()
+    finally:
+        con.close()
+    return row[0] if row else None
+
+
+def log_rejections():
+    log = (LOGS / "modul.log").read_text(encoding="utf-8", errors="replace") if (LOGS / "modul.log").exists() else ""
+    return [l for l in log.splitlines() if "Odrzucono komunikat" in l]
+
+
+def scenario_g(panel, db_path, gid, timer_id):
+    say("\n== G. Zmiana meczu przy biegnacym zegarze: kontekst w poleceniach i odrzucanie spoznionych komunikatow (E2c)")
+    panel.emit("timer_start", {"timer_id": timer_id})
+    time.sleep(2.5)
+    before_plugin = elapsed_of(panel.timers(), timer_id)
+    say(f"przed zmiana meczu: zegar w pluginie={before_plugin}, w bazie stan={timer_db_state(db_path, timer_id)}")
+    con = sqlite3.connect(db_path)
+    gid2 = con.execute("select id from games where status = 0 and id != ? and id not in (select game_id from periods) order by id limit 1", (gid,)).fetchone()[0]
+    con.close()
+    http("GET", f"/games/{gid2}/prepare-broadcast")
+    rej0 = len(log_rejections())
+
+    http("GET", f"/games/{gid2}/select-broadcast")            # zmiana meczu: A -> B
+    time.sleep(2)
+    sess = http("GET", "/api/session")
+    st_plugin = elapsed_of(panel.timers(), timer_id)[1]
+    st_db = timer_db_state(db_path, timer_id)
+    say(f"po zmianie meczu: aktywny mecz={sess.get('game_id')} (oczekiwano {gid2}), zegar starego meczu w pluginie={st_plugin}, w bazie={st_db}")
+    ok1 = sess.get("game_id") == gid2 and st_plugin == "paused" and st_db == "paused"
+    say(f"zegar starego meczu wstrzymany przed zmiana, a odpowiedz pluginu przyjeta (stan w bazie): {'OK' if ok1 else 'BLAD'}")
+    rej1 = len(log_rejections())
+    say(f"odrzucenia w logu modulu w oknie zmiany meczu: {rej1 - rej0} (oczekiwano 0) -> {'OK' if rej1 == rej0 else 'BLAD'}")
+
+    say("czekam 17 s na koniec okna dla odpowiedzi starego meczu...")
+    time.sleep(17)
+    panel.emit("timer_start", {"timer_id": timer_id})          # zegar nalezy do meczu A, a aktywny jest B: jego zdarzenia niosa kontekst A
+    time.sleep(3)
+    st_db2 = timer_db_state(db_path, timer_id)
+    rejected = log_rejections()[rej1:]
+    sample = rejected[0][:220] if rejected else "brak"
+    say(f"spozniony zegar starego meczu: odrzuconych komunikatow={len(rejected)}, stan w bazie={st_db2} (oczekiwano paused)")
+    say(f"przykladowy wpis: {sample}")
+    ok2 = len(rejected) >= 1 and st_db2 == "paused" and "game_id" in sample
+    panel.emit("timer_pause", {"timer_id": timer_id})
+    say(f"WYNIK G: {'ZALICZONY' if ok1 and rej1 == rej0 and ok2 else 'NIEZALICZONY'} (zmiana meczu={ok1}, bez odrzucen w oknie={rej1 == rej0}, spozniony komunikat odrzucony={ok2})")
 
 
 def plugin_pid():

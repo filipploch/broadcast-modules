@@ -17,6 +17,25 @@ type RecorderManager struct {
 	hubClient *HubClient // used to notify main_module on recording start/stop
 	streamer  *StreamManager
 	mu        sync.RWMutex
+
+	// cameraCtx: kontekst transmisji z polecenia, które uruchomiło nagrywanie kamery; niosą go zdarzenia tej kamery
+	// (recording_started/stopped, segment_rotated, stream_changed), żeby moduł odrzucił te ze starego meczu.
+	cameraCtx map[string]map[string]interface{}
+}
+
+func (rm *RecorderManager) setCameraContext(cameraID string, ctx map[string]interface{}) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if rm.cameraCtx == nil {
+		rm.cameraCtx = make(map[string]map[string]interface{})
+	}
+	rm.cameraCtx[cameraID] = ctx
+}
+
+func (rm *RecorderManager) cameraContext(cameraID string) map[string]interface{} {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.cameraCtx[cameraID]
 }
 
 const (
@@ -131,8 +150,9 @@ func (rm *RecorderManager) notifyRecordingStarted(meta RecordingMeta) {
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   "main-module",
-		Type: "recording_started",
+		To:      "main-module",
+		Context: rm.cameraContext(meta.CameraID),
+		Type:    "recording_started",
 		Payload: map[string]interface{}{
 			"camera_id":     meta.CameraID,
 			"camera_name":   meta.CameraName,
@@ -160,8 +180,9 @@ func (rm *RecorderManager) notifySegmentRotated(cameraID string, meta RecordingM
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   "main-module",
-		Type: "segment_rotated",
+		To:      "main-module",
+		Context: rm.cameraContext(cameraID),
+		Type:    "segment_rotated",
 		Payload: map[string]interface{}{
 			"camera_id":     cameraID,
 			"session_id":    meta.SessionID,
@@ -198,6 +219,7 @@ func (rm *RecorderManager) notifyStreamChanged(cameraID string, active bool, err
 	}
 	_ = hc.Send(&Message{
 		To:      "main-module",
+		Context: rm.cameraContext(cameraID),
 		Type:    "stream_changed",
 		Payload: payload,
 	})
@@ -214,8 +236,9 @@ func (rm *RecorderManager) notifyRecordingStopped(cameraID string) {
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   "main-module",
-		Type: "recording_stopped",
+		To:      "main-module",
+		Context: rm.cameraContext(cameraID),
+		Type:    "recording_stopped",
 		Payload: map[string]interface{}{
 			"camera_id": cameraID,
 		},
@@ -242,8 +265,9 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 
 	if hc != nil {
 		_ = hc.Send(&Message{
-			To:   "main-module",
-			Type: "recording_stopped",
+			To:      "main-module",
+			Context: rm.cameraContext(cameraID),
+			Type:    "recording_stopped",
 			Payload: map[string]interface{}{
 				"camera_id": cameraID,
 				"reason":    "crash",
@@ -272,8 +296,9 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 			rm.mu.RUnlock()
 			if hc2 != nil {
 				_ = hc2.Send(&Message{
-					To:   "main-module",
-					Type: "recording_restarted",
+					To:      "main-module",
+					Context: rm.cameraContext(cameraID),
+					Type:    "recording_restarted",
 					Payload: map[string]interface{}{
 						"camera_id": cameraID,
 						"attempt":   attempt,
@@ -288,8 +313,9 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 		log.Printf("🛑 [%s] Auto-restart gave up after %d attempts", cameraID, autoRestartMaxTries)
 		if hc != nil {
 			_ = hc.Send(&Message{
-				To:   "main-module",
-				Type: "recording_restart_failed",
+				To:      "main-module",
+				Context: rm.cameraContext(cameraID),
+				Type:    "recording_restart_failed",
 				Payload: map[string]interface{}{
 					"camera_id": cameraID,
 					"attempts":  autoRestartMaxTries,
@@ -322,6 +348,7 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 		return err
 	}
 
+	rm.setCameraContext(cameraID, meta.Context)
 	rm.notifyRecordingStarted(cam.LastMeta())
 
 	// Auto-start this camera's stream to Windows, if configured — in the
@@ -461,6 +488,7 @@ func (rm *RecorderManager) HandleHubMessage(msg *Message, hubClient *HubClient) 
 		meta := RecordingMeta{
 			MatchID:  optStringField(msg.Payload, "match_id"),
 			PeriodID: optStringField(msg.Payload, "period_id"),
+			Context:  msg.Context,
 		}
 
 		if err := rm.StartRecord(cameraID, meta); err != nil {
@@ -655,6 +683,7 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 	meta := RecordingMeta{
 		MatchID:  optStringField(msg.Payload, "match_id"),
 		PeriodID: optStringField(msg.Payload, "period_id"),
+		Context:  msg.Context,
 	}
 
 	switch requestType {
@@ -675,8 +704,9 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 			rm.replyError(hubClient, msg, "one or more cameras failed to start")
 			// Also include per-camera results in a follow-up status field
 			_ = hubClient.Send(&Message{
-				To:   msg.From,
-				Type: "recording_command_response",
+				To:      msg.From,
+				Context: msg.Context,
+				Type:    "recording_command_response",
 				Payload: map[string]interface{}{
 					"status":     "partial_error",
 					"cameras":    results,
@@ -706,8 +736,9 @@ func (rm *RecorderManager) handleRecordingCommand(msg *Message, hubClient *HubCl
 		}
 		if hasError {
 			_ = hubClient.Send(&Message{
-				To:   msg.From,
-				Type: "recording_command_response",
+				To:      msg.From,
+				Context: msg.Context,
+				Type:    "recording_command_response",
 				Payload: map[string]interface{}{
 					"status":     "partial_error",
 					"cameras":    results,
@@ -850,6 +881,7 @@ func (rm *RecorderManager) replyOK(hc *HubClient, req *Message, payload map[stri
 	payload["status"] = "ok"
 	_ = hc.Send(&Message{
 		To:      req.From,
+		Context: req.Context,
 		Type:    req.Type + "_response",
 		Payload: payload,
 	})
@@ -860,8 +892,9 @@ func (rm *RecorderManager) replyError(hc *HubClient, req *Message, errMsg string
 		return
 	}
 	_ = hc.Send(&Message{
-		To:   req.From,
-		Type: req.Type + "_response",
+		To:      req.From,
+		Context: req.Context,
+		Type:    req.Type + "_response",
 		Payload: map[string]interface{}{
 			"status": "error",
 			"error":  errMsg,

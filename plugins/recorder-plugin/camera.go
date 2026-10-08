@@ -36,6 +36,8 @@ type RecordingMeta struct {
 	SessionID    string `json:"session_id,omitempty"`    // stable across all segments of one recording session
 	SegmentIndex int    `json:"segment_index,omitempty"` // 1-based index of this segment within the session
 	EndReason    string `json:"end_reason,omitempty"`    // "manual_stop" | "max_duration" | "signal" | "crash"
+	// Context: kontekst transmisji z polecenia startu (moduł, sesja, mecz, okres); odsyłany w zdarzeniach nagrania.
+	Context map[string]interface{} `json:"-"`
 }
 
 // CameraConfig holds per-camera configuration loaded from config.json.
