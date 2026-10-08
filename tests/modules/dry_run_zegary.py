@@ -12,6 +12,8 @@ C i D (E2a): plugin sam odtwarza zegar z pliku stanu (czas scienny + przestoj); 
      i zapisuje ostrzezenie w logu modulu.
   F. (E2b) polecenie do zabitego timer-pluginu: panel dostaje komunikat raz, stan zegara bez zmian, komunikat znika po powrocie
      pluginu; potem restart pluginu z panelu (poza limitem) i zegar biegnie dalej.
+  G. (E2c) zmiana meczu przy biegnacym zegarze: modul wstrzymuje zegar starego meczu PRZED zmiana (odpowiedz pluginu z kontekstem
+     starego meczu jest przyjeta i stan trafia do bazy), a pozniejsze zdarzenia tego zegara (kontekst starego meczu) sa odrzucane.
 Wymaga wolnych portow 8080 i 8081 oraz braku uruchomionych hub.exe / timer-plugin.exe (wersja transmisyjna musi byc wylaczona).
 """
 import json, os, pathlib, shutil, socket, sqlite3, subprocess, sys, threading, time, urllib.request
@@ -268,6 +270,58 @@ def scenarios(panel, db_path):
     bad = list((DRY / "state").glob("timers.json.bad-*"))
     say(f"uszkodzony plik odlozony na bok: {'TAK' if bad else 'NIE'} ({len(bad)})")
     scenario_f(panel, n2)
+    scenario_g(panel, db_path, gid, n2)
+
+
+def timer_db_state(db_path, timer_id):
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute("select state from game_timers where plugin_timer_id=?", (timer_id,)).fetchone()
+    finally:
+        con.close()
+    return row[0] if row else None
+
+
+def log_rejections():
+    log = (LOGS / "modul.log").read_text(encoding="utf-8", errors="replace") if (LOGS / "modul.log").exists() else ""
+    return [l for l in log.splitlines() if "Odrzucono komunikat" in l]
+
+
+def scenario_g(panel, db_path, gid, timer_id):
+    say("\n== G. Zmiana meczu przy biegnacym zegarze: kontekst w poleceniach i odrzucanie spoznionych komunikatow (E2c)")
+    panel.emit("timer_start", {"timer_id": timer_id})
+    time.sleep(2.5)
+    before_plugin = elapsed_of(panel.timers(), timer_id)
+    say(f"przed zmiana meczu: zegar w pluginie={before_plugin}, w bazie stan={timer_db_state(db_path, timer_id)}")
+    con = sqlite3.connect(db_path)
+    gid2 = con.execute("select id from games where status = 0 and id != ? and id not in (select game_id from periods) order by id limit 1", (gid,)).fetchone()[0]
+    con.close()
+    http("GET", f"/games/{gid2}/prepare-broadcast")
+    rej0 = len(log_rejections())
+
+    http("GET", f"/games/{gid2}/select-broadcast")            # zmiana meczu: A -> B
+    time.sleep(2)
+    sess = http("GET", "/api/session")
+    st_plugin = elapsed_of(panel.timers(), timer_id)[1]
+    st_db = timer_db_state(db_path, timer_id)
+    say(f"po zmianie meczu: aktywny mecz={sess.get('game_id')} (oczekiwano {gid2}), zegar starego meczu w pluginie={st_plugin}, w bazie={st_db}")
+    ok1 = sess.get("game_id") == gid2 and st_plugin == "paused" and st_db == "paused"
+    say(f"zegar starego meczu wstrzymany przed zmiana, a odpowiedz pluginu przyjeta (stan w bazie): {'OK' if ok1 else 'BLAD'}")
+    rej1 = len(log_rejections())
+    say(f"odrzucenia w logu modulu w oknie zmiany meczu: {rej1 - rej0} (oczekiwano 0) -> {'OK' if rej1 == rej0 else 'BLAD'}")
+
+    say("czekam 17 s na koniec okna dla odpowiedzi starego meczu...")
+    time.sleep(17)
+    panel.emit("timer_start", {"timer_id": timer_id})          # zegar nalezy do meczu A, a aktywny jest B: jego zdarzenia niosa kontekst A
+    time.sleep(3)
+    st_db2 = timer_db_state(db_path, timer_id)
+    rejected = log_rejections()[rej1:]
+    sample = rejected[0][:220] if rejected else "brak"
+    say(f"spozniony zegar starego meczu: odrzuconych komunikatow={len(rejected)}, stan w bazie={st_db2} (oczekiwano paused)")
+    say(f"przykladowy wpis: {sample}")
+    ok2 = len(rejected) >= 1 and st_db2 == "paused" and "game_id" in sample
+    panel.emit("timer_pause", {"timer_id": timer_id})
+    say(f"WYNIK G: {'ZALICZONY' if ok1 and rej1 == rej0 and ok2 else 'NIEZALICZONY'} (zmiana meczu={ok1}, bez odrzucen w oknie={rej1 == rej0}, spozniony komunikat odrzucony={ok2})")
 
 
 def plugin_pid():
