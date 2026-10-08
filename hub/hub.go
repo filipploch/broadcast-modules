@@ -710,6 +710,31 @@ func (h *Hub) routeMessage(msg *Message) {
 		}
 	} else {
 		log.Printf("⚠️  Destination not found or inactive: %s", msg.To)
+		h.notifyUndelivered(msg)
+	}
+}
+
+// notifyUndelivered informuje moduł główny, że jego polecenie nie dotarło do pluginu
+// (plugin nie jest zarejestrowany albo jest nieaktywny). Raport dostaje tylko moduł główny:
+// to on trzyma stan zakładany z góry i pokazuje komunikat w panelu.
+func (h *Hub) notifyUndelivered(msg *Message) {
+	src := msg.Source
+	if src == nil || src.ComponentType != "main_module" || msg.Type == "undelivered" {
+		return
+	}
+	report := NewMessage("hub", src.ID, "undelivered", map[string]interface{}{
+		"plugin_id":       msg.To,
+		"command":         msg.Type,
+		"command_payload": msg.Payload,
+	})
+	data, err := report.ToJSON()
+	if err != nil {
+		return
+	}
+	select {
+	case src.Send <- data:
+	default:
+		log.Printf("⚠️  Cannot report undelivered %s to %s: channel full", msg.Type, src.ID)
 	}
 }
 
