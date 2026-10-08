@@ -5,7 +5,7 @@ import straz_zdarzen
 
 APP, TMP = harness.boot("futsal_nalf")
 
-_Straz, _Rec, _Leniwa = straz_zdarzen.make(APP)
+_Straz, _Rec, _Leniwa, _Granice = straz_zdarzen.make(APP)
 
 
 class StrazZdarzen(_Straz):
@@ -20,7 +20,11 @@ class LeniwaInicjalizacja(_Leniwa):
     pass
 
 
-del _Straz, _Rec, _Leniwa
+class StrazPrzypadkiGraniczne(_Granice):
+    pass
+
+
+del _Straz, _Rec, _Leniwa, _Granice
 
 
 if __name__ == "__main__":

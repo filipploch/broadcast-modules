@@ -285,7 +285,7 @@ class HubClient:
                 self._report_unreachable(plugin_id, msg_type)
             else:
                 # Plugin nie odpowiada od startu albo to nakładka przy zamkniętym OBS: bez paska, tylko stan na ikonie.
-                self._log("debug", f"Plugin {plugin_id} niedostępny — polecenie {msg_type} pominięte")
+                self._log("info", f"Polecenie {msg_type} nie dotarło do pluginu {plugin_id}: plugin niedostępny, polecenie pominięte (bez paska w panelu)")
             return False
         message = {
             'from': self.module_id,
@@ -894,7 +894,7 @@ class HubClient:
             self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
             self._report_unreachable(plugin_id, command)
         else:
-            self._log("debug", f"Polecenie {command} nie dotarło do pluginu {plugin_id} (bez paska w panelu)")
+            self._log("info", f"Polecenie {command} nie dotarło do pluginu {plugin_id} (bez paska w panelu)")
         if plugin_id == 'timer-plugin':
             try:
                 from core.managers import get_timer_manager

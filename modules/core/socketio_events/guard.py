@@ -64,7 +64,9 @@ def _wrap(app, socketio, name, handler):
             reason = None
         if reason:
             logger.warning('Odrzucono zdarzenie %s: %s', name, reason)
-            socketio.emit('error', {'message': f'Polecenie {name} odrzucone: {reason}'}, to=sid)
+            # Rozgłoszenie jak w pozostałych komunikatach 'error' modułu: panel to kilka ramek (lewa, środkowa, prawa), każda z własnym
+            # połączeniem, a komunikat pokazuje ta z obsługą 'error' (ui-jinja.js), więc wysłanie tylko do nadawcy zwykle nic by nie pokazało.
+            socketio.emit('error', {'message': f'Polecenie nie zostało wykonane ({name}): {reason}'})
             return None
         return handler(sid, *args, **kwargs)
     guarded._bm_guarded = True
