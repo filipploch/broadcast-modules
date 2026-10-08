@@ -10,6 +10,8 @@ i modul (port 8081) i przeprowadza scenariusze:
 C i D (E2a): plugin sam odtwarza zegar z pliku stanu (czas scienny + przestoj); skrypt sprawdza stan i czas po powrocie pluginu.
   E. uszkodzony plik stanu: plugin wraca bez zegarow, odtwarza je modul awaryjnie (jak timer-recovery.js po E2a: szacunek z bazy)
      i zapisuje ostrzezenie w logu modulu.
+  F. (E2b) polecenie do zabitego timer-pluginu: panel dostaje komunikat raz, stan zegara bez zmian, komunikat znika po powrocie
+     pluginu; potem restart pluginu z panelu (poza limitem) i zegar biegnie dalej.
 Wymaga wolnych portow 8080 i 8081 oraz braku uruchomionych hub.exe / timer-plugin.exe (wersja transmisyjna musi byc wylaczona).
 """
 import json, os, pathlib, shutil, socket, sqlite3, subprocess, sys, threading, time, urllib.request
@@ -63,6 +65,9 @@ class Panel:
         self.ev = threading.Event()
         self.last = None
         self.c.on("timer_plugin_all_timers", self._on_all)
+        self.events = []                              # (nazwa, dane) zdarzen E2b dla panelu
+        for name in ("plugin_unreachable", "plugin_reachable", "plugin_restart_result"):
+            self.c.on(name, lambda data, name=name: self.events.append((name, data)))
         self.c.connect(BASE)
 
     def _on_all(self, data):
@@ -262,6 +267,66 @@ def scenarios(panel, db_path):
     say(f"ostrzezenie w logu modulu: {'JEST' if warn else 'BRAK'}" + (f" -> {warn[-1][:200]}" if warn else ""))
     bad = list((DRY / "state").glob("timers.json.bad-*"))
     say(f"uszkodzony plik odlozony na bok: {'TAK' if bad else 'NIE'} ({len(bad)})")
+    scenario_f(panel, n2)
+
+
+def plugin_pid():
+    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq timer-plugin.exe", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        parts = [x.strip('"') for x in line.split('","')]
+        if len(parts) > 1 and parts[0].lower().startswith("timer-plugin"):
+            return int(parts[1])
+    return None
+
+
+def scenario_f(panel, timer_id):
+    say("\n== F. Polecenie do zabitego timer-pluginu i restart pluginu z panelu (E2b)")
+    st0 = http("GET", "/api/settings")["current_timers"]["main"]["state"]
+    panel.events.clear()
+    subprocess.run(["taskkill", "/F", "/IM", "timer-plugin.exe"], capture_output=True)
+    time.sleep(0.8)                                   # HUB zdazyl zglosic rozlaczenie; restart pluginu dopiero po ok. 3-4 s
+    for _ in range(3):
+        panel.emit("timer_pause" if st0 == "running" else "timer_start", {"timer_id": timer_id})
+        time.sleep(0.2)
+    time.sleep(0.5)
+    st1 = http("GET", "/api/settings")["current_timers"]["main"]["state"]
+    unreachable = [d for n, d in panel.events if n == "plugin_unreachable"]
+    ok1 = len(unreachable) == 1 and unreachable[0].get("plugin_id") == "timer-plugin"
+    say(f"komunikaty dla panelu po 3 poleceniach do zabitego pluginu: {len(unreachable)} (oczekiwano 1) -> {'OK' if ok1 else 'BLAD'}")
+    say(f"stan zegara w panelu przed/po: {st0} / {st1} -> {'OK: bez zmian' if st0 == st1 else 'BLAD: stan sie zmienil'}")
+
+    for _ in range(40):                               # powrot pluginu (HUB uruchamia go ponownie)
+        time.sleep(0.5)
+        if any(n == "plugin_reachable" for n, _d in panel.events):
+            break
+    back = any(n == "plugin_reachable" for n, _d in panel.events)
+    say(f"komunikat zniknal po powrocie pluginu: {'TAK' if back else 'NIE'}")
+    time.sleep(1.5)
+    ui_recovery(panel, "F")
+    before, bstate = elapsed_of(panel.timers(), timer_id)
+
+    pid0 = plugin_pid()
+    panel.events.clear()
+    t_r = time.time()
+    panel.emit("restart_plugin", {"plugin_id": "timer-plugin"})
+    res = None
+    for _ in range(40):
+        time.sleep(0.5)
+        res = next((d for n, d in panel.events if n == "plugin_restart_result"), None)
+        if res:
+            break
+    time.sleep(2)
+    pid1 = plugin_pid()
+    say(f"restart z panelu: wynik={res}, PID {pid0} -> {pid1}")
+    ui_recovery(panel, "F2")
+    time.sleep(1.5)
+    after, astate = elapsed_of(panel.timers(), timer_id)
+    should = before + ((time.time() - t_r) * 1000 if bstate == "running" else 0)
+    lag = None if after is None else should - after
+    ok2 = bool(res and res.get("ok")) and pid0 and pid1 and pid0 != pid1 and lag is not None and abs(lag) <= 4000 and astate == bstate
+    say(f"zegar przed restartem={before} ({bstate}), po={after} ({astate}), odchylka {0 if lag is None else lag:.0f} ms")
+    say(f"WYNIK F: {'ZALICZONY' if ok1 and st0 == st1 and back and ok2 else 'NIEZALICZONY'} "
+        f"(komunikat raz={ok1}, stan bez zmian={st0 == st1}, komunikat zniknal={back}, restart={bool(ok2)})")
 
 
 def kill_and_recover(panel, timer_id, before_display, before_state, label, corrupt_state=False):
