@@ -200,15 +200,14 @@ func (h *Hub) handleRegister(msg *Message) {
 
 	log.Printf("📝 Registration: id=%s, component_type=%s", id, componentType)
 
-	// Find the module that sent this message
+	// Rejestracja dotyczy połączenia, z którego przyszła (nie dowolnego oczekującego:
+	// przy kilku jednoczesnych połączeniach rejestracje by się myliły).
 	h.mu.Lock()
-	var module *Module
-	for m := range h.PendingModules {
-		if m.ID == "" || m.ID == msg.From || msg.From == "" {
-			module = m
-			delete(h.PendingModules, m)
-			break
-		}
+	module := msg.Source
+	if module == nil || !h.PendingModules[module] {
+		module = nil
+	} else {
+		delete(h.PendingModules, module)
 	}
 	h.mu.Unlock()
 
