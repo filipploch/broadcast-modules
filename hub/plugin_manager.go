@@ -69,11 +69,15 @@ type PluginManager struct {
 	problems        map[string]*pluginProblem
 }
 
+// gaveUpNotifyEvery: jak często przypominać modułowi głównemu, że plugin wyczerpał limit automatycznych restartów.
+const gaveUpNotifyEvery = 30 * time.Second
+
 // pluginProblem opisuje, od kiedy wymagany plugin lokalny jest w danym kłopocie.
 type pluginProblem struct {
 	kind     string // "not_registered", "disconnected", "no_process"
 	since    time.Time
-	reported bool // limit restartów wyczerpany i zgłoszony w logu
+	reported bool      // limit restartów wyczerpany i zgłoszony w logu
+	notified time.Time // kiedy ostatnio powiadomiono moduł główny o wyczerpanym limicie
 }
 
 // NewPluginManager creates a new plugin manager
@@ -593,6 +597,7 @@ func (pm *PluginManager) superviseOnce(now time.Time) {
 		alive bool
 	}
 	var actions []action
+	var gaveUp []string
 
 	pm.mu.Lock()
 	for id, pp := range pm.plugins {
@@ -632,6 +637,11 @@ func (pm *PluginManager) superviseOnce(now time.Time) {
 				log.Printf("❌ Plugin %s (%s): limit restartów (%d) wyczerpany, wymagany restart ręczny z panelu",
 					id, kind, pp.Config.MaxRestarts)
 			}
+			// Moduł główny mógł nie być połączony przy pierwszym zgłoszeniu, więc powtarzamy co gaveUpNotifyEvery.
+			if prob.notified.IsZero() || now.Sub(prob.notified) >= gaveUpNotifyEvery {
+				prob.notified = now
+				gaveUp = append(gaveUp, id)
+			}
 			continue
 		}
 		prob.since = now
@@ -639,6 +649,10 @@ func (pm *PluginManager) superviseOnce(now time.Time) {
 		log.Printf("🩺 Plugin %s: %s od ponad %s, samonaprawa", id, kind, grace)
 	}
 	pm.mu.Unlock()
+
+	for _, id := range gaveUp {
+		pm.hub.notifyMainModule("plugin_gave_up", map[string]interface{}{"plugin_id": id})
+	}
 
 	for _, a := range actions {
 		a := a

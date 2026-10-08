@@ -197,11 +197,13 @@ function _applyOnePluginIconColor(iconId) {
 
 // Komunikat o pluginie, który nie odebrał polecenia: jeden na plugin, znika po jego powrocie.
 const _unreachablePlugins = {};   // {plugin_id: polecenie albo null}
+const _gaveUpPlugins = new Set(); // pluginy, którym HUB wyczerpał automatyczne próby restartu
 
 function _renderUnreachableBanner() {
     let banner = document.getElementById('plugin-unreachable-banner');
-    const ids = Object.keys(_unreachablePlugins);
-    if (!ids.length) {
+    const ids = Object.keys(_unreachablePlugins).filter(id => !_gaveUpPlugins.has(id));
+    const gaveUp = Array.from(_gaveUpPlugins);
+    if (!ids.length && !gaveUp.length) {
         if (banner) banner.remove();
         return;
     }
@@ -212,10 +214,17 @@ function _renderUnreachableBanner() {
             + 'color:#fff;padding:6px 12px;font-size:14px;text-align:center;';
         document.body.appendChild(banner);
     }
-    banner.textContent = ids.map(id => _unreachablePlugins[id]
-        ? `Plugin ${id} nie odpowiada, polecenie ${_unreachablePlugins[id]} nie zostało wykonane`
-        : `Plugin ${id} nie odpowiada, polecenie nie zostało wykonane`).join(' | ');
+    banner.textContent = gaveUp.map(id =>
+        `Plugin ${id} nie działa, automatyczne próby wyczerpane. Użyj przycisku restartu przy ikonie.`)
+        .concat(ids.map(id => _unreachablePlugins[id]
+            ? `Plugin ${id} nie odpowiada, polecenie ${_unreachablePlugins[id]} nie zostało wykonane`
+            : `Plugin ${id} nie odpowiada, polecenie nie zostało wykonane`)).join(' | ');
 }
+
+socket.on('plugin_gave_up', (data) => {
+    _gaveUpPlugins.add(data.plugin_id);
+    _renderUnreachableBanner();
+});
 
 socket.on('plugin_unreachable', (data) => {
     _unreachablePlugins[data.plugin_id] = data.command || null;
@@ -224,6 +233,7 @@ socket.on('plugin_unreachable', (data) => {
 
 socket.on('plugin_reachable', (data) => {
     delete _unreachablePlugins[data.plugin_id];
+    _gaveUpPlugins.delete(data.plugin_id);
     _renderUnreachableBanner();
 });
 
@@ -238,6 +248,11 @@ socket.on('plugins_states', (data) => {
             if (!(pluginId in _unreachablePlugins)) _unreachablePlugins[pluginId] = null;
         } else {
             delete _unreachablePlugins[pluginId];
+        }
+        if (state.gave_up) {
+            _gaveUpPlugins.add(pluginId);
+        } else {
+            _gaveUpPlugins.delete(pluginId);
         }
     }
     _renderUnreachableBanner();

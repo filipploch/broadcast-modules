@@ -182,6 +182,30 @@ func TestSuperviseStopsAtRestartLimit(t *testing.T) {
 	}
 }
 
+// Po wyczerpaniu limitu moduł główny dostaje komunikat (ponawiany co gaveUpNotifyEvery, bo mógł nie być połączony).
+func TestSuperviseNotifiesMainModuleWhenPluginGivesUp(t *testing.T) {
+	hub, pm := newTestPM(t, "timer-plugin")
+	hub.ExpectedPlugins["timer-plugin"] = true
+	pm.plugins["timer-plugin"].RestartCount = 3 // max_restarts
+	main := newMainModule(hub)
+
+	t0 := time.Now()
+	pm.superviseOnce(t0)                    // zauważenie kłopotu
+	pm.superviseOnce(t0.Add(time.Minute))   // grace minął, limit wyczerpany
+	got := readSent(t, main)
+	if got == nil || got.Type != "plugin_gave_up" || got.Payload["plugin_id"] != "timer-plugin" {
+		t.Fatalf("oczekiwano plugin_gave_up, jest %+v", got)
+	}
+	pm.superviseOnce(t0.Add(time.Minute + 5*time.Second))
+	if again := readSent(t, main); again != nil {
+		t.Fatalf("komunikat nie może się powtarzać co każdy przebieg: %+v", again)
+	}
+	pm.superviseOnce(t0.Add(time.Minute + 40*time.Second))
+	if again := readSent(t, main); again == nil || again.Type != "plugin_gave_up" {
+		t.Fatalf("po gaveUpNotifyEvery komunikat powinien wrócić: %+v", again)
+	}
+}
+
 func TestSuperviseResetsCounterAfterStableRun(t *testing.T) {
 	hub, pm := newTestPM(t, "timer-plugin")
 	hub.ExpectedPlugins["timer-plugin"] = true

@@ -373,6 +373,12 @@ class HubClient:
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
 
+        elif msg_type == 'plugin_gave_up':
+            plugin_id = payload.get('plugin_id')
+            if plugin_id:
+                self.plugin_online[plugin_id] = False
+                self._report_gave_up(plugin_id)
+
         elif msg_type == 'plugin_restart_result':
             self._log("info" if payload.get('ok') else "error",
                       f"Restart pluginu {payload.get('plugin_id')}: "
@@ -775,6 +781,15 @@ class HubClient:
                     get_plugin_manager().mark_unreachable(plugin_id, command)
         except Exception as e:
             self._log("error", f"Nie udało się zgłosić panelowi braku pluginu {plugin_id}: {e}")
+
+    def _report_gave_up(self, plugin_id):
+        try:
+            if self.app:
+                with self.app.app_context():
+                    from core.managers import get_plugin_manager
+                    get_plugin_manager().mark_gave_up(plugin_id)
+        except Exception as e:
+            self._log("error", f"Nie udało się zgłosić panelowi wyczerpania prób dla {plugin_id}: {e}")
 
     def _report_reachable(self, plugin_id):
         try:

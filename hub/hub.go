@@ -877,3 +877,14 @@ func (h *Hub) sendSafely(m *Module, msg *Message) {
 		log.Printf("⚠️  %s: kolejka pełna, pomijam %s", m.ID, msg.Type)
 	}
 }
+
+// notifyMainModule wysyła komunikat od HUB-a do modułu głównego, jeśli jest połączony.
+func (h *Hub) notifyMainModule(msgType string, payload map[string]interface{}) {
+	h.mu.RLock()
+	m := h.MainModule
+	h.mu.RUnlock()
+	if m == nil || !m.IsActive {
+		return
+	}
+	h.sendSafely(m, NewMessage("hub", m.ID, msgType, payload))
+}

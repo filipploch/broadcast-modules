@@ -109,6 +109,21 @@ class NiedostarczonePolecenia(unittest.TestCase):
             'connected_plugins': {'timer-plugin': {'is_active': True}}, 'plugin_health': {}}})
         self.assertFalse(self._events('plugins_states')[-1]['timer-plugin']['unreachable'])
 
+    def test_plugin_ktory_sie_poddal_ma_trwaly_komunikat_do_rejestracji(self):
+        self.hub._handle_message({'type': 'plugin_gave_up', 'payload': {'plugin_id': 'timer-plugin'}})
+        self.hub._handle_message({'type': 'plugin_gave_up', 'payload': {'plugin_id': 'timer-plugin'}})   # przypomnienie z HUB-a
+        self.assertEqual(self._events('plugin_gave_up'), [{'plugin_id': 'timer-plugin'}])               # komunikat raz
+        self.assertFalse(self.hub.plugin_online['timer-plugin'])
+        # trwa po odswiezeniu strony: flaga w stanie pluginow wysylanym przy kazdym raporcie
+        self.hub._handle_message({'type': 'health_status', 'payload': {'connected_plugins': {}, 'plugin_health': {}}})
+        self.assertTrue(self._events('plugins_states')[-1]['timer-plugin']['gave_up'])
+        # znika po rejestracji pluginu
+        self.hub._handle_message({'type': 'plugin_status', 'payload': {'plugin_id': 'timer-plugin', 'status': 'connected'}})
+        self.assertEqual(self._events('plugin_reachable'), [{'plugin_id': 'timer-plugin'}])
+        self.hub._handle_message({'type': 'health_status', 'payload': {
+            'connected_plugins': {'timer-plugin': {'is_active': True}}, 'plugin_health': {}}})
+        self.assertFalse(self._events('plugins_states')[-1]['timer-plugin']['gave_up'])
+
     def test_prosba_o_restart_idzie_do_hub_a_tylko_dla_obslugiwanych_pluginow(self):
         self.assertTrue(self.hub.request_plugin_restart('timer-plugin'))
         sent = self._sent()[-1]
