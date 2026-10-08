@@ -76,13 +76,23 @@ func connect(hub *Hub, pm *PluginManager, id string) {
 	pm.UpdatePluginStatus(id, "online")
 }
 
-func TestManualRestartIgnoresLimitAndDoesNotCount(t *testing.T) {
+func TestManualRestartIgnoresLimitAndResetsCounter(t *testing.T) {
 	_, pm := newTestPM(t, "timer-plugin")
-	if err := pm.StartPlugin("timer-plugin"); err != nil {
-		t.Fatal(err)
+	pm.plugins["timer-plugin"].RestartCount = 3 // limit max_restarts wyczerpany
+	if err := pm.StartPlugin("timer-plugin"); err == nil {
+		t.Fatal("start automatyczny po wyczerpaniu limitu powinien być odrzucony")
+	}
+	if err := pm.RestartPlugin("timer-plugin", true); err != nil {
+		t.Fatalf("restart ręczny mimo limitu: %v", err)
 	}
 	pid := pidOf(pm, "timer-plugin")
-	for i := 0; i < 5; i++ { // więcej niż max_restarts (3)
+	if pid == 0 {
+		t.Fatal("plugin nie został uruchomiony")
+	}
+	if n := restartsOf(pm, "timer-plugin"); n != 0 {
+		t.Fatalf("po ręcznym restarcie licznik prób ma być wyzerowany (pełny zapas): %d", n)
+	}
+	for i := 0; i < 5; i++ { // kolejne ręczne restarty też nie zużywają prób
 		if err := pm.RestartPlugin("timer-plugin", true); err != nil {
 			t.Fatalf("restart ręczny %d: %v", i, err)
 		}
@@ -90,8 +100,53 @@ func TestManualRestartIgnoresLimitAndDoesNotCount(t *testing.T) {
 	if got := pidOf(pm, "timer-plugin"); got == 0 || got == pid {
 		t.Fatalf("proces nie został uruchomiony od nowa (pid %d -> %d)", pid, got)
 	}
-	if n := restartsOf(pm, "timer-plugin"); n != 1 {
-		t.Fatalf("restarty ręczne nie mogą zwiększać licznika: %d", n)
+	if n := restartsOf(pm, "timer-plugin"); n != 0 {
+		t.Fatalf("licznik prób po ręcznych restartach: %d", n)
+	}
+}
+
+// Po ręcznym restarcie zapis o wyczerpanym limicie znika, a nadzór znów naprawia plugin automatycznie.
+func TestManualRestartGivesFullBudgetBackToSupervisor(t *testing.T) {
+	hub, pm := newTestPM(t, "timer-plugin")
+	hub.ExpectedPlugins["timer-plugin"] = true
+	pm.plugins["timer-plugin"].RestartCount = 3
+	t0 := time.Now()
+	pm.superviseOnce(t0)
+	pm.superviseOnce(t0.Add(time.Minute)) // wyczerpany limit zgłoszony
+	pm.mu.RLock()
+	reported := pm.problems["timer-plugin"] != nil && pm.problems["timer-plugin"].reported
+	pm.mu.RUnlock()
+	if !reported {
+		t.Fatal("limit powinien być zgłoszony przed ręcznym restartem")
+	}
+	if err := pm.RestartPlugin("timer-plugin", true); err != nil {
+		t.Fatal(err)
+	}
+	pm.mu.RLock()
+	_, stillThere := pm.problems["timer-plugin"]
+	pm.mu.RUnlock()
+	if stillThere {
+		t.Fatal("zapis o problemie powinien zniknąć po ręcznym restarcie")
+	}
+	// plugin ginie: automatyczna naprawa znów działa (nie ma już limitu)
+	pm.StopPlugin("timer-plugin")
+	t1 := t0.Add(2 * time.Minute)
+	pm.superviseOnce(t1)
+	pm.superviseOnce(t1.Add(10 * time.Second))
+	waitFor(t, "automatyczny start po ręcznym restarcie", func() bool { return pidOf(pm, "timer-plugin") != 0 })
+}
+
+func TestStatusReportsRestartsSinceHubStart(t *testing.T) {
+	_, pm := newTestPM(t, "timer-plugin")
+	pm.StartPlugin("timer-plugin")
+	st := pm.GetAllStatus()["local_plugins"].(map[string]interface{})["timer-plugin"].(map[string]interface{})
+	if st["restarts"] != 0 {
+		t.Fatalf("pierwszy start nie jest restartem: %v", st)
+	}
+	pm.RestartPlugin("timer-plugin", true)
+	st = pm.GetAllStatus()["local_plugins"].(map[string]interface{})["timer-plugin"].(map[string]interface{})
+	if st["restarts"] != 1 {
+		t.Fatalf("po restarcie oczekiwano restarts=1: %v", st)
 	}
 }
 

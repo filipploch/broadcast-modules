@@ -47,6 +47,8 @@ type PluginProcess struct {
 	Status       string // "stopped", "starting", "online", "offline", "error"
 	LastError    error
 	RestartCount int
+	Restarts     int  // ile razy plugin uruchomiono PONOWNIE od startu HUB-a (każdy rodzaj restartu); pierwszy start się nie liczy
+	startedOnce  bool // czy plugin był już kiedykolwiek uruchomiony
 	StartedAt    time.Time
 	exitChan     chan struct{}
 	stopping     bool // zatrzymanie z woli HUB-a (restart, zamykanie): monitor nie uruchamia pluginu ponownie
@@ -324,6 +326,10 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 	}
 	pluginProc.stopping = false
 	pluginProc.exitChan = make(chan struct{})
+	if pluginProc.startedOnce {
+		pluginProc.Restarts++
+	}
+	pluginProc.startedOnce = true
 	pm.mu.Unlock()
 
 	log.Printf("✅ Plugin %s started (PID: %d)", pluginID, cmd.Process.Pid)
@@ -547,8 +553,13 @@ func (pm *PluginManager) GetAllStatus() map[string]interface{} {
 	localPlugins := make(map[string]interface{})
 	for id, pluginProc := range pm.plugins {
 		localPlugins[id] = map[string]interface{}{
-			"status": pluginProc.Status,
-			"pid":    0,
+			"status":        pluginProc.Status,
+			"pid":           0,
+			"restarts":      pluginProc.Restarts,
+			"restart_count": pluginProc.RestartCount,
+		}
+		if !pluginProc.StartedAt.IsZero() {
+			localPlugins[id].(map[string]interface{})["uptime_s"] = int(time.Since(pluginProc.StartedAt).Seconds())
 		}
 		if pluginProc.Process != nil && pluginProc.Process.Process != nil {
 			localPlugins[id].(map[string]interface{})["pid"] = pluginProc.Process.Process.Pid
@@ -579,6 +590,14 @@ func (pm *PluginManager) RestartPlugin(pluginID string, manual bool) error {
 	log.Printf("🔄 Restart pluginu %s (ręczny: %v)", pluginID, manual)
 	if err := pm.StopPlugin(pluginID); err != nil {
 		return fmt.Errorf("nie udało się zatrzymać pluginu %s: %w", pluginID, err)
+	}
+	if manual {
+		// Operator interweniował: plugin dostaje pełny zapas automatycznych prób (limit max_restarts liczy od zera)
+		// i znika zapis o wyczerpanym limicie.
+		pm.mu.Lock()
+		pm.plugins[pluginID].RestartCount = 0
+		delete(pm.problems, pluginID)
+		pm.mu.Unlock()
 	}
 	return pm.startPlugin(pluginID, manual)
 }
