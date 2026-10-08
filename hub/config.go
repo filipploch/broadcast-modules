@@ -47,8 +47,11 @@ type HubConfig struct {
 	ModuleDir           string                 `json:"module_dir"`
 	ModuleReadyTimeoutS int                    `json:"module_ready_timeout_s"`
 	ModuleStopGraceS    int                    `json:"module_stop_grace_s"`
-	Obs                 ObsConfig              `json:"obs"`
-	Wol                 WolConfig              `json:"wol"`
+	// PluginsConfig: plik konfiguracji pluginów (względem katalogu głównego); "" = config/plugins.json względem bieżącego folderu.
+	// Próby ręczne wskazują tu plik tylko z pluginami lokalnymi, żeby HUB nie wołał prawdziwych urządzeń (Debian, kamery).
+	PluginsConfig string    `json:"plugins_config"`
+	Obs           ObsConfig `json:"obs"`
+	Wol           WolConfig `json:"wol"`
 }
 
 // defaultHubConfig: wartości wbudowane; test pilnuje, żeby były identyczne z hub.example.json.

@@ -48,6 +48,12 @@ func main() {
 	// Create Hub
 	hub := NewHub(port, enablePluginManager, enableHealthMonitor)
 
+	// Plik konfiguracji pluginów z hub.json (próby ręczne: tylko pluginy lokalne, bez Debiana i kamer)
+	if hub.PluginManager != nil && hubCfg.PluginsConfig != "" {
+		hub.PluginManager.configPath = hubCfg.abs(hubCfg.PluginsConfig)
+		log.Printf("Konfiguracja pluginów: %s", hub.PluginManager.configPath)
+	}
+
 	// Load plugin configurations
 	if hub.PluginManager != nil {
 		if err := hub.PluginManager.LoadConfig(); err != nil {

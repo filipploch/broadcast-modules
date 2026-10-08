@@ -151,6 +151,8 @@ def build():
         "health_check_interval": 10, "is_critical": False}}
     (DRY / "hub" / "config" / "plugins.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     (DRY / "hub" / "config" / "overlays.json").write_text("[]", encoding="utf-8")
+    # wlasna konfiguracja HUB-a (E2d1): HUB nie uruchamia modulu (robi to skrypt), WoL wylaczony
+    (DRY / "hub.json").write_text(json.dumps({"hub_port": 8080, "module": "", "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"}}, indent=2), encoding="utf-8")
 
 
 def main():
@@ -169,7 +171,7 @@ def main():
     shutil.rmtree(DRY / "state", ignore_errors=True)
     procs = []
     try:
-        hub = subprocess.Popen([str(DRY / "hub.exe")], cwd=DRY / "hub", stdout=open(LOGS / "hub.log", "w"), stderr=subprocess.STDOUT)
+        hub = subprocess.Popen([str(DRY / "hub.exe"), "--config", str(DRY / "hub.json")], cwd=DRY / "hub", stdout=open(LOGS / "hub.log", "w"), stderr=subprocess.STDOUT)
         procs.append(hub)
         for _ in range(40):
             if port_busy(8080):
