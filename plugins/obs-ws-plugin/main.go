@@ -467,12 +467,19 @@ func (p *Plugin) monitorOBSStatus() {
 	}
 }
 
+// Odstępy między próbami połączenia z OBS. OBS startuje dopiero po module i pluginach (HUB uruchamia go ostatni),
+// więc krótki maksymalny odstęp (5 s zamiast 30 s) sprawia, że plugin łączy się w kilka sekund po jego starcie.
+const (
+	obsInitialBackoff = 3 * time.Second
+	obsMaxBackoff     = 5 * time.Second
+)
+
 // connectToOBSWithRetry próbuje połączyć się z OBS w pętli z exponential backoff.
 // Po udanym połączeniu oddaje kontrolę wewnętrznemu mechanizmowi reconnect
 // w obs/client.go (który obsługuje zerwania połączenia podczas działania).
 func (p *Plugin) connectToOBSWithRetry() {
-	backoff := 3 * time.Second
-	maxBackoff := 30 * time.Second
+	backoff := obsInitialBackoff
+	maxBackoff := obsMaxBackoff
 	attempt := 0
 
 	for {

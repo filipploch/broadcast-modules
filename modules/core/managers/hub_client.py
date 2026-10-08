@@ -425,6 +425,13 @@ class HubClient:
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
 
+        elif msg_type == 'shutdown_module':
+            # Prośba HUB-a (E2d1) o łagodne zamknięcie: tylko od HUB-a. Bez odpowiedzi poza zamknięciem procesu.
+            if msg_from == 'hub':
+                self._shutdown_module()
+            else:
+                self._log("warning", f"Ignoruję shutdown_module od {msg_from}")
+
         elif msg_type == 'plugin_gave_up':
             plugin_id = payload.get('plugin_id')
             if plugin_id:
@@ -787,6 +794,29 @@ class HubClient:
 
     # Pluginy, które operator może uruchomić ponownie z panelu (nakładkę odświeża OBS: etap E2d).
     RESTARTABLE_PLUGINS = ('timer-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'recorder-plugin')
+
+    def _shutdown_module(self):
+        """Zamyka moduł na prośbę HUB-a: zatrzymuje menedżery, zamyka logi i kończy proces (kod 0 = bez restartu przez HUB).
+        Działa w osobnym wątku, żeby nie blokować wątku WebSocket."""
+        def run():
+            self._log("info", "HUB poprosił o zamknięcie modułu (shutdown_module)")
+            try:
+                if self.app:
+                    with self.app.app_context():
+                        from app.managers import shutdown_all_managers
+                        shutdown_all_managers()
+            except Exception as e:
+                self._log("error", f"Błąd przy zatrzymywaniu menedżerów: {e}", exc_info=True)
+            self._log("info", "Moduł zamknięty na prośbę HUB-a")
+            import logging
+            logging.shutdown()
+            self._exit_process(0)
+        threading.Thread(target=run, daemon=True, name='shutdown-module').start()
+
+    @staticmethod
+    def _exit_process(code):
+        import os
+        os._exit(code)
 
     def request_plugin_restart(self, plugin_id):
         """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""

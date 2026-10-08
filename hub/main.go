@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -10,7 +11,25 @@ import (
 )
 
 func main() {
+	configFlag := flag.String("config", "", "ścieżka do pliku konfiguracji HUB-a (domyślnie hub/config/hub.json, a bez niego hub.example.json)")
+	moduleFlag := flag.String("module", "", "moduł do uruchomienia (nadpisuje pole \"module\" z konfiguracji)")
+	flag.Parse()
+
+	hubCfg, cfgErr := loadHubConfig(*configFlag, *moduleFlag, "")
+	if cfgErr != nil {
+		log.Fatalf("❌ Konfiguracja HUB-a: %v", cfgErr)
+	}
+
 	runDir, closeLogs, logErr := setupRunLogs(logsRoot(), time.Now())
+	// Pierwszy wiersz logu: wybrany moduł i skąd ta wartość
+	if hubCfg.Module == "" {
+		log.Printf("Moduł: (brak; HUB nie uruchamia modułu) (źródło: %s)", hubCfg.ModuleSource)
+	} else {
+		log.Printf("Moduł: %s (źródło: %s)", hubCfg.Module, hubCfg.ModuleSource)
+	}
+	for _, n := range hubCfg.Notes {
+		log.Print(n)
+	}
 	if logErr != nil {
 		log.Printf("⚠️  Nie można założyć folderu logów (logi tylko w konsoli): %v", logErr)
 	} else {
@@ -22,7 +41,7 @@ func main() {
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// Configuration
-	port := 8080
+	port := hubCfg.HubPort
 	enablePluginManager := true
 	enableHealthMonitor := true
 
@@ -43,6 +62,20 @@ func main() {
 
 	if hub.PluginManager != nil {
 		go hub.PluginManager.RunSupervisor(5 * time.Second)
+	}
+
+	// Usługi: moduł główny (z hub.json) i wpisy "type": "service" z plugins.json
+	hub.Services = NewServiceManager()
+	hub.Services.graceful = hub.gracefulStopService
+	if hub.PluginManager != nil {
+		if err := hub.Services.LoadFromPluginsJSON(hub.PluginManager.configPath); err != nil {
+			log.Fatalf("❌ Failed to load services from plugin config: %v", err)
+		}
+	}
+	if svc, ok := hubCfg.moduleService(); ok {
+		if err := hub.Services.Add(svc); err != nil {
+			log.Fatalf("❌ Moduł: %v", err)
+		}
 	}
 
 	// Start hub event loop
@@ -92,6 +125,9 @@ func main() {
 
 	// Start reverse discovery for external plugins
 	hub.StartReverseDiscovery()
+
+	// Usługi startują po HUB-ie (moduł łączy się z nim od razu); pluginy lokalne startują dalej na deklarację modułu
+	hub.Services.StartAll()
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)

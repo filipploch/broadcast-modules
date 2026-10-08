@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -41,17 +40,7 @@ func logsRoot() string {
 	if d := os.Getenv("BM_LOGS_DIR"); d != "" {
 		return d
 	}
-	exeDir := ""
-	if exe, err := os.Executable(); err == nil {
-		exeDir = filepath.Dir(exe)
-	}
-	// `go run` buduje plik w folderze tymczasowym: wtedy liczymy od położenia źródeł
-	if exeDir == "" || strings.Contains(exeDir, "go-build") {
-		if _, file, _, ok := runtime.Caller(0); ok {
-			exeDir = filepath.Dir(file)
-		}
-	}
-	return filepath.Join(filepath.Dir(exeDir), "logs")
+	return filepath.Join(repoRoot(), "logs")
 }
 
 // setupRunLogs zakłada folder uruchomienia, usuwa foldery starsze niż 30 dni, ustawia BM_LOG_RUN_DIR dla procesów

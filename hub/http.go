@@ -181,6 +181,10 @@ func serveStatus(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	status["expected_plugins"] = expectedPlugins
 	hub.mu.RUnlock()
 
+	if hub.Services != nil {
+		status["services"] = hub.Services.Snapshot()
+	}
+
 	// Add plugin manager status if available
 	if hub.PluginManager != nil {
 		status["plugin_manager"] = hub.PluginManager.GetAllStatus()
