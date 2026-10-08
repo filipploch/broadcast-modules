@@ -4,12 +4,6 @@
   background-image: linear-gradient(to bottom, rgb(72, 54, 28), #2a1b06);
 }
 
-.specific-colors-reversed {
-  color: #2a1b06;
-  background-color: #480f0f;
-  background-image: linear-gradient(to bottom, rgb(255, 255, 255), #9c9c9c);
-}
-
 .info-body-right {
   flex: 1;
   display: flex;
@@ -20,9 +14,7 @@
 }
 
 .info-body-right img {
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
   object-fit: cover;
-  top: 45px;
-  position: absolute;
 }
