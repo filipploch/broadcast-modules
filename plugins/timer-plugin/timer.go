@@ -389,8 +389,37 @@ func (m *Manager) GetState(timerID string) (*TimerInfo, error) {
 		State:           t.state,
 		Limit:           t.limit,
 		HasReachedLimit: t.hasReachedLimit,
-		Metadata:        t.metadata,
+		Metadata:        copyMetadata(t.metadata), // kopia: metadata mogą być zmieniane przez SetMetadata
 	}, nil
+}
+
+func copyMetadata(md map[string]interface{}) map[string]interface{} {
+	if md == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(md))
+	for k, v := range md {
+		out[k] = v
+	}
+	return out
+}
+
+// SetMetadata ustawia jeden klucz w metadata zegara (pod blokadą zegara) i zapisuje stan.
+func (m *Manager) SetMetadata(timerID, key string, value interface{}) error {
+	m.mu.RLock()
+	t, exists := m.timers[timerID]
+	m.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("timer not found: %s", timerID)
+	}
+	t.mu.Lock()
+	if t.metadata == nil {
+		t.metadata = make(map[string]interface{})
+	}
+	t.metadata[key] = value
+	t.mu.Unlock()
+	m.markDirty()
+	return nil
 }
 
 // GetAllTimers returns information about all timers

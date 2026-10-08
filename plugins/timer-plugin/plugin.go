@@ -136,6 +136,8 @@ func (p *Plugin) handleMessages() {
 func (p *Plugin) handleMessage(msg *Message) {
 	// log.Printf("📩 Received: %s from %s (type: %s)", msg.Type, msg.From, msg.Type)
 
+	p.refreshTimerSessions(msg)
+
 	switch msg.Type {
 	case "registered":
 		log.Printf("✅ Plugin registered with Hub")
@@ -796,6 +798,28 @@ func (p *Plugin) timerContext(timerID string) map[string]interface{} {
 	}
 	ctx, _ := info.Metadata[contextMetaKey].(map[string]interface{})
 	return ctx
+}
+
+// refreshTimerSessions: polecenie z kontekstem tego samego meczu, ale NOWEJ sesji (sesję zamknięto i otwarto ponownie, a mecz
+// ten sam) odświeża numer sesji w kontekście zegarów tego meczu. Bez tego zdarzenia zegara niosłyby numer starej sesji
+// i moduł odrzucałby je jako spóźnione. Zegary innego meczu zostają bez zmian (to są właśnie komunikaty spóźnione).
+func (p *Plugin) refreshTimerSessions(msg *Message) {
+	game, session := msg.Context["game_id"], msg.Context["session_id"]
+	if game == nil || session == nil {
+		return
+	}
+	for _, info := range p.manager.GetAllTimers() {
+		cur, _ := info.Metadata[contextMetaKey].(map[string]interface{})
+		if cur == nil || cur["game_id"] != game || cur["module"] != msg.Context["module"] || cur["session_id"] == session {
+			continue
+		}
+		updated := make(map[string]interface{}, len(cur))
+		for k, v := range cur {
+			updated[k] = v
+		}
+		updated["session_id"] = session
+		p.manager.SetMetadata(info.ID, contextMetaKey, updated)
+	}
 }
 
 // sendCtx wysyła wiadomość z kontekstem: najpierw kontekst zegara, którego dotyczy (payload.timer_id), a gdy go nie ma,

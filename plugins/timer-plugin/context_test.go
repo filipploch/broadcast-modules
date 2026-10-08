@@ -168,3 +168,37 @@ func TestContextSurvivesPluginRestartThroughStateFile(t *testing.T) {
 	}
 	sameContext(t, paused.Context, gameA)
 }
+
+// Mecz ten sam, sesja nowa (zamknięto i otwarto sesję): zdarzenia zegara niosą nowy numer sesji, żeby moduł ich nie odrzucał.
+func TestNewerSessionOfSameGameRefreshesTimerContext(t *testing.T) {
+	p := newCtxPlugin(t)
+	p.handleCreateTimer(&Message{From: "main-module", Payload: map[string]interface{}{"timer_id": "t1", "limit": float64(60000)}, Context: gameA})
+	t.Cleanup(func() { p.manager.Remove("t1") })
+	sent(p)
+
+	newSession := map[string]interface{}{"module": "futsal_nalf", "session_id": float64(8), "game_id": float64(42), "period_id": float64(3)}
+	p.handleMessage(&Message{From: "main-module", Type: "start_timer", Payload: map[string]interface{}{"timer_id": "t1"}, Context: newSession})
+	p.handlePauseTimer(&Message{From: "main-module", Payload: map[string]interface{}{"timer_id": "t1"}, Context: newSession})
+	started := lastOfType(collect(p, 300*time.Millisecond), "timer_started")
+	if started == nil {
+		t.Fatal("brak timer_started")
+	}
+	sameContext(t, started.Context, newSession)
+}
+
+// Inny mecz nie odświeża kontekstu: zegar meczu A dalej niesie mecz A (komunikat spóźniony ma zostać odrzucony przez moduł).
+func TestCommandOfOtherGameDoesNotRefreshTimerContext(t *testing.T) {
+	p := newCtxPlugin(t)
+	p.handleCreateTimer(&Message{From: "main-module", Payload: map[string]interface{}{"timer_id": "t1", "limit": float64(60000)}, Context: gameA})
+	t.Cleanup(func() { p.manager.Remove("t1") })
+	sent(p)
+
+	otherSession := map[string]interface{}{"module": "futsal_nalf", "session_id": float64(8), "game_id": float64(43), "period_id": float64(5)}
+	p.handleMessage(&Message{From: "main-module", Type: "start_timer", Payload: map[string]interface{}{"timer_id": "t1"}, Context: otherSession})
+	p.handlePauseTimer(&Message{From: "main-module", Payload: map[string]interface{}{"timer_id": "t1"}, Context: otherSession})
+	started := lastOfType(collect(p, 300*time.Millisecond), "timer_started")
+	if started == nil {
+		t.Fatal("brak timer_started")
+	}
+	sameContext(t, started.Context, gameA)
+}
