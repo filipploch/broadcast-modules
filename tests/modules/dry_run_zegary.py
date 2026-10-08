@@ -7,7 +7,9 @@ testowa (kopia lokalnej bazy modulu), uruchamia HUB (port 8080), timer-plugin (s
 i modul (port 8081) i przeprowadza scenariusze:
   A. start okresu 1 i zegara, B. przerwa i start okresu 2 (plugin ma dokladnie jeden zegar glowny),
   C. zabicie timer-pluginu w trakcie BIEGNACEGO okresu, D. zabicie timer-pluginu w trakcie PAUZY.
-C i D tylko obserwuja: odtwarzanie zegara robione jest tak jak w timer-recovery.js; zapisujemy, co pokazuje zegar po odtworzeniu.
+C i D (E2a): plugin sam odtwarza zegar z pliku stanu (czas scienny + przestoj); skrypt sprawdza stan i czas po powrocie pluginu.
+  E. uszkodzony plik stanu: plugin wraca bez zegarow, odtwarza je modul awaryjnie (jak timer-recovery.js po E2a: szacunek z bazy)
+     i zapisuje ostrzezenie w logu modulu.
 Wymaga wolnych portow 8080 i 8081 oraz braku uruchomionych hub.exe / timer-plugin.exe (wersja transmisyjna musi byc wylaczona).
 """
 import json, os, pathlib, shutil, socket, sqlite3, subprocess, sys, threading, time, urllib.request
@@ -21,10 +23,14 @@ LOGS = DRY / "logs"
 OUT = REPO / "wp-local" / "tests-out" / "dry_run_zegary.txt"
 BASE = "http://127.0.0.1:8081"
 lines = []
+TOLERANCE_MS = {"C": 1500, "D": 1500, "E": 4000}
 
 
 def say(msg=""):
-    print(msg, flush=True)
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:                         # konsola w cp1250 nie wypisze emoji z logow
+        print(msg.encode("ascii", "replace").decode(), flush=True)
     lines.append(msg)
 
 
@@ -88,21 +94,32 @@ def main_ids(timers, all_main_names):
 
 
 def ui_recovery(panel, label):
-    """Odtwarzanie jak w timer-recovery.js: brak zegara w pluginie -> utworz z initial_time = elapsed (albo initial_time), start jesli 'running'."""
+    """Odtwarzanie jak w timer-recovery.js (E2a): brak zegara w pluginie -> utworz (z oznaczeniem 'recovery'), ustaw szacowany
+    upływ i uruchom, jesli 'running'. Dane z /api/settings: recovery_timers (zapasowo current_timers)."""
     st = http("GET", "/api/settings")
-    main = (st.get("current_timers") or {}).get("main")
-    timers = panel.timers()
-    ids = {t.get("timer_id") for t in timers or []}
-    info = {"settings_main": main, "plugin_timers_before_recovery": sorted(ids)}
+    rt = st.get("recovery_timers") or st.get("current_timers") or {}
+    main = rt.get("main")
+    timers = panel.timers() or []
+    resp = panel.last or {}
+    ids = {t.get("timer_id") for t in timers}
+    info = {"settings_main": main, "plugin_timers_before_recovery": sorted(ids), "plugin_state_status": resp.get("state_status")}
     if main and main["timer_id"] not in ids:
+        has_est = isinstance(main.get("recovery_elapsed"), (int, float))
         payload = {"timer_id": main["timer_id"], "timer_type": main.get("timer_type", "independent"),
-                   "initial_time": main.get("elapsed_time") or main.get("initial_time") or 0, "limit": main["limit"],
-                   "pause_at_limit": main.get("pause_at_limit") is not False, "metadata": main.get("metadata") or {}}
+                   "initial_time": (main.get("initial_time") or 0) if has_est else (main.get("elapsed_time") or main.get("initial_time") or 0),
+                   "limit": main["limit"], "pause_at_limit": main.get("pause_at_limit") is not False,
+                   "metadata": main.get("metadata") or {}, "recovery": True,
+                   "recovery_reason": resp.get("state_status") or "plugin nie zglosil powodu",
+                   "recovery_elapsed": main["recovery_elapsed"] if has_est else 0}
         panel.emit("timer_plugin_create_timer", payload)
-        if main["state"] == "running":
+        if has_est and main["recovery_elapsed"] > 0:
             time.sleep(0.1)
+            panel.emit("timer_plugin_set_elapsed_time", {"timer_id": main["timer_id"], "elapsed_time": main["recovery_elapsed"]})
+        if main["state"] == "running":
+            time.sleep(0.15)
             panel.emit("timer_plugin_start_timer", {"timer_id": main["timer_id"]})
         info["created_with_initial_time"] = payload["initial_time"]
+        info["recovery_elapsed"] = payload["recovery_elapsed"]
     return info
 
 
@@ -139,6 +156,7 @@ def main():
         sys.exit("Przygotowanie bazy nie powiodlo sie:\n" + r.stdout[-1500:] + r.stderr[-1500:])
     db_path = REPO / "modules" / MODULE / "instance" / "database-proba.db"
     build()
+    shutil.rmtree(DRY / "state", ignore_errors=True)
     procs = []
     try:
         hub = subprocess.Popen([str(DRY / "hub.exe")], cwd=DRY / "hub", stdout=open(LOGS / "hub.log", "w"), stderr=subprocess.STDOUT)
@@ -232,14 +250,29 @@ def scenarios(panel, db_path):
     say(f"przed zabiciem: plugin pokazuje={before_display} stan={bstate}; panel elapsed={before_db['elapsed_time']} stan={before_db['state']}")
     kill_and_recover(panel, n2, before_display, bstate, "D")
 
+    say("\n== E. Uszkodzony plik stanu: plugin wraca bez zegarow, zegar odtwarza modul awaryjnie")
+    panel.emit("timer_start", {"timer_id": n2})
+    time.sleep(3.5)
+    t = panel.timers()
+    before_display, bstate = elapsed_of(t, n2)
+    say(f"przed zabiciem: plugin pokazuje={before_display} stan={bstate}")
+    kill_and_recover(panel, n2, before_display, bstate, "E", corrupt_state=True)
+    log = (LOGS / "modul.log").read_text(encoding="utf-8", errors="replace") if (LOGS / "modul.log").exists() else ""
+    warn = [l for l in log.splitlines() if "AWARYJNE ODTWARZANIE ZEGARA" in l]
+    say(f"ostrzezenie w logu modulu: {'JEST' if warn else 'BRAK'}" + (f" -> {warn[-1][:200]}" if warn else ""))
+    bad = list((DRY / "state").glob("timers.json.bad-*"))
+    say(f"uszkodzony plik odlozony na bok: {'TAK' if bad else 'NIE'} ({len(bad)})")
 
-def kill_and_recover(panel, timer_id, before_display, before_state, label):
+
+def kill_and_recover(panel, timer_id, before_display, before_state, label, corrupt_state=False):
     """Zabija timer-plugin, czeka na ponowne uruchomienie przez HUB, odtwarza zegar jak timer-recovery.js i zapisuje, co pokazuje zegar.
 
     Porownanie: 'powinien pokazywac' = czas przed zabiciem + czas, ktory uplynal od zabicia (dla biegnacego) albo sam czas
     przed zabiciem (dla spauzowanego). 'Cofniecie' = powinien - pokazuje."""
     t_kill = time.time()
     subprocess.run(["taskkill", "/F", "/IM", "timer-plugin.exe"], capture_output=True)
+    if corrupt_state:                                 # zanim HUB wznowi plugin (ok. 3-4 s)
+        (DRY / "state" / "timers.json").write_text("{zepsuty plik", encoding="utf-8")
     up = None
     for _ in range(60):
         time.sleep(1)
@@ -270,6 +303,10 @@ def kill_and_recover(panel, timer_id, before_display, before_state, label):
     say(f"zegar powinien pokazywac ok. {should:.0f} ms; cofniecie wzgledem rzeczywistego czasu: {lag:.0f} ms (o {lag/1000:.1f} s)"
         if lag is not None else "brak danych")
     say(f"wzgledem wartosci sprzed zabicia: {shown - before_display:+.0f} ms")
+    tol = TOLERANCE_MS.get(label, 1500)
+    ok = lag is not None and abs(lag) <= tol and astate == before_state
+    say(f"WYNIK {label}: {'ZALICZONY' if ok else 'NIEZALICZONY'} (stan {before_state} -> {astate}, odchylka {0 if lag is None else lag:.0f} ms, tolerancja {tol} ms)")
+    return ok
 
 
 if __name__ == "__main__":

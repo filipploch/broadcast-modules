@@ -10,12 +10,12 @@ import (
 )
 
 func main() {
-	logFile, logErr := setupLogFile(logsDir(), time.Now())
+	runDir, closeLogs, logErr := setupRunLogs(logsRoot(), time.Now())
 	if logErr != nil {
-		log.Printf("⚠️  Nie można otworzyć pliku logu (logi tylko w konsoli): %v", logErr)
+		log.Printf("⚠️  Nie można założyć folderu logów (logi tylko w konsoli): %v", logErr)
 	} else {
-		defer logFile.Close()
-		log.Printf("📝 Log HUB-a: %s", logFile.Name())
+		defer closeLogs()
+		log.Printf("📝 Logi tego uruchomienia: %s", runDir)
 	}
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("🚀 BROADCAST HUB STARTING")

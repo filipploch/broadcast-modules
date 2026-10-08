@@ -28,7 +28,7 @@ def create_app(config_name='default'):
     # Logging
     logging.basicConfig(
         level=logging.DEBUG if app.debug else logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
+        format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',   # znacznik z ms, jak w HUB-ie i pluginach
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 

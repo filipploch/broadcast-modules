@@ -49,6 +49,7 @@ type PluginProcess struct {
 	RestartCount int
 	StartedAt    time.Time
 	exitChan     chan struct{}
+	logSink      *logSink // wyjście pluginu: plik <id>.log w folderze logów uruchomienia + konsola HUB-a
 }
 
 // PluginManager manages plugin processes (LOCAL PLUGINS ONLY!)
@@ -267,11 +268,13 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	cmd.Env = append(os.Environ(), config.Env...)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PLUGIN_ID=%s", pluginID))
 
-	cmd.Stdout = processOutput
-	cmd.Stderr = processOutput
+	sink := newSink(pluginID, os.Stdout, pluginID)
+	cmd.Stdout = sink
+	cmd.Stderr = sink
 
 	// Start process
 	if err := cmd.Start(); err != nil {
+		sink.Close()
 		pluginProc.Status = "error"
 		pluginProc.LastError = err
 		return fmt.Errorf("failed to start plugin: %w", err)
@@ -280,6 +283,7 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	// Update status
 	pm.mu.Lock()
 	pluginProc.Process = cmd
+	pluginProc.logSink = sink
 	pluginProc.Status = "starting"
 	pluginProc.StartedAt = time.Now()
 	pluginProc.RestartCount++
@@ -305,6 +309,10 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 
 	pm.mu.Lock()
 	pluginProc := pm.plugins[pluginID]
+	if pluginProc.logSink != nil {
+		pluginProc.logSink.Close() // wyjście pluginu dopisane do końca; restart otworzy ten sam plik ponownie
+		pluginProc.logSink = nil
+	}
 
 	if pluginProc.exitChan != nil {
 		close(pluginProc.exitChan)
