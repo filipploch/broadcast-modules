@@ -6,9 +6,13 @@
  * 
  * FLOW:
  * 1. On UI load, fetch settings from /api/settings
- * 2. Check if timers exist in settings.current_timers
+ * 2. Check if timers exist in settings.recovery_timers (zapasowo current_timers)
  * 3. Query timer-plugin for actual timer states
  * 4. Compare and restore any missing timers
+ *
+ * Od E2a timer-plugin sam odtwarza zegary z pliku stanu (z doliczonym przestojem), więc ten skrypt tworzy zegary tylko
+ * awaryjnie: gdy plugin nie ma zegara (brak, uszkodzenie albo przeterminowanie pliku stanu). Takie odtworzenie jest
+ * oznaczane 'recovery: true' i moduł zapisuje w logu ostrzeżenie z powodem (state_status z pluginu).
  */
 
 class TimerRecovery {
@@ -18,6 +22,12 @@ class TimerRecovery {
         this.pluginTimers = null;
         this.recoveryInProgress = false;
         this.recoveryDone = false; // Guard against multiple runs (e.g. socket reconnects)
+        this.pluginStateStatus = null; // none / restored / stale / corrupt (skąd plugin wziął swój stan po starcie)
+    }
+
+    /** Zegary do odtworzenia: dane awaryjne (recovery_timers) albo, gdy ich brak, dotychczasowe current_timers. */
+    _recoveryTimers() {
+        return (this.settings && (this.settings.recovery_timers || this.settings.current_timers)) || null;
     }
 
     /**
@@ -37,14 +47,14 @@ class TimerRecovery {
             // Step 1: Fetch settings from database
             await this.fetchSettings();
             
-            if (!this.settings || !this.settings.current_timers) {
+            if (!this._recoveryTimers()) {
                 console.log('ℹ️  No timers in settings - nothing to recover');
                 this.recoveryDone = true;
                 return;
             }
 
-            const mainTimer = this.settings.current_timers.main;
-            const penalties = this.settings.current_timers.penalties || { home: [], away: [] };
+            const mainTimer = this._recoveryTimers().main;
+            const penalties = this._recoveryTimers().penalties || { home: [], away: [] };
             const hasPenalties = penalties.home.length > 0 || penalties.away.length > 0;
             
             if (!mainTimer && !hasPenalties) {
@@ -139,6 +149,7 @@ class TimerRecovery {
         }
 
         this.pluginTimers = data.timers;
+        this.pluginStateStatus = data.state_status || null;
         this.performRecovery(this.pluginTimers);
     }
 
@@ -154,7 +165,7 @@ class TimerRecovery {
         this.recoveryInProgress = true;
         console.log('🔧 Starting timer recovery...');
 
-        const settingsTimers = this.settings.current_timers;
+        const settingsTimers = this._recoveryTimers();
         const mainTimer = settingsTimers.main;
         const homePenaltyTimers = settingsTimers.penalties['home'] || [];
         const awayPenaltyTimers = settingsTimers.penalties['away'] || [];
@@ -202,11 +213,18 @@ class TimerRecovery {
      * Restore missing timers in timer-plugin
      */
     restoreTimers(timersToRestore) {
+        // Kara (zegar zależny) kotwiczy się na upływie zegara głównego w chwili utworzenia, więc przy odtwarzaniu
+        // zegara głównego kary tworzymy dopiero po tym, jak dostał szacowany upływ.
+        const restoringMain = timersToRestore.some(t => t.type === 'main');
         timersToRestore.forEach(({ type, data }) => {
             if (type === 'main') {
                 this.restoreMainTimer(data);
             } else if (type === 'penalty') {
-                this.restorePenaltyTimer(data);
+                if (restoringMain) {
+                    setTimeout(() => this.restorePenaltyTimer(data), 400);
+                } else {
+                    this.restorePenaltyTimer(data);
+                }
             }
         });
     }
@@ -217,13 +235,19 @@ class TimerRecovery {
     restoreMainTimer(timerData) {
         console.log('🔧 Restoring main timer:', timerData.timer_id);
         
+        // Trwający okres: initial_time to przesunięcie okresu, a upływ ustawiamy osobno (szacunek z bazy);
+        // pozostałe przypadki jak dotąd (okres zakończony: zamrożony upływ).
+        const hasEstimate = typeof timerData.recovery_elapsed === 'number';
         const payload = {
             timer_id: timerData.timer_id,
             timer_type: timerData.timer_type || 'independent',
-            initial_time: timerData.elapsed_time || timerData.initial_time || 0,
+            initial_time: hasEstimate ? (timerData.initial_time || 0) : (timerData.elapsed_time || timerData.initial_time || 0),
             limit: timerData.limit,
             pause_at_limit: timerData.pause_at_limit !== false,
-            metadata: timerData.metadata || {}
+            metadata: timerData.metadata || {},
+            recovery: true,
+            recovery_reason: this.pluginStateStatus || 'plugin nie zgłosił powodu',
+            recovery_elapsed: hasEstimate ? timerData.recovery_elapsed : 0
         };
 
         this.socket.emit('timer_plugin_create_timer', payload);
@@ -234,6 +258,15 @@ class TimerRecovery {
                     timer_id: timerData.timer_id
                 });
                 console.log(`▶️  Started restored timer: ${timerData.timer_id}`);
+            }, 250);
+        }
+
+        if (hasEstimate && timerData.recovery_elapsed > 0) {
+            setTimeout(() => {
+                this.socket.emit('timer_plugin_set_elapsed_time', {
+                    timer_id: timerData.timer_id,
+                    elapsed_time: timerData.recovery_elapsed
+                });
             }, 100);
         }
     }
@@ -250,7 +283,11 @@ class TimerRecovery {
             parent_id: timerData.parent_id,
             initial_time: timerData.elapsed_time || timerData.initial_time || 0,
             limit: timerData.limit || 120000,
-            metadata: timerData.metadata || {}
+            pause_at_limit: timerData.pause_at_limit !== false,
+            metadata: timerData.metadata || {},
+            recovery: true,
+            recovery_reason: this.pluginStateStatus || 'plugin nie zgłosił powodu',
+            recovery_elapsed: 0
         };
 
         this.socket.emit('timer_plugin_create_timer', payload);
@@ -261,7 +298,7 @@ class TimerRecovery {
                     timer_id: timerData.timer_id
                 });
                 console.log(`▶️  Started restored penalty timer: ${timerData.timer_id}`);
-            }, 100);
+            }, 250);
         }
     }
 

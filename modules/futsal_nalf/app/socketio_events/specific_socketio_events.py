@@ -629,10 +629,27 @@ def register_events(socketio):
         keys       = ('parent_id', 'limit', 'pause_at_limit', 'initial_time', 'metadata')
         kwargs     = {k: data[k] for k in keys if k in data}
 
+        if data.get('recovery'):
+            current_app.logger.warning(
+                f'⚠️  AWARYJNE ODTWARZANIE ZEGARA przez moduł: {timer_id} ({timer_type}); plugin zegara nie miał tego zegara '
+                f'(powód: {data.get("recovery_reason") or "nieznany"}). Czas jest szacowany z ostatniego zapisu w bazie '
+                f'(szacunek: {data.get("recovery_elapsed", 0)} ms), może się różnić od rzeczywistego o kilka sekund.')
+
         if tm.create_timer(timer_id, timer_type, **kwargs):
             current_app.logger.info(f'✅ Timer created: {timer_id}')
         else:
             socketio.emit('error', {'message': f'Failed to create timer {timer_id}'})
+
+    @socketio.on('timer_plugin_set_elapsed_time')
+    def handle_timer_plugin_set_elapsed_time(data):
+        # Używane tylko przez awaryjne odtwarzanie zegara (timer-recovery.js): ustawia upływ odtworzonego zegara
+        tm = _get_timer_manager_or_error()
+        if not tm:
+            return
+        timer_id = data.get('timer_id')
+        elapsed  = data.get('elapsed_time')
+        if timer_id and isinstance(elapsed, (int, float)) and elapsed >= 0:
+            tm.set_elapsed_time(timer_id, int(elapsed))
 
     @socketio.on('timer_plugin_start_timer')
     def handle_timer_plugin_start_timer(data):

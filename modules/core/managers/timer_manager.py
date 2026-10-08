@@ -63,6 +63,61 @@ def current_timers_for_game(game_id=None, period=None):
     }
 
 
+def _estimated_elapsed_ms(gt, now=None):
+    """Szacunek upływu zegara z rekordu GameTimer: ostatnia wartość z pluginu (zapis co ok. 1 s) plus czas od zapisu,
+    jeśli zegar biegł. Używane TYLKO przy awaryjnym odtwarzaniu zegara przez moduł (plugin nie miał go w pliku stanu)."""
+    elapsed = gt.elapsed_time_ms or 0
+    if gt.state == gt.STATE_RUNNING and gt.updated_at is not None:
+        now = now or datetime.utcnow()
+        elapsed += max(0, int((now - gt.updated_at).total_seconds() * 1000))
+    return elapsed
+
+
+def recovery_timers_for_game(game_id=None, now=None):
+    """Dane do awaryjnego odtwarzania zegarów w pluginie przez timer-recovery.js (/api/settings: 'recovery_timers').
+
+    To samo co current_timers_for_game, ale dla trwającego okresu zegar główny niesie 'recovery_elapsed' (szacowany upływ,
+    ms), a kary meczu (aktywne rekordy GameTimer okresu) są odtwarzane jako zegary zależne od zegara głównego okresu
+    z pozostałym czasem kary. Panel NIE korzysta z tej listy kar (ma własne źródło), dlatego jest osobna funkcja.
+    """
+    from core.managers import session_manager
+    from core.models.base_period import get_period_model
+    result = current_timers_for_game(game_id)
+    if game_id is None:
+        game_id = session_manager.current_game_id()
+    if game_id is None or result['main'] is None:
+        return result
+    Period = get_period_model()
+    GameTimer = _get_gametimer()
+    period = Period.query.filter_by(game_id=game_id, main_timer_name=result['main']['timer_id']).first()
+    if period is None or period.status != Period.STATUS_PENDING:
+        return result
+    main_gt = GameTimer.query.filter_by(plugin_timer_id=period.main_timer_name).first()
+    if main_gt is None or main_gt.state not in (GameTimer.STATE_RUNNING, GameTimer.STATE_PAUSED):
+        return result
+    main_elapsed = _estimated_elapsed_ms(main_gt, now)
+    result['main']['recovery_elapsed'] = main_elapsed
+    for gt in TimerManager.get_active_penalties(period.id):
+        try:
+            remaining = gt.penalty_remaining_ms(main_elapsed)
+        except ValueError:
+            continue
+        if remaining <= 0 or gt.team not in ('home', 'away'):
+            continue
+        result['penalties'][gt.team].append({
+            'timer_id':       gt.plugin_timer_id,
+            'timer_type':     'dependent',
+            'parent_id':      period.main_timer_name,
+            'initial_time':   max((gt.limit_ms or 0) - remaining, 0),   # czas już odbyty (jak przy przenoszeniu kar)
+            'limit':          remaining,                                # plugin odlicza tylko resztę
+            'pause_at_limit': True,
+            'state':          gt.state,
+            'elapsed_time':   0,
+            'metadata':       {'team': gt.team, 'timer_class': 'penalty'},
+        })
+    return result
+
+
 class TimerManager:
     """Manages communication with Timer Plugin and caches timer states."""
 
@@ -585,14 +640,22 @@ class TimerManager:
             else main_state
         )
 
-        gt = _get_gametimer()(
-            game_id=game_id, period_id=period_id,
-            timer_type=GameTimer.TYPE_PENALTY,
-            team=team, plugin_timer_id=timer_id,
-            elapsed_time_ms=0, limit_ms=limit,
-            state=penalty_state, start_offset_ms=start_offset,
-        )
-        db.session.add(gt)
+        gt = _get_gametimer().query.filter_by(plugin_timer_id=timer_id).first()
+        if gt is None:
+            gt = _get_gametimer()(
+                game_id=game_id, period_id=period_id,
+                timer_type=GameTimer.TYPE_PENALTY,
+                team=team, plugin_timer_id=timer_id,
+                elapsed_time_ms=0, limit_ms=limit,
+                state=penalty_state, start_offset_ms=start_offset,
+            )
+            db.session.add(gt)
+        else:
+            # Awaryjne odtworzenie kary po utracie stanu przez plugin: rekord już istnieje, nie dublujemy go
+            # (plugin_timer_id jest unikalny); zostaje start_offset_ms, a limit to pozostały czas kary
+            gt.period_id = period_id
+            gt.state = penalty_state
+            gt.updated_at = datetime.utcnow()
         db.session.commit()
 
         if main_state == GameTimer.STATE_RUNNING:
@@ -706,6 +769,9 @@ class TimerManager:
         )
         self._emit_to_ui('timer_plugin_all_timers', {
             'count': count, 'timers': timers,
+            # skąd plugin wziął swój stan po starcie (none / restored / stale / corrupt), do logu przy awaryjnym odtwarzaniu
+            'state_status': payload.get('state_status'),
+            'restored_count': payload.get('restored_count'),
         })
 
     # =========================================================================
