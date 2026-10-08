@@ -5,7 +5,10 @@
   - przed rozpoczeciem 1. okresu: bez zmian (okres 1, czas z panelu).
 Regula bieznego okresu dla panelu (session_manager.select_period_for_game) pozostaje: trwajacy -> ostatnio zakonczony -> pierwszy.
 """
+import json
 import pathlib
+import shutil
+import subprocess
 import unittest
 from unittest.mock import MagicMock
 import harness
@@ -17,13 +20,29 @@ HALF = 2700000          # polowa 45 min w testach (jak mecz IV ligi)
 BREAK_OFFSET = 1000     # zmiana w przerwie: initial_time nastepnej czesci + 1 s
 
 
-def overlay_header_time(game_time_ms, period_end_s):
-    """Port hub/overlays/garbarnia/js/substitution.js + utils.js formatGameTimeDisplay (pilnowany przez test zgodnosci zrodla)."""
-    import math
-    total_sec = math.floor((game_time_ms or 0) / 1000)
-    if period_end_s > 0 and total_sec > period_end_s:
-        return f"{period_end_s // 60}+{math.ceil((total_sec - period_end_s) / 60)}'"
-    return f"{math.ceil(total_sec / 60)}'"
+NODE_RUNNER = REPO / "tests" / "modules" / "js" / "overlay_time.js"
+
+
+def _node():
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError("Brak Node.js w PATH: testy wzoru minuty z grafik uruchamiaja prawdziwy kod JS (tests/modules/js/overlay_time.js)")
+    return node
+
+
+def _run_js(*args):
+    r = subprocess.run([_node(), str(NODE_RUNNER), *map(str, args)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    if r.returncode:
+        raise RuntimeError(f"Skrypt JS zakonczyl sie bledem:\n{r.stderr}")
+    return json.loads(r.stdout)
+
+
+def overlay_header_time(game_time_ms, period_end_s, overlay="garbarnia"):
+    """Minuta w naglowku grafiki zmiany: wykonuje PRAWDZIWE showSubstitutionOverlay z hub/overlays/<nakladka>/js/substitution.js
+    (razem z utils.js) w Node i zwraca tekst przed ' ZMIANA'."""
+    header = _run_js(overlay, "substitution", json.dumps(
+        {"game_time_ms": game_time_ms, "period_end_s": period_end_s, "team_short_name": ""}))
+    return header.split(" ZMIANA")[0]
 
 
 class ZmianyNaZywo(unittest.TestCase):
@@ -170,14 +189,6 @@ class ZmianyNaZywo(unittest.TestCase):
         self.assertEqual(payload['game_time_ms'], HALF + BREAK_OFFSET)
         self.assertEqual(payload['period_end_s'], 2 * HALF // 1000)     # koniec NASTEPNEJ czesci (do formatowania doliczonego)
 
-    def test_zrodlo_formatowania_w_grafice_zgodne_z_portem_w_tescie(self):
-        js = (REPO / "hub/overlays/garbarnia/js/utils.js").read_text(encoding="utf-8")
-        self.assertIn("return Math.ceil(gameTimeS / 60) + \"'\";", js)
-        self.assertIn("var baseMin  = Math.floor(periodEndS / 60);", js)
-        sub = (REPO / "hub/overlays/garbarnia/js/substitution.js").read_text(encoding="utf-8")
-        self.assertIn("var totalSec   = Math.floor((data.game_time_ms || 0) / 1000);", sub)
-        self.assertIn("formatGameTimeDisplay(totalSec, periodEndS)", sub)
-
     def test_grafika_pokazuje_pierwsza_minute_czesci_po_przerwie_2x45(self):
         """Wlasciciel: zmiana w przerwie = pierwsza minuta czesci po przerwie (46' przy 2x45)."""
         self.pm.start_period(self.p1.id)
@@ -196,9 +207,16 @@ class ZmianyNaZywo(unittest.TestCase):
 
     def test_znane_ograniczenie_wzoru_grafiki_na_granicy_minuty(self):
         """Do E2 (bez naprawiania): ceil(sekundy/60) na DOKLADNEJ granicy minuty daje minute o 1 mniejsza niz konwencja pilkarska
-        (45:00 -> 45', a pierwsza minuta 2. polowy to 46'). Dlatego czas zmiany w przerwie to initial_time + 1 s."""
-        self.assertEqual(overlay_header_time(HALF, 2 * HALF // 1000), "45'")
-        self.assertEqual(overlay_header_time(HALF + 1000, 2 * HALF // 1000), "46'")
+        (45:00 -> 45', a pierwsza minuta 2. polowy to 46'). Dlatego czas zmiany w przerwie to initial_time + 1 s.
+        Sprawdzane na prawdziwym formatGameTimeDisplay z obu nakladek."""
+        for overlay in ("garbarnia", "futsal-nalf"):
+            with self.subTest(overlay=overlay):
+                self.assertEqual(_run_js(overlay, "format", HALF // 1000, 2 * HALF // 1000), "45'")
+                self.assertEqual(_run_js(overlay, "format", HALF // 1000 + 1, 2 * HALF // 1000), "46'")
+                self.assertEqual(_run_js(overlay, "format", 2 * HALF // 1000 + 60, 2 * HALF // 1000), "90+1'")
+
+    def test_naglowek_zmiany_w_czasie_doliczonym(self):
+        self.assertEqual(overlay_header_time(2 * HALF + 61000, 2 * HALF // 1000), "90+2'")
 
 
 if __name__ == "__main__":
