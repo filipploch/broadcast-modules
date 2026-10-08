@@ -16,6 +16,10 @@ type Message struct {
 	To      string                 `json:"to"`
 	Type    string                 `json:"type"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
+
+	// Context to kontekst transmisji (module, session_id, game_id, period_id) z polecenia modułu głównego:
+	// plugin go nie interpretuje, tylko odsyła w odpowiedziach i zdarzeniach związanych z poleceniem.
+	Context map[string]interface{} `json:"context,omitempty"`
 }
 
 // classes that this plugin subscribes to after every successful registration.

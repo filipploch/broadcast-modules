@@ -18,6 +18,10 @@ type Message struct {
 	Type      string                 `json:"type"`
 	Payload   map[string]interface{} `json:"payload,omitempty"`
 	Timestamp string                 `json:"timestamp,omitempty"`
+
+	// Context to kontekst transmisji (module, session_id, game_id, period_id) z polecenia modułu głównego:
+	// plugin go nie interpretuje, tylko odsyła w odpowiedziach i zdarzeniach związanych z poleceniem.
+	Context map[string]interface{} `json:"context,omitempty"`
 }
 
 // HubClient manages WebSocket connection to the Hub
