@@ -24,6 +24,8 @@ class NiedostarczonePolecenia(unittest.TestCase):
         self.hub.ws = MagicMock()
         self.hub.module_id = "futsal-nalf"
         self.hub.required_plugins = ['timer-plugin', 'obs-ws-plugin', 'recorder-plugin']
+        # pluginy dzialaly od startu modulu (inaczej brak odpowiedzi nie daje paska; zob. test_pasek_pluginow)
+        self.hub.plugin_seen.update(self.hub.required_plugins)
         self.emitted = []
         self.pm = PluginManager(self.hub)
         self.pm._emit_to_ui = lambda t, d: self.emitted.append((t, d))
