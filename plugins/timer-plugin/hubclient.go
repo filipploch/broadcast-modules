@@ -17,6 +17,10 @@ type Message struct {
 	Type      string                 `json:"type"`
 	Payload   map[string]interface{} `json:"payload"`
 	Timestamp string                 `json:"timestamp"`
+
+	// Context to kontekst transmisji (module, session_id, game_id, period_id) z polecenia modułu głównego.
+	// Plugin go nie interpretuje: zapisuje przy zegarze i odsyła w odpowiedziach i zdarzeniach tego zegara.
+	Context map[string]interface{} `json:"context,omitempty"`
 }
 
 // HubClient manages WebSocket connection to the Hub

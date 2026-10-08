@@ -208,6 +208,9 @@ func (p *Plugin) buildTimerConfig(msg *Message, timerID string) TimerConfig {
 	}
 	config.Metadata["timer_id"] = timerID
 	config.Metadata["creator"] = msg.From
+	if len(msg.Context) > 0 {
+		config.Metadata[contextMetaKey] = msg.Context // kontekst z chwili utworzenia zegara (dla zegara istniejącego nie jest nadpisywany)
+	}
 
 	if intervalMs, ok := msg.Payload["update_interval_ms"].(float64); ok && intervalMs > 0 {
 		config.UpdateInterval = time.Duration(intervalMs) * time.Millisecond
@@ -292,7 +295,7 @@ func (p *Plugin) handleCreateTimer(msg *Message) {
 
 	timerState, _ := p.manager.GetState(timerID)
 
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "timer_created",
@@ -327,7 +330,7 @@ func (p *Plugin) handleEnsureTimer(msg *Message) {
 		limitMs = timerState.Limit.Milliseconds()
 	}
 
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "timer_ensured",
@@ -406,7 +409,7 @@ func (p *Plugin) handleResumeTimer(msg *Message) {
 		if timerInfo.Limit > 0 {
 			limitMs = timerInfo.Limit.Milliseconds()
 		}
-		p.hubClient.Send(&Message{
+		p.sendCtx(msg, &Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
 			Type: "timer_resumed",
@@ -442,7 +445,7 @@ func (p *Plugin) handleResetTimer(msg *Message) {
 		if timerInfo.Limit > 0 {
 			limitMs = timerInfo.Limit.Milliseconds()
 		}
-		p.hubClient.Send(&Message{
+		p.sendCtx(msg, &Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
 			Type: "timer_reset",
@@ -485,7 +488,7 @@ func (p *Plugin) handleAdjustTime(msg *Message) {
 		if timerInfo.Limit > 0 {
 			limitMs = timerInfo.Limit.Milliseconds()
 		}
-		p.hubClient.Send(&Message{
+		p.sendCtx(msg, &Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
 			Type: "timer_adjusted",
@@ -531,7 +534,7 @@ func (p *Plugin) handleSetElapsedTime(msg *Message) {
 		if timerInfo.Limit > 0 {
 			limitMs = timerInfo.Limit.Milliseconds()
 		}
-		p.hubClient.Send(&Message{
+		p.sendCtx(msg, &Message{
 			From: p.ID,
 			To:   "broadcast:timer_update_receiver",
 			Type: "timer_updated",
@@ -562,7 +565,7 @@ func (p *Plugin) handleGetTimerState(msg *Message) {
 	}
 
 	// Broadcast to all timer_state_receiver clients
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_state_receiver",
 		Type: "timer_state",
@@ -581,7 +584,7 @@ func (p *Plugin) handleGetAllTimers(msg *Message) {
 		states = append(states, p.convertTimerInfo(timerInfo, timerInfo.ID))
 	}
 
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "all_timers",
@@ -603,7 +606,7 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 	}
 
 	// Step 1: Broadcast timer_stopped to all overlay receivers before removing
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_state_receiver",
 		Type: "timer_updated",
@@ -620,7 +623,7 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 	}
 
 	// Step 3: Confirm removal to the requester
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "timer_removed",
@@ -634,7 +637,7 @@ func (p *Plugin) handleRemoveTimer(msg *Message) {
 }
 
 func (p *Plugin) handlePing(msg *Message) {
-	p.hubClient.Send(&Message{
+	p.sendCtx(msg, &Message{
 		From: p.ID,
 		To:   msg.From,
 		Type: "pong",
@@ -658,7 +661,7 @@ func (p *Plugin) broadcastTimerStarted(internalID, externalID string, _ time.Dur
 	if timerInfo.Limit > 0 {
 		limitMs = timerInfo.Limit.Milliseconds()
 	}
-	p.hubClient.Send(&Message{
+	p.sendCtx(nil, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_started",
@@ -696,7 +699,7 @@ func (p *Plugin) broadcastTimerUpdated(internalID, externalID string, elapsedTim
 	if reported == 0 {
 		reported = timerInfo.ElapsedTime
 	}
-	p.hubClient.Send(&Message{
+	p.sendCtx(nil, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_updated",
@@ -719,7 +722,7 @@ func (p *Plugin) broadcastTimerPaused(internalID, externalID string, _ time.Dura
 	if timerInfo.Limit > 0 {
 		limitMs = timerInfo.Limit.Milliseconds()
 	}
-	p.hubClient.Send(&Message{
+	p.sendCtx(nil, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "timer_paused",
@@ -743,7 +746,7 @@ func (p *Plugin) broadcastLimitReached(internalID, externalID string, _ time.Dur
 	if timerInfo.Limit > 0 {
 		limitMs = timerInfo.Limit.Milliseconds()
 	}
-	p.hubClient.Send(&Message{
+	p.sendCtx(nil, &Message{
 		From: p.ID,
 		To:   "broadcast:timer_update_receiver",
 		Type: "limit_reached",
@@ -777,13 +780,40 @@ func (p *Plugin) convertTimerInfo(info *TimerInfo, externalID string) map[string
 		"state":             string(info.State),
 		"timer_type":        string(info.Type),
 		"parent_id":         info.ParentID,
-		"metadata":          info.Metadata,
+		"metadata":          metadataWithoutContext(info.Metadata),
 		"has_reached_limit": info.HasReachedLimit,
 	}
 }
 
+// contextMetaKey to klucz w Metadata zegara, pod którym przechowywany jest kontekst transmisji z polecenia utworzenia zegara.
+const contextMetaKey = "_context"
+
+// timerContext zwraca kontekst zapisany przy zegarze albo nil.
+func (p *Plugin) timerContext(timerID string) map[string]interface{} {
+	info, err := p.manager.GetState(timerID)
+	if err != nil || info == nil {
+		return nil
+	}
+	ctx, _ := info.Metadata[contextMetaKey].(map[string]interface{})
+	return ctx
+}
+
+// sendCtx wysyła wiadomość z kontekstem: najpierw kontekst zegara, którego dotyczy (payload.timer_id), a gdy go nie ma,
+// kontekst polecenia, na które odpowiadamy (cmd może być nil). Wiadomości bez żadnego kontekstu idą bez niego, jak dotąd.
+func (p *Plugin) sendCtx(cmd *Message, m *Message) {
+	if m.Context == nil {
+		if id, ok := m.Payload["timer_id"].(string); ok && id != "" {
+			m.Context = p.timerContext(id)
+		}
+	}
+	if m.Context == nil && cmd != nil {
+		m.Context = cmd.Context
+	}
+	p.hubClient.Send(m)
+}
+
 func (p *Plugin) sendError(to, operation, message string) {
-	p.hubClient.Send(&Message{
+	p.sendCtx(nil, &Message{
 		From: p.ID,
 		To:   to,
 		Type: "error",
@@ -794,4 +824,18 @@ func (p *Plugin) sendError(to, operation, message string) {
 	})
 
 	log.Printf("❌ Error in %s: %s", operation, message)
+}
+
+// metadataWithoutContext zwraca kopię metadata bez wewnętrznego klucza kontekstu.
+func metadataWithoutContext(md map[string]interface{}) map[string]interface{} {
+	if _, has := md[contextMetaKey]; !has {
+		return md
+	}
+	out := make(map[string]interface{}, len(md))
+	for k, v := range md {
+		if k != contextMetaKey {
+			out[k] = v
+		}
+	}
+	return out
 }
