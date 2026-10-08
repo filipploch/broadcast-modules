@@ -195,10 +195,146 @@ function _applyOnePluginIconColor(iconId) {
     colorizeSvgBody(iconId,       state.is_healthy ? '#00FF00' : '#cccccc');
 }
 
+// Komunikat o pluginie, który nie odebrał polecenia: jeden na plugin, znika po jego powrocie.
+const _unreachablePlugins = {};   // {plugin_id: polecenie albo null}
+const _gaveUpPlugins = new Set(); // pluginy, którym HUB wyczerpał automatyczne próby restartu
+
+function _renderUnreachableBanner() {
+    let banner = document.getElementById('plugin-unreachable-banner');
+    const ids = Object.keys(_unreachablePlugins).filter(id => !_gaveUpPlugins.has(id));
+    const gaveUp = Array.from(_gaveUpPlugins);
+    if (!ids.length && !gaveUp.length) {
+        if (banner) banner.remove();
+        return;
+    }
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'plugin-unreachable-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b00020;'
+            + 'color:#fff;padding:6px 12px;font-size:14px;text-align:center;';
+        document.body.appendChild(banner);
+    }
+    banner.textContent = gaveUp.map(id =>
+        `Plugin ${id} nie działa, automatyczne próby wyczerpane. Użyj przycisku restartu przy ikonie.`)
+        .concat(ids.map(id => _unreachablePlugins[id]
+            ? `Plugin ${id} nie odpowiada, polecenie ${_unreachablePlugins[id]} nie zostało wykonane`
+            : `Plugin ${id} nie odpowiada, polecenie nie zostało wykonane`)).join(' | ');
+}
+
+socket.on('plugin_gave_up', (data) => {
+    _gaveUpPlugins.add(data.plugin_id);
+    _renderUnreachableBanner();
+});
+
+socket.on('plugin_unreachable', (data) => {
+    _unreachablePlugins[data.plugin_id] = data.command || null;
+    _renderUnreachableBanner();
+});
+
+socket.on('plugin_reachable', (data) => {
+    delete _unreachablePlugins[data.plugin_id];
+    _gaveUpPlugins.delete(data.plugin_id);
+    _renderUnreachableBanner();
+});
+
 socket.on('plugins_states', (data) => {
     _pluginStates = data;
     for (const iconId of Object.keys(_PLUGIN_ICON_MAP)) {
         _applyOnePluginIconColor(iconId);
+    }
+    // Stan z serwera przywraca komunikat po odświeżeniu strony i zdejmuje go po powrocie pluginu.
+    for (const [pluginId, state] of Object.entries(data)) {
+        if (state.unreachable) {
+            if (!(pluginId in _unreachablePlugins)) _unreachablePlugins[pluginId] = null;
+        } else {
+            delete _unreachablePlugins[pluginId];
+        }
+        if (state.gave_up) {
+            _gaveUpPlugins.add(pluginId);
+        } else {
+            _gaveUpPlugins.delete(pluginId);
+        }
+    }
+    _renderUnreachableBanner();
+});
+
+// Pojedyncze kliknięcie ikony pluginu otwiera małe menu z przyciskiem "Uruchom ponownie".
+// Klik czeka chwilę, żeby nie otwierać menu przy dwukliku (dwuklik ma własne akcje: recorder, nakładka).
+let _pluginMenuTimer = null;
+
+function _closePluginMenu() {
+    const menu = document.getElementById('plugin-menu');
+    if (menu) menu.remove();
+}
+
+function _showPluginToast(text, isError) {
+    let toast = document.getElementById('plugin-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'plugin-toast';
+        document.body.appendChild(toast);
+    }
+    toast.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:10000;'
+        + 'padding:8px 14px;border-radius:4px;color:#fff;font-size:14px;'
+        + `background:${isError ? '#b00020' : '#1b5e20'};`;
+    toast.textContent = text;
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => toast.remove(), 6000);
+}
+
+function _openPluginMenu(iconId) {
+    const pluginId = _PLUGIN_ICON_MAP[iconId];
+    const icon = document.getElementById(iconId);
+    if (!pluginId || !icon) return;
+    _closePluginMenu();
+    const state = _pluginStates[pluginId] || {};
+    const menu = document.createElement('div');
+    menu.id = 'plugin-menu';
+    const rect = icon.getBoundingClientRect();
+    menu.style.cssText = `position:fixed;top:${Math.round(rect.bottom + 4)}px;`
+        + `left:${Math.max(4, Math.round(rect.left - 60))}px;z-index:10000;background:#222;color:#fff;`
+        + 'padding:10px 12px;border-radius:6px;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+    const status = state.unreachable ? 'nie odpowiada' : (state.is_active ? 'połączony' : 'rozłączony');
+    const title = document.createElement('div');
+    title.textContent = `${pluginId}: ${status}`;
+    title.style.marginBottom = '8px';
+    menu.appendChild(title);
+    const button = document.createElement('button');
+    if (pluginId === 'stream-overlay') {
+        button.textContent = 'Restart nakładki: wkrótce';
+        button.disabled = true;
+    } else {
+        button.textContent = 'Uruchom ponownie';
+        button.onclick = () => {
+            socket.emit('restart_plugin', { plugin_id: pluginId });
+            _showPluginToast(`Ponowne uruchamianie: ${pluginId}...`, false);
+            _closePluginMenu();
+        };
+    }
+    menu.appendChild(button);
+    document.body.appendChild(menu);
+}
+
+document.addEventListener('click', (e) => {
+    const icon = e.target.closest('[id$="-plugin-icon"]');
+    if (!icon || !_PLUGIN_ICON_MAP[icon.id]) {
+        if (!e.target.closest('#plugin-menu')) _closePluginMenu();
+        return;
+    }
+    clearTimeout(_pluginMenuTimer);
+    _pluginMenuTimer = setTimeout(() => _openPluginMenu(icon.id), 300);
+});
+
+document.addEventListener('dblclick', () => {
+    clearTimeout(_pluginMenuTimer);
+    _closePluginMenu();
+});
+
+socket.on('plugin_restart_result', (data) => {
+    if (data.ok) {
+        _showPluginToast(`Plugin ${data.plugin_id} uruchomiony ponownie`, false);
+    } else {
+        _showPluginToast(`Restart pluginu ${data.plugin_id} nie powiódł się: ${data.error || 'nieznany błąd'}`, true);
     }
 });
 

@@ -72,6 +72,7 @@ func (m *Module) ReadPump() {
 		}
 
 		msg.From = m.ID
+		msg.Source = m
 
 		if m.handleSystemMessage(msg) {
 			continue

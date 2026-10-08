@@ -263,6 +263,17 @@ def register_events(socketio):
                 'payload': step['payload']
             })
 
+    @socketio.on('restart_plugin')
+    def handle_restart_plugin(data):
+        # Przycisk "Uruchom ponownie" przy ikonie pluginu w panelu (index.js).
+        from core.managers import get_hub_client
+        plugin_id = (data or {}).get('plugin_id')
+        hub_client = get_hub_client()
+        if not hub_client or not hub_client.request_plugin_restart(plugin_id):
+            socketio.emit('plugin_restart_result', {
+                'plugin_id': plugin_id, 'ok': False,
+                'error': 'Restart nie został wysłany (brak połączenia z HUB-em albo plugin nieobsługiwany)'})
+
     @socketio.on('wake_recorder_plugin')
     def handle_wake_recorder_plugin():
         # Double-click on #recorder-plugin-icon while it's greyed out (not
@@ -640,6 +651,10 @@ def register_events(socketio):
     def handle_show_overlay_container(data):
         from core.managers import get_hub_client
         from core.sequences.steps import show_overlay_container
+        from core.managers import session_manager
+        if not session_manager.current_game_id():
+            socketio.emit('error', {'message': 'Brak aktywnego meczu'})
+            return
         hub_client = get_hub_client()
         if hub_client:
             step = show_overlay_container(data)

@@ -11,6 +11,9 @@ type Message struct {
 	Type      string                 `json:"type"`
 	Payload   map[string]interface{} `json:"payload,omitempty"`
 	Timestamp string                 `json:"timestamp"`
+
+	// Source to połączenie, z którego wiadomość przyszła (ustawiane przez HUB, nie przesyłane).
+	Source *Module `json:"-"`
 }
 
 func NewMessage(from, to, msgType string, payload map[string]interface{}) *Message {

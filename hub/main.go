@@ -41,6 +41,10 @@ func main() {
 		log.Printf("✅ Plugin configurations loaded — waiting for main_module to declare required plugins")
 	}
 
+	if hub.PluginManager != nil {
+		go hub.PluginManager.RunSupervisor(5 * time.Second)
+	}
+
 	// Start hub event loop
 	// Initialize FallbackWriter
 	hub.FallbackWriter = NewFallbackWriter(hub, fallbackRules())

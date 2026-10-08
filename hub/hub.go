@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -171,6 +172,8 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleApplyStylingClass(msg)
 	case "create_styling_class":
 		h.handleCreateStylingClass(msg)
+	case "restart_plugin":
+		h.handleRestartPlugin(msg)
 	case "request_scene_map":
 		// Main module asks obs-ws-plugin to re-send its scene map
 		// (used when obs-ws-plugin was already online before main module started).
@@ -200,15 +203,14 @@ func (h *Hub) handleRegister(msg *Message) {
 
 	log.Printf("📝 Registration: id=%s, component_type=%s", id, componentType)
 
-	// Find the module that sent this message
+	// Rejestracja dotyczy połączenia, z którego przyszła (nie dowolnego oczekującego:
+	// przy kilku jednoczesnych połączeniach rejestracje by się myliły).
 	h.mu.Lock()
-	var module *Module
-	for m := range h.PendingModules {
-		if m.ID == "" || m.ID == msg.From || msg.From == "" {
-			module = m
-			delete(h.PendingModules, m)
-			break
-		}
+	module := msg.Source
+	if module == nil || !h.PendingModules[module] {
+		module = nil
+	} else {
+		delete(h.PendingModules, module)
 	}
 	h.mu.Unlock()
 
@@ -711,6 +713,31 @@ func (h *Hub) routeMessage(msg *Message) {
 		}
 	} else {
 		log.Printf("⚠️  Destination not found or inactive: %s", msg.To)
+		h.notifyUndelivered(msg)
+	}
+}
+
+// notifyUndelivered informuje moduł główny, że jego polecenie nie dotarło do pluginu
+// (plugin nie jest zarejestrowany albo jest nieaktywny). Raport dostaje tylko moduł główny:
+// to on trzyma stan zakładany z góry i pokazuje komunikat w panelu.
+func (h *Hub) notifyUndelivered(msg *Message) {
+	src := msg.Source
+	if src == nil || src.ComponentType != "main_module" || msg.Type == "undelivered" {
+		return
+	}
+	report := NewMessage("hub", src.ID, "undelivered", map[string]interface{}{
+		"plugin_id":       msg.To,
+		"command":         msg.Type,
+		"command_payload": msg.Payload,
+	})
+	data, err := report.ToJSON()
+	if err != nil {
+		return
+	}
+	select {
+	case src.Send <- data:
+	default:
+		log.Printf("⚠️  Cannot report undelivered %s to %s: channel full", msg.Type, src.ID)
 	}
 }
 
@@ -783,4 +810,81 @@ func (h *Hub) Shutdown() {
 	close(h.shutdown)
 
 	log.Println("✅ Hub shutdown complete")
+}
+
+// pluginPresence zwraca, które pluginy są wymagane (zadeklarowane przez moduł główny) i które są połączone.
+func (h *Hub) pluginPresence() (expected, connected map[string]bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	expected = make(map[string]bool, len(h.ExpectedPlugins))
+	for id, v := range h.ExpectedPlugins {
+		expected[id] = v
+	}
+	connected = make(map[string]bool, len(h.Plugins))
+	for id, p := range h.Plugins {
+		connected[id] = p.IsActive
+	}
+	return expected, connected
+}
+
+// handleRestartPlugin obsługuje polecenie operatora "uruchom ponownie plugin" od modułu głównego.
+// Odpowiedź (plugin_restart_result) wraca do modułu po zakończeniu restartu.
+func (h *Hub) handleRestartPlugin(msg *Message) {
+	src := msg.Source
+	if src == nil || src.ComponentType != "main_module" {
+		log.Printf("⚠️  restart_plugin odrzucone: polecenie tylko od modułu głównego")
+		return
+	}
+	pluginID, _ := msg.Payload["plugin_id"].(string)
+	go func() {
+		kind, err := h.restartPlugin(pluginID)
+		payload := map[string]interface{}{"plugin_id": pluginID, "kind": kind, "ok": err == nil}
+		if err != nil {
+			payload["error"] = err.Error()
+			log.Printf("❌ Restart pluginu %s nie powiódł się: %v", pluginID, err)
+		}
+		h.sendSafely(src, NewMessage("hub", src.ID, "plugin_restart_result", payload))
+	}()
+}
+
+// restartPlugin wykonuje restart zależnie od rodzaju pluginu: lokalny (proces), zewnętrzny (ponowne wykrywanie).
+func (h *Hub) restartPlugin(pluginID string) (kind string, err error) {
+	if h.PluginManager == nil || pluginID == "" {
+		return "", fmt.Errorf("brak menedżera pluginów albo identyfikatora")
+	}
+	if h.PluginManager.IsLocalPlugin(pluginID) {
+		return "local", h.PluginManager.RestartPlugin(pluginID, true)
+	}
+	if cfg, ok := h.PluginManager.GetAllConfigs()[pluginID]; ok && cfg.Type == "external" {
+		if cfg.DiscoveryMode != "reverse" {
+			return "external", fmt.Errorf("plugin zewnętrzny %s nie ma wykrywania zwrotnego", pluginID)
+		}
+		return "external", h.AnnounceToPlugin(ReverseDiscoveryConfig{PluginID: cfg.ID, Hostname: cfg.DiscoveryHostname, Port: cfg.DiscoveryPort})
+	}
+	return "unknown", fmt.Errorf("restart pluginu %s nie jest obsługiwany (nakładkę odświeża OBS: etap E2d)", pluginID)
+}
+
+// sendSafely wysyła wiadomość do modułu; pomija, gdy moduł zdążył się rozłączyć albo kolejka jest pełna.
+func (h *Hub) sendSafely(m *Module, msg *Message) {
+	defer func() { recover() }()
+	data, err := msg.ToJSON()
+	if err != nil {
+		return
+	}
+	select {
+	case m.Send <- data:
+	default:
+		log.Printf("⚠️  %s: kolejka pełna, pomijam %s", m.ID, msg.Type)
+	}
+}
+
+// notifyMainModule wysyła komunikat od HUB-a do modułu głównego, jeśli jest połączony.
+func (h *Hub) notifyMainModule(msgType string, payload map[string]interface{}) {
+	h.mu.RLock()
+	m := h.MainModule
+	h.mu.RUnlock()
+	if m == nil || !m.IsActive {
+		return
+	}
+	h.sendSafely(m, NewMessage("hub", m.ID, msgType, payload))
 }
