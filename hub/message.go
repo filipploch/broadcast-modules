@@ -12,6 +12,10 @@ type Message struct {
 	Payload   map[string]interface{} `json:"payload,omitempty"`
 	Timestamp string                 `json:"timestamp"`
 
+	// Context to kontekst transmisji (module, session_id, game_id, period_id). HUB go tylko przekazuje:
+	// polecenie niesie go do pluginu, a plugin odsyła ten sam kontekst w odpowiedzi.
+	Context map[string]interface{} `json:"context,omitempty"`
+
 	// Source to połączenie, z którego wiadomość przyszła (ustawiane przez HUB, nie przesyłane).
 	Source *Module `json:"-"`
 }
