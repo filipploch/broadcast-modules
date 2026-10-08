@@ -5,6 +5,8 @@ import threading
 import time
 from datetime import datetime
 
+from core.managers.context import ContextFilter, current_context
+
 
 def _none_to_empty_string(value):
     """Recursively replace Python None (JSON null) with "" inside a payload.
@@ -42,6 +44,8 @@ class HubClient:
         self.required_plugins = []
         # Co modul wie o obecnosci pluginow w HUB-ie: {plugin_id: True/False}. Brak wpisu = nie wiadomo.
         self.plugin_online = {}
+        # Filtr kontekstu (E2c): odrzuca komunikaty pluginów ze starej sesji, meczu albo innego modułu.
+        self.context_filter = ContextFilter()
         self._should_reconnect = True  # Kontrola reconnect
         self._reconnect_delay = 3  # Sekundy między próbami
 
@@ -239,8 +243,22 @@ class HubClient:
             'payload': payload
         })
 
-    def send_to_plugin(self, plugin_id, msg_type, payload):
+    def current_context(self, period_id=None):
+        """Kontekst transmisji (moduł, sesja, mecz, okres) wyliczony z bazy; None, gdy nie da się go ustalić."""
+        if not self.app:
+            return None
+        try:
+            with self.app.app_context():
+                from flask import current_app
+                return current_context(current_app.config.get('MODULE_NAME'), period_id)
+        except Exception as e:
+            self._log("error", f"Nie udało się ustalić kontekstu transmisji: {e}")
+            return None
+
+    def send_to_plugin(self, plugin_id, msg_type, payload, context=None):
         """Send message to specific plugin.
+
+        Do polecenia dołączany jest kontekst transmisji (moduł, sesja, mecz, okres); plugin odsyła go w odpowiedziach.
 
         Zwraca False także wtedy, gdy moduł wie, że plugin jest rozłączony: polecenie
         nie jest wtedy wysyłane (HUB i tak nie miałby adresata), a w panelu pojawia się komunikat.
@@ -249,12 +267,16 @@ class HubClient:
             self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
             self._report_unreachable(plugin_id, msg_type)
             return False
-        return self.send({
+        message = {
             'from': self.module_id,
             'to': plugin_id,
             'type': msg_type,
             'payload': payload
-        })
+        }
+        context = context or self.current_context()
+        if context:
+            message['context'] = context
+        return self.send(message)
 
     # ✅ NEW: Subscribe to classes
     def subscribe_to_classes(self, classes):
@@ -315,6 +337,11 @@ class HubClient:
             msg_from = msg.get('from', 'unknown')
             # self._log("debug", f"Received: {msg_type} from {msg_from}")
 
+            # Spóźnione komunikaty ze starej sesji / meczu / innego modułu są odrzucane (E2c).
+            # Komunikaty od samego HUB-a oraz bez kontekstu przechodzą.
+            if msg.get('context') and msg_from != 'hub' and not self._context_accepted(msg):
+                return
+
             # Handle message in app context
             if self.app:
                 with self.app.app_context():
@@ -338,6 +365,17 @@ class HubClient:
 
         except Exception as e:
             self._log("error", f"Error processing message: {e}", exc_info=True)
+
+    def _context_accepted(self, msg):
+        """Porównuje kontekst komunikatu z bieżącym; przy niezgodności zapisuje jeden wpis w logu z powodem."""
+        expected = self.current_context()
+        if expected is None:
+            return True        # nie da się ustalić kontekstu: nie gubimy komunikatu
+        ok, reason = self.context_filter.check(msg.get('context'), expected)
+        if not ok:
+            self.context_filter.rejected += 1
+            self._log("warning", f"Odrzucono komunikat {msg.get('type')} od {msg.get('from')}: {reason}")
+        return ok
 
     def _handle_message(self, msg):
         """Handle specific message types"""

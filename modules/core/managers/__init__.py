@@ -59,6 +59,20 @@ def initialize_core_managers(app):
         app.logger.info("=" * 60)
 
         try:
+            # Sesja i mecz są wczytywane z bazy ZANIM moduł połączy się z HUB-em (restart w trakcie meczu): kontekst
+            # komunikatów z pluginów jest wyliczany z tego stanu, więc zegary i zdarzenia aktualnego meczu są przyjmowane od razu.
+            try:
+                with app.app_context():
+                    from core.managers import session_manager
+                    restored = session_manager.describe()
+                if restored.get('open'):
+                    app.logger.info(f"Wczytano z bazy sesję {restored.get('session_id')} ({restored.get('status')}), "
+                                    f"mecz {restored.get('game_id')}, okres {restored.get('period_id')}")
+                else:
+                    app.logger.info("Wczytano z bazy stan sesji: brak otwartej sesji")
+            except Exception as e:
+                app.logger.error(f"Nie udało się wczytać sesji z bazy przed połączeniem z HUB-em: {e}")
+
             from core.managers.hub_client import HubClient
 
             hub_url     = app.config['HUB_HOST']
