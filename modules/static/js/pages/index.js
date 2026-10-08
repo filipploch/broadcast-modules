@@ -195,11 +195,52 @@ function _applyOnePluginIconColor(iconId) {
     colorizeSvgBody(iconId,       state.is_healthy ? '#00FF00' : '#cccccc');
 }
 
+// Komunikat o pluginie, który nie odebrał polecenia: jeden na plugin, znika po jego powrocie.
+const _unreachablePlugins = {};   // {plugin_id: polecenie albo null}
+
+function _renderUnreachableBanner() {
+    let banner = document.getElementById('plugin-unreachable-banner');
+    const ids = Object.keys(_unreachablePlugins);
+    if (!ids.length) {
+        if (banner) banner.remove();
+        return;
+    }
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'plugin-unreachable-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b00020;'
+            + 'color:#fff;padding:6px 12px;font-size:14px;text-align:center;';
+        document.body.appendChild(banner);
+    }
+    banner.textContent = ids.map(id => _unreachablePlugins[id]
+        ? `Plugin ${id} nie odpowiada, polecenie ${_unreachablePlugins[id]} nie zostało wykonane`
+        : `Plugin ${id} nie odpowiada, polecenie nie zostało wykonane`).join(' | ');
+}
+
+socket.on('plugin_unreachable', (data) => {
+    _unreachablePlugins[data.plugin_id] = data.command || null;
+    _renderUnreachableBanner();
+});
+
+socket.on('plugin_reachable', (data) => {
+    delete _unreachablePlugins[data.plugin_id];
+    _renderUnreachableBanner();
+});
+
 socket.on('plugins_states', (data) => {
     _pluginStates = data;
     for (const iconId of Object.keys(_PLUGIN_ICON_MAP)) {
         _applyOnePluginIconColor(iconId);
     }
+    // Stan z serwera przywraca komunikat po odświeżeniu strony i zdejmuje go po powrocie pluginu.
+    for (const [pluginId, state] of Object.entries(data)) {
+        if (state.unreachable) {
+            if (!(pluginId in _unreachablePlugins)) _unreachablePlugins[pluginId] = null;
+        } else {
+            delete _unreachablePlugins[pluginId];
+        }
+    }
+    _renderUnreachableBanner();
 });
 
 // Dwuklik na szarej ikonie budzi Debiana z recorder-pluginem przez WOL.

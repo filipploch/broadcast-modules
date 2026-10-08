@@ -201,6 +201,26 @@ class TimerManager:
             current_app.logger.info(f'▶️  Started timer: {timer_id}')
         return success
 
+    # Stan, który start/pauza/wznowienie zapisują z góry, i stan sprzed polecenia.
+    _OPTIMISTIC_STATES = {
+        'start_timer':  ('running', 'idle'),
+        'resume_timer': ('running', 'paused'),
+        'pause_timer':  ('paused', 'running'),
+    }
+
+    def on_command_undelivered(self, command, payload):
+        """HUB nie miał adresata polecenia (timer-plugin nie odpowiada): wycofuje stan zapisany z góry."""
+        rule = self._OPTIMISTIC_STATES.get(command)
+        timer_id = (payload or {}).get('timer_id')
+        if not rule or not timer_id:
+            return
+        optimistic, previous = rule
+        with self.lock:
+            timer = self.timers.get(timer_id)
+            if timer and timer.get('state') == optimistic:
+                timer['state'] = previous
+        current_app.logger.warning(f'↩️  Polecenie {command} dla {timer_id} nie dotarło do timer-pluginu: stan wycofany do {previous}')
+
     def pause_timer(self, timer_id):
         success = self.hub_client.send_to_plugin(
             self.timer_plugin_id, 'pause_timer', {'timer_id': timer_id}

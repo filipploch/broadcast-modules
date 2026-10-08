@@ -40,6 +40,8 @@ class HubClient:
         self._lock = threading.Lock()
         self.subscribe_classes = []
         self.required_plugins = []
+        # Co modul wie o obecnosci pluginow w HUB-ie: {plugin_id: True/False}. Brak wpisu = nie wiadomo.
+        self.plugin_online = {}
         self._should_reconnect = True  # Kontrola reconnect
         self._reconnect_delay = 3  # Sekundy między próbami
 
@@ -238,7 +240,15 @@ class HubClient:
         })
 
     def send_to_plugin(self, plugin_id, msg_type, payload):
-        """Send message to specific plugin"""
+        """Send message to specific plugin.
+
+        Zwraca False także wtedy, gdy moduł wie, że plugin jest rozłączony: polecenie
+        nie jest wtedy wysyłane (HUB i tak nie miałby adresata), a w panelu pojawia się komunikat.
+        """
+        if self.plugin_online.get(plugin_id) is False:
+            self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
+            self._report_unreachable(plugin_id, msg_type)
+            return False
         return self.send({
             'from': self.module_id,
             'to': plugin_id,
@@ -353,8 +363,15 @@ class HubClient:
             status    = payload.get('status')
             self._log("info", f"Plugin status: {plugin_id} → {status}")
 
+            if plugin_id:
+                self.plugin_online[plugin_id] = (status == 'connected')
+
             if status == 'connected':
+                self._report_reachable(plugin_id)
                 self._on_plugin_connected(plugin_id)
+
+        elif msg_type == 'undelivered':
+            self._on_undelivered(payload)
 
         elif msg_type == 'plugin_online':
             # Legacy alias — kept for backward compatibility with older hub builds.
@@ -402,6 +419,7 @@ class HubClient:
 
         elif msg_type == 'health_status':
             from core.managers import get_plugin_manager
+            self._sync_plugin_online(payload)
             plugin_manager = get_plugin_manager()
             plugin_manager.on_plugins_state_received(msg)
             # print(f"health_status: {msg}")
@@ -692,6 +710,53 @@ class HubClient:
             gopro_manager = get_gopro_manager()
             if gopro_manager:
                 gopro_manager.on_head_online(plugin_id)
+
+    # =========================================================================
+    # POLECENIA DO NIEOBECNYCH PLUGINÓW
+    # =========================================================================
+
+    def _sync_plugin_online(self, health_payload):
+        """Aktualizuje wiedzę o obecności pluginów z okresowego raportu HUB-a (health_status).
+
+        Wymagany plugin, którego w raporcie nie ma, jest rozłączony."""
+        connected = (health_payload or {}).get('connected_plugins') or {}
+        for plugin_id in set(self.required_plugins) | set(self.plugin_online):
+            info = connected.get(plugin_id)
+            self.plugin_online[plugin_id] = bool(info and info.get('is_active', False))
+
+    def _on_undelivered(self, payload):
+        """HUB nie miał adresata dla polecenia (plugin nie odpowiada)."""
+        plugin_id = payload.get('plugin_id')
+        command = payload.get('command')
+        if not plugin_id:
+            return
+        self.plugin_online[plugin_id] = False
+        self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
+        self._report_unreachable(plugin_id, command)
+        if plugin_id == 'timer-plugin':
+            try:
+                from core.managers import get_timer_manager
+                get_timer_manager().on_command_undelivered(command, payload.get('command_payload') or {})
+            except Exception as e:
+                self._log("error", f"Nie udało się wycofać stanu zegara po niedostarczonym poleceniu: {e}", exc_info=True)
+
+    def _report_unreachable(self, plugin_id, command):
+        try:
+            if self.app:
+                with self.app.app_context():
+                    from core.managers import get_plugin_manager
+                    get_plugin_manager().mark_unreachable(plugin_id, command)
+        except Exception as e:
+            self._log("error", f"Nie udało się zgłosić panelowi braku pluginu {plugin_id}: {e}")
+
+    def _report_reachable(self, plugin_id):
+        try:
+            if self.app and plugin_id:
+                with self.app.app_context():
+                    from core.managers import get_plugin_manager
+                    get_plugin_manager().mark_reachable(plugin_id)
+        except Exception as e:
+            self._log("error", f"Nie udało się zdjąć komunikatu o pluginie {plugin_id}: {e}")
 
     def _request_obs_scene_map(self):
         """Prosi obs-ws-plugin o przesłanie aktualnej mapy scen."""

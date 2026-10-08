@@ -20,6 +20,7 @@ class PluginManager:
         self.timer_plugin_id = 'timer-plugin'
         self.timers = {}  # Cache: {timer_id: timer_state}
         self.lock = threading.Lock()
+        self.unreachable = {}  # {plugin_id: polecenie, ktore nie dotarlo}; wpis znika po powrocie pluginu
         
         current_app.logger.info("PluginManager initialized")
 
@@ -41,12 +42,30 @@ class PluginManager:
         for plugin_id, info in connected_plugins.items():
             if plugin_id in plugins:
                 plugins[plugin_id]['is_active'] = info.get('is_active', False)
+                if plugins[plugin_id]['is_active']:
+                    self.mark_reachable(plugin_id)
 
         for plugin_id, info in plugins_health.items():
             if plugin_id in plugins:
                 plugins[plugin_id]['is_healthy'] = info.get('is_healthy', False)
 
+        for plugin_id, entry in plugins.items():
+            entry['unreachable'] = plugin_id in self.unreachable
         self._emit_to_ui('plugins_states', plugins)
+
+    def mark_unreachable(self, plugin_id, command):
+        """Plugin nie odebrał polecenia. Komunikat w panelu pojawia się raz na plugin (do jego powrotu)."""
+        with self.lock:
+            first = plugin_id not in self.unreachable
+            self.unreachable[plugin_id] = command
+        if first:
+            self._emit_to_ui('plugin_unreachable', {'plugin_id': plugin_id, 'command': command})
+
+    def mark_reachable(self, plugin_id):
+        with self.lock:
+            was = self.unreachable.pop(plugin_id, None) is not None
+        if was:
+            self._emit_to_ui('plugin_reachable', {'plugin_id': plugin_id})
 
     def _emit_to_ui(self, msg_type, data):
         """Emit event to UI clients via SocketIO"""
