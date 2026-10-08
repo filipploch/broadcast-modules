@@ -60,7 +60,9 @@ class Config:
 
 
 class DevelopmentConfig(Config):
-    DEBUG = True
+    # Moduł uruchomiony przez HUB (BM_HUB_MANAGED=1) nie działa w trybie debug: debugger Werkzeuga drukuje na stderr
+    # traceback ConnectionError po każdym zamknięciu połączenia websocket (engineio kończy je takim wyjątkiem celowo)
+    DEBUG = os.environ.get('BM_HUB_MANAGED') != '1'
     # SQLALCHEMY_ECHO = True
     SQLALCHEMY_ECHO = False
 

@@ -25,7 +25,7 @@ func main() {
 	if hubCfg.Module == "" {
 		log.Printf("Moduł: (brak; HUB nie uruchamia modułu) (źródło: %s)", hubCfg.ModuleSource)
 	} else {
-		log.Printf("Moduł: %s (źródło: %s)", hubCfg.Module, hubCfg.ModuleSource)
+		log.Printf("Moduł: %s (źródło: %s)", hubCfg.ModuleLabel(), hubCfg.ModuleSource)
 	}
 	for _, n := range hubCfg.Notes {
 		log.Print(n)

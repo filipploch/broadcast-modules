@@ -10,13 +10,14 @@ import (
 	"time"
 )
 
-// fileFollower czyta (tylko czyta) plik tekstowy zapisywany przez inny proces i przekazuje nowe wiersze do emit.
+// fileFollower czyta (tylko czyta) plik tekstowy zapisywany przez inny proces i przekazuje nowe wiersze do emit
+// (zawsze całą paczką wierszy odczytanych w jednym przebiegu, żeby np. traceback nie został przecięty wierszami innego pliku).
 // Używany do pokazania w konsoli HUB-a logu modułu, który pisze do plików sam (bez potoku przez HUB).
 // Rotacja pliku (zmiana nazwy i nowy plik o tej samej ścieżce) jest wykrywana: po dokończeniu starego pliku
 // follower otwiera nowy od początku.
 type fileFollower struct {
 	path string
-	emit func(line string)
+	emit func(lines []string)
 	stop chan struct{}
 	done chan struct{}
 	once sync.Once
@@ -24,7 +25,7 @@ type fileFollower struct {
 
 // startFileFollower rusza czytanie w tle. Jeśli plik już istnieje, czytanie zaczyna się od jego końca
 // (stara zawartość nie jest wypisywana); plik, który powstanie później, jest czytany od początku.
-func startFileFollower(path string, interval time.Duration, emit func(string)) *fileFollower {
+func startFileFollower(path string, interval time.Duration, emit func([]string)) *fileFollower {
 	f := &fileFollower{path: path, emit: emit, stop: make(chan struct{}), done: make(chan struct{})}
 	_, err := os.Stat(path)
 	startAtEnd := err == nil
@@ -78,15 +79,18 @@ func (f *fileFollower) run(interval time.Duration, startAtEnd bool) {
 // drain czyta wszystko, co dopisano, i emituje kompletne wiersze; niedokończony wiersz wraca jako reszta.
 func (f *fileFollower) drain(r io.Reader, partial []byte) []byte {
 	br := bufio.NewReader(r)
+	var batch []string
 	for {
 		chunk, err := br.ReadBytes('\n')
 		partial = append(partial, chunk...)
 		if err != nil {
+			if len(batch) > 0 {
+				f.emit(batch)
+			}
 			return partial
 		}
-		line := string(bytes.TrimRight(partial, "\r\n"))
+		batch = append(batch, string(bytes.TrimRight(partial, "\r\n")))
 		partial = partial[:0]
-		f.emit(line)
 	}
 }
 
@@ -96,13 +100,15 @@ func (f *fileFollower) Stop() {
 	<-f.done
 }
 
-// consoleEmit zwraca funkcję wypisującą wiersz na konsolę HUB-a z etykietą (poza plikiem hub.log: wiersze modułu
-// są już w jego własnych plikach).
-func consoleEmit(label string) func(string) {
+// consoleEmit zwraca funkcję wypisującą paczkę wierszy na konsolę HUB-a z etykietą (poza plikiem hub.log: wiersze modułu
+// są już w jego własnych plikach). Paczka jest wypisywana pod jedną blokadą, więc wiersze z różnych plików się nie przeplatają.
+func consoleEmit(label string) func([]string) {
 	var mu sync.Mutex
-	return func(line string) {
+	return func(lines []string) {
 		mu.Lock()
 		defer mu.Unlock()
-		fmt.Fprintf(os.Stdout, "[%s] %s\n", label, line)
+		for _, line := range lines {
+			fmt.Fprintf(os.Stdout, "[%s] %s\n", label, line)
+		}
 	}
 }

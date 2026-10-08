@@ -161,12 +161,13 @@ def register_events(socketio):
             cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
                        if settings and settings.current_game_id else
                        {'camera1': False, 'camera2': False, 'camera3': False, 'camera4': False})
-            hub_client.broadcast(msg_type='recording_command', payload={
+            # stan kamer zna tylko recorder-plugin (odpowiedź OBS na to zapytanie moduł pomija)
+            hub_client.send_recording_command({
                 'requestType': 'GetRecordStatus',
                 'requestData': {},
                 'request_id': f'rec-status-{datetime.now()}',
                 'cameras': cameras,
-            })
+            }, plugins=('recorder-plugin',))
 
     @socketio.on('timer_create')
     def handle_timer_create(data):
@@ -393,7 +394,8 @@ def register_events(socketio):
             cameras = (GameCameraManager().get_cameras_dict_for_game(settings.current_game_id)
                        if settings and settings.current_game_id else
                        {'camera1': False, 'camera2': False, 'camera3': False, 'camera4': False})
-            hub_client.broadcast(msg_type='recording_command', payload={
+            # czas nagrania w OBS (obs-ws-plugin) i stan kamer (recorder-plugin); pozostałe pluginy nie dostają polecenia
+            hub_client.send_recording_command({
                 'requestType': 'GetRecordStatus',
                 'requestData': {},
                 'request_id': f'get-record-status-{game_event.id}',

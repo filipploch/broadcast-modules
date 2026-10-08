@@ -62,6 +62,44 @@ def make(APP):
             self.assertEqual(path.read_text(encoding='utf-8').count('wiersz-testowy-E2d1'), 1)
             self.assertEqual(sorted(p.name for p in self.dir.iterdir()), [f'modul-{MODULE}.log'])
 
+        def test_wiersze_logu_aplikacji_nie_trafiaja_na_stderr_ani_stdout(self):
+            """Domyślny uchwyt Flaska (stderr, własny format) dublował wiersze logu w pliku wyjścia procesu."""
+            import contextlib
+            import io
+            from flask.logging import default_handler
+            from core.utils.logs import quiet_flask_console
+            os.environ['BM_HUB_MANAGED'] = '1'
+            path, _ = self._setup()
+            APP.logger.addHandler(default_handler)                 # tak Flask robi przy pierwszym użyciu app.logger
+            try:
+                quiet_flask_console(APP)
+                self.assertNotIn(default_handler, APP.logger.handlers)
+                err, out = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                    APP.logger.info('flask-logger-E2d1')
+                    logging.getLogger('app').debug('debug-E2d1')
+                    logging.getLogger('hub_client').warning('ostrzezenie-E2d1')
+                self.assertEqual(err.getvalue(), '')
+                self.assertEqual(out.getvalue(), '')
+                for h in self.root.handlers:
+                    h.flush()
+                text = path.read_text(encoding='utf-8')
+                self.assertEqual(text.count('flask-logger-E2d1'), 1)
+                self.assertEqual(text.count('ostrzezenie-E2d1'), 1)
+            finally:
+                APP.logger.removeHandler(default_handler)
+
+        def test_uruchomiony_recznie_domyslny_uchwyt_flaska_zostaje(self):
+            from flask.logging import default_handler
+            from core.utils.logs import quiet_flask_console
+            os.environ.pop('BM_HUB_MANAGED', None)
+            APP.logger.addHandler(default_handler)
+            try:
+                quiet_flask_console(APP)
+                self.assertIn(default_handler, APP.logger.handlers)
+            finally:
+                APP.logger.removeHandler(default_handler)
+
         def test_uruchomiony_recznie_konsola_zostaje(self):
             os.environ.pop('BM_HUB_MANAGED', None)
             path, console = self._setup()
@@ -87,6 +125,16 @@ def make(APP):
                 cfg = cfg_mod.config['development']
                 self.assertEqual(cfg.HUB_HOST, 'ws://localhost:8080/ws')
                 self.assertEqual(cfg.APP_PORT, 8081)
+
+        def test_tryb_debug_wylaczony_tylko_pod_kontrola_huba(self):
+            import config as cfg_mod
+            with patch.dict(os.environ, {'BM_HUB_MANAGED': '1'}):
+                importlib.reload(cfg_mod)
+                self.assertFalse(cfg_mod.config['development'].DEBUG)
+            env = {k: v for k, v in os.environ.items() if k != 'BM_HUB_MANAGED'}
+            with patch.dict(os.environ, env, clear=True):
+                importlib.reload(cfg_mod)
+                self.assertTrue(cfg_mod.config['development'].DEBUG)      # uruchomiony ręcznie: jak dotąd
 
         def test_adres_huba_i_port_z_huba(self):
             host, port = self._config({'BM_HUB_URL': 'ws://localhost:18080/ws', 'BM_MODULE_PORT': '18081'})

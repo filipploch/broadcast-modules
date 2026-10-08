@@ -9,6 +9,11 @@ import threading
 import time
 
 # ── Globalne singletony ───────────────────────────────────────────────────────
+# Leniwe tworzenie menedżerów jest chronione blokadą (podwójne sprawdzenie): dwa równoczesne wywołania
+# (np. dwie karty przeglądarki łączące się w tej samej milisekundzie) nie tworzą dwóch obiektów.
+# RLock, bo menedżery tworzą się nawzajem (np. get_obs_ws_manager -> get_hub_client).
+_lazy_lock = threading.RLock()
+
 _hub_client            = None
 _timer_manager         = None
 _recorder_manager      = None
@@ -132,8 +137,10 @@ def initialize_core_managers(app):
 def get_hub_client():
     global _hub_client
     if _hub_client is None:
-        from core.managers.hub_client import HubClient
-        _hub_client = HubClient(current_app.config['HUB_HOST'], current_app)
+        with _lazy_lock:
+            if _hub_client is None:
+                from core.managers.hub_client import HubClient
+                _hub_client = HubClient(current_app.config['HUB_HOST'], current_app)
     return _hub_client
 
 
@@ -141,12 +148,14 @@ def get_hub_client():
 def get_timer_manager():
     global _timer_manager
     if _timer_manager is None:
-        if _timer_manager_class is not None:
-            cls = _timer_manager_class
-        else:
-            from core.managers.timer_manager import TimerManager
-            cls = TimerManager
-        _timer_manager = cls(get_hub_client())
+        with _lazy_lock:
+            if _timer_manager is None:
+                if _timer_manager_class is not None:
+                    cls = _timer_manager_class
+                else:
+                    from core.managers.timer_manager import TimerManager
+                    cls = TimerManager
+                _timer_manager = cls(get_hub_client())
     return _timer_manager
 
 
@@ -160,60 +169,72 @@ def get_period_manager():
 def get_recorder_manager():
     global _recorder_manager
     if _recorder_manager is None:
-        from core.managers.recorder_manager import RecorderManager
-        _recorder_manager = RecorderManager(get_hub_client())
-        current_app.logger.info("✅ Recorder Manager initialized (lazy)")
+        with _lazy_lock:
+            if _recorder_manager is None:
+                from core.managers.recorder_manager import RecorderManager
+                _recorder_manager = RecorderManager(get_hub_client())
+                current_app.logger.info("✅ Recorder Manager initialized (lazy)")
     return _recorder_manager
 
 
 def get_obs_ws_manager():
     global _obs_ws_manager
     if _obs_ws_manager is None:
-        from core.managers.obs_ws_manager import ObsWsManager
-        _obs_ws_manager = ObsWsManager(get_hub_client())
-        current_app.logger.info("✅ OBS WS Manager initialized (lazy)")
+        with _lazy_lock:
+            if _obs_ws_manager is None:
+                from core.managers.obs_ws_manager import ObsWsManager
+                _obs_ws_manager = ObsWsManager(get_hub_client())
+                current_app.logger.info("✅ OBS WS Manager initialized (lazy)")
     return _obs_ws_manager
 
 
 def get_sequence_manager():
     global _sequence_manager
     if _sequence_manager is None:
-        from core.managers.sequence_manager import SequenceManager
-        _sequence_manager = SequenceManager(
-            get_hub_client(),
-            current_app.config['SEQUENCES_PATH'],
-            app=current_app._get_current_object()
-        )
-        current_app.logger.info("✅ Sequence Manager initialized (lazy)")
+        with _lazy_lock:
+            if _sequence_manager is None:
+                from core.managers.sequence_manager import SequenceManager
+                _sequence_manager = SequenceManager(
+                    get_hub_client(),
+                    current_app.config['SEQUENCES_PATH'],
+                    app=current_app._get_current_object()
+                )
+                current_app.logger.info("✅ Sequence Manager initialized (lazy)")
     return _sequence_manager
 
 
 def get_plugin_manager():
     global _plugin_manager
     if _plugin_manager is None:
-        from core.managers.plugin_manager import PluginManager
-        _plugin_manager = PluginManager(get_hub_client())
-        current_app.logger.info("✅ Plugin Manager initialized (lazy)")
+        with _lazy_lock:
+            if _plugin_manager is None:
+                from core.managers.plugin_manager import PluginManager
+                _plugin_manager = PluginManager(get_hub_client())
+                current_app.logger.info("✅ Plugin Manager initialized (lazy)")
     return _plugin_manager
 
 
 def get_current_game_manager():
     global _current_game_manager
     if _current_game_manager is None:
-        from core.managers.current_game_manager import CurrentGameManager
-        _current_game_manager = CurrentGameManager(get_hub_client())
-        current_app.logger.info("✅ Current Game Manager initialized (lazy)")
+        with _lazy_lock:
+            if _current_game_manager is None:
+                from core.managers.current_game_manager import CurrentGameManager
+                _current_game_manager = CurrentGameManager(get_hub_client())
+                current_app.logger.info("✅ Current Game Manager initialized (lazy)")
     return _current_game_manager
 
 
 def get_replay_export_manager():
     global _replay_export_manager
     if _replay_export_manager is None:
-        from core.managers.replay_export_manager import ReplayExportManager
-        from pathlib import Path
-        data_dir = Path(current_app.config.get('REPLAY_EXPORT_DIR', 'app/data'))
-        _replay_export_manager = ReplayExportManager(data_dir)
-        current_app.logger.info("✅ Replay Export Manager initialized (lazy)")
+        with _lazy_lock:
+            if _replay_export_manager is None:
+                from core.managers.replay_export_manager import ReplayExportManager
+                from pathlib import Path
+                data_dir = Path(current_app.config.get('REPLAY_EXPORT_DIR', 'app/data'))
+                _replay_export_manager = ReplayExportManager(data_dir)
+                current_app.logger.info("✅ Replay Export Manager initialized (lazy)")
     return _replay_export_manager
 
 
@@ -227,42 +248,50 @@ def get_controller_manager():
 def get_servo_manager():
     global _servo_manager
     if _servo_manager is None:
-        from core.managers.servo_manager import ServoManager
-        _servo_manager = ServoManager(get_hub_client())
-        current_app.logger.info("✅ Servo Manager initialized (lazy)")
+        with _lazy_lock:
+            if _servo_manager is None:
+                from core.managers.servo_manager import ServoManager
+                _servo_manager = ServoManager(get_hub_client())
+                current_app.logger.info("✅ Servo Manager initialized (lazy)")
     return _servo_manager
 
 
 def get_gopro_manager():
     global _gopro_manager
     if _gopro_manager is None:
-        from core.managers.gopro_manager import GoProManager
-        _gopro_manager = GoProManager(get_hub_client())
-        current_app.logger.info("✅ GoPro Manager initialized (lazy)")
+        with _lazy_lock:
+            if _gopro_manager is None:
+                from core.managers.gopro_manager import GoProManager
+                _gopro_manager = GoProManager(get_hub_client())
+                current_app.logger.info("✅ GoPro Manager initialized (lazy)")
     return _gopro_manager
 
 
 def get_helper_relay_client():
     global _helper_relay_client
     if _helper_relay_client is None:
-        from core.managers.helper_relay_client import HelperRelayClient
-        _helper_relay_client = HelperRelayClient(
-            relay_url=current_app.config.get('HELPER_RELAY_URL'),
-            token=current_app.config.get('HELPER_RELAY_TOKEN'),
-            app=current_app._get_current_object(),
-            ping_interval_s=current_app.config.get('HELPER_RELAY_PING_INTERVAL_S', 300),
-        )
-        current_app.logger.info("✅ Helper Relay Client initialized (lazy)")
+        with _lazy_lock:
+            if _helper_relay_client is None:
+                from core.managers.helper_relay_client import HelperRelayClient
+                _helper_relay_client = HelperRelayClient(
+                    relay_url=current_app.config.get('HELPER_RELAY_URL'),
+                    token=current_app.config.get('HELPER_RELAY_TOKEN'),
+                    app=current_app._get_current_object(),
+                    ping_interval_s=current_app.config.get('HELPER_RELAY_PING_INTERVAL_S', 300),
+                )
+                current_app.logger.info("✅ Helper Relay Client initialized (lazy)")
     return _helper_relay_client
 
 
 def get_helper_relay_manager():
     global _helper_relay_manager
     if _helper_relay_manager is None:
-        from core.managers.helper_relay_manager import HelperRelayManager
-        client = get_helper_relay_client() if current_app.config.get('HELPER_RELAY_ENABLED', False) else None
-        _helper_relay_manager = HelperRelayManager(relay_client=client)
-        current_app.logger.info("✅ Helper Relay Manager initialized (lazy)")
+        with _lazy_lock:
+            if _helper_relay_manager is None:
+                from core.managers.helper_relay_manager import HelperRelayManager
+                client = get_helper_relay_client() if current_app.config.get('HELPER_RELAY_ENABLED', False) else None
+                _helper_relay_manager = HelperRelayManager(relay_client=client)
+                current_app.logger.info("✅ Helper Relay Manager initialized (lazy)")
     return _helper_relay_manager
 
 

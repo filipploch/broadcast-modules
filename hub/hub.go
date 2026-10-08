@@ -798,6 +798,15 @@ func (h *Hub) hasCapability(module *Module, capability string) bool {
 func (h *Hub) Shutdown() {
 	log.Println("⏹️  Initiating Hub shutdown...")
 
+	// Od początku zamykania nic nie jest uruchamiane ponownie (plugin zabity przez Ctrl+C z konsoli nie wraca,
+	// a zaplanowane restarty są pomijane), nawet jeśli zatrzymanie modułu potrwa dłużej niż opóźnienie restartu
+	if h.PluginManager != nil {
+		h.PluginManager.BeginShutdown()
+	}
+	if h.Services != nil {
+		h.Services.BeginShutdown()
+	}
+
 	// Usługi (moduł) zatrzymujemy przed pluginami, póki moduł może jeszcze odpowiedzieć na prośbę o zamknięcie
 	if h.Services != nil {
 		h.Services.StopAll()

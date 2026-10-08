@@ -14,8 +14,8 @@ type collector struct {
 	lines []string
 }
 
-func (c *collector) add(s string) { c.mu.Lock(); c.lines = append(c.lines, s); c.mu.Unlock() }
-func (c *collector) get() string  { c.mu.Lock(); defer c.mu.Unlock(); return strings.Join(c.lines, "|") }
+func (c *collector) add(s []string) { c.mu.Lock(); c.lines = append(c.lines, s...); c.mu.Unlock() }
+func (c *collector) get() string    { c.mu.Lock(); defer c.mu.Unlock(); return strings.Join(c.lines, "|") }
 
 func appendTo(t *testing.T, path, text string) {
 	t.Helper()
@@ -67,4 +67,26 @@ func TestFollowerAllowsRotationByWriterAndSwitchesToNewFile(t *testing.T) {
 	}
 	appendTo(t, path, "po rotacji\n")
 	waitCond(t, "wiersz po rotacji", 3*time.Second, func() bool { return c.get() == "przed rotacją|po rotacji" })
+}
+
+// Wiersze zapisane razem (np. traceback) trafiają do konsoli jedną paczką, nie przecięte wierszami z innego pliku.
+func TestFollowerEmitsLinesWrittenTogetherAsOneBatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wyjscie.log")
+	appendTo(t, path, "")
+	var mu sync.Mutex
+	var batches [][]string
+	f := startFileFollower(path, 10*time.Millisecond, func(lines []string) {
+		mu.Lock()
+		batches = append(batches, lines)
+		mu.Unlock()
+	})
+	defer f.Stop()
+	time.Sleep(60 * time.Millisecond)
+	appendTo(t, path, "Traceback (most recent call last):\n  File \"a.py\", line 1\n    boom()\nValueError: x\n")
+	waitCond(t, "paczka", 3*time.Second, func() bool { mu.Lock(); defer mu.Unlock(); return len(batches) > 0 })
+	mu.Lock()
+	defer mu.Unlock()
+	if len(batches) != 1 || len(batches[0]) != 4 {
+		t.Fatalf("oczekiwano jednej paczki 4 wierszy: %v", batches)
+	}
 }

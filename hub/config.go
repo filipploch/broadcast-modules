@@ -185,6 +185,16 @@ func (c *LoadedHubConfig) abs(p string) string {
 	return filepath.Join(c.Root, filepath.FromSlash(p))
 }
 
+// ModuleLabel to nazwa modułu do logu: klucz z konfiguracji i, gdy inna, nazwa używana w plikach logu
+// (np. "nalf (futsal_nalf)"), żeby było widać, który moduł naprawdę startuje.
+func (c *LoadedHubConfig) ModuleLabel() string {
+	e := c.Modules[c.Module]
+	if e.LogName != "" && e.LogName != c.Module {
+		return fmt.Sprintf("%s (%s)", c.Module, e.LogName)
+	}
+	return c.Module
+}
+
 // moduleService składa usługę modułu głównego z wybranego wpisu "modules". Zwraca false, gdy moduł nie jest wybrany.
 func (c *LoadedHubConfig) moduleService() (ServiceConfig, bool) {
 	if c.Module == "" {

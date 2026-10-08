@@ -32,8 +32,9 @@ def create_app(config_name='default'):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    from core.utils.logs import setup_file_logging
+    from core.utils.logs import setup_file_logging, quiet_flask_console
     setup_file_logging('futsal_nalf', testing=bool(app.config.get('TESTING')) or config_name not in ('development', 'production'))
+    quiet_flask_console(app)
 
     # Rozszerzenia — używamy instancji z core
     from core.extensions import db, socketio, migrate
@@ -68,6 +69,10 @@ def create_app(config_name='default'):
         from app.socketio_events import specific_socketio_events as specific_events
         specific_routes.register_routes(app)
         specific_events.register_events(socketio)
+
+        # Polecenia zegara i zapisy meczu tylko przy otwartej sesji i aktywnym meczu (E2d1)
+        from core.socketio_events.guard import guard_events
+        guard_events(app, socketio)
 
 
         @app.context_processor

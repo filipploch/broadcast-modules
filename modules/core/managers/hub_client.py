@@ -238,6 +238,17 @@ class HubClient:
             'payload': payload
         })
 
+    # Pluginy, które odpowiadają na recording_command: recorder (stan kamer) i obs-ws-plugin (stan nagrywania w OBS)
+    RECORDING_PLUGINS = ('recorder-plugin', 'obs-ws-plugin')
+
+    def send_recording_command(self, payload, plugins=RECORDING_PLUGINS):
+        """Wysyła recording_command tylko do pluginów, które go obsługują (zamiast rozsyłać do wszystkich: timer-plugin,
+        replay i controller odpowiadały "Unknown message type"). Plugin znany jako rozłączony jest pomijany."""
+        sent = False
+        for plugin_id in plugins:
+            sent = bool(self.send_to_plugin(plugin_id, 'recording_command', payload)) or sent
+        return sent
+
     # ✅ NEW: Broadcast to specific class
     def broadcast_to_class(self, class_name, msg_type, payload):
         """Broadcast message to specific class of modules"""

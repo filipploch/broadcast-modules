@@ -82,7 +82,7 @@ func NewServiceManager() *ServiceManager {
 		services:       make(map[string]*serviceProc),
 		stableAfter:    60 * time.Second,
 		pollInterval:   250 * time.Millisecond,
-		followInterval: 300 * time.Millisecond,
+		followInterval: 100 * time.Millisecond,
 		killWait:       5 * time.Second,
 	}
 }
@@ -256,6 +256,11 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 		sm.mu.Unlock()
 		return fmt.Errorf("nieznana usługa %s", id)
 	}
+	if sm.shuttingDown {
+		sm.mu.Unlock()
+		log.Printf("⏹️  Usługa %s: HUB się zamyka, pomijam start", id)
+		return fmt.Errorf("HUB się zamyka")
+	}
 	if sp.status == "online" || sp.status == "starting" {
 		sm.mu.Unlock()
 		log.Printf("ℹ️  Usługa %s już działa (%s)", id, sp.status)
@@ -347,6 +352,7 @@ func openServiceOutput(name string) (*os.File, string, error) {
 		return f, os.DevNull, err
 	}
 	path := filepath.Join(runLogDir, name)
+	rotateIfLarge(path, logMaxBytes, logBackups) // przy (ponownym) starcie; w trakcie pracy procesu plik rośnie tylko surowym wyjściem
 	existed := false
 	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
 		existed = true
@@ -359,6 +365,19 @@ func openServiceOutput(name string) (*os.File, string, error) {
 		fmt.Fprintf(f, "%s ──────── ponowne uruchomienie usługi ────────\n", time.Now().Format(logTimeFormat))
 	}
 	return f, path, nil
+}
+
+// rotateIfLarge przesuwa plik większy niż maxBytes do <plik>.1 (starsze do .2, .3), żeby nowy start zaczynał od małego pliku.
+func rotateIfLarge(path string, maxBytes int64, backups int) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() <= maxBytes {
+		return
+	}
+	os.Remove(fmt.Sprintf("%s.%d", path, backups))
+	for i := backups - 1; i >= 1; i-- {
+		os.Rename(fmt.Sprintf("%s.%d", path, i), fmt.Sprintf("%s.%d", path, i+1))
+	}
+	os.Rename(path, path+".1")
 }
 
 func (sm *ServiceManager) startFollowers(cfg ServiceConfig) []*fileFollower {
@@ -540,6 +559,13 @@ func (sm *ServiceManager) Stop(id string) error {
 func (sm *ServiceManager) stopFailed(id, msg string) error {
 	log.Printf("❌ Usługa %s: %s", id, msg)
 	return fmt.Errorf("%s", msg)
+}
+
+// BeginShutdown blokuje wszystkie starty usług (także zaplanowane restarty po awarii).
+func (sm *ServiceManager) BeginShutdown() {
+	sm.mu.Lock()
+	sm.shuttingDown = true
+	sm.mu.Unlock()
 }
 
 // StopAll zatrzymuje usługi w kolejności odwrotnej do startu i blokuje ich automatyczne restarty.

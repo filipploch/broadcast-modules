@@ -6,7 +6,9 @@ Buduje swiezo hub i timer-plugin do wp-local/dryrun-hub/ (nie rusza plikow .exe 
 (--config) i portow testowych 18080 (HUB) / 18081 (modul), wiec nie koliduje z wersja transmisyjna (8080/8081).
 Baza: kopia lokalnej bazy (prepare_dry_run.py). Modul to dry_run_module.py (bez kopiowania plikow do overlayow).
   J1. HUB uruchamia modul (proces odlaczony); pierwszy wiersz hub.log: modul i zrodlo; modul laczy sie z HUB-em,
-      HUB uruchamia timer-plugin na deklaracje modulu; logi modulu w jednym pliku bez dublowania wierszy.
+      HUB uruchamia timer-plugin na deklaracje modulu; logi modulu w jednym pliku bez dublowania wierszy; karty przegladarki
+      (klient socket.io) otwierane i zamykane nie zostawiaja tracebackow w wyjscie.log; zalegle polecenie zegara bez sesji
+      jest odrzucone; konsola HUB-a pokazuje kazdy wiersz modulu raz.
   J2. (stala zasada prob) 3 minuty bez restartow: modul i pluginy lokalne maja restarts == 0, brak timeoutow heartbeatu.
   J3. HUB zabity silowo: modul zyje dalej i odpowiada (przezywa awarie HUB-a); nowy HUB nie uruchamia drugiej kopii
       (zajety port) i zapisuje to w logu (przejecie dziala od E2d2).
@@ -15,7 +17,7 @@ Baza: kopia lokalnej bazy (prepare_dry_run.py). Modul to dry_run_module.py (bez 
 --krotka pomija 3 minuty z J2 (do szybkich sprawdzen; wynik J2 jest wtedy oznaczony jako POMINIETY).
 Wymaga wolnych portow 18080 i 18081.
 """
-import json, os, pathlib, shutil, signal, socket, subprocess, sys, time, urllib.request
+import json, os, pathlib, re, shutil, signal, socket, subprocess, sys, time, urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -74,6 +76,20 @@ def wait_for(cond, timeout, step=0.5):
             pass
         time.sleep(step)
     return False
+
+
+FLASK_LOG_LINE = re.compile(r"^\[\d{4}-\d\d-\d\d [\d:,]+\] (DEBUG|INFO|WARNING|ERROR|CRITICAL) in ", re.M)
+
+
+def wyjscie_ok(path):
+    """Surowe wyjscie procesu nie ma tracebackow ani wierszy logu (format Flaska)."""
+    text = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    return "Traceback" not in text and not FLASK_LOG_LINE.search(text)
+
+
+def wyjscie_summary(path):
+    text = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    return f"{len(text)} B, wierszy {len(text.splitlines())}, tracebackow {text.count('Traceback')}, wierszy w formacie logu {len(FLASK_LOG_LINE.findall(text))}"
 
 
 def build():
@@ -150,7 +166,7 @@ def main():
         spawned.append(module_pid)
         rd = run_dir()
         first = (rd / "hub.log").read_text(encoding="utf-8", errors="replace").splitlines()[0]
-        check("J1b pierwszy wiersz hub.log podaje modul i zrodlo", "Moduł: proba (źródło: hub.json)" in first, repr(first))
+        check("J1b pierwszy wiersz hub.log podaje modul (nazwe pliku logu) i zrodlo", f"Moduł: proba ({MODULE}) (źródło: hub.json)" in first, repr(first))
         check("J1c modul polaczony z HUB-em", wait_for(lambda: status()["main_module_connected"], 30))
         got_plugin = wait_for(lambda: "timer-plugin" in status()["connected_plugins"], 60)
         check("J1d HUB uruchomil timer-plugin na deklaracje modulu", got_plugin)
@@ -159,7 +175,8 @@ def main():
             spawned.append(plugin_pid)
         mod_log = rd / f"modul-{MODULE}.log"
         text = mod_log.read_text(encoding="utf-8", errors="replace") if mod_log.exists() else ""
-        rows = [l for l in text.splitlines() if l.strip()]
+        # wiersze-separatory ("====") z tej samej milisekundy nie sa dublami
+        rows = [l for l in text.splitlines() if l.strip() and not l.rstrip().endswith("=====")]
         dup = len(rows) - len(set(rows))
         check("J1e jeden plik logu modulu, wiersze bez dublowania", mod_log.exists() and len(rows) > 3 and dup == 0,
               f"(wierszy {len(rows)}, powtorzonych {dup}, pliki: {sorted(p.name for p in rd.iterdir())})")
@@ -170,6 +187,31 @@ def main():
             check("J1g strona modulu odpowiada", True)
         except Exception as e:
             check("J1g strona modulu odpowiada", False, str(e))
+
+        import socketio as sio
+        for _ in range(3):                             # karty przegladarki otwierane i zamykane (dawniej: ConnectionError w wyjscie.log)
+            c = sio.Client()
+            c.connect(MOD, transports=["websocket"])
+            time.sleep(0.4)
+            c.disconnect()
+            time.sleep(0.4)
+        c = sio.Client()                               # zalegle polecenie ze starej karty, bez otwartej sesji
+        c.connect(MOD, transports=["websocket"])
+        c.emit("timer_start", {"timer_id": "OPPxBRO p:1"})
+        time.sleep(1.0)
+        c.disconnect()
+        time.sleep(0.5)
+        text = mod_log.read_text(encoding="utf-8", errors="replace")
+        check("J1h zalegle polecenie zegara bez sesji odrzucone (wpis w logu, zegar nie ruszyl)",
+              "Odrzucono zdarzenie timer_start: brak otwartej sesji" in text and "Started timer: OPPxBRO" not in text)
+        rd1 = rd
+        check("J1i wyjscie.log po otwieraniu i zamykaniu kart: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
+              f"({wyjscie_summary(out_file)})")
+        console = (DRY / "hub-konsola-1.txt").read_text(encoding="utf-8", errors="replace")
+        modul_lines = [l for l in console.splitlines() if l.startswith("[moduł]") and not l.rstrip().endswith("=====")]
+        dup_console = len(modul_lines) - len(set(modul_lines))
+        check("J1j konsola HUB-a: wiersze modulu bez powtorzen, bez tracebackow", dup_console == 0 and "Traceback" not in console and len(modul_lines) > 3,
+              f"(wierszy modulu {len(modul_lines)}, powtorzonych {dup_console})")
 
         if not SHORT:
             say("\n== J2. Stabilnosc: 3 minuty bez restartow")
@@ -216,6 +258,8 @@ def main():
         hub.wait()
         kill_pid_tree(module_pid)
         check("J3c po sprzataniu port modulu wolny", wait_for(lambda: not port_busy(MOD_PORT), 15))
+        check("J3d wyjscie.log modulu z J1 po zabiciu HUB-a: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
+              f"({wyjscie_summary(out_file)})")
 
         say("\n== J4. Lagodne zamkniecie HUB-a: modul zamyka sie sam")
         hub = start_hub("3")
@@ -225,6 +269,12 @@ def main():
         wait_for(lambda: "timer-plugin" in status()["connected_plugins"], 60)
         plugin_pid = status()["plugin_manager"]["local_plugins"]["timer-plugin"]["pid"]
         spawned.append(plugin_pid)
+        import socketio as sio4
+        panel = sio4.Client()                          # wczytanie panelu: get_record_status (dawniej recording_command do wszystkich pluginow)
+        panel.connect(MOD, transports=["websocket"])
+        panel.emit("get_record_status")
+        time.sleep(1.5)
+        panel.disconnect()
         os.kill(hub.pid, signal.CTRL_BREAK_EVENT)
         exited = wait_for(lambda: hub.poll() is not None, 60)
         check("J4a HUB zakonczyl sie po Ctrl+Break", exited)
@@ -234,6 +284,11 @@ def main():
         rd = run_dir()
         hub_log = (rd / "hub.log").read_text(encoding="utf-8", errors="replace")
         check("J4d w logu: modul zamknal sie sam po prosbie HUB-a", "zamknęła się sama" in hub_log)
+        out4 = rd / f"modul-{MODULE}.wyjscie.log"
+        check("J4e wyjscie.log w J4: bez tracebackow i wierszy w formacie logu", out4.exists() and wyjscie_ok(out4),
+              f"({wyjscie_summary(out4)})")
+        timer_log = (rd / "timer-plugin.log").read_text(encoding="utf-8", errors="replace") if (rd / "timer-plugin.log").exists() else ""
+        check("J4f timer-plugin nie dostal recording_command (adresat tylko recorder/obs)", "recording_command" not in timer_log)
     finally:
         say("\n== J5. Sprzatanie")
         for pr in (hub,):

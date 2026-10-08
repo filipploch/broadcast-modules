@@ -259,6 +259,12 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 		pm.mu.Unlock()
 		return fmt.Errorf("plugin not found or not local: %s", pluginID)
 	}
+	if pm.shuttingDown {
+		// HUB się zamyka: żaden start (także zaplanowany wcześniej restart po awarii) nie może zostawić osieroconego pluginu
+		pm.mu.Unlock()
+		log.Printf("⏹️  Plugin %s: HUB się zamyka, pomijam start", pluginID)
+		return fmt.Errorf("HUB się zamyka")
+	}
 	status := pluginProc.Status
 	restarts := pluginProc.RestartCount
 	pm.mu.Unlock()
@@ -469,6 +475,14 @@ func (pm *PluginManager) StopPlugin(pluginID string) error {
 	pm.mu.Unlock()
 
 	return nil
+}
+
+// BeginShutdown oznacza początek zamykania HUB-a: od tej chwili nie są planowane ani wykonywane żadne starty pluginów
+// (restart po awarii, samonaprawa, restart ręczny). Wołane na samym początku zamykania, zanim zatrzymamy cokolwiek innego.
+func (pm *PluginManager) BeginShutdown() {
+	pm.mu.Lock()
+	pm.shuttingDown = true
+	pm.mu.Unlock()
 }
 
 // StopAllPlugins stops all running plugins

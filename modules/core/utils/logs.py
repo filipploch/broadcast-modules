@@ -92,6 +92,15 @@ def _drop_console_handlers(root):
             root.removeHandler(h)
 
 
+def quiet_flask_console(app):
+    """Moduł uruchomiony przez HUB: zdejmuje z app.logger domyślny uchwyt Flaska (stderr, własny format), który
+    dublowałby wiersze logu w pliku wyjścia procesu. Wołać po setup_file_logging."""
+    if os.environ.get(MANAGED_ENV) != '1':
+        return
+    from flask.logging import default_handler
+    app.logger.removeHandler(default_handler)
+
+
 def file_formatter():
     return logging.Formatter(FILE_FORMAT, DATE_FORMAT)
 
