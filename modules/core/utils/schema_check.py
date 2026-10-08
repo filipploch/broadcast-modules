@@ -70,14 +70,24 @@ def migrate_command(module_name):
     return f'"{sys.executable}" "{script}" {module_name}'
 
 
+def migrate_commands(module_name):
+    """Polecenie migracji w dwóch postaciach: PowerShell (wymaga operatora wywołania '&' przy cudzysłowie na początku wiersza) i cmd."""
+    plain = migrate_command(module_name)
+    return f'& {plain}', plain
+
+
 def build_message(module_name, info):
     cur = ', '.join(info['current']) if info['current'] else 'brak'
     need = ', '.join(info['heads'])
     line = '=' * 72
-    cmd = migrate_command(module_name)
+    ps_cmd, cmd_cmd = migrate_commands(module_name)
+    cmd = f'PowerShell:  {ps_cmd}\n    cmd:         {cmd_cmd}'
     env_hint = ''
     if os.environ.get('DATABASE_URL'):
-        env_hint = f'\n    (zmienna DATABASE_URL musi być ustawiona tak samo przy tym poleceniu: {os.environ["DATABASE_URL"]})'
+        url = os.environ['DATABASE_URL']
+        env_hint = ('\n    Zmienna DATABASE_URL musi być ustawiona tak samo w tym oknie, przed poleceniem:\n'
+                    f'    PowerShell:  $env:DATABASE_URL = "{url}"\n'
+                    f'    cmd:         set DATABASE_URL={url}')
     why = {
         'outdated': 'baza jest na starszej wersji migracji niż wymaga kod modułu',
         'ahead': 'baza ma wersję migracji, której ten kod nie zna (baza jest nowsza niż kod)',

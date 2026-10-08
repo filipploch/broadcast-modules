@@ -28,9 +28,12 @@ def create_app(config_name='default'):
     # Logging
     logging.basicConfig(
         level=logging.DEBUG if app.debug else logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
+        format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',   # znacznik z ms, jak w HUB-ie i pluginach
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+    from core.utils.logs import setup_file_logging
+    setup_file_logging('futsal_nalf', testing=bool(app.config.get('TESTING')) or config_name not in ('development', 'production'))
 
     # Rozszerzenia — używamy instancji z core
     from core.extensions import db, socketio, migrate

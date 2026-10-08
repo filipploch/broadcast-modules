@@ -89,8 +89,9 @@ type timer struct {
 
 // Manager manages multiple timers
 type Manager struct {
-	timers map[string]*timer
-	mu     sync.RWMutex
+	timers  map[string]*timer
+	mu      sync.RWMutex
+	persist *persistence // nil = zapis stanu wyłączony (patrz persist.go)
 }
 
 // NewManager creates a new timer manager
@@ -114,6 +115,7 @@ func (m *Manager) parentElapsed(parent *timer) time.Duration {
 
 // Create creates a new timer with the given id.
 func (m *Manager) Create(id string, config TimerConfig) {
+	defer m.markDirty()
 	updateInterval := config.UpdateInterval
 	if updateInterval == 0 {
 		updateInterval = 50 * time.Millisecond
@@ -157,6 +159,7 @@ func (m *Manager) Create(id string, config TimerConfig) {
 // Ensure creates a timer with the given id only if it does not already exist.
 // Returns true if the timer was created, false if it already existed.
 func (m *Manager) Ensure(id string, config TimerConfig) bool {
+	defer m.markDirty()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -209,6 +212,7 @@ func (m *Manager) Ensure(id string, config TimerConfig) bool {
 
 // Start starts a timer
 func (m *Manager) Start(timerID string) error {
+	defer m.markDirty()
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
 	m.mu.RUnlock()
@@ -257,6 +261,7 @@ func (m *Manager) Start(timerID string) error {
 
 // Pause pauses a running timer
 func (m *Manager) Pause(timerID string) error {
+	defer m.markDirty()
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
 	m.mu.RUnlock()
@@ -296,6 +301,7 @@ func (m *Manager) Resume(timerID string) error {
 
 // Reset resets timer to elapsed_time = 0
 func (m *Manager) Reset(timerID string) error {
+	defer m.markDirty()
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
 	m.mu.RUnlock()
@@ -336,6 +342,7 @@ func (m *Manager) Reset(timerID string) error {
 
 // Remove removes a timer, stopping it first if it is running
 func (m *Manager) Remove(timerID string) error {
+	defer m.markDirty()
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
 	m.mu.RUnlock()
@@ -403,6 +410,7 @@ func (m *Manager) GetAllTimers() []*TimerInfo {
 
 // AdjustTime adjusts timer by delta
 func (m *Manager) AdjustTime(timerID string, delta time.Duration) error {
+	defer m.markDirty()
 	m.mu.RLock()
 	t, exists := m.timers[timerID]
 	m.mu.RUnlock()
@@ -566,6 +574,7 @@ func (m *Manager) runTimer(timerID string) {
 					t.elapsedBase = limit
 					t.remainderTime = 0
 					t.mu.Unlock()
+					m.markDirty()
 
 					if callbacks != nil && callbacks.OnLimit != nil {
 						go callbacks.OnLimit(limit, timerID)
@@ -574,6 +583,7 @@ func (m *Manager) runTimer(timerID string) {
 					return
 				}
 				t.mu.Unlock()
+				m.markDirty()
 
 				if callbacks != nil && callbacks.OnLimit != nil {
 					go callbacks.OnLimit(limit, timerID)

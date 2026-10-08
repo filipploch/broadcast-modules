@@ -31,3 +31,5 @@ config.h
 **/docs/**
 plugins/recorder-plugin/samba/
 wp-local/
+/logs/
+plugins/timer-plugin/state/

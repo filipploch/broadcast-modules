@@ -9,7 +9,7 @@ Każdy moduł rejestruje te trasy przez:
     core_broadcast.register_routes(app)
 """
 from core.managers import session_manager
-from core.managers.timer_manager import current_timers_for_game
+from core.managers.timer_manager import current_timers_for_game, recovery_timers_for_game
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.managers.season_manager import SeasonManager
@@ -199,6 +199,7 @@ def register_routes(app, exclude=None):
             "current_game_id": session_manager.current_game_id(),
             "current_period_id": session_manager.current_period_id(),
             "current_timers": current_timers,
+            "recovery_timers": recovery_timers_for_game(),
             "period": period_data,
             "game": game_data,
             "is_reversed": is_reversed,

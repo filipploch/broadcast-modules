@@ -6,9 +6,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
+	runDir, closeLogs, logErr := setupRunLogs(logsRoot(), time.Now())
+	if logErr != nil {
+		log.Printf("⚠️  Nie można założyć folderu logów (logi tylko w konsoli): %v", logErr)
+	} else {
+		defer closeLogs()
+		log.Printf("📝 Logi tego uruchomienia: %s", runDir)
+	}
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("🚀 BROADCAST HUB STARTING")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
