@@ -92,6 +92,20 @@ class LogiModulu(unittest.TestCase):
         i1, i2, i3 = text.index("przed awaria"), text.index("ponowne uruchomienie składnika modul-garbarnia"), text.index("po restarcie")
         self.assertTrue(i1 < i2 < i3, text)
 
+    def test_potomek_przeladowania_serwera_nie_dodaje_separatora_restartu(self):
+        from core.utils.logs import setup_file_logging
+        hub_dir = self.root_dir / "logs-2026-10-08-12-00-00"
+        os.environ["BM_LOG_RUN_DIR"] = str(hub_dir)
+        path = setup_file_logging("garbarnia")
+        self._detach()
+        os.environ["WERKZEUG_RUN_MAIN"] = "true"
+        try:
+            setup_file_logging("garbarnia")
+        finally:
+            os.environ.pop("WERKZEUG_RUN_MAIN", None)
+        self._handler().flush()
+        self.assertNotIn("ponowne uruchomienie", path.read_text(encoding="utf-8"))
+
     def test_poziom_konsoli_zostaje_a_plik_dostaje_info(self):
         from core.utils.logs import setup_file_logging
         self.root.setLevel(logging.ERROR)

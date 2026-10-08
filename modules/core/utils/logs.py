@@ -117,7 +117,8 @@ def setup_file_logging(module_name, testing=False):
         root.setLevel(logging.INFO)
     root.addHandler(handler)
     log = logging.getLogger(__name__)
-    if existed:
+    # Potomek przeładowania serwera deweloperskiego (werkzeug) to ten sam start, a nie restart modułu
+    if existed and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         log.info('──────── ponowne uruchomienie składnika modul-%s ────────', module_name)
     log.info('Log modułu %s: %s', module_name, path)
     return path
