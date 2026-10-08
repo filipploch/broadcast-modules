@@ -733,10 +733,15 @@ def register_events(socketio):
         kwargs     = {k: data[k] for k in keys if k in data}
 
         if data.get('recovery'):
-            current_app.logger.warning(
-                f'⚠️  AWARYJNE ODTWARZANIE ZEGARA przez moduł: {timer_id} ({timer_type}); plugin zegara nie miał tego zegara '
-                f'(powód: {data.get("recovery_reason") or "nieznany"}). Czas jest szacowany z ostatniego zapisu w bazie '
-                f'(szacunek: {data.get("recovery_elapsed", 0)} ms), może się różnić od rzeczywistego o kilka sekund.')
+            if data.get('recovery_expected'):
+                current_app.logger.warning(
+                    f'⚠️  AWARYJNE ODTWARZANIE ZEGARA przez moduł: {timer_id} ({timer_type}); plugin zegara nie miał tego zegara '
+                    f'(powód: {data.get("recovery_reason") or "nieznany"}), a okres trwa. Czas jest szacowany z ostatniego zapisu w bazie '
+                    f'(szacunek: {data.get("recovery_elapsed", 0)} ms), może się różnić od rzeczywistego o kilka sekund.')
+            else:
+                current_app.logger.info(
+                    f'Zakładam zegar {timer_id} w pluginie (okres nie trwa, to zwykłe przygotowanie, nie awaria; stan pluginu: '
+                    f'{data.get("recovery_reason") or "nieznany"}).')
 
         if tm.create_timer(timer_id, timer_type, **kwargs):
             current_app.logger.info(f'✅ Timer created: {timer_id}')

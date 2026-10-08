@@ -82,6 +82,12 @@ class StanBazy(unittest.TestCase):
         self.assertEqual(msg.count("BŁĄD:"), 1)
         for needed in (MODULE, OLD_REVISION, _head(), "migrate_db.py", "uruchom moduł ponownie"):
             self.assertIn(needed, msg)
+        # PowerShell nie uruchomi polecenia zaczynającego się od cudzysłowu: wymaga operatora '&'; cmd bierze wersję bez niego
+        ps_line = next(l for l in msg.splitlines() if l.strip().startswith("PowerShell:"))
+        self.assertIn('PowerShell:  & "', ps_line)
+        cmd_line = next(l for l in msg.splitlines() if l.strip().startswith("cmd:"))
+        self.assertIn('cmd:         "', cmd_line)
+        self.assertNotIn("&", cmd_line)
 
 
 class UruchomienieModulu(unittest.TestCase):

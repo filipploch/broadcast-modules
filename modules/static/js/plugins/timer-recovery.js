@@ -246,6 +246,7 @@ class TimerRecovery {
             pause_at_limit: timerData.pause_at_limit !== false,
             metadata: timerData.metadata || {},
             recovery: true,
+            recovery_expected: timerData.recovery_expected === true,
             recovery_reason: this.pluginStateStatus || 'plugin nie zgłosił powodu',
             recovery_elapsed: hasEstimate ? timerData.recovery_elapsed : 0
         };
@@ -286,6 +287,7 @@ class TimerRecovery {
             pause_at_limit: timerData.pause_at_limit !== false,
             metadata: timerData.metadata || {},
             recovery: true,
+            recovery_expected: timerData.recovery_expected === true,
             recovery_reason: this.pluginStateStatus || 'plugin nie zgłosił powodu',
             recovery_elapsed: 0
         };

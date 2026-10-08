@@ -124,9 +124,10 @@ class OdtwarzanieZegarow(unittest.TestCase):
         with self.assertLogs(APP.logger, level='WARNING') as cap:
             client.emit('timer_plugin_create_timer', {
                 'timer_id': 'x p:1', 'timer_type': 'independent', 'initial_time': 0, 'limit': 1200000,
-                'recovery': True, 'recovery_reason': 'corrupt', 'recovery_elapsed': 70000})
+                'recovery': True, 'recovery_expected': True, 'recovery_reason': 'corrupt', 'recovery_elapsed': 70000})
         text = "\n".join(cap.output)
         self.assertIn('AWARYJNE ODTWARZANIE ZEGARA', text)
+        self.assertIn('okres trwa', text)
         self.assertIn('x p:1', text)
         self.assertIn('corrupt', text)
 
@@ -146,6 +147,72 @@ class OdtwarzanieZegarow(unittest.TestCase):
         self.cm._hub_client.send_to_plugin.reset_mock()
         client.emit('timer_plugin_set_elapsed_time', {'timer_id': 'x p:1', 'elapsed_time': -5})
         self.cm._hub_client.send_to_plugin.assert_not_called()
+
+    def test_zalozenie_zegara_dla_nietrwajacego_okresu_nie_jest_alarmem(self):
+        """Falszywy alarm z proby E2a: zwykle zalozenie zegara okresu, ktory nie trwa, nie moze byc ostrzezeniem."""
+        from core.extensions import socketio
+        client = socketio.test_client(APP)
+        with self.assertNoLogs(APP.logger, level='WARNING'):
+            client.emit('timer_plugin_create_timer', {
+                'timer_id': 'x p:1', 'timer_type': 'independent', 'initial_time': 0, 'limit': 1200000,
+                'recovery': True, 'recovery_expected': False, 'recovery_reason': 'none', 'recovery_elapsed': 0})
+
+    def test_dane_odtwarzania_oznaczaja_kiedy_zegar_powinien_istniec(self):
+        from core.managers.timer_manager import recovery_timers_for_game
+        self.assertFalse(recovery_timers_for_game(now=self.now)['main']['recovery_expected'])    # okres nierozpoczety
+        self._start_p1('running', 65000, age_s=1)
+        r = recovery_timers_for_game(now=self.now)
+        self.assertTrue(r['main']['recovery_expected'])                                           # okres trwa
+        self._penalty('home', 120000, 30000)
+        self.assertTrue(recovery_timers_for_game(now=self.now)['penalties']['home'][0]['recovery_expected'])
+
+    def test_okres_w_pauzie_tez_wymaga_zegara_w_pluginie(self):
+        from core.managers.timer_manager import recovery_timers_for_game
+        self._start_p1('paused', 65000, age_s=30)
+        self.assertTrue(recovery_timers_for_game(now=self.now)['main']['recovery_expected'])
+
+    def test_okres_zakonczony_nie_wymaga_zegara_w_pluginie(self):
+        from core.managers.timer_manager import recovery_timers_for_game
+        gt = self._start_p1('paused', 65000, age_s=30)
+        self.p1.status = self.p1.STATUS_FINISHED
+        from core.extensions import db
+        db.session.commit()
+        self.assertFalse(recovery_timers_for_game(now=self.now)['main']['recovery_expected'])
+
+    # -- nieszkodliwe wyscigi i odpowiedzi, ktore byly logowane jako blad/ostrzezenie
+    def test_zapis_stanu_zegara_usuwanego_rownolegle_nie_jest_bledem(self):
+        """Proba E2a: usuniecie kary kasuje rekord, a plugin tuz przed usunieciem wysyla ostatnie timer_updated (stopped)."""
+        from unittest.mock import patch
+        from sqlalchemy.orm.exc import StaleDataError
+        from core.extensions import db
+        self._start_p1('running', 65000, age_s=1)
+        self._penalty('home', 120000, 30000, suffix='9')
+        with patch.object(db.session, 'commit', side_effect=StaleDataError('UPDATE statement ... 0 were matched')):
+            with self.assertNoLogs(APP.logger, level='ERROR'):
+                self.tm._sync_db_timer('penalty_home_9', 5000, 'stopped')
+        db.session.rollback()
+        from app.models import GameTimer
+        self.assertEqual(GameTimer.query.filter_by(plugin_timer_id='penalty_home_9').count(), 1)   # sesja nadal uzywalna
+
+    def test_inny_blad_zapisu_stanu_zegara_nadal_jest_bledem(self):
+        from unittest.mock import patch
+        from core.extensions import db
+        self._start_p1('running', 65000, age_s=1)
+        with patch.object(db.session, 'commit', side_effect=RuntimeError('inny blad')):
+            with self.assertLogs(APP.logger, level='ERROR'):
+                self.tm._sync_db_timer(self.p1.main_timer_name, 5000, 'running')
+        db.session.rollback()
+
+    def test_odpowiedz_obs_na_zapytanie_o_stan_kamer_nie_jest_ostrzezeniem(self):
+        """Proba E2a: panel rozsyla recording_command (GetRecordStatus), odpowiada tez obs-ws-plugin; moduł nie ma co z tym robic."""
+        from core.managers.obs_ws_manager import ObsWsManager
+        mgr = ObsWsManager(MagicMock())
+        msg = {'payload': {'requestID': 'rec-status-2026-10-08 03:19:18.977412', 'requestType': 'GetRecordStatus',
+                           'responseData': {'outputActive': False}}}
+        with self.assertNoLogs(APP.logger, level='WARNING'):
+            mgr.on_obs_response(msg)
+        with self.assertLogs(APP.logger, level='WARNING'):                  # nieznane identyfikatory nadal ostrzegaja
+            mgr.on_obs_response({'payload': {'requestID': 'cos-nieznanego', 'responseData': {}}})
 
     # -- odpowiedzi pluginu
     def test_odpowiedz_all_timers_niesie_powod_stanu_pluginu(self):

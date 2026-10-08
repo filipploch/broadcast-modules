@@ -152,6 +152,11 @@ class ObsWsManager:
                 self._session_update('on_obs_recording_started')
         elif request_id.startswith('sync-request-'):
             self._handle_sync_request(payload=payload)
+        elif request_id.startswith('rec-status-'):
+            # 'get_record_status' z panelu rozsyła wspólne 'recording_command', które odbiera też obs-ws-plugin i odpowiada
+            # obs_response. Stan nagrywania kamer obsługuje recorder_manager (odpowiedź pluginu nagrywania); ta odpowiedź
+            # OBS jest zbędna (stan OBS zgłasza osobne zapytanie 'ui-obs-record-status').
+            current_app.logger.debug(f'Pomijam odpowiedź OBS na zapytanie o stan kamer: {request_id}')
         else:
             current_app.logger.warning(f"Unhandled OBS response requestID={request_id}: {msg}")
 

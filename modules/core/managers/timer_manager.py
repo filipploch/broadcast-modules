@@ -4,6 +4,8 @@ from datetime import datetime
 
 from flask import current_app
 
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
+
 from core.extensions import db
 
 def _get_gametimer():
@@ -90,6 +92,9 @@ def recovery_timers_for_game(game_id=None, now=None):
     Period = get_period_model()
     GameTimer = _get_gametimer()
     period = Period.query.filter_by(game_id=game_id, main_timer_name=result['main']['timer_id']).first()
+    # Zegar MUSI istnieć w pluginie tylko wtedy, gdy okres trwa albo jest w pauzie (status PENDING); w pozostałych
+    # przypadkach (okres nierozpoczęty/zakończony) założenie zegara jest zwykłym przygotowaniem, a nie awarią.
+    result['main']['recovery_expected'] = bool(period is not None and period.status == Period.STATUS_PENDING)
     if period is None or period.status != Period.STATUS_PENDING:
         return result
     main_gt = GameTimer.query.filter_by(plugin_timer_id=period.main_timer_name).first()
@@ -113,6 +118,7 @@ def recovery_timers_for_game(game_id=None, now=None):
             'pause_at_limit': True,
             'state':          gt.state,
             'elapsed_time':   0,
+            'recovery_expected': True,
             'metadata':       {'team': gt.team, 'timer_class': 'penalty'},
         })
     return result
@@ -807,6 +813,13 @@ class TimerManager:
             # czasu meczowego na czas ścienny (patrz base_timer_sample.py).
             if gt.timer_type == gt.TYPE_MAIN and gt.period_id:
                 self._maybe_record_timer_sample(gt.period_id, elapsed_time_ms, state)
+        except (StaleDataError, ObjectDeletedError):
+            # Wyścig z usuwaniem zegara kary: plugin tuż przed usunięciem wysyła ostatnie 'timer_updated' (stan 'stopped'),
+            # a trasa usuwania w tym czasie kasuje rekord. Zapis stanu usuwanego zegara jest zbędny.
+            db.session.rollback()
+            current_app.logger.debug(
+                f'_sync_db_timer({plugin_timer_id}): rekord zegara został usunięty w trakcie zapisu stanu, pomijam'
+            )
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(

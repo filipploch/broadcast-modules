@@ -108,7 +108,7 @@ def ui_recovery(panel, label):
         payload = {"timer_id": main["timer_id"], "timer_type": main.get("timer_type", "independent"),
                    "initial_time": (main.get("initial_time") or 0) if has_est else (main.get("elapsed_time") or main.get("initial_time") or 0),
                    "limit": main["limit"], "pause_at_limit": main.get("pause_at_limit") is not False,
-                   "metadata": main.get("metadata") or {}, "recovery": True,
+                   "metadata": main.get("metadata") or {}, "recovery": True, "recovery_expected": main.get("recovery_expected") is True,
                    "recovery_reason": resp.get("state_status") or "plugin nie zglosil powodu",
                    "recovery_elapsed": main["recovery_elapsed"] if has_est else 0}
         panel.emit("timer_plugin_create_timer", payload)
