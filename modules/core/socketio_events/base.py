@@ -651,6 +651,10 @@ def register_events(socketio):
     def handle_show_overlay_container(data):
         from core.managers import get_hub_client
         from core.sequences.steps import show_overlay_container
+        from core.managers import session_manager
+        if not session_manager.current_game_id():
+            socketio.emit('error', {'message': 'Brak aktywnego meczu'})
+            return
         hub_client = get_hub_client()
         if hub_client:
             step = show_overlay_container(data)

@@ -59,7 +59,10 @@ def register_events(socketio):
         settings = Settings.get_settings()
         current_game_id = settings.current_game_id
         game_manager = GameManager()
-        game = game_manager.get_game_by_id(game_id=current_game_id)
+        game = game_manager.get_game_by_id(game_id=current_game_id) if current_game_id else None
+        if not game:
+            socketio.emit('error', {'message': 'Brak aktywnego meczu'})
+            return
         print('game:', game.to_dict())
         game_data = game.to_dict()
         game_player_manager = GamePlayerManager()
@@ -190,8 +193,7 @@ def register_events(socketio):
         duration_minutes = data.get('duration_minutes', 40)
         timer_id         = tm.create_game_timer(game_id, duration_minutes)
 
-        socketio.emit('match_timer_created', {'game_id': game_id, 'timer_id': timer_id},
-             broadcast=True)
+        socketio.emit('match_timer_created', {'game_id': game_id, 'timer_id': timer_id})
 
     @socketio.on('penalty_timer_create')
     def handle_penalty_timer_create(data):
@@ -242,7 +244,11 @@ def register_events(socketio):
 
         period_manager   = PeriodManager()
         current_game_id  = Settings.get_settings().current_game_id
-        current_period_id = period_manager.get_current_period(current_game_id).id
+        current_period = period_manager.get_current_period(current_game_id) if current_game_id else None
+        if not current_period:
+            socketio.emit('error', {'message': 'Brak aktywnego meczu'})
+            return
+        current_period_id = current_period.id
         team_type  = data.get('team_type')
         value_type = data.get('value_type')
         value      = data.get('value')
@@ -274,7 +280,10 @@ def register_events(socketio):
         from app.models.game import Game
 
         settings     = Settings.get_settings()
-        game         = Game.query.get(settings.current_game_id)
+        game         = Game.query.get(settings.current_game_id) if settings.current_game_id else None
+        if not game:
+            socketio.emit('error', {'message': 'Brak aktywnego meczu'})
+            return
         team_type    = data.get('team_type')
         team         = game.home_team if team_type == 'home' else game.away_team
 
@@ -684,7 +693,7 @@ def register_events(socketio):
         socketio.emit('rafting_timer_created', {
             'timer_id': timer_id, 'team_name': team_name,
             'start_number': start_number,
-        }, broadcast=True)
+        })
 
     @socketio.on('skiing_timers_create')
     def handle_skiing_timers_create(data):
@@ -696,7 +705,7 @@ def register_events(socketio):
         )
         socketio.emit('skiing_timers_created', {
             'blue_timer_id': blue_id, 'red_timer_id': red_id,
-        }, broadcast=True)
+        })
 
     @socketio.on('skiing_start_simultaneous')
     def handle_skiing_start_simultaneous(data):
@@ -708,7 +717,7 @@ def register_events(socketio):
         if tm.start_multiple([blue_id, red_id]):
             socketio.emit('skiing_started', {
                 'blue_timer_id': blue_id, 'red_timer_id': red_id,
-            }, broadcast=True)
+            })
         else:
             socketio.emit('error', {'message': 'Failed to start skiing timers'})
 
