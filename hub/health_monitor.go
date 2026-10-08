@@ -190,8 +190,8 @@ func (hm *HealthMonitor) checkPluginHealth(pluginID string) {
 				pluginID, timeSinceHeartbeat.Seconds())
 		}
 
-		// Take action if too many failures
-		if health.ConsecutiveFails >= hm.maxFailures {
+		// Take action if too many failures (raz na epizod braku heartbeatu; wcześniej log powtarzał się co kontrolę)
+		if health.ConsecutiveFails == hm.maxFailures {
 			log.Printf("❌ Plugin %s exceeded max failures (%d), taking action",
 				pluginID, hm.maxFailures)
 			hm.handleUnhealthyPlugin(pluginID)
@@ -208,7 +208,13 @@ func (hm *HealthMonitor) handleUnhealthyPlugin(pluginID string) {
 	isExpected := hm.hub.ExpectedPlugins[pluginID]
 	hm.hub.mu.RUnlock()
 
-	if isExpected && hm.hub.PluginManager != nil {
+	if !isExpected {
+		// Np. nakładka w OBS (brak heartbeatu przy ukrytym źródle): nic do restartowania, wystarczy jeden wpis w logu.
+		log.Printf("ℹ️  Plugin %s nie jest wymagany: bez restartu, czekam na jego heartbeat", pluginID)
+		return
+	}
+
+	if hm.hub.PluginManager != nil {
 		log.Printf("🔄 Restarting unhealthy plugin: %s", pluginID)
 
 		go func(id string) {

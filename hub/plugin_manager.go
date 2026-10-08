@@ -49,6 +49,7 @@ type PluginProcess struct {
 	RestartCount int
 	StartedAt    time.Time
 	exitChan     chan struct{}
+	stopping     bool // zatrzymanie z woli HUB-a (restart, zamykanie): monitor nie uruchamia pluginu ponownie
 	logSink      *logSink // wyjście pluginu: plik <id>.log w folderze logów uruchomienia + konsola HUB-a
 }
 
@@ -60,6 +61,19 @@ type PluginManager struct {
 	allConfigs   map[string]PluginConfig   // All plugin configs (local + external)
 	mu           sync.RWMutex
 	shuttingDown bool
+
+	// Nadzór (supervise): ile czeka na rejestrację, po jakim czasie pracy zeruje licznik restartów.
+	registerTimeout time.Duration
+	noProcessGrace  time.Duration
+	stableAfter     time.Duration
+	problems        map[string]*pluginProblem
+}
+
+// pluginProblem opisuje, od kiedy wymagany plugin lokalny jest w danym kłopocie.
+type pluginProblem struct {
+	kind     string // "not_registered", "disconnected", "no_process"
+	since    time.Time
+	reported bool // limit restartów wyczerpany i zgłoszony w logu
 }
 
 // NewPluginManager creates a new plugin manager
@@ -69,6 +83,11 @@ func NewPluginManager(hub *Hub) *PluginManager {
 		configPath: "config/plugins.json",
 		plugins:    make(map[string]*PluginProcess),
 		allConfigs: make(map[string]PluginConfig),
+
+		registerTimeout: 15 * time.Second,
+		noProcessGrace:  6 * time.Second,
+		stableAfter:     60 * time.Second,
+		problems:        make(map[string]*pluginProblem),
 	}
 }
 
@@ -217,24 +236,32 @@ func (pm *PluginManager) IsLocalPlugin(pluginID string) bool {
 	return exists
 }
 
-// StartPlugin starts a specific LOCAL plugin
+// StartPlugin starts a specific LOCAL plugin (start automatyczny: liczy się do limitu max_restarts)
 func (pm *PluginManager) StartPlugin(pluginID string) error {
+	return pm.startPlugin(pluginID, false)
+}
+
+// startPlugin uruchamia plugin lokalny. Start ręczny (z polecenia operatora) pomija limit max_restarts
+// i nie zwiększa licznika restartów.
+func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 	pm.mu.Lock()
 	pluginProc, exists := pm.plugins[pluginID]
 	if !exists {
 		pm.mu.Unlock()
 		return fmt.Errorf("plugin not found or not local: %s", pluginID)
 	}
+	status := pluginProc.Status
+	restarts := pluginProc.RestartCount
 	pm.mu.Unlock()
 
 	// Check if already running
-	if pluginProc.Status == "online" || pluginProc.Status == "starting" {
-		log.Printf("ℹ️  Plugin %s is already %s", pluginID, pluginProc.Status)
+	if status == "online" || status == "starting" {
+		log.Printf("ℹ️  Plugin %s is already %s", pluginID, status)
 		return nil
 	}
 
 	// Check restart limit
-	if pluginProc.RestartCount > 0 && pluginProc.RestartCount >= pluginProc.Config.MaxRestarts {
+	if !manual && restarts > 0 && restarts >= pluginProc.Config.MaxRestarts {
 		return fmt.Errorf("plugin %s exceeded max restarts (%d)",
 			pluginID, pluginProc.Config.MaxRestarts)
 	}
@@ -275,8 +302,10 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	// Start process
 	if err := cmd.Start(); err != nil {
 		sink.Close()
+		pm.mu.Lock()
 		pluginProc.Status = "error"
 		pluginProc.LastError = err
+		pm.mu.Unlock()
 		return fmt.Errorf("failed to start plugin: %w", err)
 	}
 
@@ -286,7 +315,10 @@ func (pm *PluginManager) StartPlugin(pluginID string) error {
 	pluginProc.logSink = sink
 	pluginProc.Status = "starting"
 	pluginProc.StartedAt = time.Now()
-	pluginProc.RestartCount++
+	if !manual {
+		pluginProc.RestartCount++
+	}
+	pluginProc.stopping = false
 	pluginProc.exitChan = make(chan struct{})
 	pm.mu.Unlock()
 
@@ -309,6 +341,7 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 
 	pm.mu.Lock()
 	pluginProc := pm.plugins[pluginID]
+	stoppedByHub := pluginProc.stopping
 	if pluginProc.logSink != nil {
 		pluginProc.logSink.Close() // wyjście pluginu dopisane do końca; restart otworzy ten sam plik ponownie
 		pluginProc.logSink = nil
@@ -318,10 +351,23 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 		close(pluginProc.exitChan)
 		pluginProc.exitChan = nil
 	}
+	// Po ręcznym restarcie nowy proces mógł już zająć miejsce tego: wtedy nic więcej nie zmieniamy.
+	superseded := pluginProc.Process != nil && pluginProc.Process != cmd
+	if !superseded && time.Since(pluginProc.StartedAt) >= pm.stableAfter {
+		pluginProc.RestartCount = 0 // długa, stabilna praca: kolejna awaria zaczyna liczenie od zera
+	}
 	pm.mu.Unlock()
 
+	if superseded {
+		return
+	}
+
 	if err != nil {
-		log.Printf("❌ Plugin %s exited with error: %v", pluginID, err)
+		if stoppedByHub {
+			log.Printf("⏹️  Plugin %s zatrzymany przez HUB", pluginID)
+		} else {
+			log.Printf("❌ Plugin %s exited with error: %v", pluginID, err)
+		}
 		pm.mu.Lock()
 		pluginProc.Status = "error"
 		pluginProc.LastError = err
@@ -335,7 +381,7 @@ func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 
 	// Auto-restart if configured
 	pm.mu.Lock()
-	shouldRestart := !pm.shuttingDown &&
+	shouldRestart := !pm.shuttingDown && !stoppedByHub &&
 		pluginProc.Config.RestartOnCrash &&
 		pluginProc.RestartCount < pluginProc.Config.MaxRestarts
 	pm.mu.Unlock()
@@ -371,9 +417,11 @@ func (pm *PluginManager) StopPlugin(pluginID string) error {
 		pm.mu.Unlock()
 		return fmt.Errorf("plugin not found: %s", pluginID)
 	}
+	pluginProc.stopping = true
+	hasProcess := pluginProc.Process != nil
 	pm.mu.Unlock()
 
-	if pluginProc.Process == nil {
+	if !hasProcess {
 		log.Printf("ℹ️  Plugin %s is not running", pluginID)
 		return nil
 	}
@@ -516,4 +564,108 @@ func (pm *PluginManager) GetAllStatus() map[string]interface{} {
 	result["external_plugins"] = externalPlugins
 
 	return result
+}
+
+// RestartPlugin zatrzymuje plugin lokalny i uruchamia go od nowa. Restart ręczny (manual) nie podlega
+// limitowi max_restarts i nie zwiększa licznika.
+func (pm *PluginManager) RestartPlugin(pluginID string, manual bool) error {
+	if !pm.IsLocalPlugin(pluginID) {
+		return fmt.Errorf("plugin not found or not local: %s", pluginID)
+	}
+	log.Printf("🔄 Restart pluginu %s (ręczny: %v)", pluginID, manual)
+	if err := pm.StopPlugin(pluginID); err != nil {
+		return fmt.Errorf("nie udało się zatrzymać pluginu %s: %w", pluginID, err)
+	}
+	return pm.startPlugin(pluginID, manual)
+}
+
+// superviseOnce sprawdza wymagane pluginy lokalne i naprawia trzy przypadki:
+//  1. proces działa, ale plugin nie zarejestrował się w HUB-ie w czasie registerTimeout,
+//  2. plugin zarejestrował się, potem rozłączył i nie wrócił, choć proces działa,
+//  3. plugin jest wymagany, ale jego procesu w ogóle nie ma.
+//
+// Naprawa to restart zliczany do limitu max_restarts; po jego wyczerpaniu zostaje tylko restart ręczny.
+func (pm *PluginManager) superviseOnce(now time.Time) {
+	expected, connected := pm.hub.pluginPresence() // blokada HUB-a zwolniona przed blokadą menedżera (ta sama kolejność co w HUB-ie)
+
+	type action struct {
+		id    string
+		alive bool
+	}
+	var actions []action
+
+	pm.mu.Lock()
+	for id, pp := range pm.plugins {
+		if pm.shuttingDown || !expected[id] {
+			delete(pm.problems, id)
+			continue
+		}
+		if connected[id] {
+			delete(pm.problems, id)
+			if pp.RestartCount > 0 && time.Since(pp.StartedAt) >= pm.stableAfter {
+				pp.RestartCount = 0
+			}
+			continue
+		}
+
+		alive := pp.Process != nil && pp.exitChan != nil
+		kind := "no_process"
+		grace := pm.noProcessGrace
+		switch {
+		case alive && pp.Status == "starting":
+			kind, grace = "not_registered", pm.registerTimeout
+		case alive:
+			kind, grace = "disconnected", pm.registerTimeout
+		}
+
+		prob := pm.problems[id]
+		if prob == nil || prob.kind != kind {
+			pm.problems[id] = &pluginProblem{kind: kind, since: now}
+			continue
+		}
+		if now.Sub(prob.since) < grace {
+			continue
+		}
+		if pp.RestartCount >= pp.Config.MaxRestarts {
+			if !prob.reported {
+				prob.reported = true
+				log.Printf("❌ Plugin %s (%s): limit restartów (%d) wyczerpany, wymagany restart ręczny z panelu",
+					id, kind, pp.Config.MaxRestarts)
+			}
+			continue
+		}
+		prob.since = now
+		actions = append(actions, action{id, alive})
+		log.Printf("🩺 Plugin %s: %s od ponad %s, samonaprawa", id, kind, grace)
+	}
+	pm.mu.Unlock()
+
+	for _, a := range actions {
+		a := a
+		go func() {
+			var err error
+			if a.alive {
+				err = pm.RestartPlugin(a.id, false)
+			} else {
+				err = pm.startPlugin(a.id, false)
+			}
+			if err != nil {
+				log.Printf("❌ Samonaprawa pluginu %s nie powiodła się: %v", a.id, err)
+			}
+		}()
+	}
+}
+
+// RunSupervisor wywołuje superviseOnce co interval, aż HUB zostanie zamknięty.
+func (pm *PluginManager) RunSupervisor(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			pm.superviseOnce(time.Now())
+		case <-pm.hub.shutdown:
+			return
+		}
+	}
 }
