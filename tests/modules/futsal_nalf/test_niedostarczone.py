@@ -109,6 +109,14 @@ class NiedostarczonePolecenia(unittest.TestCase):
             'connected_plugins': {'timer-plugin': {'is_active': True}}, 'plugin_health': {}}})
         self.assertFalse(self._events('plugins_states')[-1]['timer-plugin']['unreachable'])
 
+    def test_nakladka_nieobecna_nie_daje_paska_w_panelu(self):
+        # nakladka (stream-overlay) nie jest pluginem wymaganym: przy zamknietym OBS jej brak jest normalny
+        self.hub._handle_message({'type': 'plugin_status', 'payload': {'plugin_id': 'stream-overlay', 'status': 'disconnected'}})
+        self.assertFalse(self.hub.send_to_plugin('stream-overlay', 'game_data', {}))     # polecenie pomijane
+        self._undelivered('stream-overlay', 'game_data', {})                               # raport HUB-a tez
+        self.assertEqual(self._events('plugin_unreachable'), [])
+        self.assertNotIn('stream-overlay', self.pm.unreachable)
+
     def test_plugin_ktory_sie_poddal_ma_trwaly_komunikat_do_rejestracji(self):
         self.hub._handle_message({'type': 'plugin_gave_up', 'payload': {'plugin_id': 'timer-plugin'}})
         self.hub._handle_message({'type': 'plugin_gave_up', 'payload': {'plugin_id': 'timer-plugin'}})   # przypomnienie z HUB-a

@@ -264,8 +264,12 @@ class HubClient:
         nie jest wtedy wysyłane (HUB i tak nie miałby adresata), a w panelu pojawia się komunikat.
         """
         if self.plugin_online.get(plugin_id) is False:
-            self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
-            self._report_unreachable(plugin_id, msg_type)
+            if plugin_id in self.required_plugins:
+                self._log("warning", f"Plugin {plugin_id} jest rozłączony — polecenie {msg_type} nie zostało wysłane")
+                self._report_unreachable(plugin_id, msg_type)
+            else:
+                # Plugin niewymagany (np. nakładka w OBS, gdy OBS jest zamknięty): brak adresata jest normalny, bez paska w panelu.
+                self._log("debug", f"Plugin {plugin_id} niedostępny — polecenie {msg_type} pominięte")
             return False
         message = {
             'from': self.module_id,
@@ -802,8 +806,11 @@ class HubClient:
         if not plugin_id:
             return
         self.plugin_online[plugin_id] = False
-        self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
-        self._report_unreachable(plugin_id, command)
+        if plugin_id in self.required_plugins:
+            self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
+            self._report_unreachable(plugin_id, command)
+        else:
+            self._log("debug", f"Polecenie {command} nie dotarło do niewymaganego pluginu {plugin_id}")
         if plugin_id == 'timer-plugin':
             try:
                 from core.managers import get_timer_manager
