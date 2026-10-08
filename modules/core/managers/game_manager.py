@@ -533,12 +533,17 @@ class GameManager:
 
         settings        = Settings.get_settings()
         current_game_id = session_manager.current_game_id()
-        current_game    = _get_game().query.get(current_game_id).to_dict()
         msg_from        = msg.get('from', '')
 
         hub_client = get_hub_client()
         if not hub_client:
             return
+
+        # Bez otwartej sesji / aktywnego meczu nie ma czego wysłać (nakładka pokazuje pusty stan).
+        game = _get_game().query.get(current_game_id) if current_game_id else None
+        if game is None:
+            return
+        current_game = game.to_dict()
 
         # Dane meczu (wynik, drużyny, składy…)
         hub_client.send_to_plugin(msg_from, 'game_data', current_game)
@@ -549,3 +554,14 @@ class GameManager:
         if timer_manager:
             penalties = timer_manager._get_penalties_dict(current_game_id)
             hub_client.send_to_plugin(msg_from, 'penalty_state', penalties)
+
+            # Stan zegara głównego: biegnący zegar sam przysyła ticki, ale zatrzymany (przerwa, pauza) nie przyśle nic, więc
+            # nakładka uruchomiona później (np. po starcie OBS) nie znałaby czasu. Wysyłamy go w postaci zwykłego timer_updated.
+            period_id = session_manager.current_period_id()
+            main_gt = timer_manager.get_active_main_timer(period_id) if period_id else None
+            if main_gt is not None and main_gt.state != 'running':
+                state = main_gt.to_dict()
+                hub_client.send_to_plugin(msg_from, 'timer_updated', {
+                    'timer_id': state['timer_id'], 'elapsed_time': state['elapsed_time'],
+                    'initial_time': state['initial_time'], 'limit': state['limit'], 'state': state['state'],
+                })
