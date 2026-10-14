@@ -319,6 +319,9 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 	sink := newSink(pluginID, os.Stdout, pluginID)
 	cmd.Stdout = sink
 	cmd.Stderr = sink
+	// Plugin we własnej grupie procesów i bez konsoli HUB-a: Ctrl+C (Ctrl+Break) w oknie HUB-a trafia tylko do HUB-a, a pluginy zamyka
+	// on sam we właściwej kolejności. Inaczej obs-ws-plugin ginąłby razem z HUB-em, zanim HUB zdążyłby zapytać go o stan streamu OBS.
+	cmd.SysProcAttr = detachedAttr()
 
 	// Start process
 	if err := cmd.Start(); err != nil {

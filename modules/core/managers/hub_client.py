@@ -878,6 +878,8 @@ class HubClient:
 
     def request_plugin_restart(self, plugin_id):
         """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""
+        if plugin_id == 'stream-overlay':
+            return self._restart_overlay()
         if plugin_id not in self.RESTARTABLE_PLUGINS:
             self._log("warning", f"Restart pluginu {plugin_id} nie jest obsługiwany")
             return False
@@ -888,6 +890,33 @@ class HubClient:
             'type': 'restart_plugin',
             'payload': {'plugin_id': plugin_id}
         })
+
+    def _restart_overlay(self):
+        """Nakładka (stream-overlay) to źródło przeglądarki w OBS, nie proces HUB-a: "uruchom ponownie" odświeża to źródło
+        (obs-ws-plugin: PressInputPropertiesButton). Nakładka po odświeżeniu sama prosi o dane meczu (request_game_data).
+        Wynik wraca do panelu zdarzeniem plugin_restart_result, jak przy restarcie pluginów lokalnych."""
+        def run():
+            result = {'plugin_id': 'stream-overlay', 'ok': False}
+            try:
+                if not self.obs_running:
+                    result['error'] = 'OBS nie działa albo obs-ws-plugin nie jest połączony: nie ma czego odświeżyć'
+                else:
+                    from core.managers import get_obs_ws_manager
+                    with self.app.app_context():
+                        mgr = get_obs_ws_manager()
+                        reply = mgr.refresh_browser_source(mgr.OVERLAY_INPUT)
+                    if reply is None:
+                        result['error'] = f'OBS nie odpowiedział na odświeżenie źródła {mgr.OVERLAY_INPUT} w 2 s'
+                    else:
+                        result['ok'] = True
+                        self._log("info", f"Nakładka odświeżona w OBS (źródło {mgr.OVERLAY_INPUT})")
+            except Exception as e:
+                result['error'] = f'{type(e).__name__}: {e}'
+                self._log("error", f"Odświeżenie nakładki nie powiodło się: {e}", exc_info=True)
+            from core.extensions import socketio
+            socketio.emit('plugin_restart_result', result)
+        threading.Thread(target=run, daemon=True, name='restart-overlay').start()
+        return True
 
     def _should_flag_unreachable(self, plugin_id):
         """Czy brak pluginu ma dać pasek w panelu.

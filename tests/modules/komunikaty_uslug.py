@@ -63,7 +63,12 @@ def make(APP):
             self.assertEqual(self._keys(), ['obs-restarted'])
             mgr._session_update('on_obs_stream_started')          # stream działa: pasek znika
             self.assertEqual(self._keys(), [])
-            self.assertEqual(self.emit.call_args.args[1], [])
+            self.assertEqual(self._last_notices_emit(), [])
+
+        def _last_notices_emit(self):
+            """Ostatnia lista rozesłana do paneli ('service_notices'); inne zdarzenia (np. 'session_state') są pomijane."""
+            lists = [c.args[1] for c in self.emit.call_args_list if c.args and c.args[0] == 'service_notices']
+            return lists[-1]
 
         def test_operator_moze_zamknac_pasek(self):
             self.notices.on_service_event('obs', 'restarted', 'OBS')
@@ -73,7 +78,7 @@ def make(APP):
             finally:
                 client.disconnect()
             self.assertEqual(self._keys(), [])
-            self.assertEqual(self.emit.call_args.args[1], [])     # pozostałe panele dostają pustą listę
+            self.assertEqual(self._last_notices_emit(), [])        # pozostałe panele dostają pustą listę
 
         def test_odswiezenie_strony_przywraca_komunikaty(self):
             self.notices.on_service_event('obs', 'restarted', 'OBS')
@@ -124,4 +129,69 @@ def make(APP):
             hub._on_message(None, json.dumps(msg))
             self.assertEqual(self._keys(), [])
 
-    return (KomunikatyUslug,)
+    class RestartNakladki(unittest.TestCase):
+        """Nakładka to źródło przeglądarki w OBS: "uruchom ponownie" w panelu odświeża to źródło (przez obs-ws-plugin)."""
+
+        def setUp(self):
+            self.ctx = APP.app_context()
+            self.ctx.push()
+            from core.extensions import socketio
+            from core.managers.hub_client import HubClient
+            self.hub = HubClient('ws://test', app=APP)
+            self.hub.connected = True
+            self.hub.ws = MagicMock()
+            self.hub.module_id = 'main-module'
+            self.emit_patch = patch.object(socketio, 'emit')
+            self.emit = self.emit_patch.start()
+            self.mgr = MagicMock()
+            self.mgr.OVERLAY_INPUT = 'Overlay'
+            self.mgr_patch = patch('core.managers.get_obs_ws_manager', return_value=self.mgr)
+            self.mgr_patch.start()
+
+        def tearDown(self):
+            self.mgr_patch.stop()
+            self.emit_patch.stop()
+            self.ctx.pop()
+
+        def _result(self):
+            import time
+            for _ in range(100):
+                for call in self.emit.call_args_list:
+                    if call.args and call.args[0] == 'plugin_restart_result':
+                        return call.args[1]
+                time.sleep(0.02)
+            self.fail('brak wyniku restartu nakładki')
+
+        def test_odswieza_zrodlo_overlay_gdy_obs_dziala(self):
+            self.hub.obs_running = True
+            self.mgr.refresh_browser_source.return_value = {'requestType': 'PressInputPropertiesButton'}
+            self.assertTrue(self.hub.request_plugin_restart('stream-overlay'))
+            res = self._result()
+            self.assertEqual((res['plugin_id'], res['ok']), ('stream-overlay', True))
+            self.mgr.refresh_browser_source.assert_called_once_with('Overlay')
+            self.hub.ws.send.assert_not_called()          # to nie jest restart procesu przez HUB
+
+        def test_bez_obs_komunikat_zamiast_cichego_niepowodzenia(self):
+            self.hub.obs_running = False
+            self.assertTrue(self.hub.request_plugin_restart('stream-overlay'))
+            res = self._result()
+            self.assertFalse(res['ok'])
+            self.assertIn('OBS nie działa', res['error'])
+            self.mgr.refresh_browser_source.assert_not_called()
+
+        def test_brak_odpowiedzi_obs_jest_bledem(self):
+            self.hub.obs_running = True
+            self.mgr.refresh_browser_source.return_value = None
+            self.hub.request_plugin_restart('stream-overlay')
+            res = self._result()
+            self.assertFalse(res['ok'])
+            self.assertIn('nie odpowiedział', res['error'])
+
+        def test_inne_pluginy_nadal_przez_hub(self):
+            self.assertTrue(self.hub.request_plugin_restart('timer-plugin'))
+            import json
+            sent = [json.loads(c.args[0]) for c in self.hub.ws.send.call_args_list]
+            self.assertEqual(sent[-1]['type'], 'restart_plugin')
+            self.assertEqual(sent[-1]['payload'], {'plugin_id': 'timer-plugin'})
+
+    return (KomunikatyUslug, RestartNakladki)

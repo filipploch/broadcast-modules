@@ -5,14 +5,18 @@ import komunikaty_uslug
 
 APP, TMP = harness.boot("garbarnia")
 
-(_Komunikaty,) = komunikaty_uslug.make(APP)
+_Komunikaty, _Nakladka = komunikaty_uslug.make(APP)
 
 
 class KomunikatyUslug(_Komunikaty):
     pass
 
 
-del _Komunikaty
+class RestartNakladki(_Nakladka):
+    pass
+
+
+del _Komunikaty, _Nakladka
 
 
 if __name__ == "__main__":

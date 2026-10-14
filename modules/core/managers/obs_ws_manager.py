@@ -302,8 +302,12 @@ class ObsWsManager:
             'is_local_file': False,
         })
 
+    # Nazwa źródła przeglądarki z nakładką w OBS (profil rozgrywek; docelowo ustawienie profilu)
+    OVERLAY_INPUT = 'Overlay'
+
     def refresh_browser_source(self, input_name: str):
-        self.send_obs_request_sync('PressInputPropertiesButton', {
+        """Odświeża źródło przeglądarki w OBS (przycisk "Odśwież pamięć podręczną"). Zwraca odpowiedź OBS albo None (brak w 2 s)."""
+        return self.send_obs_request_sync('PressInputPropertiesButton', {
             'inputName':    input_name,
             'propertyName': 'refreshnocache',
         })

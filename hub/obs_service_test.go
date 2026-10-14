@@ -446,3 +446,19 @@ func spawnHTTPHelper(t *testing.T, port int) *exec.Cmd {
 	waitCond(t, "obcy proces nasłuchuje", 10*time.Second, func() bool { return portOpen(port) })
 	return cmd
 }
+
+func TestSkippedInitialStartStillRecognizesManuallyStartedObsAsForeign(t *testing.T) {
+	useRunDir(t)
+	port := freePort(t)
+	foreign := spawnHTTPHelper(t, port)
+	sm := newTestSM(t)
+	sm.externalInterval = 50 * time.Millisecond
+	sm.procByName = func(string) []int { return []int{foreign.Process.Pid} }
+	sm.Add(obsLikeCfg(port))
+	sm.SkipInitialStart("obs", "zakończył się, gdy HUB nie działał")
+	sm.StartAll()
+	waitCond(t, "obcy OBS rozpoznany mimo pominięcia startu", 3*time.Second, func() bool { return sm.Status("obs") == "external" })
+	if sm.Running("obs") {
+		t.Fatal("HUB uruchomił własną kopię")
+	}
+}

@@ -341,17 +341,13 @@ function _openPluginMenu(iconId) {
     title.style.marginBottom = '8px';
     menu.appendChild(title);
     const button = document.createElement('button');
-    if (pluginId === 'stream-overlay') {
-        button.textContent = 'Restart nakładki: wkrótce';
-        button.disabled = true;
-    } else {
-        button.textContent = 'Uruchom ponownie';
-        button.onclick = () => {
-            socket.emit('restart_plugin', { plugin_id: pluginId });
-            _showPluginToast(`Ponowne uruchamianie: ${pluginId}...`, false);
-            _closePluginMenu();
-        };
-    }
+    // Nakładka: "Uruchom ponownie" odświeża jej źródło przeglądarki w OBS (moduł wysyła polecenie przez obs-ws-plugin).
+    button.textContent = pluginId === 'stream-overlay' ? 'Odśwież nakładkę w OBS' : 'Uruchom ponownie';
+    button.onclick = () => {
+        socket.emit('restart_plugin', { plugin_id: pluginId });
+        _showPluginToast(pluginId === 'stream-overlay' ? 'Odświeżanie nakładki w OBS...' : `Ponowne uruchamianie: ${pluginId}...`, false);
+        _closePluginMenu();
+    };
     menu.appendChild(button);
     document.body.appendChild(menu);
 }
@@ -373,7 +369,7 @@ document.addEventListener('dblclick', () => {
 
 socket.on('plugin_restart_result', (data) => {
     if (data.ok) {
-        _showPluginToast(`Plugin ${data.plugin_id} uruchomiony ponownie`, false);
+        _showPluginToast(data.plugin_id === 'stream-overlay' ? 'Nakładka odświeżona w OBS' : `Plugin ${data.plugin_id} uruchomiony ponownie`, false);
     } else {
         _showPluginToast(`Restart pluginu ${data.plugin_id} nie powiódł się: ${data.error || 'nieznany błąd'}`, true);
     }

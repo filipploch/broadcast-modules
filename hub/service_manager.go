@@ -216,6 +216,12 @@ func (sm *ServiceManager) StartAll() {
 		go func(id string) {
 			if reason := sm.skipReason(id); reason != "" {
 				log.Printf("ℹ️  Usługa %s: pomijam start: %s", id, reason)
+				sm.mu.Lock()
+				cfg := sm.services[id].cfg
+				sm.mu.Unlock()
+				if cfg.ForeignOK {
+					sm.detectForeign(id, cfg) // OBS uruchomiony ręcznie mimo to jest rozpoznany jako obcy (bez uruchamiania drugiej kopii)
+				}
 				return
 			}
 			sm.waitForDeps(id)
