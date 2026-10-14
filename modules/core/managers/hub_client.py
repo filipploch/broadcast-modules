@@ -183,6 +183,25 @@ class HubClient:
         #     time.sleep(0.1)
         #     self.declare_required_plugins(required_plugins)
 
+    def send_session_status(self, status=None):
+        """Zgłasza HUB-owi status sesji transmisji (state: none/preparation/on_air). Bez połączenia nic nie robi:
+        status jest wysyłany ponownie po każdym połączeniu. Bez argumentu liczy status z bazy (wymaga kontekstu aplikacji)."""
+        if not self.connected or not self.module_id:
+            return False
+        if status is None:
+            from core.managers import session_manager
+            if self.app:
+                with self.app.app_context():
+                    status = session_manager.status_for_hub()
+            else:
+                status = session_manager.status_for_hub()
+        return self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'session_status',
+            'payload': status,
+        })
+
     def declare_required_plugins(self, plugins):
         self.required_plugins = plugins
         """Declare required plugins to Hub"""
@@ -755,6 +774,12 @@ class HubClient:
                         'class': self.subscribe_classes
                     }
                 })
+
+            # 4. Status sesji dla HUB-a (po każdym połączeniu: HUB mógł być uruchomiony od nowa)
+            try:
+                self.send_session_status()
+            except Exception as e:
+                self._log("warning", f"Nie udało się zgłosić statusu sesji HUB-owi: {e}")
 
         # ✅ Fallback: jeśli po 10s dane nadal nie dotarły, wyślij ponowne żądanie
         self._ensure_plugins_ready(delay=10.0)

@@ -25,6 +25,8 @@ type Hub struct {
 	HealthMonitor *HealthMonitor
 	Services      *ServiceManager
 
+	session sessionTracker // ostatni znany status sesji transmisji (zgłaszany przez moduł główny)
+
 	Port int // HTTP/WebSocket port
 
 	mu       sync.RWMutex
@@ -175,6 +177,8 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleCreateStylingClass(msg)
 	case "restart_plugin":
 		h.handleRestartPlugin(msg)
+	case "session_status":
+		h.handleSessionStatus(msg)
 	case "request_scene_map":
 		// Main module asks obs-ws-plugin to re-send its scene map
 		// (used when obs-ws-plugin was already online before main module started).

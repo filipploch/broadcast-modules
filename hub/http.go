@@ -184,6 +184,7 @@ func serveStatus(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	if hub.Services != nil {
 		status["services"] = hub.Services.Snapshot()
 	}
+	status["session"] = sessionSnapshot(hub.SessionStatus())
 
 	// Add plugin manager status if available
 	if hub.PluginManager != nil {

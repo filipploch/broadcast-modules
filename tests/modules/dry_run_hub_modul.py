@@ -92,6 +92,14 @@ def wyjscie_summary(path):
     return f"{len(text)} B, wierszy {len(text.splitlines())}, tracebackow {text.count('Traceback')}, wierszy w formacie logu {len(FLASK_LOG_LINE.findall(text))}"
 
 
+def procs_under_dry():
+    """Numery procesow, ktorych plik wykonywalny lezy w folderze proby (wp-local/dryrun-hub): sprawdzanie po SCIEZCE, nie po nazwie obrazu."""
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith('%s', 'OrdinalIgnoreCase') } "
+          "| ForEach-Object { $_.ProcessId }" % str(DRY).replace("'", "''"))
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True).stdout
+    return [int(x) for x in out.split() if x.isdigit()]
+
+
 def build():
     DRY.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(exist_ok=True)
@@ -205,6 +213,8 @@ def main():
         check("J1h zalegle polecenie zegara bez sesji odrzucone (wpis w logu, zegar nie ruszyl)",
               "Odrzucono zdarzenie timer_start: brak otwartej sesji" in text and "Started timer: OPPxBRO" not in text)
         rd1 = rd
+        sess = status().get("session", {})
+        check("J1k HUB zna status sesji zgloszony przez modul (brak sesji po starcie)", sess.get("known") is True and sess.get("state") == "none", f"({sess})")
         check("J1i wyjscie.log po otwieraniu i zamykaniu kart: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
               f"({wyjscie_summary(out_file)})")
         console = (DRY / "hub-konsola-1.txt").read_text(encoding="utf-8", errors="replace")
@@ -254,8 +264,17 @@ def main():
         msg = st["services"]["module"].get("last_error", "")
         check("J3b nowy HUB nie uruchamia drugiej kopii modulu (zajety port) i zglasza blad",
               err_logged and "zajęty" in msg and pid_alive(module_pid), f"({msg})")
+        # drugi HUB uruchamia timer-plugin na deklaracje modulu; po zabiciu HUB-a plugin zostaje sierota (kończy ją dopiero E2d2: plik stanu)
+        wait_for(lambda: status()["plugin_manager"]["local_plugins"].get("timer-plugin", {}).get("pid", 0) > 0, 30)
+        plugin2_pid = status()["plugin_manager"]["local_plugins"].get("timer-plugin", {}).get("pid", 0)
+        if plugin2_pid:
+            spawned.append(plugin2_pid)
+        sess2 = wait_for(lambda: status()["session"]["known"] is True, 40)
+        check("J3e nowy HUB dostaje status sesji od modulu po ponownym polaczeniu (bez restartu modulu)", sess2, f"({status().get('session')})")
         subprocess.run(["taskkill", "/F", "/PID", str(hub.pid)], capture_output=True)
         hub.wait()
+        if plugin2_pid:
+            kill_pid_tree(plugin2_pid)
         kill_pid_tree(module_pid)
         check("J3c po sprzataniu port modulu wolny", wait_for(lambda: not port_busy(MOD_PORT), 15))
         check("J3d wyjscie.log modulu z J1 po zabiciu HUB-a: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
@@ -299,6 +318,10 @@ def main():
                 kill_pid_tree(pid)
         time.sleep(1)
         left = [p for p in set(spawned) if p and pid_alive(p)]
+        stray = procs_under_dry()                      # procesy z folderu proby, ktorych nie sledzilismy (np. sieroty po zabitym HUB-ie)
+        for pid in stray:
+            kill_pid_tree(pid)
+        left += stray
         results["J5 nic nie zostalo"] = not left and not port_busy(HUB_PORT) and not port_busy(MOD_PORT)
         say(f"J5 nic nie zostalo: {'ZALICZONY' if results['J5 nic nie zostalo'] else 'NIEZALICZONY'} "
             f"(zywe: {left}, port huba zajety: {port_busy(HUB_PORT)}, port modulu zajety: {port_busy(MOD_PORT)})")

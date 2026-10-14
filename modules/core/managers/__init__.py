@@ -101,6 +101,7 @@ def initialize_core_managers(app):
             time.sleep(1.0)
 
             _hub_client.subscribe_to_classes(app.config['SUBSCRIBE_CLASSES'])
+            _hub_client.send_session_status()          # status sesji dla HUB-a (wczytana z bazy przed połączeniem)
 
             # ⭐ ControllerManager — eager init (musi istnieć zanim przyjdą
             # pierwsze sygnały od controller-plugin / replay-plugin).
