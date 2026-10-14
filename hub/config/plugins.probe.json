@@ -1,0 +1,20 @@
+{
+  "timer-plugin": {
+    "id": "timer-plugin",
+    "name": "Timer Plugin",
+    "type": "local",
+    "executable_path": "../plugins/timer-plugin/timer-plugin.exe",
+    "working_dir": "../plugins/timer-plugin",
+    "args": [],
+    "env": [
+      "PLUGIN_ID=timer-plugin"
+    ],
+    "auto_start": true,
+    "restart_on_crash": true,
+    "max_restarts": 10,
+    "restart_delay_ms": 3000,
+    "startup_delay_ms": 1000,
+    "health_check_interval": 10,
+    "is_critical": false
+  }
+}

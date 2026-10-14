@@ -11,4 +11,4 @@ from app import create_app
 from core.extensions import socketio
 
 app = create_app("development")
-socketio.run(app, host="127.0.0.1", port=app.config["APP_PORT"], debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+socketio.run(app, host="127.0.0.1", port=app.config["APP_PORT"], debug=app.config["DEBUG"], use_reloader=False, allow_unsafe_werkzeug=True)

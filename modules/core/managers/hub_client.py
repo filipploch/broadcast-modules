@@ -238,6 +238,17 @@ class HubClient:
             'payload': payload
         })
 
+    # Pluginy, które odpowiadają na recording_command: recorder (stan kamer) i obs-ws-plugin (stan nagrywania w OBS)
+    RECORDING_PLUGINS = ('recorder-plugin', 'obs-ws-plugin')
+
+    def send_recording_command(self, payload, plugins=RECORDING_PLUGINS):
+        """Wysyła recording_command tylko do pluginów, które go obsługują (zamiast rozsyłać do wszystkich: timer-plugin,
+        replay i controller odpowiadały "Unknown message type"). Plugin znany jako rozłączony jest pomijany."""
+        sent = False
+        for plugin_id in plugins:
+            sent = bool(self.send_to_plugin(plugin_id, 'recording_command', payload)) or sent
+        return sent
+
     # ✅ NEW: Broadcast to specific class
     def broadcast_to_class(self, class_name, msg_type, payload):
         """Broadcast message to specific class of modules"""
@@ -274,7 +285,7 @@ class HubClient:
                 self._report_unreachable(plugin_id, msg_type)
             else:
                 # Plugin nie odpowiada od startu albo to nakładka przy zamkniętym OBS: bez paska, tylko stan na ikonie.
-                self._log("debug", f"Plugin {plugin_id} niedostępny — polecenie {msg_type} pominięte")
+                self._log("info", f"Polecenie {msg_type} nie dotarło do pluginu {plugin_id}: plugin niedostępny, polecenie pominięte (bez paska w panelu)")
             return False
         message = {
             'from': self.module_id,
@@ -424,6 +435,13 @@ class HubClient:
 
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
+
+        elif msg_type == 'shutdown_module':
+            # Prośba HUB-a (E2d1) o łagodne zamknięcie: tylko od HUB-a. Bez odpowiedzi poza zamknięciem procesu.
+            if msg_from == 'hub':
+                self._shutdown_module()
+            else:
+                self._log("warning", f"Ignoruję shutdown_module od {msg_from}")
 
         elif msg_type == 'plugin_gave_up':
             plugin_id = payload.get('plugin_id')
@@ -788,6 +806,29 @@ class HubClient:
     # Pluginy, które operator może uruchomić ponownie z panelu (nakładkę odświeża OBS: etap E2d).
     RESTARTABLE_PLUGINS = ('timer-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'recorder-plugin')
 
+    def _shutdown_module(self):
+        """Zamyka moduł na prośbę HUB-a: zatrzymuje menedżery, zamyka logi i kończy proces (kod 0 = bez restartu przez HUB).
+        Działa w osobnym wątku, żeby nie blokować wątku WebSocket."""
+        def run():
+            self._log("info", "HUB poprosił o zamknięcie modułu (shutdown_module)")
+            try:
+                if self.app:
+                    with self.app.app_context():
+                        from app.managers import shutdown_all_managers
+                        shutdown_all_managers()
+            except Exception as e:
+                self._log("error", f"Błąd przy zatrzymywaniu menedżerów: {e}", exc_info=True)
+            self._log("info", "Moduł zamknięty na prośbę HUB-a")
+            import logging
+            logging.shutdown()
+            self._exit_process(0)
+        threading.Thread(target=run, daemon=True, name='shutdown-module').start()
+
+    @staticmethod
+    def _exit_process(code):
+        import os
+        os._exit(code)
+
     def request_plugin_restart(self, plugin_id):
         """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""
         if plugin_id not in self.RESTARTABLE_PLUGINS:
@@ -853,7 +894,7 @@ class HubClient:
             self._log("warning", f"Polecenie {command} nie zostało dostarczone do {plugin_id}")
             self._report_unreachable(plugin_id, command)
         else:
-            self._log("debug", f"Polecenie {command} nie dotarło do pluginu {plugin_id} (bez paska w panelu)")
+            self._log("info", f"Polecenie {command} nie dotarło do pluginu {plugin_id} (bez paska w panelu)")
         if plugin_id == 'timer-plugin':
             try:
                 from core.managers import get_timer_manager

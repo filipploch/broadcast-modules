@@ -23,6 +23,7 @@ type Hub struct {
 
 	PluginManager *PluginManager
 	HealthMonitor *HealthMonitor
+	Services      *ServiceManager
 
 	Port int // HTTP/WebSocket port
 
@@ -797,7 +798,21 @@ func (h *Hub) hasCapability(module *Module, capability string) bool {
 func (h *Hub) Shutdown() {
 	log.Println("⏹️  Initiating Hub shutdown...")
 
-	// Stop plugin manager first
+	// Od początku zamykania nic nie jest uruchamiane ponownie (plugin zabity przez Ctrl+C z konsoli nie wraca,
+	// a zaplanowane restarty są pomijane), nawet jeśli zatrzymanie modułu potrwa dłużej niż opóźnienie restartu
+	if h.PluginManager != nil {
+		h.PluginManager.BeginShutdown()
+	}
+	if h.Services != nil {
+		h.Services.BeginShutdown()
+	}
+
+	// Usługi (moduł) zatrzymujemy przed pluginami, póki moduł może jeszcze odpowiedzieć na prośbę o zamknięcie
+	if h.Services != nil {
+		h.Services.StopAll()
+	}
+
+	// Stop plugin manager
 	if h.PluginManager != nil {
 		h.PluginManager.StopAllPlugins()
 	}
@@ -811,6 +826,22 @@ func (h *Hub) Shutdown() {
 	close(h.shutdown)
 
 	log.Println("✅ Hub shutdown complete")
+}
+
+// gracefulStopService prosi usługę o zamknięcie się samej. Dla modułu głównego: komunikat shutdown_module
+// przez WebSocket. Zwraca false, gdy nie ma jak (moduł niepołączony): wtedy zatrzymanie od razu wymusza.
+func (h *Hub) gracefulStopService(id string) bool {
+	if id != "module" {
+		return false
+	}
+	h.mu.RLock()
+	m := h.MainModule
+	h.mu.RUnlock()
+	if m == nil || !m.IsActive {
+		return false
+	}
+	h.sendSafely(m, NewMessage("hub", m.ID, "shutdown_module", map[string]interface{}{}))
+	return true
 }
 
 // pluginPresence zwraca, które pluginy są wymagane (zadeklarowane przez moduł główny) i które są połączone.

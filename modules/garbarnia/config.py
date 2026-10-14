@@ -16,9 +16,10 @@ class Config:
 
     MODULE_ID = 'main-module'
     MODULE_NAME = 'garbarnia'
-    HUB_HOST = 'ws://localhost:8080/ws'
+    # BM_HUB_URL i BM_MODULE_PORT ustawia HUB, który uruchamia moduł (E2d1); bez nich wartości dotychczasowe
+    HUB_HOST = os.environ.get('BM_HUB_URL') or 'ws://localhost:8080/ws'
     APP_HOST = '0.0.0.0'
-    APP_PORT = 8081
+    APP_PORT = int(os.environ.get('BM_MODULE_PORT') or 8081)
 
     SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver', 'obs_messages_receiver', 'servo_events', 'gopro_events']
     # BM_REQUIRED_PLUGINS=timer-plugin,... zawęża listę (próby na sucho z samym timer-pluginem); domyślnie pełna lista
@@ -75,7 +76,9 @@ class Config:
 
 
 class DevelopmentConfig(Config):
-    DEBUG = True
+    # Moduł uruchomiony przez HUB (BM_HUB_MANAGED=1) nie działa w trybie debug: debugger Werkzeuga drukuje na stderr
+    # traceback ConnectionError po każdym zamknięciu połączenia websocket (engineio kończy je takim wyjątkiem celowo)
+    DEBUG = os.environ.get('BM_HUB_MANAGED') != '1'
     # SQLALCHEMY_ECHO = True
     SQLALCHEMY_ECHO = False
 

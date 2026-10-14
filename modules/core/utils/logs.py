@@ -20,6 +20,9 @@ RETENTION_DAYS = 30
 MAX_BYTES = 5 * 1024 * 1024
 BACKUP_COUNT = 3
 RUN_DIR_ENV = 'BM_LOG_RUN_DIR'
+# Moduł uruchomiony przez HUB (E2d1) jest odłączony od konsoli: jedynym zapisującym do modul-<nazwa>.log jest on sam,
+# a surowe wyjście procesu (print, traceback) HUB kieruje do osobnego pliku modul-<nazwa>.wyjscie.log.
+MANAGED_ENV = 'BM_HUB_MANAGED'
 RUN_DIR_PREFIX = 'logs-'
 RUN_DIR_FORMAT = 'logs-%Y-%m-%d-%H-%M-%S'
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -81,6 +84,23 @@ def remove_old_run_dirs(root, now=None, retention_days=RETENTION_DAYS):
     return removed
 
 
+def _drop_console_handlers(root):
+    """Usuwa z głównego loggera uchwyty konsoli (StreamHandler bez pliku), żeby wiersze logu nie trafiały drugi raz
+    do pliku wyjścia procesu."""
+    for h in list(root.handlers):
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+            root.removeHandler(h)
+
+
+def quiet_flask_console(app):
+    """Moduł uruchomiony przez HUB: zdejmuje z app.logger domyślny uchwyt Flaska (stderr, własny format), który
+    dublowałby wiersze logu w pliku wyjścia procesu. Wołać po setup_file_logging."""
+    if os.environ.get(MANAGED_ENV) != '1':
+        return
+    from flask.logging import default_handler
+    app.logger.removeHandler(default_handler)
+
+
 def file_formatter():
     return logging.Formatter(FILE_FORMAT, DATE_FORMAT)
 
@@ -116,6 +136,8 @@ def setup_file_logging(module_name, testing=False):
                 h.setLevel(root.level)
         root.setLevel(logging.INFO)
     root.addHandler(handler)
+    if os.environ.get(MANAGED_ENV) == '1':
+        _drop_console_handlers(root)
     log = logging.getLogger(__name__)
     # Potomek przeładowania serwera deweloperskiego (werkzeug) to ten sam start, a nie restart modułu
     if existed and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':

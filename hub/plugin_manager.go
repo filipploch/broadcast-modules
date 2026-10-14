@@ -140,6 +140,9 @@ func (pm *PluginManager) LoadConfig() error {
 			}
 			localCount++
 			log.Printf("   ✅ Loaded LOCAL plugin: %s", id)
+		} else if config.Type == "service" {
+			// USŁUGA - obsługuje ServiceManager (service_manager.go)
+			log.Printf("   🛠  Service entry (managed by ServiceManager): %s", id)
 		} else if config.Type == "external" {
 			// This is an EXTERNAL plugin - PluginManager just tracks config
 			externalCount++
@@ -256,6 +259,12 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 		pm.mu.Unlock()
 		return fmt.Errorf("plugin not found or not local: %s", pluginID)
 	}
+	if pm.shuttingDown {
+		// HUB się zamyka: żaden start (także zaplanowany wcześniej restart po awarii) nie może zostawić osieroconego pluginu
+		pm.mu.Unlock()
+		log.Printf("⏹️  Plugin %s: HUB się zamyka, pomijam start", pluginID)
+		return fmt.Errorf("HUB się zamyka")
+	}
 	status := pluginProc.Status
 	restarts := pluginProc.RestartCount
 	pm.mu.Unlock()
@@ -300,6 +309,10 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 
 	cmd.Env = append(os.Environ(), config.Env...)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PLUGIN_ID=%s", pluginID))
+	if pm.hub != nil && pm.hub.Port != 0 {
+		// adres HUB-a zawsze zgodny z portem, na którym HUB faktycznie nasłuchuje (konfiguracja hub.json)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("HUB_URL=ws://localhost:%d/ws", pm.hub.Port))
+	}
 
 	sink := newSink(pluginID, os.Stdout, pluginID)
 	cmd.Stdout = sink
@@ -462,6 +475,14 @@ func (pm *PluginManager) StopPlugin(pluginID string) error {
 	pm.mu.Unlock()
 
 	return nil
+}
+
+// BeginShutdown oznacza początek zamykania HUB-a: od tej chwili nie są planowane ani wykonywane żadne starty pluginów
+// (restart po awarii, samonaprawa, restart ręczny). Wołane na samym początku zamykania, zanim zatrzymamy cokolwiek innego.
+func (pm *PluginManager) BeginShutdown() {
+	pm.mu.Lock()
+	pm.shuttingDown = true
+	pm.mu.Unlock()
 }
 
 // StopAllPlugins stops all running plugins
