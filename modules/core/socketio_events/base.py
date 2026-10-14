@@ -84,6 +84,21 @@ def register_events(socketio):
                 if head.get('online'):
                     emit('servo_head_online', {'head_id': head['head_id']})
 
+    @socketio.on('get_service_notices')
+    def handle_get_service_notices():
+        """Panel po połączeniu pyta o aktualne komunikaty usług (przeżywają odświeżenie strony)."""
+        from flask_socketio import emit
+        from core.managers import get_service_notices
+        emit('service_notices', get_service_notices().snapshot())
+
+    @socketio.on('dismiss_service_notice')
+    def handle_dismiss_service_notice(data):
+        """Operator zamyka komunikat usługi (np. "OBS uruchomiony ponownie"); znika we wszystkich panelach."""
+        from core.managers import get_service_notices
+        key = (data or {}).get('key') if isinstance(data, dict) else None
+        if key:
+            get_service_notices().clear(key)
+
     @socketio.on('disconnect')
     def handle_disconnect():
         logger.info('Client disconnected')

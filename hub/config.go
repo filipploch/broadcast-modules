@@ -26,10 +26,11 @@ type ModuleEntry struct {
 
 // ObsConfig: ustawienia OBS (używane od E2d2).
 type ObsConfig struct {
-	Enabled     bool   `json:"enabled"` // czy HUB uruchamia i nadzoruje OBS (próby i konfiguracje testowe: false)
-	Path        string `json:"path"`
-	WsPort      int    `json:"ws_port"`
-	ProcessName string `json:"process_name"`
+	Enabled       bool   `json:"enabled"` // czy HUB uruchamia i nadzoruje OBS (próby i konfiguracje testowe: false)
+	Path          string `json:"path"`
+	WsPort        int    `json:"ws_port"`
+	ReadyTimeoutS int    `json:"ready_timeout_s"` // po tylu sekundach milczenia portu obs-websocket HUB zgłasza błąd (bez drugiej kopii OBS)
+	ProcessName   string `json:"process_name"`
 }
 
 // WolConfig: Wake-on-LAN Debiana (używane od E2d3).
@@ -71,10 +72,11 @@ func defaultHubConfig() HubConfig {
 		ModuleReadyTimeoutS: 60,
 		ModuleStopGraceS:    10,
 		Obs: ObsConfig{
-			Enabled:     true,
-			Path:        `C:\Program Files\obs-studio\bin\64bit\obs64.exe`,
-			WsPort:      4455,
-			ProcessName: "obs64.exe",
+			Enabled:       true,
+			Path:          `C:\Program Files\obs-studio\bin\64bit\obs64.exe`,
+			WsPort:        4455,
+			ReadyTimeoutS: 60,
+			ProcessName:   "obs64.exe",
 		},
 		Wol: WolConfig{Enabled: false, Mac: "", BroadcastAddr: "255.255.255.255:9"},
 	}
@@ -187,6 +189,42 @@ func (c *LoadedHubConfig) abs(p string) string {
 		return p
 	}
 	return filepath.Join(c.Root, filepath.FromSlash(p))
+}
+
+// obsService składa usługę OBS z sekcji "obs". Zwraca false, gdy OBS jest wyłączony albo bez ścieżki.
+// OBS startuje po module i po zarejestrowaniu obs-ws-plugin (najwyżej 15 s, tylko gdy moduł ten plugin zadeklarował); restart po awarii
+// tylko przy otwartej sesji (najwyżej 3 razy z rzędu; licznik zeruje się po 5 minutach stabilnej pracy); OBS uruchomiony poza HUB-em
+// jest "obcy": HUB go nie restartuje, nie zamyka i nie uruchamia drugiej kopii.
+func (c *LoadedHubConfig) obsService() (ServiceConfig, bool) {
+	if !c.Obs.Enabled || c.Obs.Path == "" {
+		return ServiceConfig{}, false
+	}
+	exe := c.abs(c.Obs.Path)
+	svc := ServiceConfig{
+		ID:             "obs",
+		Name:           "OBS",
+		Type:           "service",
+		ExecutablePath: exe,
+		WorkingDir:     filepath.Dir(exe), // OBS szuka plików językowych względem katalogu roboczego (bin4bit)
+		Args:           []string{"--disable-shutdown-check"},
+		ReadyPort:      c.Obs.WsPort,
+		ReadyTimeoutS:  c.Obs.ReadyTimeoutS,
+		WaitForPlugin:  "obs-ws-plugin",
+		WaitForPluginS: 15,
+		RestartOnCrash: true,
+		RestartPolicy:  restartSessionOpen,
+		MaxRestarts:    3,
+		RestartDelayMs: 3000,
+		StableAfterS:   300,
+		StopGraceS:     30,
+		ProcessName:    c.Obs.ProcessName,
+		ForeignOK:      true,
+		OutputFile:     "obs.wyjscie.log",
+	}
+	if c.Module != "" {
+		svc.StartAfter = []string{"module"}
+	}
+	return svc, true
 }
 
 // StatePath to ścieżka pliku stanu usług (run/uslugi.json w katalogu głównym, o ile nie wskazano inaczej).

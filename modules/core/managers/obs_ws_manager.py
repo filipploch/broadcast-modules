@@ -341,6 +341,12 @@ class ObsWsManager:
 
         Błąd w sesji nie może przerwać obsługi zdarzenia OBS. Po zmianie UI dostaje 'session_state'.
         """
+        if action == 'on_obs_stream_started':
+            try:
+                from core.managers import get_service_notices
+                get_service_notices().on_obs_stream_running()      # po restarcie OBS: stream działa, przypomnienie niepotrzebne
+            except Exception:
+                current_app.logger.warning('Nie udało się zdjąć komunikatu o restarcie OBS', exc_info=True)
         try:
             from core.managers import session_manager
             before = session_manager.get_open_session()

@@ -152,7 +152,7 @@ def build():
     (DRY / "hub" / "config" / "plugins.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     (DRY / "hub" / "config" / "overlays.json").write_text("[]", encoding="utf-8")
     # wlasna konfiguracja HUB-a (E2d1): HUB nie uruchamia modulu (robi to skrypt), WoL wylaczony
-    (DRY / "hub.json").write_text(json.dumps({"hub_port": 8080, "module": "", "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"}}, indent=2), encoding="utf-8")
+    (DRY / "hub.json").write_text(json.dumps({"hub_port": 8080, "module": "", "obs": {"enabled": False}, "state_file": str(DRY / "uslugi.json"), "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"}}, indent=2), encoding="utf-8")
 
 
 def main():

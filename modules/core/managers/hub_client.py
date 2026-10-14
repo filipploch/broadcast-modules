@@ -455,6 +455,13 @@ class HubClient:
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
 
+        elif msg_type == 'service_status':
+            # Zdarzenie usługi uruchamianej przez HUB (OBS): pasek w panelu (tylko od HUB-a)
+            if msg_from == 'hub':
+                self._on_service_status(payload)
+            else:
+                self._log("warning", f"Ignoruję service_status od {msg_from}")
+
         elif msg_type == 'shutdown_module':
             # Prośba HUB-a (E2d1) o łagodne zamknięcie: tylko od HUB-a. Bez odpowiedzi poza zamknięciem procesu.
             if msg_from == 'hub':
@@ -830,6 +837,21 @@ class HubClient:
 
     # Pluginy, które operator może uruchomić ponownie z panelu (nakładkę odświeża OBS: etap E2d).
     RESTARTABLE_PLUGINS = ('timer-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'recorder-plugin')
+
+    def _on_service_status(self, payload):
+        service_id = payload.get('service_id') or '?'
+        kind = payload.get('kind') or ''
+        message = payload.get('message') or ''
+        self._log("info", f"Usługa {service_id}: {kind} {message}".strip())
+        try:
+            from core.managers import get_service_notices
+            if self.app:
+                with self.app.app_context():
+                    get_service_notices().on_service_event(service_id, kind, message)
+            else:
+                get_service_notices().on_service_event(service_id, kind, message)
+        except Exception as e:
+            self._log("error", f"Nie udało się pokazać komunikatu usługi {service_id}: {e}", exc_info=True)
 
     def _shutdown_module(self):
         """Zamyka moduł na prośbę HUB-a: zatrzymuje menedżery, zamyka logi i kończy proces (kod 0 = bez restartu przez HUB).

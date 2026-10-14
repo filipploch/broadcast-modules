@@ -83,6 +83,14 @@ func main() {
 			log.Fatalf("❌ Moduł: %v", err)
 		}
 	}
+	if svc, ok := hubCfg.obsService(); ok {
+		if err := hub.Services.Add(svc); err != nil {
+			log.Fatalf("❌ OBS: %v", err)
+		}
+		log.Printf("OBS uruchamia HUB (%s); OBS uruchomiony ręcznie jest \"obcy\": HUB go nie restartuje ani nie zamyka", svc.ExecutablePath)
+	} else {
+		log.Printf("OBS: HUB go nie uruchamia (sekcja obs.enabled = false albo brak ścieżki)")
+	}
 
 	// Plik stanu usług (E2d2): przejęcie działających usług i zakończenie sierot PRZED startem pętli HUB-a i pluginów
 	hub.State = NewStateStore(hubCfg.StatePath())

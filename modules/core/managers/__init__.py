@@ -13,6 +13,7 @@ import time
 # (np. dwie karty przeglądarki łączące się w tej samej milisekundzie) nie tworzą dwóch obiektów.
 # RLock, bo menedżery tworzą się nawzajem (np. get_obs_ws_manager -> get_hub_client).
 _lazy_lock = threading.RLock()
+_service_notices = None   # komunikaty usług z HUB-a (OBS, moduł) dla paska w panelu
 
 _hub_client            = None
 _timer_manager         = None
@@ -144,6 +145,16 @@ def get_hub_client():
                 _hub_client = HubClient(current_app.config['HUB_HOST'], current_app)
     return _hub_client
 
+
+
+def get_service_notices():
+    global _service_notices
+    if _service_notices is None:
+        with _lazy_lock:
+            if _service_notices is None:
+                from core.managers.service_notices import ServiceNotices
+                _service_notices = ServiceNotices()
+    return _service_notices
 
 
 def get_timer_manager():
@@ -298,7 +309,7 @@ def get_helper_relay_manager():
 
 def shutdown_core_managers():
     """Rozłącza hub i zeruje wszystkie singletony."""
-    global _hub_client, _timer_manager, _recorder_manager, _obs_ws_manager, \
+    global _hub_client, _service_notices, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
            _replay_export_manager, _controller_manager, _helper_relay_client, \
            _helper_relay_manager, _initialized
@@ -311,6 +322,7 @@ def shutdown_core_managers():
         _helper_relay_client.disconnect()
 
     _hub_client            = None
+    _service_notices       = None
     _timer_manager         = None
     _recorder_manager      = None
     _obs_ws_manager        = None
