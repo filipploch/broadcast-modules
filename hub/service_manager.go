@@ -53,6 +53,7 @@ type ServiceConfig struct {
 	RestartDelayMs int    `json:"restart_delay_ms"`
 	StableAfterS   int    `json:"stable_after_s"` // po tylu sekundach stabilnej pracy licznik restartów zeruje się (domyślnie 60)
 	StopGraceS     int    `json:"stop_grace_s"`   // czas łagodnego zatrzymania przed wymuszeniem
+	NeverKill      bool   `json:"never_kill"`     // po czasie łagodnego zatrzymania usługa NIE jest kończona siłą (OBS)
 
 	// Obcy proces: proces o tej nazwie (albo odpowiadający port) uruchomiony nie przez HUB jest "obcy": HUB go nie restartuje,
 	// nie zamyka i nie uruchamia drugiej kopii.
@@ -704,6 +705,12 @@ func (sm *ServiceManager) Stop(id string) error {
 	select {
 	case <-exited:
 	default:
+		if cfg.NeverKill {
+			sm.mu.Lock()
+			sp.stopping = false
+			sm.mu.Unlock()
+			return sm.stopFailed(id, fmt.Sprintf("nie zamknęła się w %d s; zostawiam ją uruchomioną (bez wymuszania)", cfg.StopGraceS))
+		}
 		if err := killTree(pid); err != nil {
 			log.Printf("⚠️  Kończenie drzewa procesów usługi %s: %v", id, err)
 		}
@@ -728,6 +735,31 @@ func (sm *ServiceManager) Stop(id string) error {
 func (sm *ServiceManager) stopFailed(id, msg string) error {
 	log.Printf("❌ Usługa %s: %s", id, msg)
 	return fmt.Errorf("%s", msg)
+}
+
+// IDs zwraca identyfikatory usług w kolejności startu.
+func (sm *ServiceManager) IDs() []string {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return append([]string(nil), sm.order...)
+}
+
+// Has mówi, czy usługa jest skonfigurowana.
+func (sm *ServiceManager) Has(id string) bool {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return sm.services[id] != nil
+}
+
+// PID zwraca numer procesu usługi uruchomionej lub przejętej przez HUB (0, gdy nie działa albo jest obca).
+func (sm *ServiceManager) PID(id string) int {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sp := sm.services[id]
+	if sp == nil || sp.exited == nil || isClosed(sp.exited) || sp.status == "external" {
+		return 0
+	}
+	return sp.pid
 }
 
 // BeginShutdown blokuje wszystkie starty usług (także zaplanowane restarty po awarii).

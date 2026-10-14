@@ -58,6 +58,8 @@ func TestServiceHelper(t *testing.T) {
 			os.Exit(2)
 		}
 		child.Wait()
+	case "window-http":
+		runWindowAtrapa()
 	case "sleep":
 		time.Sleep(60 * time.Second)
 	case "crash":

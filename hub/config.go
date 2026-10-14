@@ -217,6 +217,7 @@ func (c *LoadedHubConfig) obsService() (ServiceConfig, bool) {
 		RestartDelayMs: 3000,
 		StableAfterS:   300,
 		StopGraceS:     30,
+		NeverKill:      true, // zamknięcie OBS jest łagodne (WM_CLOSE do okna głównego) i nigdy wymuszone
 		ProcessName:    c.Obs.ProcessName,
 		ForeignOK:      true,
 		OutputFile:     "obs.wyjscie.log",
