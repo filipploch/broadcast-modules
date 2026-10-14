@@ -22,7 +22,8 @@ type SessionStatus struct {
 	SessionID int       `json:"session_id"`
 	GameID    int       `json:"game_id"`
 	At        time.Time `json:"at"`
-	Known     bool      `json:"known"` // czy kiedykolwiek zgłoszono (w tym uruchomienie) albo odczytano z pliku stanu
+	Known     bool      `json:"known"`     // czy kiedykolwiek zgłoszono albo odczytano z pliku stanu
+	FromFile  bool      `json:"from_file"` // status pochodzi z pliku stanu (moduł jeszcze go nie zgłosił po starcie HUB-a)
 }
 
 // IsOpen: sesja otwarta (przygotowanie albo na antenie) i status znany.
@@ -48,6 +49,13 @@ func (t *sessionTracker) get() SessionStatus {
 	return t.st
 }
 
+// restore ustawia status odczytany z pliku stanu (bez wywoływania onChange).
+func (t *sessionTracker) restore(st SessionStatus) {
+	t.mu.Lock()
+	t.st = st
+	t.mu.Unlock()
+}
+
 // set zapisuje nowy status; wywołuje onChange poza blokadą.
 func (t *sessionTracker) set(st SessionStatus) {
 	t.mu.Lock()
@@ -55,7 +63,7 @@ func (t *sessionTracker) set(st SessionStatus) {
 	t.st = st
 	cb := t.onChange
 	t.mu.Unlock()
-	if cb != nil && (prev.State != st.State || prev.SessionID != st.SessionID || prev.GameID != st.GameID || !prev.Known) {
+	if cb != nil && (prev.State != st.State || prev.SessionID != st.SessionID || prev.GameID != st.GameID || !prev.Known || prev.FromFile) {
 		cb(st)
 	}
 }
@@ -92,7 +100,7 @@ func (h *Hub) handleSessionStatus(msg *Message) {
 
 // sessionSnapshot: status sesji do /status (z wiekiem zgłoszenia).
 func sessionSnapshot(s SessionStatus) map[string]interface{} {
-	m := map[string]interface{}{"known": s.Known, "state": s.State, "session_id": s.SessionID, "game_id": s.GameID}
+	m := map[string]interface{}{"known": s.Known, "state": s.State, "session_id": s.SessionID, "game_id": s.GameID, "from_file": s.FromFile}
 	if s.Known {
 		m["age_s"] = int(time.Since(s.At).Seconds())
 	}

@@ -84,6 +84,22 @@ func main() {
 		}
 	}
 
+	// Plik stanu usług (E2d2): przejęcie działających usług i zakończenie sierot PRZED startem pętli HUB-a i pluginów
+	hub.State = NewStateStore(hubCfg.StatePath())
+	hub.Services.persist = hub.persistState
+	hub.Services.sessionOpen = func() bool { return hub.SessionStatus().OpenForRestart() }
+	hub.Services.pluginGate = hub.pluginGate
+	hub.Services.notify = hub.notifyService
+	if hub.PluginManager != nil {
+		hub.PluginManager.persist = hub.persistState
+	}
+	hub.session.onChange = func(SessionStatus) { hub.persistState() }
+	for _, id := range hub.RestoreFromState() {
+		if hub.Services.RestartPolicy(id) == restartSessionOpen && !hub.SessionStatus().OpenForRestart() {
+			hub.Services.SkipInitialStart(id, "proces zakończył się, gdy HUB nie działał (kod wyjścia nieznany), a ostatni znany status sesji nie jest otwarty")
+		}
+	}
+
 	// Start hub event loop
 	// Initialize FallbackWriter
 	hub.FallbackWriter = NewFallbackWriter(hub, fallbackRules())

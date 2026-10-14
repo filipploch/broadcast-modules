@@ -53,6 +53,7 @@ type PluginProcess struct {
 	exitChan     chan struct{}
 	stopping     bool // zatrzymanie z woli HUB-a (restart, zamykanie): monitor nie uruchamia pluginu ponownie
 	logSink      *logSink // wyjście pluginu: plik <id>.log w folderze logów uruchomienia + konsola HUB-a
+	createdFT    uint64   // czas utworzenia procesu (plik stanu: rozpoznanie sieroty po awarii HUB-a)
 }
 
 // PluginManager manages plugin processes (LOCAL PLUGINS ONLY!)
@@ -63,6 +64,7 @@ type PluginManager struct {
 	allConfigs   map[string]PluginConfig   // All plugin configs (local + external)
 	mu           sync.RWMutex
 	shuttingDown bool
+	persist      func() // zapis pliku stanu (ustawiany przez HUB)
 
 	// Nadzór (supervise): ile czeka na rejestrację, po jakim czasie pracy zeruje licznik restartów.
 	registerTimeout time.Duration
@@ -346,6 +348,11 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 	pm.mu.Unlock()
 
 	log.Printf("✅ Plugin %s started (PID: %d)", pluginID, cmd.Process.Pid)
+	created, _ := processCreationTime(cmd.Process.Pid)
+	pm.mu.Lock()
+	pluginProc.createdFT = created
+	pm.mu.Unlock()
+	pm.persistNow()
 
 	// Wait for startup delay
 	if config.StartupDelay > 0 {
@@ -361,6 +368,7 @@ func (pm *PluginManager) startPlugin(pluginID string, manual bool) error {
 // monitorProcess monitors a plugin process
 func (pm *PluginManager) monitorProcess(pluginID string, cmd *exec.Cmd) {
 	err := cmd.Wait()
+	defer pm.persistNow()
 
 	pm.mu.Lock()
 	pluginProc := pm.plugins[pluginID]
@@ -473,6 +481,7 @@ func (pm *PluginManager) StopPlugin(pluginID string) error {
 	pluginProc.Process = nil
 	pluginProc.exitChan = nil
 	pm.mu.Unlock()
+	pm.persistNow()
 
 	return nil
 }

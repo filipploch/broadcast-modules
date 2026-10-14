@@ -26,6 +26,7 @@ type ModuleEntry struct {
 
 // ObsConfig: ustawienia OBS (używane od E2d2).
 type ObsConfig struct {
+	Enabled     bool   `json:"enabled"` // czy HUB uruchamia i nadzoruje OBS (próby i konfiguracje testowe: false)
 	Path        string `json:"path"`
 	WsPort      int    `json:"ws_port"`
 	ProcessName string `json:"process_name"`
@@ -49,9 +50,11 @@ type HubConfig struct {
 	ModuleStopGraceS    int                    `json:"module_stop_grace_s"`
 	// PluginsConfig: plik konfiguracji pluginów (względem katalogu głównego); "" = config/plugins.json względem bieżącego folderu.
 	// Próby ręczne wskazują tu plik tylko z pluginami lokalnymi, żeby HUB nie wołał prawdziwych urządzeń (Debian, kamery).
-	PluginsConfig string    `json:"plugins_config"`
-	Obs           ObsConfig `json:"obs"`
-	Wol           WolConfig `json:"wol"`
+	PluginsConfig string `json:"plugins_config"`
+	// StateFile: plik stanu usług (względem katalogu głównego); "" = run/uslugi.json
+	StateFile string    `json:"state_file"`
+	Obs       ObsConfig `json:"obs"`
+	Wol       WolConfig `json:"wol"`
 }
 
 // defaultHubConfig: wartości wbudowane; test pilnuje, żeby były identyczne z hub.example.json.
@@ -68,6 +71,7 @@ func defaultHubConfig() HubConfig {
 		ModuleReadyTimeoutS: 60,
 		ModuleStopGraceS:    10,
 		Obs: ObsConfig{
+			Enabled:     true,
 			Path:        `C:\Program Files\obs-studio\bin\64bit\obs64.exe`,
 			WsPort:      4455,
 			ProcessName: "obs64.exe",
@@ -183,6 +187,14 @@ func (c *LoadedHubConfig) abs(p string) string {
 		return p
 	}
 	return filepath.Join(c.Root, filepath.FromSlash(p))
+}
+
+// StatePath to ścieżka pliku stanu usług (run/uslugi.json w katalogu głównym, o ile nie wskazano inaczej).
+func (c *LoadedHubConfig) StatePath() string {
+	if c.StateFile != "" {
+		return c.abs(c.StateFile)
+	}
+	return filepath.Join(c.Root, "run", "uslugi.json")
 }
 
 // ModuleLabel to nazwa modułu do logu: klucz z konfiguracji i, gdy inna, nazwa używana w plikach logu

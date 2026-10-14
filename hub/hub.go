@@ -27,6 +27,10 @@ type Hub struct {
 
 	session sessionTracker // ostatni znany status sesji transmisji (zgłaszany przez moduł główny)
 
+	State        *StateStore // plik stanu usług (run/uslugi.json); nil = bez zapisu
+	stateReady   stateGate
+	declaredOnce bool // moduł główny zadeklarował już wymagane pluginy (potrzebne usłudze czekającej na plugin)
+
 	Port int // HTTP/WebSocket port
 
 	mu       sync.RWMutex
@@ -363,6 +367,7 @@ func (h *Hub) handleDeclareRequiredPlugins(msg *Message) {
 	}
 
 	log.Printf("📋 Main module declared %d required plugins", len(pluginIDs))
+	h.declaredOnce = true
 
 	// Clear expected plugins
 	h.ExpectedPlugins = make(map[string]bool)
