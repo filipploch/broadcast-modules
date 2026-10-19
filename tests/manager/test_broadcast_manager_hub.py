@@ -13,7 +13,49 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from broadcast_manager_hub import hub_module_choice, start_hub, stop_hub  # noqa: E402
+from broadcast_manager_hub import hub_exe_stale, hub_module_choice, start_hub, stop_hub  # noqa: E402
+
+import os  # noqa: E402
+
+
+class StaryHubExe(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.exe = self.dir / "hub.exe"
+        self.exe.write_bytes(b"x")
+        self.src = self.dir / "wol.go"
+        self.src.write_text("package main", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _times(self, exe, src):
+        os.utime(self.exe, (exe, exe))
+        os.utime(self.src, (src, src))
+
+    def test_zrodlo_nowsze_niz_exe_daje_ostrzezenie(self):
+        self._times(1_000_000, 2_000_000)
+        msg = hub_exe_stale(self.exe, self.dir)
+        self.assertIsNotNone(msg)
+        self.assertIn("wol.go", msg)
+        self.assertIn("go build", msg)
+
+    def test_exe_nowszy_bez_ostrzezenia(self):
+        self._times(2_000_000, 1_000_000)
+        self.assertIsNone(hub_exe_stale(self.exe, self.dir))
+
+    def test_testy_go_nie_licza_sie(self):
+        self._times(2_000_000, 1_000_000)
+        t = self.dir / "wol_test.go"
+        t.write_text("package main", encoding="utf-8")
+        os.utime(t, (3_000_000, 3_000_000))
+        self.assertIsNone(hub_exe_stale(self.exe, self.dir))
+
+    def test_brak_exe_albo_zrodel_bez_ostrzezenia(self):
+        self.assertIsNone(hub_exe_stale(self.dir / "brak.exe", self.dir))
+        self.src.unlink()
+        self.assertIsNone(hub_exe_stale(self.exe, self.dir))
 
 
 class NazwaModulu(unittest.TestCase):

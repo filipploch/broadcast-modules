@@ -28,7 +28,7 @@ from textual.widgets import (
     TabbedContent, TabPane,
 )
 
-from broadcast_manager_hub import hub_module_choice, start_hub, stop_hub
+from broadcast_manager_hub import hub_exe_stale, hub_module_choice, start_hub, stop_hub
 
 # ── Konfiguracja ──────────────────────────────────────────────────────────────
 
@@ -182,6 +182,9 @@ class BroadcastManager(App):
         self._log_sys(f"HUB:  {HUB_EXE}")
         self._log_sys(f"Moduł uruchamiany przez HUB: {self._module_name or '(brak)'} (źródło: {self._module_source})")
         self._log_sys("Moduł, OBS i budzenie Debiana obsługuje HUB; zmiana modułu: pole \"module\" w hub/config/hub.json.")
+        stale = hub_exe_stale(HUB_EXE, HUB_DIR)
+        if stale:
+            self._log_sys(f"[UWAGA] {stale}")
         if not DEBIAN_SSH_HOST:
             self._log_sys("[UWAGA] Brak DEBIAN_SSH_HOST w .env")
 
@@ -204,6 +207,9 @@ class BroadcastManager(App):
         if not HUB_EXE.exists():
             self._log_sys(f"[BŁĄD] Nie znaleziono HUB: {HUB_EXE}")
             return
+        stale = hub_exe_stale(HUB_EXE, HUB_DIR)
+        if stale:
+            self._log_sys(f"[UWAGA] {stale}")
         try:
             self._hub_proc = start_hub(HUB_EXE, HUB_DIR)
             self._log_sys(f"HUB uruchomiony (pid {self._hub_proc.pid})")

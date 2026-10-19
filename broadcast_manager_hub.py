@@ -38,6 +38,26 @@ def hub_module_choice(config_dir: Path) -> tuple[str, str]:
     return BUILTIN_MODULE, "wartości wbudowane (brak hub.json i hub.example.json)"
 
 
+def hub_exe_stale(hub_exe: Path, src_dir: Path) -> Optional[str]:
+    """Ostrzeżenie, gdy hub.exe jest starszy niż najnowszy plik źródłowy HUB-a (*.go w hub/). Manager uruchamia gotowy plik
+    i niczego nie buduje, więc bez przebudowania działa stara wersja HUB-a (zgłoszone w próbie E2d3a, 2026-10-19).
+    None: plik aktualny albo nie da się porównać (brak hub.exe lub źródeł, np. w folderze bez kodu Go)."""
+    try:
+        exe_mtime = hub_exe.stat().st_mtime
+        sources = [p for p in src_dir.glob("*.go") if not p.name.endswith("_test.go")]
+        if not sources:
+            return None
+        newest = max(sources, key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return None
+    if newest.stat().st_mtime <= exe_mtime:
+        return None
+    fmt = "%Y-%m-%d %H:%M"
+    return (f"hub.exe ({time.strftime(fmt, time.localtime(exe_mtime))}) jest starszy niż źródło {newest.name} "
+            f"({time.strftime(fmt, time.localtime(newest.stat().st_mtime))}): uruchomi się stara wersja HUB-a. "
+            f"Przebuduj: w folderze hub polecenie  go build -o hub.exe .")
+
+
 def start_hub(hub_exe: Path, cwd: Path) -> subprocess.Popen:
     """Uruchamia HUB z wyjściem do potoku (zakładka logów) we własnej grupie procesów, żeby dało się wysłać mu CTRL_BREAK."""
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
