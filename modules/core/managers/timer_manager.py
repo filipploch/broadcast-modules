@@ -147,6 +147,7 @@ class TimerManager:
         )
         if success:
             with self.lock:
+                self._removed_ids().discard(timer_id)
                 self.timers[timer_id] = {
                     'timer_id':     timer_id,
                     'timer_type':   timer_type,
@@ -174,6 +175,7 @@ class TimerManager:
         )
         if success:
             with self.lock:
+                self._removed_ids().discard(timer_id)
                 if timer_id not in self.timers:
                     self.timers[timer_id] = {
                         'timer_id':     timer_id,
@@ -271,10 +273,21 @@ class TimerManager:
             self.timer_plugin_id, 'reset_timer', {'timer_id': timer_id}
         )
 
+    def _removed_ids(self):
+        return self.__dict__.setdefault('_removed_timer_ids', set())
+
     def remove_timer(self, timer_id):
+        # Plugin odsyła przy usunięciu ostatnie 'timer_updated' (stan 'stopped', upływ 0). Ten komunikat nie może zerować w bazie
+        # upływu zegara (jest potrzebny do wyliczenia czasu pozostałego kar przenoszonych do kolejnej części), więc znacznik
+        # ustawiamy PRZED wysłaniem polecenia (odpowiedź może wrócić, zanim wyślemy kolejne).
+        with self.lock:
+            self._removed_ids().add(timer_id)
         success = self.hub_client.send_to_plugin(
             self.timer_plugin_id, 'remove_timer', {'timer_id': timer_id}
         )
+        if not success:
+            with self.lock:
+                self._removed_ids().discard(timer_id)
         if success:
             with self.lock:
                 self.timers.pop(timer_id, None)
@@ -835,6 +848,8 @@ class TimerManager:
             ).first()
             if gt is None:
                 return
+            if plugin_timer_id in self._removed_ids():
+                elapsed_time_ms = gt.elapsed_time_ms or 0     # zegar usunięty z pluginu: zostaje zamrożony upływ, zmienia się tylko stan
             gt.sync_from_plugin(elapsed_time_ms, state)
             db.session.commit()
 
@@ -908,6 +923,17 @@ class TimerManager:
             result[p.team].append(p.to_dict())
         return result
 
+    def _current_main_elapsed(self, penalties: dict):
+        try:
+            period_ids = [p.get('period_id') for p in penalties.get('home', []) + penalties.get('away', []) if p.get('period_id')]
+            if not period_ids:
+                return None
+            main = self.get_active_main_timer(max(period_ids))
+            return (main.elapsed_time_ms or 0) if main else 0     # brak wiersza zegara głównego tej części: jeszcze nie ruszył
+        except Exception as e:
+            current_app.logger.error(f'_current_main_elapsed: {e}')
+            return None
+
     def _emit_to_ui(self, msg_type, data):
         try:
             from core.extensions import socketio
@@ -923,8 +949,8 @@ class TimerManager:
         from core.managers import get_hub_client
         hub_client = get_hub_client()
         if hub_client:
-            hub_client.broadcast_to_class(
-                'overlay',
-                'penalty_state',
-                self._get_penalties_dict(game_id),
-            )
+            payload = self._get_penalties_dict(game_id)
+            # Upływ aktualnego zegara głównego: nakładka nie może liczyć kar ze starej wartości zapamiętanej
+            # z poprzedniej części meczu (po zmianie części nowy zegar zaczyna od zera).
+            payload['main_elapsed_ms'] = self._current_main_elapsed(payload)
+            hub_client.broadcast_to_class('overlay', 'penalty_state', payload)
