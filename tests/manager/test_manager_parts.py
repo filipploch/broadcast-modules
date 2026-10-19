@@ -323,3 +323,19 @@ class LogsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HubButtonTest(unittest.TestCase):
+    """Jeden przycisk HUB-a zmieniający stan (prośba właściciela 2026-10-19), jak przyciski modułów."""
+
+    def b(self, v):
+        return (v.hub_button.text, v.hub_button.color, v.hub_button.enabled, v.hub_button.action)
+
+    def test_stany_przycisku(self):
+        self.assertEqual(self.b(view.build(CAT, state(), "ok")), ("ZATRZYMAJ HUB", "red", True, "stop_hub"))
+        self.assertEqual(self.b(view.build(CAT, state(stopping=True), "ok")), ("ZATRZYMYWANIE HUB…", "grey", False, ""))
+        self.assertEqual(self.b(view.build(CAT, None, "starting")), ("URUCHAMIANIE HUB…", "grey", False, ""))
+        for phase in ("stopped", "gave_up", "not_started", "unreachable"):
+            self.assertEqual(self.b(view.build(CAT, None, phase)), ("URUCHOM HUB", "green", True, "start_hub"), phase)
+        self.assertEqual(self.b(view.build(CAT, None, "stopped", supervising=False)), ("URUCHOM HUB", "grey", False, ""),
+                         "drugi manager nie uruchamia HUB-a")

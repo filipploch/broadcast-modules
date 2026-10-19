@@ -141,8 +141,7 @@ class BroadcastManager(App):
                 yield Label("MODUŁY", classes="section-title")
                 yield Vertical(id="module-buttons")
                 yield Static("", classes="separator")
-                yield Button("ZATRZYMAJ HUB", id="btn-hub-stop", classes="danger", disabled=True)
-                yield Button("Uruchom HUB", id="btn-hub-start", classes="grey", disabled=True)
+                yield Button("HUB: sprawdzam…", id="btn-hub", classes="grey", disabled=True)
                 yield Static("", classes="separator")
                 yield Label("DEBIAN", classes="section-title")
                 yield Static("Debian: sprawdzam…", id="debian-status", classes="status")
@@ -205,11 +204,10 @@ class BroadcastManager(App):
         colors = {"info": "#8b949e", "warn": "#d29922", "error": "#f85149"}
         self.query_one("#banners", Static).update("\n".join(f"[{colors[b.level]}]{b.text}[/]" for b in v.banners))
         self._sync_buttons(v.buttons)
-        stop = self.query_one("#btn-hub-stop", Button)
-        stop.disabled = not v.stop_hub_enabled
-        start = self.query_one("#btn-hub-start", Button)
-        start.disabled = not v.start_hub_enabled
-        start.set_classes("green" if v.start_hub_enabled else "grey")
+        hb = v.hub_button
+        w = self.query_one("#btn-hub", Button)
+        w.label, w.disabled, w.hub_action = hb.text, not hb.enabled, hb.action
+        w.set_classes(hb.color)
 
     def _sync_buttons(self, buttons) -> None:
         box = self.query_one("#module-buttons", Vertical)
@@ -249,11 +247,11 @@ class BroadcastManager(App):
             action, mid = getattr(event.button, "mod_action", ""), getattr(event.button, "mod_id", "")
             if action:
                 self.run_worker(lambda: self._module_action(action, mid), thread=True)
-        elif bid == "btn-hub-stop":
+        elif bid == "btn-hub" and getattr(event.button, "hub_action", "") == "stop_hub":
             self.push_screen(Confirm("Zatrzymać HUB?", ["Moduł, OBS i pluginy zostaną zamknięte według reguł HUB-a.",
-                                                          "Manager nie uruchomi HUB-a ponownie, dopóki nie klikniesz \"Uruchom HUB\"."],
+                                                          "Manager nie uruchomi HUB-a ponownie, dopóki nie klikniesz \"URUCHOM HUB\"."],
                                      yes="Zatrzymaj HUB"), self._stop_hub_confirmed)
-        elif bid == "btn-hub-start":
+        elif bid == "btn-hub" and getattr(event.button, "hub_action", "") == "start_hub":
             self.run_worker(self._start_hub, thread=True)
         elif bid == "btn-debian-off":
             self.run_worker(self._debian_prepare, thread=True)

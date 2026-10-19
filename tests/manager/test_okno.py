@@ -67,6 +67,9 @@ class OknoTest(unittest.TestCase):
             await pilot.pause(1.5)
             labels = [str(b.label) for b in app.query("#module-buttons Button")]
             self.assertEqual(labels, ["URUCHOM FUTSAL NALF", "URUCHOM GARBARNIA"])
+            hub_btn = app.query_one("#btn-hub")
+            self.assertEqual((str(hub_btn.label), hub_btn.disabled), ("ZATRZYMAJ HUB", False), "jeden przycisk HUB-a, gdy HUB działa")
+            self.assertEqual(len(app.query("#btn-hub-stop")) + len(app.query("#btn-hub-start")), 0, "bez dwóch osobnych przycisków")
             await pilot.click("#module-buttons Button")
             await pilot.pause(2.5)
             self.assertIn(("/module/start", {"id": "nalf"}), fake.posts)

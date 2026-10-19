@@ -35,6 +35,20 @@ class View:
     hub_text: str = ""
     stop_hub_enabled: bool = False
     start_hub_enabled: bool = False
+    hub_button: Optional[Button] = None  # jeden przycisk HUB-a zmieniający stan (jak przyciski modułów)
+
+
+def hub_button(phase: str, stopping: bool, start_enabled: bool) -> Button:
+    """URUCHOM HUB (zielony) / ZATRZYMAJ HUB (czerwony) / stan przejściowy (szary, nieaktywny)."""
+    if phase == "ok":
+        if stopping:
+            return Button("hub", "ZATRZYMYWANIE HUB…", GREY, False, "")
+        return Button("hub", "ZATRZYMAJ HUB", RED, True, "stop_hub")
+    if phase == "starting":
+        return Button("hub", "URUCHAMIANIE HUB…", GREY, False, "")
+    if start_enabled:
+        return Button("hub", "URUCHOM HUB", GREEN, True, "start_hub")
+    return Button("hub", "URUCHOM HUB", GREY, False, "")
 
 
 def hub_phase(state_ok: bool, seconds_since_start: Optional[float], supervisor_phase: str = "") -> str:
@@ -63,10 +77,12 @@ def build(catalog, state: Optional[dict], phase: str, root=None, git=None, super
         if not supervising:
             v.banners.append(Banner("info", "HUB nadzoruje inny otwarty manager: ten tylko pokazuje stan"))
         v.buttons = [Button(m.id, f"URUCHOM {m.button}", GREY, False, "") for m in mods]
+        v.hub_button = hub_button(phase, False, v.start_hub_enabled)
         return v
 
     v.hub_text = "HUB działa"
     v.stop_hub_enabled = not (state.get("hub") or {}).get("stopping", False)
+    v.hub_button = hub_button("ok", not v.stop_hub_enabled, False)
     if root is None:
         notices = [n for n in version.check(state, None, git=lambda *a: (None, "")) if n.level == "error"]
     else:
