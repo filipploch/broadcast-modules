@@ -119,3 +119,24 @@ func TestUndeliveredReportDoesNotLoop(t *testing.T) {
 		t.Fatalf("pętla raportów: %+v", got)
 	}
 }
+
+// Moduł rozłączony w ciągu 200 ms od rejestracji (np. zatrzymany kanałem sterującym zaraz po starcie): opóźnione powiadomienie
+// o pluginach nie może wywrócić HUB-a (dawniej: "panic: send on closed channel", wykryte w próbie M4 z E2d3c1).
+func TestLateJoinNotificationAfterQuickDisconnectDoesNotPanic(t *testing.T) {
+	hub := NewHub(0, false, false)
+	p := NewModule(hub, nil)
+	p.ID, p.IsActive = "timer-plugin", true
+	hub.Plugins[p.ID] = p
+	main := newMainModule(hub)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		hub.sendCurrentPluginStates(main)
+	}()
+	hub.mu.Lock()
+	main.IsActive = false
+	hub.MainModule = nil
+	hub.mu.Unlock()
+	close(main.Send)
+	<-done
+}

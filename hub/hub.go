@@ -297,24 +297,27 @@ func (h *Hub) sendCurrentPluginStates(mainModule *Module) {
 	time.Sleep(200 * time.Millisecond)
 
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
+	// Moduł mógł się w tym czasie rozłączyć (jego kanał Send jest wtedy zamknięty): nie wysyłamy (E2d3c1, próba M4)
+	if h.MainModule != mainModule || !mainModule.IsActive {
+		h.mu.RUnlock()
+		return
+	}
+	var ids []string
 	for id, plugin := range h.Plugins {
-		if !plugin.IsActive {
-			continue
+		if plugin.IsActive {
+			ids = append(ids, id)
 		}
+	}
+	h.mu.RUnlock()
+
+	for _, id := range ids {
 		notification := NewMessage("hub", mainModule.ID, "plugin_status", map[string]interface{}{
 			"plugin_id": id,
 			"status":    "connected",
 		})
-		if data, err := notification.ToJSON(); err == nil {
-			select {
-			case mainModule.Send <- data:
-				log.Printf("📤 Late-join: notified main module of already-connected plugin %s", id)
-			default:
-				log.Printf("⚠️  sendCurrentPluginStates: main module send buffer full for %s", id)
-			}
-		}
+		// sendSafely: rozłączenie w trakcie pętli nie wywraca HUB-a (zamknięty kanał), pełna kolejka jest pomijana z wpisem w logu
+		h.sendSafely(mainModule, notification)
+		log.Printf("📤 Late-join: notified main module of already-connected plugin %s", id)
 	}
 }
 
