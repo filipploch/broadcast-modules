@@ -27,6 +27,11 @@ func main() {
 	} else {
 		log.Printf("Moduł: %s (źródło: %s)", hubCfg.ModuleLabel(), hubCfg.ModuleSource)
 	}
+	commit := buildCommit
+	if commit == "" {
+		commit = "nieznany (hub.exe zbudowany bez hub\\build.bat)"
+	}
+	log.Printf("Wersja HUB-a: commit %s, protokół kanału sterującego %d", commit, controlProtocolVersion)
 	for _, n := range hubCfg.Notes {
 		log.Print(n)
 	}
@@ -107,6 +112,8 @@ func main() {
 		hub.PluginManager.persist = hub.persistState
 	}
 	hub.session.onChange = func(SessionStatus) { hub.persistState() }
+	// Moduł z pliku stanu jest przejmowany także przy --module none albo innym module w konfiguracji (E2d3c1)
+	hub.prepareModuleAdoption(hubCfg)
 	for _, id := range hub.RestoreFromState() {
 		if hub.Services.RestartPolicy(id) == restartSessionOpen && !hub.SessionStatus().OpenForRestart() {
 			hub.Services.SkipInitialStart(id, "proces zakończył się, gdy HUB nie działał (kod wyjścia nieznany), a ostatni znany status sesji nie jest otwarty")
@@ -165,14 +172,22 @@ func main() {
 	hub.wol = newWolSender(hubCfg.Wol)
 	hub.wakeDebianOnStart()
 
+	// Kanał sterujący managera (E2d3c1): osobny serwer tylko na 127.0.0.1, niezależny od WebSocketu pluginów
+	control := newControlServer(hub, hubCfg)
+	control.Listen(hubCfg.ControlPort)
+
 	// Usługi startują po HUB-ie (moduł łączy się z nim od razu); pluginy lokalne startują dalej na deklarację modułu
 	hub.Services.StartAll()
 
-	// Wait for interrupt signal
+	// Wait for interrupt signal albo polecenia zamknięcia z kanału sterującego (te same reguły zamykania)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	<-sigChan
+	select {
+	case <-sigChan:
+	case <-control.StopRequested():
+		log.Println("🎛️  Zamknięcie HUB-a zlecone przez kanał sterujący managera")
+	}
 
 	log.Println("")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
