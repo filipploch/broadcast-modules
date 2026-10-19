@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"mime"
 	"net"
@@ -189,6 +191,14 @@ func (c *controlServer) method(m string, h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if m == http.MethodPost {
+			// Treść czytamy zawsze w całości (do 64 KB), także gdy handler jej nie potrzebuje: zamknięcie gniazda z nieprzeczytanymi
+			// danymi przy "Connection: close" Windows kończy RST-em i klient gubi odpowiedź (próba M4/M7, E2d3c1: 66 z 200 żądań).
+			body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, controlResult{Reason: "bad_request", Error: "nie można odczytać treści żądania"})
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
 			mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 			if err != nil || mt != "application/json" {
 				writeJSON(w, http.StatusUnsupportedMediaType, controlResult{Reason: "content_type", Error: "wymagany Content-Type: application/json"})
@@ -331,7 +341,7 @@ func (c *controlServer) handleModuleStart(w http.ResponseWriter, r *http.Request
 	var req struct {
 		ID string `json:"id"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil || req.ID == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
 		writeJSON(w, http.StatusBadRequest, controlResult{Reason: "bad_request", Error: "oczekiwano {\"id\": \"<moduł>\"}"})
 		return
 	}

@@ -9,7 +9,7 @@ import json, pathlib, shutil, subprocess, sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 MODULE = sys.argv[1] if len(sys.argv) > 1 else "futsal_nalf"
-SCRIPT = {"futsal_nalf": "nalf.py", "garbarnia": "garbarnia.py"}[MODULE]
+MODULE_ID = {"futsal_nalf": "nalf", "garbarnia": "garbarnia"}[MODULE]   # id z modules/<folder>/module.json
 BASE = REPO / "wp-local" / "probe-obs"
 OBS_BIN = BASE / "obs-bin"
 OBS_PORT = 14455
@@ -43,8 +43,9 @@ def build():
     (BASE / "hub" / "config" / "overlays.json").write_text("{}", encoding="utf-8")
     (BASE / "fake-obs-state.json").write_text(json.dumps({"stream": False, "record": False, "silent": False, "fail": False}), encoding="utf-8")
     cfg = {
-        "hub_port": 8080, "module": "probe",
-        "modules": {"probe": {"script": str(REPO / "modules" / SCRIPT), "port": 8081, "log_name": MODULE}},
+        # modul z prawdziwego module.json (E2d3c1); folder modulow z repozytorium, bo hub.exe proby lezy poza nim
+        "hub_port": 8080, "module": MODULE_ID, "modules_dir": str(REPO / "modules"),
+        "control_port": 18099,                          # kanal sterujacy proby: poza 8079 i 18080-18091
         "python_path": str(REPO / "modules" / ".venv" / "Scripts" / "python.exe"), "module_dir": str(REPO / "modules"),
         "obs": {"enabled": True, "path": str(OBS_BIN / "obs-atrapa.exe"), "ws_port": OBS_PORT, "process_name": "obs-atrapa.exe", "ready_timeout_s": 20},
         "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"},

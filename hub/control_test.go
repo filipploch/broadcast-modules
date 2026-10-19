@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -620,5 +621,35 @@ func TestPrepareModuleAdoptionUsesModuleFromStateFile(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("wpis pliku stanu bez id modułu: %+v", e.hub.Services.StateEntries())
+	}
+}
+
+// Odpowiedź na POST z treścią, której handler nie czyta (np. /module/stop z "{}"), przy "Connection: close" (tak wysyła urllib
+// i będzie wysyłał manager): serwer nie może zamknąć gniazda z nieprzeczytanymi danymi, bo Windows wysyła wtedy RST, a RST kasuje
+// nieodczytaną jeszcze odpowiedź u klienta (wykryte w próbie M4/M7 z E2d3c1: 66 z 200 żądań z Pythona zerwanych).
+// Gołe połączenie TCP z chwilą zwłoki przed odczytem odtwarza to bez zależności od szybkości klienta.
+func TestControlPostWithUnreadBodyAndConnectionCloseIsNotReset(t *testing.T) {
+	e := newControlEnv(t)
+	addr := strings.TrimPrefix(e.srv.URL, "http://")
+	body := `{"powod":"` + strings.Repeat("x", 200) + `"}`
+	for i := 0; i < 10; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// jak urllib: nagłówki i treść w osobnych zapisach; serwer, który nie czeka na treść, odpowiada i zamyka gniazdo,
+		// zanim treść dotrze, a treść trafiająca w zamknięte gniazdo wywołuje RST
+		fmt.Fprintf(c, "POST /module/stop HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: %d\r\n\r\n",
+			addr, len(body))
+		time.Sleep(50 * time.Millisecond)
+		c.Write([]byte(body))
+		time.Sleep(100 * time.Millisecond) // odpowiedź i zamknięcie gniazda przez serwer docierają przed odczytem
+		c.SetReadDeadline(time.Now().Add(3 * time.Second))
+		var buf bytes.Buffer
+		_, rerr := buf.ReadFrom(c)
+		c.Close()
+		if !strings.HasPrefix(buf.String(), "HTTP/1.1 409") || !strings.Contains(buf.String(), "no_module") {
+			t.Fatalf("żądanie %d: odpowiedź utracona (%v), odebrano %q", i, rerr, buf.String())
+		}
 	}
 }

@@ -11,13 +11,16 @@ cd /d "%ROOT%"
 
 set "MODULE=futsal_nalf"
 set "SCRIPT=nalf.py"
+set "MODID=nalf"
 if /i "%~1"=="garbarnia" (
   set "MODULE=garbarnia"
   set "SCRIPT=garbarnia.py"
+  set "MODID=garbarnia"
 )
 if /i "%~2"=="garbarnia" (
   set "MODULE=garbarnia"
   set "SCRIPT=garbarnia.py"
+  set "MODID=garbarnia"
 )
 if /i "%~1"=="hub" set "HUBMODE=1"
 if /i "%~2"=="hub" set "HUBMODE=1"
@@ -64,10 +67,10 @@ rem Konfiguracja HUB-a dla proby (wp-local jest poza gitem): z modulem (tryb hub
 if not exist "%ROOT%wp-local" mkdir "%ROOT%wp-local"
 set "CFG=%ROOT%wp-local\probe-hub.json"
 if defined HUBMODE goto :cfg_hub
->"%CFG%" echo {"hub_port":8080,"module":"","plugins_config":"hub/config/plugins.probe.json","obs":{"enabled":false}}
+>"%CFG%" echo {"hub_port":8080,"module":"","control_port":18099,"plugins_config":"hub/config/plugins.probe.json","obs":{"enabled":false}}
 goto :cfg_done
 :cfg_hub
->"%CFG%" echo {"hub_port":8080,"module":"probe","modules":{"probe":{"script":"modules/%SCRIPT%","port":8081,"log_name":"%MODULE%"}},"plugins_config":"hub/config/plugins.probe.json","obs":{"enabled":false}}
+>"%CFG%" echo {"hub_port":8080,"module":"%MODID%","control_port":18099,"plugins_config":"hub/config/plugins.probe.json","obs":{"enabled":false}}
 :cfg_done
 
 echo [5/6] Uruchamiam HUB w osobnym oknie...
