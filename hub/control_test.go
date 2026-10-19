@@ -653,3 +653,94 @@ func TestControlPostWithUnreadBodyAndConnectionCloseIsNotReset(t *testing.T) {
 		}
 	}
 }
+
+// Port kanału zajęty (np. druga kopia HUB-a albo inny program): wpis w hub.log, Listen wraca od razu, HUB startuje dalej.
+func TestControlBusyPortOnlyLogs(t *testing.T) {
+	e := newControlEnv(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	logs := captureLog(t)
+	start := time.Now()
+	if e.ctl.Listen(port) {
+		t.Fatal("Listen na zajętym porcie powinien zwrócić false")
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("Listen na zajętym porcie trwał %v", d)
+	}
+	if !strings.Contains(logs.String(), "nie można otworzyć") || !strings.Contains(logs.String(), "HUB działa dalej") {
+		t.Fatalf("brak wpisu w logu: %q", logs.String())
+	}
+}
+
+func TestControlRejectsOversizedBody(t *testing.T) {
+	e := newControlEnv(t)
+	big := `{"id":"` + strings.Repeat("x", controlMaxBody) + `"}`
+	resp, err := http.Post(e.srv.URL+"/module/start", "application/json", strings.NewReader(big))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("treść > %d B: %d, oczekiwano 413", controlMaxBody, resp.StatusCode)
+	}
+	if e.hub.Services.Has("module") {
+		t.Fatal("za duże żądanie nie może niczego uruchomić")
+	}
+}
+
+// Wolne (treść nie dochodzi) i urwane żądanie zajmuje tylko własne połączenie: inne żądania są obsługiwane od razu,
+// a wiszące połączenie jest zamykane po limicie czasu.
+func TestControlSlowOrBrokenRequestDoesNotBlock(t *testing.T) {
+	e := newControlEnv(t)
+	e.ctl.readTimeout = 500 * time.Millisecond
+	port := freePort(t)
+	if !e.ctl.Listen(port) {
+		t.Fatal("Listen")
+	}
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	waitCond(t, "kanał nasłuchuje", 2*time.Second, func() bool { return portOpen(port) })
+
+	slow, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer slow.Close()
+	fmt.Fprintf(slow, "POST /module/start HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"id\":", addr)
+	broken, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(broken, "POST /hub/stop HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: 50\r\n\r\n{", addr)
+	broken.Close() // urwane w połowie treści
+
+	for i := 0; i < 3; i++ {
+		t0 := time.Now()
+		resp, err := http.Get("http://" + addr + "/state")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if d := time.Since(t0); resp.StatusCode != 200 || d > 300*time.Millisecond {
+			t.Fatalf("/state w trakcie wolnego żądania: %d po %v", resp.StatusCode, d)
+		}
+	}
+	slow.SetReadDeadline(time.Now().Add(3 * time.Second))
+	t0 := time.Now()
+	buf := make([]byte, 512)
+	n, _ := slow.Read(buf) // serwer zamyka połączenie (albo odpowiada błędem) po limicie czasu
+	if d := time.Since(t0); d > 2*time.Second {
+		t.Fatalf("wolne połączenie nie zostało zamknięte po limicie (%v, odebrano %q)", d, buf[:n])
+	}
+	if e.hub.Services.Has("module") {
+		t.Fatal("niedokończone żądanie nie może niczego uruchomić")
+	}
+	select {
+	case <-e.ctl.StopRequested():
+		t.Fatal("urwane żądanie nie może zatrzymać HUB-a")
+	default:
+	}
+}

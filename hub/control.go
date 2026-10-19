@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -119,11 +120,12 @@ type controlResult struct {
 const recorderQueryTimeout = 3 * time.Second
 
 type controlServer struct {
-	hub       *Hub
-	cfg       *LoadedHubConfig
-	startedAt time.Time
-	recTO     time.Duration
-	stopHub   func() // uruchamia zamykanie HUB-a (to samo co Ctrl+C)
+	hub         *Hub
+	cfg         *LoadedHubConfig
+	startedAt   time.Time
+	recTO       time.Duration
+	readTimeout time.Duration // 0 = controlReadTimeout (testy skracają)
+	stopHub     func()        // uruchamia zamykanie HUB-a (to samo co Ctrl+C)
 	// serviceFor składa usługę "module" dla modułu z katalogu (testy podmieniają ją na proces pomocniczy)
 	serviceFor func(ModuleManifest) ServiceConfig
 
@@ -147,20 +149,36 @@ func newControlServer(h *Hub, cfg *LoadedHubConfig) *controlServer {
 func (c *controlServer) StopRequested() <-chan struct{} { return c.stopCh }
 
 // Listen otwiera serwer kanału na 127.0.0.1. Błąd (np. port zajęty) tylko w logu: HUB działa dalej, manager pokaże "HUB nie odpowiada".
-func (c *controlServer) Listen(port int) {
+// Zwraca false, gdy portu nie udało się otworzyć (start HUB-a i transmisja trwają dalej; test TestControlBusyPortOnlyLogs).
+func (c *controlServer) Listen(port int) bool {
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Printf("❌ Kanał sterujący managera: nie można otworzyć %s: %v (manager nie będzie mógł sterować HUB-em)", addr, err)
-		return
+		log.Printf("❌ Kanał sterujący managera: nie można otworzyć %s: %v (manager nie będzie mógł sterować HUB-em; HUB działa dalej)", addr, err)
+		return false
 	}
 	log.Printf("🎛️  Kanał sterujący managera: http://%s (tylko z tego komputera)", addr)
 	go func() {
-		srv := &http.Server{Handler: c.Handler(), ReadHeaderTimeout: 5 * time.Second}
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := c.httpServer().Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("❌ Kanał sterujący managera: %v", err)
 		}
 	}()
+	return true
+}
+
+// Limity kanału: wolne albo urwane żądanie zajmuje tylko własne połączenie i jest zamykane po czasie (nie blokuje innych żądań).
+const (
+	controlMaxBody      = 64 << 10 // treść POST większa niż 64 KB: 413
+	controlReadTimeout  = 10 * time.Second
+	controlWriteTimeout = 15 * time.Second // /recorder czeka na recorder-plugin do 3 s
+)
+
+func (c *controlServer) httpServer() *http.Server {
+	rt := c.readTimeout
+	if rt <= 0 {
+		rt = controlReadTimeout
+	}
+	return &http.Server{Handler: c.Handler(), ReadHeaderTimeout: rt, ReadTimeout: rt, WriteTimeout: controlWriteTimeout, IdleTimeout: 30 * time.Second}
 }
 
 // Handler: obsługa żądań z kontrolą dostępu.
@@ -193,9 +211,14 @@ func (c *controlServer) method(m string, h http.HandlerFunc) http.HandlerFunc {
 		if m == http.MethodPost {
 			// Treść czytamy zawsze w całości (do 64 KB), także gdy handler jej nie potrzebuje: zamknięcie gniazda z nieprzeczytanymi
 			// danymi przy "Connection: close" Windows kończy RST-em i klient gubi odpowiedź (próba M4/M7, E2d3c1: 66 z 200 żądań).
-			body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, controlMaxBody))
 			if err != nil {
-				writeJSON(w, http.StatusBadRequest, controlResult{Reason: "bad_request", Error: "nie można odczytać treści żądania"})
+				var tooBig *http.MaxBytesError
+				if errors.As(err, &tooBig) {
+					writeJSON(w, http.StatusRequestEntityTooLarge, controlResult{Reason: "too_large", Error: fmt.Sprintf("treść żądania większa niż %d B", controlMaxBody)})
+					return
+				}
+				writeJSON(w, http.StatusBadRequest, controlResult{Reason: "bad_request", Error: "nie można odczytać treści żądania (urwane albo za wolne)"})
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewReader(body))
