@@ -965,7 +965,8 @@ def _handle_core_content(content_type, data):
         include_hidden = bool(payload.get('include_hidden', False))
         events_types = [e.to_dict() for e in event_mgr.get_all_events()]
         game_events  = []
-        for period in game.get_periods_list():
+        # Po zakończeniu sesji nie ma meczu: panel (np. po wyjściu z okna edycji zdarzenia) prosi o listę, dostaje pustą
+        for period in (game.get_periods_list() if game else []):
             period_events = gem.get_events_for_game(session_manager.current_game_id(),
                                                     period_id=period.id,
                                                     include_hidden=include_hidden)
