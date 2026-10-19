@@ -12,7 +12,15 @@ import (
 const (
 	createNewProcessGroup = 0x00000200
 	createNoWindow        = 0x08000000
+	detachedProcess       = 0x00000008
 )
+
+// windowedAttr: program okienkowy (OBS) uruchamiany jak przed poprawką z ukrytą konsolą: własna grupa procesów, bez konsoli.
+// Ukryta konsola (CREATE_NO_WINDOW) dotyczy wyłącznie programów konsolowych (moduł, pluginy lokalne); OBS jest z niej jawnie wyłączony
+// (test TestObsIsWindowedWithoutHiddenConsole).
+func windowedAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{CreationFlags: createNewProcessGroup | detachedProcess}
+}
 
 // detachedAttr: proces bez konsoli HUB-a i we własnej grupie procesów. Nie ginie przy zamknięciu okna HUB-a,
 // przy Ctrl+C w jego konsoli ani po jego awarii (bez obiektu zadania, który zabijałby procesy potomne razem z HUB-em).

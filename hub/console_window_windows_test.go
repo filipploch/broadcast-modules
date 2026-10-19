@@ -63,3 +63,26 @@ func TestDetachedChildOfServiceGetsNoVisibleConsoleWindow(t *testing.T) {
 		t.Fatalf("potomek usługi dostał widoczne okno konsoli (%s): przy uruchamianiu modułu pojawia się puste okno terminala", data)
 	}
 }
+
+// OBS (program okienkowy) jest jawnie wyłączony z ukrytej konsoli: dostaje dawne atrybuty (własna grupa, bez konsoli).
+// Ukrytą konsolę dostają wyłącznie programy konsolowe: moduł (usługa) i pluginy lokalne.
+func TestObsIsWindowedWithoutHiddenConsole(t *testing.T) {
+	c := &LoadedHubConfig{HubConfig: defaultHubConfig(), Root: t.TempDir()}
+	obs, ok := c.obsService()
+	if !ok || !obs.WindowedApp {
+		t.Fatalf("usługa OBS powinna być oznaczona jako program okienkowy: %+v", obs)
+	}
+	if f := serviceAttr(obs).CreationFlags; f&createNoWindow != 0 || f&detachedProcess == 0 || f&createNewProcessGroup == 0 {
+		t.Fatalf("OBS: flagi %#x, oczekiwano grupy procesów i DETACHED_PROCESS bez CREATE_NO_WINDOW", f)
+	}
+	mod := c.moduleServiceFor(ModuleManifest{Format: 1, ID: "nalf", Button: "N", Script: "modules/nalf.py", Port: 8081})
+	if mod.WindowedApp {
+		t.Fatal("moduł nie jest programem okienkowym")
+	}
+	if f := serviceAttr(mod).CreationFlags; f&createNoWindow == 0 || f&detachedProcess != 0 {
+		t.Fatalf("moduł: flagi %#x, oczekiwano ukrytej konsoli (CREATE_NO_WINDOW) bez DETACHED_PROCESS", f)
+	}
+	if f := detachedAttr().CreationFlags; f&createNoWindow == 0 { // pluginy lokalne (plugin_manager.go) używają detachedAttr
+		t.Fatalf("pluginy lokalne: flagi %#x bez ukrytej konsoli", f)
+	}
+}

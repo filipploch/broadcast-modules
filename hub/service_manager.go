@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -61,6 +62,9 @@ type ServiceConfig struct {
 	// nie zamyka i nie uruchamia drugiej kopii.
 	ProcessName string `json:"process_name"`
 	ForeignOK   bool   `json:"foreign_ok"`
+
+	// WindowedApp: program okienkowy (OBS): uruchamiany bez ukrytej konsoli (windowedAttr), którą dostają programy konsolowe.
+	WindowedApp bool `json:"windowed_app"`
 
 	OutputFile  string   `json:"output_file"`  // plik w folderze uruchomienia, np. "modul-nalf.wyjscie.log"; domyślnie <id>.wyjscie.log
 	FollowFiles []string `json:"follow_files"` // pliki z folderu uruchomienia pokazywane na konsoli HUB-a (czytane, nie zapisywane)
@@ -476,7 +480,7 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 	cmd.Stdin = nil
 	cmd.Stdout = out // uchwyt pliku przekazany procesowi: HUB nie pośredniczy, więc awaria HUB-a nie psuje zapisu
 	cmd.Stderr = out
-	cmd.SysProcAttr = detachedAttr()
+	cmd.SysProcAttr = serviceAttr(cfg)
 	if err := cmd.Start(); err != nil {
 		out.Close()
 		sm.setError(id, fmt.Sprintf("start nie powiódł się: %v", err))
@@ -527,6 +531,14 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 	go sm.watchReady(id, gen, exited)
 	sm.persistNow()
 	return nil
+}
+
+// serviceAttr: atrybuty procesu usługi. Programy konsolowe (moduł) dostają własną ukrytą konsolę, programy okienkowe (OBS) nie.
+func serviceAttr(cfg ServiceConfig) *syscall.SysProcAttr {
+	if cfg.WindowedApp {
+		return windowedAttr()
+	}
+	return detachedAttr()
 }
 
 func (sm *ServiceManager) setError(id, msg string) {
