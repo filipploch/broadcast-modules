@@ -27,6 +27,8 @@ def build():
         r = subprocess.run(["go", "build", "-o", str(outdir / name), target], cwd=cwd, capture_output=True, text=True)
         if r.returncode:
             sys.exit(f"Budowanie {name} nie powiodlo sie:\n{r.stderr}")
+    # HUB serwuje nakladki z ./overlays wzgledem swojego katalogu roboczego (BASE): bez kopii adres /overlays/... daje 404 i nakladka nie startuje
+    shutil.copytree(REPO / "hub" / "overlays", BASE / "overlays", dirs_exist_ok=True)
     (BASE / "hub" / "config").mkdir(parents=True, exist_ok=True)
     common = {"restart_on_crash": True, "max_restarts": 10, "restart_delay_ms": 3000, "startup_delay_ms": 1000, "health_check_interval": 10,
               "is_critical": False, "auto_start": True, "type": "local", "args": []}
