@@ -25,6 +25,14 @@ type Hub struct {
 	HealthMonitor *HealthMonitor
 	Services      *ServiceManager
 
+	requests hubRequests // pytania HUB-a do pluginów (np. stan streamu OBS) czekające na odpowiedź
+
+	session sessionTracker // ostatni znany status sesji transmisji (zgłaszany przez moduł główny)
+
+	State        *StateStore // plik stanu usług (run/uslugi.json); nil = bez zapisu
+	stateReady   stateGate
+	declaredOnce bool // moduł główny zadeklarował już wymagane pluginy (potrzebne usłudze czekającej na plugin)
+
 	Port int // HTTP/WebSocket port
 
 	mu       sync.RWMutex
@@ -158,6 +166,9 @@ func (h *Hub) handleUnregister(module *Module) {
 
 // handleMessage routes messages based on type
 func (h *Hub) handleMessage(msg *Message) {
+	if msg.To == "hub" && h.handleHubAddressed(msg) {
+		return
+	}
 	switch msg.Type {
 	case "register":
 		h.handleRegister(msg)
@@ -175,6 +186,8 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleCreateStylingClass(msg)
 	case "restart_plugin":
 		h.handleRestartPlugin(msg)
+	case "session_status":
+		h.handleSessionStatus(msg)
 	case "request_scene_map":
 		// Main module asks obs-ws-plugin to re-send its scene map
 		// (used when obs-ws-plugin was already online before main module started).
@@ -359,6 +372,7 @@ func (h *Hub) handleDeclareRequiredPlugins(msg *Message) {
 	}
 
 	log.Printf("📋 Main module declared %d required plugins", len(pluginIDs))
+	h.declaredOnce = true
 
 	// Clear expected plugins
 	h.ExpectedPlugins = make(map[string]bool)
@@ -807,10 +821,9 @@ func (h *Hub) Shutdown() {
 		h.Services.BeginShutdown()
 	}
 
-	// Usługi (moduł) zatrzymujemy przed pluginami, póki moduł może jeszcze odpowiedzieć na prośbę o zamknięcie
-	if h.Services != nil {
-		h.Services.StopAll()
-	}
+	// Usługi zatrzymujemy przed pluginami (moduł musi móc odpowiedzieć na prośbę o zamknięcie, a obs-ws-plugin na pytanie o stan
+	// streamu): sesja otwarta albo status nieznany: moduł i OBS zostają; sesja zamknięta: moduł, a OBS tylko wg reguły (hub_obs.go)
+	h.shutdownServices()
 
 	// Stop plugin manager
 	if h.PluginManager != nil {
@@ -826,22 +839,6 @@ func (h *Hub) Shutdown() {
 	close(h.shutdown)
 
 	log.Println("✅ Hub shutdown complete")
-}
-
-// gracefulStopService prosi usługę o zamknięcie się samej. Dla modułu głównego: komunikat shutdown_module
-// przez WebSocket. Zwraca false, gdy nie ma jak (moduł niepołączony): wtedy zatrzymanie od razu wymusza.
-func (h *Hub) gracefulStopService(id string) bool {
-	if id != "module" {
-		return false
-	}
-	h.mu.RLock()
-	m := h.MainModule
-	h.mu.RUnlock()
-	if m == nil || !m.IsActive {
-		return false
-	}
-	h.sendSafely(m, NewMessage("hub", m.ID, "shutdown_module", map[string]interface{}{}))
-	return true
 }
 
 // pluginPresence zwraca, które pluginy są wymagane (zadeklarowane przez moduł główny) i które są połączone.

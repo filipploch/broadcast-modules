@@ -302,8 +302,12 @@ class ObsWsManager:
             'is_local_file': False,
         })
 
+    # Nazwa źródła przeglądarki z nakładką w OBS (profil rozgrywek; docelowo ustawienie profilu)
+    OVERLAY_INPUT = 'Overlay'
+
     def refresh_browser_source(self, input_name: str):
-        self.send_obs_request_sync('PressInputPropertiesButton', {
+        """Odświeża źródło przeglądarki w OBS (przycisk "Odśwież pamięć podręczną"). Zwraca odpowiedź OBS albo None (brak w 2 s)."""
+        return self.send_obs_request_sync('PressInputPropertiesButton', {
             'inputName':    input_name,
             'propertyName': 'refreshnocache',
         })
@@ -341,6 +345,12 @@ class ObsWsManager:
 
         Błąd w sesji nie może przerwać obsługi zdarzenia OBS. Po zmianie UI dostaje 'session_state'.
         """
+        if action == 'on_obs_stream_started':
+            try:
+                from core.managers import get_service_notices
+                get_service_notices().on_obs_stream_running()      # po restarcie OBS: stream działa, przypomnienie niepotrzebne
+            except Exception:
+                current_app.logger.warning('Nie udało się zdjąć komunikatu o restarcie OBS', exc_info=True)
         try:
             from core.managers import session_manager
             before = session_manager.get_open_session()

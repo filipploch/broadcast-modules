@@ -42,7 +42,8 @@ def make(APP):
             return hub
 
         def _sent(self):
-            return [json.loads(c.args[0]) for c in self.hub.ws.send.call_args_list]
+            # bez zgłoszeń statusu sesji do HUB-a (księgowość modułu, nie polecenia do pluginów)
+            return [m for m in (json.loads(c.args[0]) for c in self.hub.ws.send.call_args_list) if m.get('type') != 'session_status']
 
         def _open(self, game='g1'):
             import core.managers.session_manager as sm

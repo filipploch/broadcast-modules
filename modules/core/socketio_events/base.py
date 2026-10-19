@@ -84,6 +84,21 @@ def register_events(socketio):
                 if head.get('online'):
                     emit('servo_head_online', {'head_id': head['head_id']})
 
+    @socketio.on('get_service_notices')
+    def handle_get_service_notices():
+        """Panel po połączeniu pyta o aktualne komunikaty usług (przeżywają odświeżenie strony)."""
+        from flask_socketio import emit
+        from core.managers import get_service_notices
+        emit('service_notices', get_service_notices().snapshot())
+
+    @socketio.on('dismiss_service_notice')
+    def handle_dismiss_service_notice(data):
+        """Operator zamyka komunikat usługi (np. "OBS uruchomiony ponownie"); znika we wszystkich panelach."""
+        from core.managers import get_service_notices
+        key = (data or {}).get('key') if isinstance(data, dict) else None
+        if key:
+            get_service_notices().clear(key)
+
     @socketio.on('disconnect')
     def handle_disconnect():
         logger.info('Client disconnected')
@@ -950,7 +965,8 @@ def _handle_core_content(content_type, data):
         include_hidden = bool(payload.get('include_hidden', False))
         events_types = [e.to_dict() for e in event_mgr.get_all_events()]
         game_events  = []
-        for period in game.get_periods_list():
+        # Po zakończeniu sesji nie ma meczu: panel (np. po wyjściu z okna edycji zdarzenia) prosi o listę, dostaje pustą
+        for period in (game.get_periods_list() if game else []):
             period_events = gem.get_events_for_game(session_manager.current_game_id(),
                                                     period_id=period.id,
                                                     include_hidden=include_hidden)

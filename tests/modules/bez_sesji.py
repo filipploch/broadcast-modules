@@ -6,7 +6,8 @@ import unittest
 # Zdarzenia pomijane celowo: powoduja skutki poza procesem (pakiet Wake-on-LAN, eksport plikow w watku w tle) albo sa zdarzeniami biblioteki.
 POMIJANE = {'connect', 'disconnect', 'wake_recorder_plugin', 'replay_export_run'}
 # Zdarzenia, ktore bez danych koncza sie bledem klienta (brak wymaganego pola), a nie brakiem sesji: podajemy minimalny ladunek.
-LADUNKI = {'trigger_sequence': {'sequence': 'halftime_start'}}
+LADUNKI = {'trigger_sequence': {'sequence': 'halftime_start'},
+           'request_ui_monitor_content': {'type': 'events'}}     # lista zdarzen po zakonczeniu sesji (regresja z proby E2d2)
 
 
 def make(APP):

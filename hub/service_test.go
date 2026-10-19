@@ -35,6 +35,10 @@ func TestServiceHelper(t *testing.T) {
 		}
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+		mux.HandleFunc("/exit", func(w http.ResponseWriter, r *http.Request) {
+			code, _ := strconv.Atoi(r.URL.Query().Get("code"))
+			go func() { time.Sleep(50 * time.Millisecond); os.Exit(code) }()
+		})
 		mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
 			if os.Getenv("HELPER_IGNORE_QUIT") == "1" {
 				return
@@ -54,6 +58,8 @@ func TestServiceHelper(t *testing.T) {
 			os.Exit(2)
 		}
 		child.Wait()
+	case "window-http":
+		runWindowAtrapa()
 	case "sleep":
 		time.Sleep(60 * time.Second)
 	case "crash":
@@ -76,6 +82,9 @@ func TestServiceHelper(t *testing.T) {
 		sm.mu.Lock()
 		pid := sm.services[cfg.ID].pid
 		sm.mu.Unlock()
+		if p := os.Getenv("MINI_STATE"); p != "" {
+			NewStateStore(p).Save(StateFile{Entries: sm.StateEntries()})
+		}
 		fmt.Println("MINI_READY", pid)
 		time.Sleep(60 * time.Second)
 	}
@@ -406,4 +415,9 @@ func fileSize(p string) int64 {
 		return info.Size()
 	}
 	return 0
+}
+
+func httpGetQuiet(url string) (*http.Response, error) {
+	c := http.Client{Timeout: 3 * time.Second}
+	return c.Get(url)
 }

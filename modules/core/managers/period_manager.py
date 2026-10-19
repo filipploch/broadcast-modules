@@ -196,6 +196,36 @@ class PeriodManager:
             if known:
                 timer_manager.remove_timer(name)
 
+    @staticmethod
+    def _snapshot_carried_penalties(period):
+        """Kary aktywne z innych części meczu wraz z czasem pozostałym do odbycia (liczonym z zamrożonego upływu zegara głównego
+        części, do której kara była przypięta). Musi być wołane PRZED usunięciem zegarów głównych poprzednich części z pluginu."""
+        from core.models.base_game_timer import get_game_timer_model
+        GameTimer = get_game_timer_model()
+        from core.managers import get_timer_manager
+        timer_manager = get_timer_manager()
+        penalties = GameTimer.query.filter(
+            GameTimer.game_id == period.game_id,
+            GameTimer.period_id != period.id,
+            GameTimer.timer_type == GameTimer.TYPE_PENALTY,
+            GameTimer.state.in_([
+                GameTimer.STATE_IDLE,
+                GameTimer.STATE_RUNNING,
+                GameTimer.STATE_PAUSED,
+            ]),
+        ).all()
+        out = []
+        for gt in penalties:
+            old_main_gt = timer_manager.get_active_main_timer(gt.period_id)
+            old_main_elapsed = old_main_gt.elapsed_time_ms if old_main_gt else 0
+            try:
+                remaining = gt.penalty_remaining_ms(old_main_elapsed)
+            except ValueError as e:
+                logger.error(f'start_period: pomijam karę id={gt.id}: {e}')
+                continue
+            out.append({'id': gt.id, 'plugin_timer_id': gt.plugin_timer_id, 'remaining_limit': remaining})
+        return out
+
     def start_period(self, period_id: int):
         """
         Start a period (set status to PENDING) and setup timers
@@ -218,6 +248,11 @@ class PeriodManager:
         self._notify_helper_relay_period(period, 'started')
 
         timer_manager = get_timer_manager()
+
+        # Kary przetrwałe z poprzedniej części: czas pozostały liczymy ZANIM usuniemy z pluginu zegar główny poprzedniej części.
+        # Usunięcie zegara wysyła ostatnie 'timer_updated' (stan 'stopped', upływ 0), które zerowało zamrożony upływ w bazie,
+        # więc kara przechodziła do następnej części w pełnym wymiarze (2:00 zamiast pozostałych sekund).
+        carried = self._snapshot_carried_penalties(period) if period.period_order > 1 else []
 
         # Jeden zegar główny naraz: usuń z pluginu zegary główne pozostałych okresów tego meczu
         # (dawniej robiła to trasa startu okresu na podstawie Settings.current_timers.main).
@@ -242,16 +277,7 @@ class PeriodManager:
             # zasilane przy tworzeniu kary (Settings.add_penalty_timer() nie
             # jest wywoływane nigdzie w kodzie), więc poleganie na nim tutaj
             # oznaczało, że kary nigdy nie były faktycznie przenoszone.
-            carried_over_penalties = GameTimer.query.filter(
-                GameTimer.game_id == period.game_id,
-                GameTimer.period_id != period.id,
-                GameTimer.timer_type == GameTimer.TYPE_PENALTY,
-                GameTimer.state.in_([
-                    GameTimer.STATE_IDLE,
-                    GameTimer.STATE_RUNNING,
-                    GameTimer.STATE_PAUSED,
-                ]),
-            ).all()
+            # (lista kar do przeniesienia i ich czas pozostały zostały wyliczone wyżej, przed usunięciem zegara poprzedniej części)
 
             # Ensure main timer exists (idempotent — reuses if plugin already has it)
             timer_manager.ensure_timer(
@@ -272,15 +298,11 @@ class PeriodManager:
             # (GameTimer.penalty_remaining_ms), na podstawie zamrożonego elapsed
             # głównego timera poprzedniej części, do którego kara była przypięta.
             game = _get_game().query.get(period.game_id)
-            for gt in carried_over_penalties:
-                old_main_gt = timer_manager.get_active_main_timer(gt.period_id)
-                old_main_elapsed = old_main_gt.elapsed_time_ms if old_main_gt else 0
-                try:
-                    remaining_limit = gt.penalty_remaining_ms(old_main_elapsed)
-                except ValueError as e:
-                    logger.error(f'start_period: pomijam karę id={gt.id}: {e}')
+            for item in carried:
+                gt = GameTimer.query.get(item['id'])
+                if gt is None:
                     continue
-
+                remaining_limit = item['remaining_limit']
                 if remaining_limit <= 0:
                     # Kara odbyta w poprzedniej części — nie przenosimy dalej
                     gt.state = GameTimer.STATE_LIMIT_REACHED

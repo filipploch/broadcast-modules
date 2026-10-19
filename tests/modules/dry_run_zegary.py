@@ -152,7 +152,7 @@ def build():
     (DRY / "hub" / "config" / "plugins.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     (DRY / "hub" / "config" / "overlays.json").write_text("[]", encoding="utf-8")
     # wlasna konfiguracja HUB-a (E2d1): HUB nie uruchamia modulu (robi to skrypt), WoL wylaczony
-    (DRY / "hub.json").write_text(json.dumps({"hub_port": 8080, "module": "", "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"}}, indent=2), encoding="utf-8")
+    (DRY / "hub.json").write_text(json.dumps({"hub_port": 8080, "module": "", "obs": {"enabled": False}, "state_file": str(DRY / "uslugi.json"), "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"}}, indent=2), encoding="utf-8")
 
 
 def main():
@@ -368,6 +368,12 @@ def log_rejections():
     return [l for l in log.splitlines() if "Odrzucono komunikat" in l]
 
 
+def log_guard_rejections():
+    """Polecenia z panelu odrzucone przez straz zdarzen (E2d1): zegar glowny innego meczu niz aktywny nie dociera do pluginu."""
+    log = (LOGS / "modul.log").read_text(encoding="utf-8", errors="replace") if (LOGS / "modul.log").exists() else ""
+    return [l for l in log.splitlines() if "Odrzucono zdarzenie" in l]
+
+
 def scenario_g(panel, db_path, gid, timer_id):
     say("\n== G. Zmiana meczu przy biegnacym zegarze: kontekst w poleceniach i odrzucanie spoznionych komunikatow (E2c)")
     panel.emit("timer_start", {"timer_id": timer_id})
@@ -389,6 +395,7 @@ def scenario_g(panel, db_path, gid, timer_id):
     ok1 = sess.get("game_id") == gid2 and st_plugin == "paused" and st_db == "paused"
     say(f"zegar starego meczu wstrzymany przed zmiana, a odpowiedz pluginu przyjeta (stan w bazie): {'OK' if ok1 else 'BLAD'}")
     rej1 = len(log_rejections())
+    guard1 = len(log_guard_rejections())
     say(f"odrzucenia w logu modulu w oknie zmiany meczu: {rej1 - rej0} (oczekiwano 0) -> {'OK' if rej1 == rej0 else 'BLAD'}")
 
     say("czekam 17 s na koniec okna dla odpowiedzi starego meczu...")
@@ -397,10 +404,14 @@ def scenario_g(panel, db_path, gid, timer_id):
     time.sleep(3)
     st_db2 = timer_db_state(db_path, timer_id)
     rejected = log_rejections()[rej1:]
-    sample = rejected[0][:220] if rejected else "brak"
-    say(f"spozniony zegar starego meczu: odrzuconych komunikatow={len(rejected)}, stan w bazie={st_db2} (oczekiwano paused)")
+    guard = log_guard_rejections()[guard1:]
+    sample = (guard[0] if guard else rejected[0] if rejected else "brak")[:220]
+    say(f"spozniony zegar starego meczu: odrzucone przez straz zdarzen={len(guard)}, odrzucone komunikaty z pluginu={len(rejected)}, "
+        f"stan w bazie={st_db2} (oczekiwano paused)")
     say(f"przykladowy wpis: {sample}")
-    ok2 = len(rejected) >= 1 and st_db2 == "paused" and "game_id" in sample
+    # Od E2d1 polecenie zegara starego meczu zatrzymuje juz straz zdarzen (zegar innego meczu niz aktywny); filtr kontekstu komunikatow
+    # z pluginow (E2c) pozostaje druga linia obrony i jest sprawdzany testami jednostkowymi (kontekst.py).
+    ok2 = (len(guard) >= 1 or (len(rejected) >= 1 and "game_id" in sample)) and st_db2 == "paused"
     panel.emit("timer_pause", {"timer_id": timer_id})
     say(f"WYNIK G: {'ZALICZONY' if ok1 and rej1 == rej0 and ok2 else 'NIEZALICZONY'} (zmiana meczu={ok1}, bez odrzucen w oknie={rej1 == rej0}, spozniony komunikat odrzucony={ok2})")
 

@@ -183,6 +183,25 @@ class HubClient:
         #     time.sleep(0.1)
         #     self.declare_required_plugins(required_plugins)
 
+    def send_session_status(self, status=None):
+        """Zgłasza HUB-owi status sesji transmisji (state: none/preparation/on_air). Bez połączenia nic nie robi:
+        status jest wysyłany ponownie po każdym połączeniu. Bez argumentu liczy status z bazy (wymaga kontekstu aplikacji)."""
+        if not self.connected or not self.module_id:
+            return False
+        if status is None:
+            from core.managers import session_manager
+            if self.app:
+                with self.app.app_context():
+                    status = session_manager.status_for_hub()
+            else:
+                status = session_manager.status_for_hub()
+        return self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'session_status',
+            'payload': status,
+        })
+
     def declare_required_plugins(self, plugins):
         self.required_plugins = plugins
         """Declare required plugins to Hub"""
@@ -435,6 +454,13 @@ class HubClient:
 
         elif msg_type == 'undelivered':
             self._on_undelivered(payload)
+
+        elif msg_type == 'service_status':
+            # Zdarzenie usługi uruchamianej przez HUB (OBS): pasek w panelu (tylko od HUB-a)
+            if msg_from == 'hub':
+                self._on_service_status(payload)
+            else:
+                self._log("warning", f"Ignoruję service_status od {msg_from}")
 
         elif msg_type == 'shutdown_module':
             # Prośba HUB-a (E2d1) o łagodne zamknięcie: tylko od HUB-a. Bez odpowiedzi poza zamknięciem procesu.
@@ -756,6 +782,12 @@ class HubClient:
                     }
                 })
 
+            # 4. Status sesji dla HUB-a (po każdym połączeniu: HUB mógł być uruchomiony od nowa)
+            try:
+                self.send_session_status()
+            except Exception as e:
+                self._log("warning", f"Nie udało się zgłosić statusu sesji HUB-owi: {e}")
+
         # ✅ Fallback: jeśli po 10s dane nadal nie dotarły, wyślij ponowne żądanie
         self._ensure_plugins_ready(delay=10.0)
 
@@ -806,6 +838,21 @@ class HubClient:
     # Pluginy, które operator może uruchomić ponownie z panelu (nakładkę odświeża OBS: etap E2d).
     RESTARTABLE_PLUGINS = ('timer-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'recorder-plugin')
 
+    def _on_service_status(self, payload):
+        service_id = payload.get('service_id') or '?'
+        kind = payload.get('kind') or ''
+        message = payload.get('message') or ''
+        self._log("info", f"Usługa {service_id}: {kind} {message}".strip())
+        try:
+            from core.managers import get_service_notices
+            if self.app:
+                with self.app.app_context():
+                    get_service_notices().on_service_event(service_id, kind, message)
+            else:
+                get_service_notices().on_service_event(service_id, kind, message)
+        except Exception as e:
+            self._log("error", f"Nie udało się pokazać komunikatu usługi {service_id}: {e}", exc_info=True)
+
     def _shutdown_module(self):
         """Zamyka moduł na prośbę HUB-a: zatrzymuje menedżery, zamyka logi i kończy proces (kod 0 = bez restartu przez HUB).
         Działa w osobnym wątku, żeby nie blokować wątku WebSocket."""
@@ -831,6 +878,8 @@ class HubClient:
 
     def request_plugin_restart(self, plugin_id):
         """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""
+        if plugin_id == 'stream-overlay':
+            return self._restart_overlay()
         if plugin_id not in self.RESTARTABLE_PLUGINS:
             self._log("warning", f"Restart pluginu {plugin_id} nie jest obsługiwany")
             return False
@@ -841,6 +890,33 @@ class HubClient:
             'type': 'restart_plugin',
             'payload': {'plugin_id': plugin_id}
         })
+
+    def _restart_overlay(self):
+        """Nakładka (stream-overlay) to źródło przeglądarki w OBS, nie proces HUB-a: "uruchom ponownie" odświeża to źródło
+        (obs-ws-plugin: PressInputPropertiesButton). Nakładka po odświeżeniu sama prosi o dane meczu (request_game_data).
+        Wynik wraca do panelu zdarzeniem plugin_restart_result, jak przy restarcie pluginów lokalnych."""
+        def run():
+            result = {'plugin_id': 'stream-overlay', 'ok': False}
+            try:
+                if not self.obs_running:
+                    result['error'] = 'OBS nie działa albo obs-ws-plugin nie jest połączony: nie ma czego odświeżyć'
+                else:
+                    from core.managers import get_obs_ws_manager
+                    with self.app.app_context():
+                        mgr = get_obs_ws_manager()
+                        reply = mgr.refresh_browser_source(mgr.OVERLAY_INPUT)
+                    if reply is None:
+                        result['error'] = f'OBS nie odpowiedział na odświeżenie źródła {mgr.OVERLAY_INPUT} w 2 s'
+                    else:
+                        result['ok'] = True
+                        self._log("info", f"Nakładka odświeżona w OBS (źródło {mgr.OVERLAY_INPUT})")
+            except Exception as e:
+                result['error'] = f'{type(e).__name__}: {e}'
+                self._log("error", f"Odświeżenie nakładki nie powiodło się: {e}", exc_info=True)
+            from core.extensions import socketio
+            socketio.emit('plugin_restart_result', result)
+        threading.Thread(target=run, daemon=True, name='restart-overlay').start()
+        return True
 
     def _should_flag_unreachable(self, plugin_id):
         """Czy brak pluginu ma dać pasek w panelu.

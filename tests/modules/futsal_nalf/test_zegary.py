@@ -281,7 +281,7 @@ class RzutyKarneIWyborMeczu(ZegaryBase):
     def _hub_calls(self, game_id):
         self.hub.reset_mock()
         self.client.get(f"/games/{game_id}/select-broadcast")
-        return [(c[0], c.args[:2]) for c in self.hub.method_calls if not c[0].startswith('context_filter')]   # filtr kontekstu to ksiegowosc modulu, nie polecenie na antene
+        return [(c[0], c.args[:2]) for c in self.hub.method_calls if not c[0].startswith('context_filter') and c[0] != 'send_session_status']   # filtr kontekstu i zgloszenie statusu sesji to ksiegowosc modulu, nie polecenie na antene
 
     def test_wybor_meczu_z_zakonczonym_konkursem_niczego_nie_wysyla_na_antene(self):
         from core.extensions import db
@@ -294,5 +294,130 @@ class RzutyKarneIWyborMeczu(ZegaryBase):
         self.assertIsNotNone(self.sm.current_shootout())           # 'pokazuje' dotyczy panelu (index, /ui, get_shootouts)
 
 
+
+class KaraPrzechodziDoNastepnejCzesciZPozostalymCzasem(ZegaryBase):
+    """Regresja z próby ręcznej E2d2: kara z 5 s do końca 1. części pojawiała się w 2. części w pełnym wymiarze (2:00), bo usunięcie zegara
+    głównego 1. części z pluginu (ostatnie 'timer_updated': 'stopped', upływ 0) zerowało w bazie zamrożony upływ, zanim start 2. części
+    policzył czas pozostały kary."""
+
+    def _setup_kara(self, main_elapsed=615000, offset=500000, limit=120000):
+        from core.extensions import db
+        from app.models import GameTimer
+        p1, p2 = self.periods(self.ids['g1'])
+        self.pm.start_period(p1.id)
+        self.tm.timers[p1.main_timer_name].update({'state': 'running', 'elapsed_time': main_elapsed})
+        db.session.add(GameTimer(game_id=p1.game_id, period_id=p1.id, timer_type='main', plugin_timer_id=p1.main_timer_name,
+                                 state='running', limit_ms=1200000))
+        db.session.add(GameTimer(game_id=p1.game_id, period_id=p1.id, timer_type='penalty', team='home', plugin_timer_id='penalty_home_1',
+                                 limit_ms=limit, elapsed_time_ms=0, state='paused', start_offset_ms=offset))
+        db.session.commit()
+        self.pm.finish_period(p1.id)
+        return p1, p2
+
+    def _echo_usuniecia(self, timer_id):
+        """Plugin po usunięciu zegara odsyła ostatnie 'timer_updated' ze stanem 'stopped' i zerowym upływem; w teście wraca od razu,
+        jeszcze w trakcie wysyłania polecenia (najgorsza kolejność)."""
+        def send(plugin_id, action, payload=None, *a, **k):
+            if action == 'remove_timer' and payload.get('timer_id') == timer_id:
+                self.tm.on_timer_updated({'type': 'timer_updated', 'from': 'timer-plugin', 'payload': {
+                    'timer_id': timer_id, 'elapsed_time': 0, 'state': 'stopped', 'limit': 1200000, 'initial_time': 0}})
+            return True
+        self.hub.send_to_plugin.side_effect = send
+
+    def _payload(self, action, timer_id):
+        for c in self.hub.send_to_plugin.call_args_list:
+            if c.args[1] == action and (c.args[2] or {}).get('timer_id') == timer_id:
+                return c.args[2]
+        return None
+
+    def test_kara_dostaje_pozostaly_czas_a_nie_pelny_wymiar(self):
+        p1, p2 = self._setup_kara()                     # kara 2:00 założona przy 500 s, część kończy się przy 615 s: zostało 5 s
+        self._echo_usuniecia(p1.main_timer_name)
+        self.pm.start_period(p2.id)
+        create = self._payload('create_timer', 'penalty_home_1')
+        self.assertIsNotNone(create, 'kara nie została przeniesiona do 2. części')
+        self.assertEqual(create['limit'], 5000)
+        self.assertEqual(create['initial_time'], 115000)
+        self.assertEqual(create['parent_id'], p2.main_timer_name)
+
+    def test_echo_usuniecia_zegara_nie_zeruje_zamrozonego_uplywu_w_bazie(self):
+        from app.models import GameTimer
+        p1, p2 = self._setup_kara()
+        self._echo_usuniecia(p1.main_timer_name)
+        self.pm.start_period(p2.id)
+        main = GameTimer.query.filter_by(plugin_timer_id=p1.main_timer_name).one()
+        self.assertEqual(main.elapsed_time_ms, 615000)
+        self.assertEqual(main.state, 'stopped')            # stan z echa jest zapisany, upływ zostaje zamrożony
+
+    def test_kara_odbyta_w_pierwszej_czesci_nie_przechodzi_dalej(self):
+        from app.models import GameTimer
+        p1, p2 = self._setup_kara(main_elapsed=700000)    # 200 s od założenia kary > 120 s
+        self._echo_usuniecia(p1.main_timer_name)
+        self.pm.start_period(p2.id)
+        self.assertIsNone(self._payload('create_timer', 'penalty_home_1'))
+        self.assertEqual(GameTimer.query.filter_by(plugin_timer_id='penalty_home_1').one().state, 'limit_reached')
+
+    def test_zegar_usuniety_i_utworzony_ponownie_synchronizuje_sie_normalnie(self):
+        from app.models import GameTimer
+        p1, p2 = self._setup_kara()
+        self.tm.remove_timer(p1.main_timer_name)
+        self.tm.create_timer(p1.main_timer_name, 'independent', limit=1200000)       # znacznik usunięcia zdjęty
+        self.tm.on_timer_updated({'type': 'timer_updated', 'payload': {
+            'timer_id': p1.main_timer_name, 'elapsed_time': 42000, 'state': 'running', 'limit': 1200000, 'initial_time': 0}})
+        self.assertEqual(GameTimer.query.filter_by(plugin_timer_id=p1.main_timer_name).one().elapsed_time_ms, 42000)
+
+    def test_nieusuniety_zegar_synchronizuje_upyw_jak_dotad(self):
+        from app.models import GameTimer
+        p1, _ = self._setup_kara()
+        self.tm.on_timer_updated({'type': 'timer_updated', 'payload': {
+            'timer_id': p1.main_timer_name, 'elapsed_time': 777000, 'state': 'paused', 'limit': 1200000, 'initial_time': 0}})
+        self.assertEqual(GameTimer.query.filter_by(plugin_timer_id=p1.main_timer_name).one().elapsed_time_ms, 777000)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class StanKarDlaNakladkiNiesieUplywAktualnegoZegara(ZegaryBase):
+    """Nakładka nie może liczyć kar z upływu zapamiętanego z poprzedniej części (np. 20:00): kara wydawałaby się odbyta i zostałaby ukryta."""
+
+    def test_penalty_state_zawiera_uplyw_zegara_glownego_aktualnej_czesci(self):
+        from core.extensions import db
+        from app.models import GameTimer
+        p1, p2 = self.periods(self.ids['g1'])
+        db.session.add(GameTimer(game_id=p2.game_id, period_id=p2.id, timer_type='main', plugin_timer_id=p2.main_timer_name,
+                                 state='paused', limit_ms=1200000, elapsed_time_ms=42000))
+        db.session.add(GameTimer(game_id=p2.game_id, period_id=p2.id, timer_type='penalty', team='home', plugin_timer_id='penalty_home_9',
+                                 limit_ms=120000, elapsed_time_ms=0, state='paused', start_offset_ms=0))
+        db.session.commit()
+        self.assertEqual(self.tm._current_main_elapsed(self.tm._get_penalties_dict(p2.game_id)), 42000)
+
+    def test_bez_wiersza_zegara_glownego_nowej_czesci_uplyw_to_zero(self):
+        from core.extensions import db
+        from app.models import GameTimer
+        p1, p2 = self.periods(self.ids['g1'])
+        db.session.add(GameTimer(game_id=p2.game_id, period_id=p2.id, timer_type='penalty', team='home', plugin_timer_id='penalty_home_9',
+                                 limit_ms=5000, elapsed_time_ms=0, state='paused', start_offset_ms=0))
+        db.session.commit()
+        self.assertEqual(self.tm._current_main_elapsed(self.tm._get_penalties_dict(p2.game_id)), 0)
+
+
+class NakladkaKaraZUplywemNowejCzesci(unittest.TestCase):
+    """Prawdziwy kod nakładki (Node): kara z 5 s liczona z upływu nowej części (0) jest widoczna, a ze starego upływu (20:00) kończy się na 0:00
+    i zostaje ukryta. Dlatego 'penalty_state' niesie upływ aktualnego zegara głównego."""
+
+    def _kara(self, elapsed):
+        import json, shutil, subprocess
+        from pathlib import Path
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('brak Node.js w PATH')
+        runner = Path(__file__).resolve().parents[1] / 'js' / 'overlay_kary.js'
+        out = subprocess.run([node, str(runner), 'futsal-nalf', str(elapsed), '5000', '0'], capture_output=True, text=True, check=True)
+        return json.loads(out.stdout)
+
+    def test_nowa_czesc_kara_widoczna(self):
+        self.assertEqual(self._kara(0), {'visible': True, 'text': '0:05'})
+
+    def test_stary_uplyw_konczy_kare(self):
+        self.assertEqual(self._kara(1200000)['text'], '0:00')

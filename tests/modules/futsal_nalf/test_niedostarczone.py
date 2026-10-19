@@ -139,9 +139,13 @@ class NiedostarczonePolecenia(unittest.TestCase):
         sent = self._sent()[-1]
         self.assertEqual((sent['to'], sent['type'], sent['payload']), ('hub', 'restart_plugin', {'plugin_id': 'timer-plugin'}))
         n = len(self._sent())
-        self.assertFalse(self.hub.request_plugin_restart('stream-overlay'))
+        # nakładka to źródło przeglądarki w OBS: "restart" odświeża je przez obs-ws-plugin (E2d2), nie przez HUB
+        from unittest.mock import patch
+        with patch.object(self.hub, '_restart_overlay', return_value=True) as overlay:
+            self.assertTrue(self.hub.request_plugin_restart('stream-overlay'))
+        overlay.assert_called_once()
         self.assertFalse(self.hub.request_plugin_restart('cokolwiek'))
-        self.assertEqual(len(self._sent()), n)
+        self.assertEqual(len(self._sent()), n)               # nic nie poszło do HUB-a
 
     def test_restart_dziala_mimo_ze_plugin_jest_uznany_za_rozlaczony(self):
         # polecenie restartu idzie do HUB-a, nie do pluginu, wiec nie podlega odrzucaniu dla rozlaczonych

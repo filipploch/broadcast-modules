@@ -123,6 +123,28 @@ def current_shootout():
 
 def _commit():
     db.session.commit()
+    _publish_status()
+
+
+def status_for_hub():
+    """Status sesji zgłaszany HUB-owi: 'none' (brak otwartej), 'preparation' albo 'on_air' + numer sesji i aktywny mecz."""
+    s = get_open_session()
+    if s is None:
+        return {'state': 'none', 'session_id': None, 'game_id': None}
+    e = get_active_entry(s)
+    return {'state': s.status, 'session_id': s.id, 'game_id': e.game_id if e else None}
+
+
+def _publish_status():
+    """Po każdej zmianie sesji zgłasza HUB-owi jej status (HUB pamięta ostatni znany i na jego podstawie decyduje o restarcie
+    i zamykaniu OBS). Nie tworzy klienta HUB-a, jeśli go nie ma; ponowne zgłoszenie idzie po każdym połączeniu. Błąd nie przerywa zmiany sesji."""
+    try:
+        import core.managers as cm
+        client = cm._hub_client
+        if client is not None:
+            client.send_session_status(status_for_hub())
+    except Exception:
+        logging.getLogger(__name__).warning('Nie udało się zgłosić statusu sesji HUB-owi', exc_info=True)
 
 
 def _before_leaving(entry):

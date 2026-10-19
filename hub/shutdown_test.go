@@ -26,6 +26,7 @@ func TestShutdownDoesNotRestartPluginKilledWhileServiceIsStopping(t *testing.T) 
 	sm.Add(slow)
 	sm.graceful = func(id string) bool { return true }
 
+	hub.handleMessage(mainModuleMsg(hub, map[string]interface{}{"state": "none"})) // sesja zamknięta: moduł jest zatrzymywany
 	if err := sm.Start("module"); err != nil {
 		t.Fatal(err)
 	}

@@ -1086,6 +1086,10 @@ ws.onmessage = (event) => {
 
         // Jednorazowy tick żeby wyrenderować kary natychmiast po reloadzie,
         // nawet jeśli główny timer jest aktualnie zapauzowany.
+        // Upływ z backendu (aktualny zegar główny) ma pierwszeństwo przed cache z poprzedniej części meczu.
+        if (typeof data.main_elapsed_ms === 'number') {
+            window._lastMainElapsed = data.main_elapsed_ms;
+        }
         const cachedElapsed = window._lastMainElapsed;
         if (cachedElapsed !== undefined) {
             window.PenaltyTimers.tickMain(cachedElapsed);

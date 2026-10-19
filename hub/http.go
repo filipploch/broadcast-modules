@@ -184,6 +184,7 @@ func serveStatus(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	if hub.Services != nil {
 		status["services"] = hub.Services.Snapshot()
 	}
+	status["session"] = sessionSnapshot(hub.SessionStatus())
 
 	// Add plugin manager status if available
 	if hub.PluginManager != nil {
@@ -245,6 +246,9 @@ func setupHTTPServer(hub *Hub) *http.Server {
 	// Custom file server with proper MIME types
 	fileServer := http.FileServer(http.Dir(overlaysDir))
 	mux.Handle("/overlays/", http.StripPrefix("/overlays/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Pliki nakładek (lokalne, małe) zawsze z weryfikacją u serwera: bez tego przeglądarka (także OBS) na podstawie daty
+		// modyfikacji zachowuje stary overlay.js i po poprawce nakładka działa kodem sprzed zmiany.
+		w.Header().Set("Cache-Control", "no-cache")
 		// Set proper MIME types based on file extension
 		ext := filepath.Ext(r.URL.Path)
 		switch ext {

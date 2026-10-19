@@ -237,6 +237,47 @@ socket.on('plugin_reachable', (data) => {
     _renderUnreachableBanner();
 });
 
+// ----------------------------------------------------------------------------
+// KOMUNIKATY USŁUG (OBS uruchamiany przez HUB): błąd, restart, limit prób, uruchomiony ponownie.
+// Lista przychodzi z modułu ('service_notices') po połączeniu i przy każdej zmianie; pasek zostaje, aż problem minie
+// albo operator go zamknie (×). Tymczasowo przy dolnej krawędzi; docelowe stałe miejsce na paski: U1 (E2f).
+// ----------------------------------------------------------------------------
+const _NOTICE_COLORS = {error: '#b00020', warning: '#b36b00', info: '#1f5f99'};
+
+function _renderServiceNotices(list) {
+    let box = document.getElementById('service-notices');
+    if (!Array.isArray(list) || !list.length) {
+        if (box) box.remove();
+        return;
+    }
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'service-notices';
+        box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9998;';
+        document.body.appendChild(box);
+    }
+    box.innerHTML = '';
+    list.forEach(n => {
+        const row = document.createElement('div');
+        row.dataset.key = n.key;
+        row.style.cssText = `background:${_NOTICE_COLORS[n.level] || _NOTICE_COLORS.info};color:#fff;`
+            + 'padding:6px 12px;font-size:14px;text-align:center;border-top:1px solid rgba(255,255,255,.35);';
+        const text = document.createElement('span');
+        text.textContent = n.text;
+        const close = document.createElement('button');
+        close.textContent = '×';
+        close.title = 'Zamknij komunikat';
+        close.style.cssText = 'margin-left:12px;background:transparent;border:1px solid #fff;color:#fff;'
+            + 'border-radius:3px;cursor:pointer;font-size:14px;line-height:14px;';
+        close.addEventListener('click', () => socket.emit('dismiss_service_notice', {key: n.key}));
+        row.appendChild(text);
+        row.appendChild(close);
+        box.appendChild(row);
+    });
+}
+
+socket.on('service_notices', _renderServiceNotices);
+
 socket.on('plugins_states', (data) => {
     _pluginStates = data;
     for (const iconId of Object.keys(_PLUGIN_ICON_MAP)) {
@@ -300,17 +341,13 @@ function _openPluginMenu(iconId) {
     title.style.marginBottom = '8px';
     menu.appendChild(title);
     const button = document.createElement('button');
-    if (pluginId === 'stream-overlay') {
-        button.textContent = 'Restart nakładki: wkrótce';
-        button.disabled = true;
-    } else {
-        button.textContent = 'Uruchom ponownie';
-        button.onclick = () => {
-            socket.emit('restart_plugin', { plugin_id: pluginId });
-            _showPluginToast(`Ponowne uruchamianie: ${pluginId}...`, false);
-            _closePluginMenu();
-        };
-    }
+    // Nakładka: "Uruchom ponownie" odświeża jej źródło przeglądarki w OBS (moduł wysyła polecenie przez obs-ws-plugin).
+    button.textContent = pluginId === 'stream-overlay' ? 'Odśwież nakładkę w OBS' : 'Uruchom ponownie';
+    button.onclick = () => {
+        socket.emit('restart_plugin', { plugin_id: pluginId });
+        _showPluginToast(pluginId === 'stream-overlay' ? 'Odświeżanie nakładki w OBS...' : `Ponowne uruchamianie: ${pluginId}...`, false);
+        _closePluginMenu();
+    };
     menu.appendChild(button);
     document.body.appendChild(menu);
 }
@@ -332,7 +369,7 @@ document.addEventListener('dblclick', () => {
 
 socket.on('plugin_restart_result', (data) => {
     if (data.ok) {
-        _showPluginToast(`Plugin ${data.plugin_id} uruchomiony ponownie`, false);
+        _showPluginToast(data.plugin_id === 'stream-overlay' ? 'Nakładka odświeżona w OBS' : `Plugin ${data.plugin_id} uruchomiony ponownie`, false);
     } else {
         _showPluginToast(`Restart pluginu ${data.plugin_id} nie powiódł się: ${data.error || 'nieznany błąd'}`, true);
     }
@@ -365,6 +402,7 @@ socket.on('connect', () => {
     socket.emit('get_obs_stream_status');
     socket.emit('get_camera_recording_status');
     socket.emit('get_source_visibility', { scene_name: 'AUDIO_SOURCES', source_name: 'MICROPHONES' });
+    socket.emit('get_service_notices');
 });
 
 socket.on('disconnect', () => {

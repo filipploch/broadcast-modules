@@ -10,8 +10,8 @@ Baza: kopia lokalnej bazy (prepare_dry_run.py). Modul to dry_run_module.py (bez 
       (klient socket.io) otwierane i zamykane nie zostawiaja tracebackow w wyjscie.log; zalegle polecenie zegara bez sesji
       jest odrzucone; konsola HUB-a pokazuje kazdy wiersz modulu raz.
   J2. (stala zasada prob) 3 minuty bez restartow: modul i pluginy lokalne maja restarts == 0, brak timeoutow heartbeatu.
-  J3. HUB zabity silowo: modul zyje dalej i odpowiada (przezywa awarie HUB-a); nowy HUB nie uruchamia drugiej kopii
-      (zajety port) i zapisuje to w logu (przejecie dziala od E2d2).
+  J3. HUB zabity silowo: modul zyje dalej i odpowiada (przezywa awarie HUB-a); nowy HUB PRZEJMUJE dzialajacy modul
+      (plik stanu: numer i czas utworzenia procesu) zamiast uruchamiac drugi, konczy plugin-sierote i dostaje status sesji.
   J4. Lagodne zamkniecie HUB-a (Ctrl+Break): modul dostaje shutdown_module i zamyka sie sam, port modulu wolny, plugin zatrzymany.
   J5. Sprzatanie: zadnego procesu uruchomionego przez probe nie zostaje (sprawdzane po numerach procesow, nigdy po nazwie obrazu).
 --krotka pomija 3 minuty z J2 (do szybkich sprawdzen; wynik J2 jest wtedy oznaczony jako POMINIETY).
@@ -92,6 +92,14 @@ def wyjscie_summary(path):
     return f"{len(text)} B, wierszy {len(text.splitlines())}, tracebackow {text.count('Traceback')}, wierszy w formacie logu {len(FLASK_LOG_LINE.findall(text))}"
 
 
+def procs_under_dry():
+    """Numery procesow, ktorych plik wykonywalny lezy w folderze proby (wp-local/dryrun-hub): sprawdzanie po SCIEZCE, nie po nazwie obrazu."""
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith('%s', 'OrdinalIgnoreCase') } "
+          "| ForEach-Object { $_.ProcessId }" % str(DRY).replace("'", "''"))
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True).stdout
+    return [int(x) for x in out.split() if x.isdigit()]
+
+
 def build():
     DRY.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(exist_ok=True)
@@ -117,6 +125,8 @@ def build():
         "python_path": sys.executable, "module_dir": str(REPO / "modules" / MODULE),
         "module_ready_timeout_s": 90, "module_stop_grace_s": 10,
         "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"},   # w probach nigdy nie wysylamy WoL
+        "state_file": str(DRY / "uslugi.json"),        # plik stanu proby (nie run/ z repozytorium)
+        "obs": {"enabled": False, "path": "", "ws_port": 0, "process_name": ""},      # OBS w probach: wylaczony
     }
     (DRY / "hub.json").write_text(json.dumps(hub_cfg, indent=2), encoding="utf-8")
 
@@ -205,6 +215,8 @@ def main():
         check("J1h zalegle polecenie zegara bez sesji odrzucone (wpis w logu, zegar nie ruszyl)",
               "Odrzucono zdarzenie timer_start: brak otwartej sesji" in text and "Started timer: OPPxBRO" not in text)
         rd1 = rd
+        sess = status().get("session", {})
+        check("J1k HUB zna status sesji zgloszony przez modul (brak sesji po starcie)", sess.get("known") is True and sess.get("state") == "none", f"({sess})")
         check("J1i wyjscie.log po otwieraniu i zamykaniu kart: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
               f"({wyjscie_summary(out_file)})")
         console = (DRY / "hub-konsola-1.txt").read_text(encoding="utf-8", errors="replace")
@@ -246,16 +258,30 @@ def main():
         except Exception:
             responds = False
         check("J3a modul zyje i odpowiada po zabiciu HUB-a", alive_ok and responds, f"(pid {module_pid})")
-        if plugin_pid:                                 # sierota: kończy ją dopiero nowy HUB (E2d2); tu tylko sprzątanie
-            kill_pid_tree(plugin_pid)
+        orphan_alive_before = bool(plugin_pid) and pid_alive(plugin_pid)
         hub = start_hub("2")
-        err_logged = wait_for(lambda: status()["services"]["module"]["status"] == "error", 30)
+        adopted = wait_for(lambda: status()["services"]["module"].get("adopted") is True, 30)
         st = status()
-        msg = st["services"]["module"].get("last_error", "")
-        check("J3b nowy HUB nie uruchamia drugiej kopii modulu (zajety port) i zglasza blad",
-              err_logged and "zajęty" in msg and pid_alive(module_pid), f"({msg})")
+        mod2 = st["services"]["module"]
+        check("J3b nowy HUB przejmuje dzialajacy modul (ten sam proces, bez drugiej kopii)",
+              adopted and mod2["pid"] == module_pid and pid_alive(module_pid), f"({mod2})")
+        check("J3b2 przejety modul jest gotowy", wait_for(lambda: status()["services"]["module"]["status"] == "online", 30))
+        hub2_log = (run_dir() / "hub.log").read_text(encoding="utf-8", errors="replace")
+        check("J3b3 w hub.log: przejecie i folder logow modulu", "Przejęto usługę module" in hub2_log and "Logi usługi module prowadzone w folderze" in hub2_log
+              and str(rd).split("\\")[-1] in hub2_log)
+        check("J3f plugin-sierota z poprzedniego HUB-a zakonczony przez nowy HUB (po numerze i czasie utworzenia)",
+              orphan_alive_before and wait_for(lambda: not pid_alive(plugin_pid), 20), f"(PID {plugin_pid})")
+        # drugi HUB uruchamia timer-plugin na deklaracje modulu; po zabiciu HUB-a plugin zostaje sierota (kończy ją dopiero E2d2: plik stanu)
+        wait_for(lambda: status()["plugin_manager"]["local_plugins"].get("timer-plugin", {}).get("pid", 0) > 0, 30)
+        plugin2_pid = status()["plugin_manager"]["local_plugins"].get("timer-plugin", {}).get("pid", 0)
+        if plugin2_pid:
+            spawned.append(plugin2_pid)
+        sess2 = wait_for(lambda: status()["session"]["known"] is True and status()["session"]["from_file"] is False, 60)
+        check("J3e nowy HUB dostaje status sesji od modulu po ponownym polaczeniu (bez restartu modulu)", sess2, f"({status().get('session')})")
         subprocess.run(["taskkill", "/F", "/PID", str(hub.pid)], capture_output=True)
         hub.wait()
+        if plugin2_pid:
+            kill_pid_tree(plugin2_pid)
         kill_pid_tree(module_pid)
         check("J3c po sprzataniu port modulu wolny", wait_for(lambda: not port_busy(MOD_PORT), 15))
         check("J3d wyjscie.log modulu z J1 po zabiciu HUB-a: bez tracebackow i wierszy w formacie logu", wyjscie_ok(out_file),
@@ -299,6 +325,10 @@ def main():
                 kill_pid_tree(pid)
         time.sleep(1)
         left = [p for p in set(spawned) if p and pid_alive(p)]
+        stray = procs_under_dry()                      # procesy z folderu proby, ktorych nie sledzilismy (np. sieroty po zabitym HUB-ie)
+        for pid in stray:
+            kill_pid_tree(pid)
+        left += stray
         results["J5 nic nie zostalo"] = not left and not port_busy(HUB_PORT) and not port_busy(MOD_PORT)
         say(f"J5 nic nie zostalo: {'ZALICZONY' if results['J5 nic nie zostalo'] else 'NIEZALICZONY'} "
             f"(zywe: {left}, port huba zajety: {port_busy(HUB_PORT)}, port modulu zajety: {port_busy(MOD_PORT)})")
