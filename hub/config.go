@@ -15,7 +15,8 @@ import (
 // Brak pliku lokalnego: HUB startuje z wartościami z przykładu i zapisuje to w logu. Plik uszkodzony albo wskazany przez
 // --config, a nieistniejący: HUB kończy start błędem (nie wraca po cichu do wartości domyślnych).
 
-// ModuleEntry opisuje, jak uruchomić jeden moduł główny.
+// ModuleEntry: dawny wpis listy "modules" w hub.json. Od E2d3c1 lista jest pomijana (źródło: pliki module.json, module_catalog.go);
+// typ zostaje tylko po to, żeby stary hub.json (np. w folderze transmisyjnym) wczytał się bez błędu.
 type ModuleEntry struct {
 	Script string   `json:"script"`         // plik startowy Pythona (względem katalogu głównego repozytorium)
 	Args   []string `json:"args,omitempty"` // dodatkowe argumenty po skrypcie
@@ -43,8 +44,10 @@ type WolConfig struct {
 // HubConfig to zawartość hub.json.
 type HubConfig struct {
 	HubPort             int                    `json:"hub_port"`
-	Module              string                 `json:"module"` // "" = HUB nie uruchamia modułu
-	Modules             map[string]ModuleEntry `json:"modules"`
+	Module              string                 `json:"module"`            // "" albo "none" = HUB nie uruchamia modułu (manager zleca go kanałem sterującym)
+	Modules             map[string]ModuleEntry `json:"modules,omitempty"` // pomijane (E2d3c1): moduły opisują pliki module.json
+	ModulesDir          string                 `json:"modules_dir"`       // folder z podfolderami modułów (każdy z module.json), względem katalogu głównego
+	ControlPort         int                    `json:"control_port"`      // kanał sterujący managera: HTTP tylko na 127.0.0.1 (control.go)
 	PythonPath          string                 `json:"python_path"`
 	ModuleDir           string                 `json:"module_dir"`
 	ModuleReadyTimeoutS int                    `json:"module_ready_timeout_s"`
@@ -61,12 +64,10 @@ type HubConfig struct {
 // defaultHubConfig: wartości wbudowane; test pilnuje, żeby były identyczne z hub.example.json.
 func defaultHubConfig() HubConfig {
 	return HubConfig{
-		HubPort: 8080,
-		Module:  "nalf",
-		Modules: map[string]ModuleEntry{
-			"nalf":      {Script: "modules/nalf.py", Port: 8081, LogName: "futsal_nalf"},
-			"garbarnia": {Script: "modules/garbarnia.py", Port: 8081, LogName: "garbarnia"},
-		},
+		HubPort:             8080,
+		Module:              "nalf",
+		ModulesDir:          "modules",
+		ControlPort:         8079,
 		PythonPath:          "modules/.venv/Scripts/python.exe",
 		ModuleDir:           "modules",
 		ModuleReadyTimeoutS: 60,
@@ -108,7 +109,8 @@ var hubConfigDir = defaultConfigDir
 // LoadedHubConfig to wczytana konfiguracja wraz z informacją, skąd pochodzi (do pierwszych wierszy logu).
 type LoadedHubConfig struct {
 	HubConfig
-	Root         string   // katalog, względem którego liczone są ścieżki względne
+	Root         string         // katalog, względem którego liczone są ścieżki względne
+	Catalog      *ModuleCatalog // moduły z plików module.json
 	ModuleSource string   // "argument --module", "hub.json", "hub.example.json (brak hub.json)", "wartości wbudowane (brak hub.json i hub.example.json)"
 	Notes        []string // komunikaty do zapisania w logu po jego założeniu
 }
@@ -161,26 +163,37 @@ func loadHubConfig(configPath, moduleArg, root string) (*LoadedHubConfig, error)
 	} else {
 		out.ModuleSource = source
 	}
-	if cfg.Module != "" {
-		if _, ok := cfg.Modules[cfg.Module]; !ok {
-			return nil, fmt.Errorf("nieznany moduł %q (źródło: %s); dozwolone: %s",
-				cfg.Module, out.ModuleSource, strings.Join(moduleNames(cfg.Modules), ", "))
+	if cfg.Module == "none" {
+		cfg.Module = ""
+	}
+	if len(cfg.Modules) > 0 {
+		names := make([]string, 0, len(cfg.Modules))
+		for n := range cfg.Modules {
+			names = append(names, n)
 		}
+		sort.Strings(names)
+		out.Notes = append(out.Notes, fmt.Sprintf("ℹ️  Lista \"modules\" w konfiguracji HUB-a (%s) jest pomijana: moduły opisują pliki module.json w %s",
+			strings.Join(names, ", "), cfg.ModulesDir))
+		cfg.Modules = nil
 	}
 	if cfg.HubPort <= 0 {
 		return nil, fmt.Errorf("hub_port musi być dodatni")
 	}
-	out.HubConfig = cfg
-	return out, nil
-}
-
-func moduleNames(m map[string]ModuleEntry) []string {
-	names := make([]string, 0, len(m))
-	for n := range m {
-		names = append(names, n)
+	if cfg.ControlPort <= 0 || cfg.ControlPort == cfg.HubPort {
+		return nil, fmt.Errorf("control_port musi być dodatni i różny od hub_port")
 	}
-	sort.Strings(names)
-	return names
+	out.HubConfig = cfg
+	out.Catalog = scanModuleCatalog(out.abs(cfg.ModulesDir))
+	for _, w := range out.Catalog.Warnings {
+		out.Notes = append(out.Notes, "⚠️  Moduły: "+w)
+	}
+	if cfg.Module != "" {
+		if _, ok := out.Catalog.Get(cfg.Module); !ok {
+			return nil, fmt.Errorf("nieznany moduł %q (źródło: %s); dozwolone (pliki module.json w %s): %s",
+				cfg.Module, out.ModuleSource, out.Catalog.Dir, strings.Join(out.Catalog.IDs(), ", "))
+		}
+	}
+	return out, nil
 }
 
 // abs zamienia ścieżkę względną na bezwzględną względem katalogu głównego repozytorium.
@@ -239,26 +252,32 @@ func (c *LoadedHubConfig) StatePath() string {
 // ModuleLabel to nazwa modułu do logu: klucz z konfiguracji i, gdy inna, nazwa używana w plikach logu
 // (np. "nalf (futsal_nalf)"), żeby było widać, który moduł naprawdę startuje.
 func (c *LoadedHubConfig) ModuleLabel() string {
-	e := c.Modules[c.Module]
-	if e.LogName != "" && e.LogName != c.Module {
-		return fmt.Sprintf("%s (%s)", c.Module, e.LogName)
+	m, _ := c.Catalog.Get(c.Module)
+	if ln := m.EffectiveLogName(); m.ID != "" && ln != c.Module {
+		return fmt.Sprintf("%s (%s)", c.Module, ln)
 	}
 	return c.Module
 }
 
-// moduleService składa usługę modułu głównego z wybranego wpisu "modules". Zwraca false, gdy moduł nie jest wybrany.
+// moduleService składa usługę modułu głównego wybranego w konfiguracji. Zwraca false, gdy moduł nie jest wybrany.
 func (c *LoadedHubConfig) moduleService() (ServiceConfig, bool) {
 	if c.Module == "" {
 		return ServiceConfig{}, false
 	}
-	e := c.Modules[c.Module]
-	logName := e.LogName
-	if logName == "" {
-		logName = c.Module
+	m, ok := c.Catalog.Get(c.Module)
+	if !ok {
+		return ServiceConfig{}, false
 	}
+	return c.moduleServiceFor(m), true
+}
+
+// moduleServiceFor składa usługę "module" dla modułu z katalogu (start z konfiguracji, z kanału sterującego i przy przejęciu po awarii).
+func (c *LoadedHubConfig) moduleServiceFor(e ModuleManifest) ServiceConfig {
+	logName := e.EffectiveLogName()
 	return ServiceConfig{
 		ID:             "module",
-		Name:           "Moduł " + c.Module,
+		ModuleID:       e.ID,
+		Name:           "Moduł " + e.ID,
 		Type:           "service",
 		ExecutablePath: c.abs(c.PythonPath),
 		WorkingDir:     c.abs(c.ModuleDir),
@@ -279,7 +298,7 @@ func (c *LoadedHubConfig) moduleService() (ServiceConfig, bool) {
 		OutputFile:     "modul-" + logName + ".wyjscie.log",
 		FollowFiles:    []string{"modul-" + logName + ".log", "modul-" + logName + ".wyjscie.log"},
 		FollowLabel:    "moduł",
-	}, true
+	}
 }
 
 // jsonUnmarshalStrict parsuje JSON, odrzucając nieznane pola (literówka w konfiguracji nie może przejść niezauważona).

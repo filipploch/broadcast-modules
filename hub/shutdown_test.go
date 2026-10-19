@@ -111,7 +111,7 @@ func TestOutputFileIsRotatedWhenLargeAtStart(t *testing.T) {
 }
 
 func TestModuleLabelShowsLogName(t *testing.T) {
-	c := &LoadedHubConfig{HubConfig: defaultHubConfig()}
+	c := &LoadedHubConfig{HubConfig: defaultHubConfig(), Catalog: scanModuleCatalog(filepath.Join("..", "modules"))}
 	c.Module = "nalf"
 	if got := c.ModuleLabel(); got != "nalf (futsal_nalf)" {
 		t.Fatalf("etykieta: %q", got)

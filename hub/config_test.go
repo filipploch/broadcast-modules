@@ -31,6 +31,21 @@ func TestDefaultsMatchExampleFile(t *testing.T) {
 	}
 }
 
+// writeModules zakłada w <root>/modules pliki module.json obu modułów (jak w repozytorium).
+func writeModules(t *testing.T, root string) {
+	t.Helper()
+	for _, m := range []struct{ folder, body string }{
+		{"futsal_nalf", `{"format":1,"id":"nalf","button":"FUTSAL NALF","script":"modules/nalf.py","port":8081,"log_name":"futsal_nalf","order":10}`},
+		{"garbarnia", `{"format":1,"id":"garbarnia","button":"GARBARNIA","script":"modules/garbarnia.py","port":8081,"log_name":"garbarnia","order":20}`},
+	} {
+		dir := filepath.Join(root, "modules", m.folder)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(dir, "module.json"), m.body)
+	}
+}
+
 func withConfigDir(t *testing.T, dir string) {
 	old := hubConfigDir
 	hubConfigDir = func() string { return dir }
@@ -40,6 +55,7 @@ func withConfigDir(t *testing.T, dir string) {
 func TestConfigFromLocalFileAndModuleSource(t *testing.T) {
 	dir := t.TempDir()
 	withConfigDir(t, dir)
+	writeModules(t, dir)
 	writeFile(t, filepath.Join(dir, "hub.json"), `{"module":"garbarnia","hub_port":18080}`)
 	c, err := loadHubConfig("", "", dir)
 	if err != nil {
@@ -62,6 +78,7 @@ func TestConfigFromLocalFileAndModuleSource(t *testing.T) {
 func TestConfigFallsBackToExampleThenBuiltin(t *testing.T) {
 	dir := t.TempDir()
 	withConfigDir(t, dir)
+	writeModules(t, dir)
 	writeFile(t, filepath.Join(dir, "hub.example.json"), `{"module":"garbarnia"}`)
 	c, err := loadHubConfig("", "", dir)
 	if err != nil || c.Module != "garbarnia" || !strings.Contains(c.ModuleSource, "hub.example.json") || len(c.Notes) == 0 {
@@ -77,6 +94,7 @@ func TestConfigFallsBackToExampleThenBuiltin(t *testing.T) {
 func TestConfigErrors(t *testing.T) {
 	dir := t.TempDir()
 	withConfigDir(t, dir)
+	writeModules(t, dir)
 	writeFile(t, filepath.Join(dir, "hub.json"), `{"module": `)
 	if _, err := loadHubConfig("", "", dir); err == nil || !strings.Contains(err.Error(), "uszkodzony") {
 		t.Fatalf("uszkodzony plik: %v", err)
@@ -86,11 +104,56 @@ func TestConfigErrors(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(dir, "hub.json"), `{"module":"hokej"}`)
 	_, err := loadHubConfig("", "", dir)
-	if err == nil || !strings.Contains(err.Error(), "garbarnia, nalf") {
+	if err == nil || !strings.Contains(err.Error(), "nalf, garbarnia") {
 		t.Fatalf("nieznany moduł powinien wypisać dozwolone: %v", err)
 	}
 	if _, err := loadHubConfig("", "futbol", dir); err == nil {
 		t.Fatal("nieznany moduł z argumentu")
+	}
+	writeFile(t, filepath.Join(dir, "hub.json"), `{"module":"","control_port":8080}`)
+	if _, err := loadHubConfig("", "", dir); err == nil || !strings.Contains(err.Error(), "control_port") {
+		t.Fatalf("control_port równy hub_port: %v", err)
+	}
+}
+
+// --module none: HUB bez modułu, nawet gdy konfiguracja wskazuje moduł (manager zleca moduł kanałem sterującym).
+func TestModuleNoneArgument(t *testing.T) {
+	dir := t.TempDir()
+	withConfigDir(t, dir)
+	writeModules(t, dir)
+	writeFile(t, filepath.Join(dir, "hub.json"), `{"module":"nalf"}`)
+	c, err := loadHubConfig("", "none", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Module != "" || c.ModuleSource != "argument --module" {
+		t.Fatalf("--module none: moduł %q, źródło %q", c.Module, c.ModuleSource)
+	}
+	if _, ok := c.moduleService(); ok {
+		t.Fatal("--module none nie powinien tworzyć usługi modułu")
+	}
+	if len(c.Catalog.Modules) != 2 {
+		t.Fatalf("katalog modułów powinien mieć 2 wpisy: %+v", c.Catalog)
+	}
+}
+
+// Stary hub.json z listą "modules" (np. w folderze transmisyjnym) wczytuje się, a lista jest pomijana z wpisem w logu.
+func TestLegacyModulesListIsIgnoredWithNote(t *testing.T) {
+	dir := t.TempDir()
+	withConfigDir(t, dir)
+	writeModules(t, dir)
+	writeFile(t, filepath.Join(dir, "hub.json"), `{"module":"nalf","modules":{"nalf":{"script":"inny.py","port":9999,"log_name":"x"}}}`)
+	c, err := loadHubConfig("", "", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := strings.Join(c.Notes, " | ")
+	if !strings.Contains(notes, "pomijana") {
+		t.Fatalf("brak wpisu o pominiętej liście modules: %s", notes)
+	}
+	svc, _ := c.moduleService()
+	if !strings.HasSuffix(svc.Args[0], "nalf.py") || svc.ReadyURL != "http://127.0.0.1:8081/" {
+		t.Fatalf("moduł powinien pochodzić z module.json, nie z listy w hub.json: %+v", svc)
 	}
 }
 
@@ -109,14 +172,10 @@ func TestEmptyModuleMeansNoModuleService(t *testing.T) {
 func TestModuleServiceDefinition(t *testing.T) {
 	root := t.TempDir()
 	c := &LoadedHubConfig{HubConfig: defaultHubConfig(), Root: root}
-	c.Module = "nalf"
 	c.HubPort = 18080
-	e := c.Modules["nalf"]
-	e.Port = 18081
-	c.Modules["nalf"] = e
-	svc, ok := c.moduleService()
-	if !ok {
-		t.Fatal("brak usługi")
+	svc := c.moduleServiceFor(ModuleManifest{Format: 1, ID: "nalf", Button: "FUTSAL NALF", Script: "modules/nalf.py", Port: 18081, LogName: "futsal_nalf"})
+	if svc.ID != "module" || svc.ModuleID != "nalf" {
+		t.Errorf("identyfikatory usługi: %s %s", svc.ID, svc.ModuleID)
 	}
 	env := strings.Join(svc.Env, "|")
 	for _, want := range []string{"BM_HUB_MANAGED=1", "BM_HUB_URL=ws://localhost:18080/ws", "BM_MODULE_PORT=18081", "PYTHONUNBUFFERED=1"} {

@@ -173,9 +173,14 @@ def build():
     }
     (DRY / "hub" / "config" / "plugins.json").write_text(json.dumps(plugins, indent=2), encoding="utf-8")
     (DRY / "hub" / "config" / "overlays.json").write_text("{}", encoding="utf-8")
+    # Modul proby opisuje plik module.json (E2d3c1) we wlasnym folderze modulow proby
+    (DRY / "modules" / "proba").mkdir(parents=True, exist_ok=True)
+    (DRY / "modules" / "proba" / "module.json").write_text(json.dumps({
+        "format": 1, "id": "proba", "button": "PROBA", "script": str(REPO / "tests" / "modules" / "dry_run_module.py"),
+        "args": [MODULE], "port": MOD_PORT, "log_name": MODULE}, indent=2), encoding="utf-8")
     cfg = {
-        "hub_port": HUB_PORT, "module": "proba",
-        "modules": {"proba": {"script": str(REPO / "tests" / "modules" / "dry_run_module.py"), "args": [MODULE], "port": MOD_PORT, "log_name": MODULE}},
+        "hub_port": HUB_PORT, "module": "proba", "modules_dir": str(DRY / "modules"),
+        "control_port": 18098,                          # kanal sterujacy proby: poza 8079 i 18080-18091
         "python_path": sys.executable, "module_dir": str(REPO / "modules" / MODULE), "module_ready_timeout_s": 90, "module_stop_grace_s": 10,
         "obs": {"enabled": True, "path": str(OBS_BIN / "obs-atrapa.exe"), "ws_port": OBS_PORT, "process_name": "obs-atrapa.exe", "ready_timeout_s": 20},
         "wol": {"enabled": False, "mac": "", "broadcast_addr": "255.255.255.255:9"},

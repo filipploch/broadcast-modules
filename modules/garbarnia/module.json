@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "garbarnia",
+  "button": "GARBARNIA",
+  "script": "modules/garbarnia.py",
+  "port": 8081,
+  "log_name": "garbarnia",
+  "order": 20
+}

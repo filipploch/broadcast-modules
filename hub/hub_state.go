@@ -70,6 +70,44 @@ func (h *Hub) RestoreFromState() (dead []string) {
 	return dead
 }
 
+// prepareModuleAdoption: jeśli plik stanu zapisał działający moduł (z id z module.json), usługa "module" dostaje jego definicję,
+// żeby RestoreFromState mógł go przejąć niezależnie od --module (manager uruchamia HUB z --module none). Wpis bez id modułu
+// (zapis sprzed E2d3c1) przejmuje tylko moduł z konfiguracji, jak dotąd.
+func (h *Hub) prepareModuleAdoption(cfg *LoadedHubConfig) {
+	if h.State == nil || h.Services == nil {
+		return
+	}
+	f, err := h.State.Load()
+	if err != nil || f == nil {
+		return
+	}
+	for _, e := range f.Entries {
+		if e.Kind != "service" || e.ID != "module" {
+			continue
+		}
+		if e.Module == "" {
+			if !h.Services.Has("module") {
+				log.Printf("ℹ️  Plik stanu: moduł (PID %d) zapisany bez nazwy (sprzed E2d3c1), a HUB nie ma wybranego modułu: nie przejmuję go", e.PID)
+			}
+			return
+		}
+		if _, _, cur, _, _, _ := h.Services.Info("module"); cur == e.Module {
+			return
+		}
+		m, ok := cfg.Catalog.Get(e.Module)
+		if !ok {
+			log.Printf("⚠️  Plik stanu: moduł %s (PID %d) nie ma pliku module.json: nie przejmuję go (jego port pozostaje zajęty)", e.Module, e.PID)
+			return
+		}
+		if err := h.Services.Replace(cfg.moduleServiceFor(m)); err != nil {
+			log.Printf("⚠️  Plik stanu: nie można przygotować przejęcia modułu %s: %v", e.Module, err)
+			return
+		}
+		log.Printf("📂 Plik stanu: moduł %s z poprzedniego uruchomienia zostanie przejęty", e.Module)
+		return
+	}
+}
+
 // pluginGate mówi usłudze czekającej na plugin (OBS na obs-ws-plugin): czy moduł już zadeklarował pluginy, czy ten jest wymagany
 // i czy jest połączony.
 func (h *Hub) pluginGate(id string) (declared, expected, connected bool) {

@@ -33,6 +33,8 @@ type ServiceConfig struct {
 	Name string `json:"name"`
 	Type string `json:"type"` // "service"
 
+	ModuleID string `json:"module_id,omitempty"` // usługa "module": id modułu z module.json (zapisywane w pliku stanu, do przejęcia po awarii)
+
 	ExecutablePath string   `json:"executable_path"`
 	WorkingDir     string   `json:"working_dir"`
 	Args           []string `json:"args"`
@@ -166,6 +168,59 @@ func (sm *ServiceManager) Add(cfg ServiceConfig) error {
 	sm.services[cfg.ID] = &serviceProc{cfg: cfg, status: "stopped"}
 	sm.order = append(sm.order, cfg.ID)
 	return nil
+}
+
+// Replace podmienia definicję usługi, której proces nie działa (kanał sterujący: zmiana modułu przy działającym HUB-ie).
+// Nieznana usługa jest dodawana. Działającej nie rusza (błąd): wyłączność modułu pilnuje kanał, a to jest druga linia obrony.
+func (sm *ServiceManager) Replace(cfg ServiceConfig) error {
+	sm.mu.Lock()
+	sp := sm.services[cfg.ID]
+	if sp == nil {
+		sm.mu.Unlock()
+		return sm.Add(cfg)
+	}
+	if sp.exited != nil && !isClosed(sp.exited) {
+		sm.mu.Unlock()
+		return fmt.Errorf("usługa %s działa (PID %d); najpierw ją zatrzymaj", cfg.ID, sp.pid)
+	}
+	if cfg.OutputFile == "" {
+		cfg.OutputFile = cfg.ID + ".wyjscie.log"
+	}
+	if cfg.ReadyTimeoutS <= 0 {
+		cfg.ReadyTimeoutS = 60
+	}
+	if cfg.StopGraceS <= 0 {
+		cfg.StopGraceS = 10
+	}
+	if cfg.WaitForPluginS <= 0 {
+		cfg.WaitForPluginS = 15
+	}
+	if cfg.Name == "" {
+		cfg.Name = cfg.ID
+	}
+	sp.cfg = cfg
+	sp.restartCount = 0
+	sp.lastErr = ""
+	if sp.status == "error" {
+		sp.status = "stopped"
+	}
+	sm.mu.Unlock()
+	return nil
+}
+
+// Info zwraca stan usługi do kanału sterującego: status, PID (gdy działa), id modułu, ostatni błąd, czy trwa zatrzymywanie.
+func (sm *ServiceManager) Info(id string) (status string, pid int, moduleID, lastErr string, stopping, alive bool) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sp := sm.services[id]
+	if sp == nil {
+		return "", 0, "", "", false, false
+	}
+	alive = sp.exited != nil && !isClosed(sp.exited) && sp.status != "external"
+	if alive {
+		pid = sp.pid
+	}
+	return sp.status, pid, sp.cfg.ModuleID, sp.lastErr, sp.stopping, alive
 }
 
 // LoadFromPluginsJSON dodaje usługi ("type": "service") z pliku konfiguracji pluginów. Brak pliku to nie błąd.
@@ -836,7 +891,7 @@ func (sm *ServiceManager) StateEntries() []StateEntry {
 			continue
 		}
 		out = append(out, StateEntry{ID: id, Kind: "service", PID: sp.pid, CreatedFT: sp.createdFT,
-			Address: readyAddr(sp.cfg), StartedByHub: true, RunDir: sp.runDir})
+			Address: readyAddr(sp.cfg), StartedByHub: true, RunDir: sp.runDir, Module: sp.cfg.ModuleID})
 	}
 	return out
 }

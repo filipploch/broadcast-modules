@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "nalf",
+  "button": "FUTSAL NALF",
+  "script": "modules/nalf.py",
+  "port": 8081,
+  "log_name": "futsal_nalf",
+  "order": 10
+}

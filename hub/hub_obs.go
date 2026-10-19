@@ -25,6 +25,7 @@ type hubRequests struct {
 
 type pendingRequest struct {
 	requestType string
+	byContext   bool // pytanie z identyfikatorem w kontekście (RequestByContext, control.go); nie pasuje po samym requestType
 	ch          chan *Message
 }
 
@@ -69,6 +70,9 @@ func (h *Hub) RequestPlugin(pluginID, msgType, requestType string, requestData m
 // handleHubAddressed przyjmuje odpowiedź pluginu adresowaną do HUB-a. Zwraca true, gdy pasuje do oczekującego pytania.
 // obs_response niesie requestID; obs_error ma identyfikator w "command" albo tylko requestType (wtedy pasuje jedyne takie pytanie).
 func (h *Hub) handleHubAddressed(msg *Message) bool {
+	if h.deliverByContext(msg) {
+		return true
+	}
 	if msg.Type != "obs_response" && msg.Type != "obs_error" {
 		return false
 	}
@@ -91,7 +95,7 @@ func (h *Hub) handleHubAddressed(msg *Message) bool {
 	var match *pendingRequest
 	n := 0
 	for _, req := range h.requests.pending {
-		if rt != "" && req.requestType == rt {
+		if rt != "" && !req.byContext && req.requestType == rt {
 			match = req
 			n++
 		}
