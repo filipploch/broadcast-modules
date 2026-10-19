@@ -29,6 +29,8 @@ type Hub struct {
 
 	session sessionTracker // ostatni znany status sesji transmisji (zgłaszany przez moduł główny)
 
+	wol *wolSender // budzenie Debiana (sekcja "wol" konfiguracji HUB-a); nil = wyłączone
+
 	State        *StateStore // plik stanu usług (run/uslugi.json); nil = bez zapisu
 	stateReady   stateGate
 	declaredOnce bool // moduł główny zadeklarował już wymagane pluginy (potrzebne usłudze czekającej na plugin)
@@ -188,6 +190,8 @@ func (h *Hub) handleMessage(msg *Message) {
 		h.handleRestartPlugin(msg)
 	case "session_status":
 		h.handleSessionStatus(msg)
+	case "wake_host":
+		h.handleWakeHost(msg)
 	case "request_scene_map":
 		// Main module asks obs-ws-plugin to re-send its scene map
 		// (used when obs-ws-plugin was already online before main module started).

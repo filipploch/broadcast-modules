@@ -375,13 +375,28 @@ socket.on('plugin_restart_result', (data) => {
     }
 });
 
-// Dwuklik na szarej ikonie budzi Debiana z recorder-pluginem przez WOL.
+// Wynik budzenia Debiana (E2d3a): odpowiedź HUB-a albo komunikat modułu o braku połączenia / odpowiedzi HUB-a.
+socket.on('wake_host_result', (data) => {
+    if (data.ok) {
+        _showPluginToast('Sygnał budzenia wysłany do Debiana; recorder zgłosi się sam, gdy system wstanie', false);
+    } else {
+        _showPluginToast(`Budzenie Debiana nie powiodło się: ${data.error || 'nieznany błąd'}`, true);
+    }
+});
+
+// Dwuklik na szarej ikonie budzi Debiana z recorder-pluginem przez WOL (wysyła HUB).
 // Dwuklik na zielonej (is_healthy) ikonie wyłącza go zdalnie — z potwierdzeniem,
 // bo to fizyczne wyłączenie maszyny, a nie tylko przełącznik w UI.
 function onRecorderPluginIconDblClick() {
     const state = _pluginStates['recorder-plugin'];
     if (!state || !state.is_active) {
+        // Bez połączenia z modułem nie wysyłamy: socket.io przechowałby zdarzenie i wysłał je dopiero po powrocie modułu
+        if (!socket.connected) {
+            _showPluginToast('MODUŁ: brak połączenia, sygnał budzenia Debiana nie został wysłany', true);
+            return;
+        }
         socket.emit('wake_recorder_plugin');
+        _showPluginToast('Budzenie Debiana...', false);
         return;
     }
     if (state.is_healthy) {

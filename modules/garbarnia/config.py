@@ -24,9 +24,6 @@ class Config:
     SUBSCRIBE_CLASSES = ['timer_update_receiver', 'timer_state_receiver', 'obs_messages_receiver', 'servo_events', 'gopro_events']
     # BM_REQUIRED_PLUGINS=timer-plugin,... zawęża listę (próby na sucho z samym timer-pluginem); domyślnie pełna lista
     REQUIRED_PLUGINS = [p for p in os.environ.get('BM_REQUIRED_PLUGINS', '').split(',') if p] or ['timer-plugin', 'recorder-plugin', 'obs-ws-plugin', 'replay-plugin', 'controller-plugin', 'cam-head-1']
-    # MAC karty sieciowej Debiana z recorder-pluginem — do zdalnego
-    # wybudzania przez WOL (dwuklik na #recorder-plugin-icon gdy offline).
-    RECORDER_PLUGIN_MAC = '6c:2b:59:f4:29:85'
     REPLAY_SCENE   = 'OUTPUT'   # scena OBS z źródłem Replay
     REPLAY_SOURCE  = 'Replay'   # nazwa źródła Window Capture mpv w OBS
     REPLAY_DEFAULT_SPEED = 0.9

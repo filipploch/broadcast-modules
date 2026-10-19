@@ -88,6 +88,11 @@ func main() {
 			log.Fatalf("❌ OBS: %v", err)
 		}
 		log.Printf("OBS uruchamia HUB (%s); OBS uruchomiony ręcznie jest \"obcy\": HUB go nie restartuje ani nie zamyka", svc.ExecutablePath)
+		if hub.PluginManager != nil {
+			if msg := obsPortMismatch(hubCfg.Obs.WsPort, hub.PluginManager.GetAllConfigs()["obs-ws-plugin"].WorkingDir); msg != "" {
+				log.Printf("⚠️  OBS: %s", msg)
+			}
+		}
 	} else {
 		log.Printf("OBS: HUB go nie uruchamia (sekcja obs.enabled = false albo brak ścieżki)")
 	}
@@ -155,6 +160,10 @@ func main() {
 
 	// Start reverse discovery for external plugins
 	hub.StartReverseDiscovery()
+
+	// Budzenie Debiana w tle: HUB na niego nie czeka (recorder-plugin zgłosi się sam, gdy system wstanie)
+	hub.wol = newWolSender(hubCfg.Wol)
+	hub.wakeDebianOnStart()
 
 	// Usługi startują po HUB-ie (moduł łączy się z nim od razu); pluginy lokalne startują dalej na deklarację modułu
 	hub.Services.StartAll()

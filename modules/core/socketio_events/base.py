@@ -18,23 +18,6 @@ def _get_settings():
     from core.models.base_settings import get_settings_model
     return get_settings_model()
 
-def _send_wol_packet(mac_address):
-    """Broadcasts a Wake-on-LAN magic packet (6x 0xFF + MAC repeated 16x)
-    as a UDP datagram on port 9 — same effect as the usual PowerShell
-    one-liner, done natively so it works regardless of what OS main-module
-    runs on."""
-    import socket as pysocket
-
-    mac_bytes = bytes.fromhex(mac_address.replace(':', '').replace('-', ''))
-    magic_packet = b'\xff' * 6 + mac_bytes * 16
-
-    sock = pysocket.socket(pysocket.AF_INET, pysocket.SOCK_DGRAM)
-    try:
-        sock.setsockopt(pysocket.SOL_SOCKET, pysocket.SO_BROADCAST, 1)
-        sock.sendto(magic_packet, ('255.255.255.255', 9))
-    finally:
-        sock.close()
-
 # Sentinel odróżniający "nie podano" od jawnego None (BRAK) dla team_id w podglądzie edycji.
 _TEAM_ID_NOT_SET = object()
 
@@ -291,19 +274,14 @@ def register_events(socketio):
 
     @socketio.on('wake_recorder_plugin')
     def handle_wake_recorder_plugin():
-        # Double-click on #recorder-plugin-icon while it's greyed out (not
-        # connected to the hub) — see onRecorderPluginIconDblClick (index.js).
-        # The Debian box running recorder-plugin has WOL enabled precisely
-        # for this: wake it remotely instead of walking over to it.
-        mac = current_app.config.get('RECORDER_PLUGIN_MAC')
-        if not mac:
-            logger.warning("wake_recorder_plugin: RECORDER_PLUGIN_MAC not configured")
+        # Dwuklik szarej ikony recorder-pluginu (onRecorderPluginIconDblClick, index.js): budzenie Debiana robi HUB
+        # (adres MAC tylko w konfiguracji HUB-a, E2d3a). Wynik zawsze wraca do panelu zdarzeniem wake_host_result.
+        from core.managers import get_hub_client
+        hub_client = get_hub_client()
+        if not hub_client:
+            socketio.emit('wake_host_result', {'ok': False, 'error': 'Brak połączenia z HUB-em: sygnał budzenia nie został wysłany'})
             return
-        try:
-            _send_wol_packet(mac)
-            logger.info(f"📡 Wake-on-LAN packet sent to recorder-plugin host ({mac})")
-        except Exception as e:
-            logger.error(f"Failed to send WOL packet to {mac}: {e}")
+        hub_client.request_wake_host()
 
     @socketio.on('shutdown_recorder_plugin')
     def handle_shutdown_recorder_plugin():
