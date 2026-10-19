@@ -95,6 +95,36 @@ class OknoTest(unittest.TestCase):
         self.run_app(scenario)
 
 
+@unittest.skipUnless(HAVE_TEXTUAL, "brak textual w tym środowisku (modules\\requirements-manager.txt)")
+class WidocznoscPrzyciskowTest(unittest.TestCase):
+    """Zgłoszone w próbie ręcznej 2026-10-19: przy typowej wysokości okna brakowało przycisku GARBARNIA (kontener przycisków
+    dostawał resztę miejsca, czyli 1 wiersz, i ucinał drugi przycisk)."""
+
+    def test_oba_przyciski_widoczne_przy_niskim_oknie(self):
+        import broadcast_manager as bm
+        from manager.hub_process import Supervisor
+        for size in ((120, 30), (100, 24)):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as d:
+                app = bm.BroadcastManager()
+                app.cfg.run_dir = pathlib.Path(d)
+                app.sup = Supervisor(app.cfg, bm.HUB_EXE, channel=FakeChannel(), launcher=lambda: 0, open_proc=lambda pid: None)
+
+                async def go():
+                    async with app.run_test(size=size) as pilot:
+                        try:
+                            await pilot.pause(1.5)
+                            box = app.query_one("#module-buttons").region
+                            buttons = list(app.query("#module-buttons Button"))
+                            self.assertEqual([str(b.label) for b in buttons], ["URUCHOM FUTSAL NALF", "URUCHOM GARBARNIA"])
+                            for b in buttons:
+                                r = b.region
+                                self.assertTrue(r.height > 0 and box.y <= r.y and r.y + r.height <= box.y + box.height,
+                                                f"{b.label}: {r} poza kontenerem {box} (okno {size})")
+                        finally:
+                            app.sup.close()
+                asyncio.run(go())
+
+
 class BrakTextualTest(unittest.TestCase):
     def test_bez_textual_komunikat_z_poleceniem_instalacji_bez_tracebacku(self):
         # Python bez dostępu do pakietów venv (-S: bez site-packages, -I: izolacja), więc textual na pewno brak

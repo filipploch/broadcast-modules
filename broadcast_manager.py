@@ -96,6 +96,7 @@ class BroadcastManager(App):
                 padding: 1; height: 100%; overflow-y: auto; margin-right: 1; }
     #right { height: 100%; }
     #banners { height: auto; max-height: 8; padding: 0 1; }
+    #module-buttons { height: auto; }  /* wysokość według liczby przycisków (domyślne 1fr ucinało drugi przycisk przy niskim oknie) */
     #log-panel { height: 1fr; border: solid #30363d; border-title-color: #58a6ff; border-title-style: bold; }
     .section-title { color: #8b949e; text-style: bold; margin-top: 1; }
     .separator { height: 1; background: #21262d; margin: 1 0; }
