@@ -53,6 +53,9 @@ class HubClient:
         self.context_filter = ContextFilter()
         self._should_reconnect = True  # Kontrola reconnect
         self._reconnect_delay = 3  # Sekundy między próbami
+        # Prośba o obudzenie Debiana (E2d3a): czekamy na wake_host_result od HUB-a najwyżej tyle sekund
+        self._wake_timer = None
+        self._wake_timeout_s = self.WAKE_TIMEOUT_S
 
     def connect(self):
         """Connect to Hub"""
@@ -475,6 +478,9 @@ class HubClient:
                 self.plugin_online[plugin_id] = False
                 self._report_gave_up(plugin_id)
 
+        elif msg_type == 'wake_host_result':
+            self._on_wake_result(payload)
+
         elif msg_type == 'plugin_restart_result':
             self._log("info" if payload.get('ok') else "error",
                       f"Restart pluginu {payload.get('plugin_id')}: "
@@ -875,6 +881,51 @@ class HubClient:
     def _exit_process(code):
         import os
         os._exit(code)
+
+    WAKE_TIMEOUT_S = 5  # HUB odpowiada po wysłaniu 3 sygnałów (ok. 2 s)
+
+    def request_wake_host(self):
+        """Prosi HUB o obudzenie Debiana (Wake-on-LAN; adres MAC jest tylko w konfiguracji HUB-a).
+
+        Wynik zawsze wraca do panelu zdarzeniem wake_host_result {ok, error}: odpowiedź HUB-a, a gdy jej nie ma,
+        komunikat o braku połączenia z HUB-em albo o braku odpowiedzi w WAKE_TIMEOUT_S sekund (nigdy cichy brak reakcji)."""
+        sent = self.send({
+            'from': self.module_id,
+            'to': 'hub',
+            'type': 'wake_host',
+            'payload': {},
+        }) if self.connected else False
+        if not sent:
+            self._emit_wake_result(False, 'Brak połączenia z HUB-em: sygnał budzenia nie został wysłany')
+            return False
+        self._log("info", "Prośba do HUB-a o obudzenie Debiana")
+        with self._lock:
+            if self._wake_timer:
+                self._wake_timer.cancel()
+            self._wake_timer = threading.Timer(self._wake_timeout_s, self._on_wake_timeout)
+            self._wake_timer.daemon = True
+            self._wake_timer.start()
+        return True
+
+    def _on_wake_timeout(self):
+        with self._lock:
+            self._wake_timer = None
+        self._log("error", f"HUB nie odpowiedział na prośbę o obudzenie Debiana w {self._wake_timeout_s} s")
+        self._emit_wake_result(False, f'HUB nie odpowiedział w {self._wake_timeout_s} s: nie wiadomo, czy sygnał budzenia został wysłany')
+
+    def _on_wake_result(self, payload):
+        with self._lock:
+            timer, self._wake_timer = self._wake_timer, None
+        if timer:
+            timer.cancel()
+        ok = bool(payload.get('ok'))
+        self._log("info" if ok else "error", f"Budzenie Debiana: {'sygnał wysłany' if ok else payload.get('error')}")
+        self._emit_wake_result(ok, payload.get('error'))
+
+    @staticmethod
+    def _emit_wake_result(ok, error=None):
+        from core.extensions import socketio
+        socketio.emit('wake_host_result', {'ok': ok, 'error': error})
 
     def request_plugin_restart(self, plugin_id):
         """Prosi HUB o ponowne uruchomienie pluginu (ręcznie, poza limitem max_restarts)."""
