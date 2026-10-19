@@ -126,7 +126,7 @@ class BroadcastManager(App):
         self.catalog = catalog.scan(self.cfg.modules_dir)
         self.view = mview.View()
         self.debian_state = "no_host" if not DEBIAN_SSH_HOST else "unreachable"
-        self.hub_follow, self.mod_follow = mlogs.Follower(), mlogs.Follower()
+        self.hub_follow, self.mod_follow, self.out_follow = mlogs.Follower(), mlogs.Follower(), mlogs.Follower()
         self._button_ids: list = []
         self._busy = False
 
@@ -188,6 +188,7 @@ class BroadcastManager(App):
             self.sup.events.clear()
             hub_lines = self.hub_follow.follow(((self.sup.state or {}).get("hub") or {}).get("hub_log"))
             mod_lines = self.mod_follow.follow(mlogs.module_log(self.sup.state))
+            mod_lines += ["[wyjście] " + l for l in self.out_follow.follow(mlogs.module_output_log(self.sup.state)) if l.strip()]
             self.call_from_thread(self._apply, cat, v, events, hub_lines, mod_lines)
         finally:
             self._busy = False

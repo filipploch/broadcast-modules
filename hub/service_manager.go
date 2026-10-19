@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -62,6 +64,10 @@ type ServiceConfig struct {
 	// nie zamyka i nie uruchamia drugiej kopii.
 	ProcessName string `json:"process_name"`
 	ForeignOK   bool   `json:"foreign_ok"`
+
+	// NoRestartExitCodes: kody wyjścia oznaczające odmowę startu wymagającą działania operatora (moduł: 3 = baza na starej wersji
+	// migracji): bez restartu, a wiersz "BŁĄD: ..." z wyjścia procesu trafia do ostatniego błędu usługi (widać go w managerze).
+	NoRestartExitCodes []int `json:"no_restart_exit_codes,omitempty"`
 
 	// WindowedApp: program okienkowy (OBS): uruchamiany bez ukrytej konsoli (windowedAttr), którą dostają programy konsolowe.
 	WindowedApp bool `json:"windowed_app"`
@@ -533,6 +539,36 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 	return nil
 }
 
+// refusedStart: kod wyjścia oznacza odmowę startu (bez restartu).
+func refusedStart(cfg ServiceConfig, code int) bool {
+	for _, c := range cfg.NoRestartExitCodes {
+		if c == code {
+			return true
+		}
+	}
+	return false
+}
+
+// lastErrorLine: ostatni wiersz zaczynający się od "BŁĄD:" z końca pliku wyjścia usługi ("" gdy brak).
+func lastErrorLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > 16<<10 {
+		f.Seek(info.Size()-16<<10, 0)
+	}
+	data, _ := io.ReadAll(f)
+	last := ""
+	for _, l := range strings.Split(string(data), "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "BŁĄD:") {
+			last = l
+		}
+	}
+	return last
+}
+
 // serviceAttr: atrybuty procesu usługi. Programy konsolowe (moduł) dostają własną ukrytą konsolę, programy okienkowe (OBS) nie.
 func serviceAttr(cfg ServiceConfig) *syscall.SysProcAttr {
 	if cfg.WindowedApp {
@@ -690,8 +726,15 @@ func (sm *ServiceManager) monitor(id string, gen int, exited chan struct{}, wait
 		} else {
 			sp.status = "error"
 			sp.lastErr = fmt.Sprintf("zakończona z kodem %d", code)
+			if refusedStart(cfg, code) {
+				sp.lastErr = fmt.Sprintf("odmowa startu (kod %d)", code)
+				if line := lastErrorLine(filepath.Join(sp.runDir, cfg.OutputFile)); line != "" {
+					sp.lastErr += ": " + line
+				}
+			}
 		}
 	}
+	lastErr := sp.lastErr
 	close(exited)
 	restartCount := sp.restartCount
 	shuttingDown := sm.shuttingDown
@@ -711,6 +754,11 @@ func (sm *ServiceManager) monitor(id string, gen int, exited chan struct{}, wait
 		return
 	default:
 		log.Printf("❌ Usługa %s zakończyła się z kodem %d (%v)", id, code, err)
+	}
+	if refusedStart(cfg, code) {
+		log.Printf("⛔ Usługa %s: %s; bez restartu (wymagane działanie operatora, szczegóły w %s)", id, lastErr, cfg.OutputFile)
+		sm.notifyNow(id, "error", fmt.Sprintf("%s: %s", cfg.Name, lastErr))
+		return
 	}
 	if shuttingDown || !cfg.RestartOnCrash {
 		return

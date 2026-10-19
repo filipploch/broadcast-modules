@@ -260,6 +260,9 @@ func (c *LoadedHubConfig) ModuleLabel() string {
 	return c.Module
 }
 
+// moduleExitSchema: kod wyjścia modułu odmawiającego startu na bazie o złej wersji migracji (core/utils/schema_check.py).
+const moduleExitSchema = 3
+
 // moduleService składa usługę modułu głównego wybranego w konfiguracji. Zwraca false, gdy moduł nie jest wybrany.
 func (c *LoadedHubConfig) moduleService() (ServiceConfig, bool) {
 	if c.Module == "" {
@@ -296,7 +299,9 @@ func (c *LoadedHubConfig) moduleServiceFor(e ModuleManifest) ServiceConfig {
 		RestartOnCrash: true,
 		MaxRestarts:    5,
 		RestartDelayMs: 3000,
-		OutputFile:     "modul-" + logName + ".wyjscie.log",
+		// 3 = moduł odmówił startu (baza na starej wersji migracji, core/utils/schema_check.py): bez restartu, komunikat w managerze
+		NoRestartExitCodes: []int{moduleExitSchema},
+		OutputFile:         "modul-" + logName + ".wyjscie.log",
 		FollowFiles:    []string{"modul-" + logName + ".log", "modul-" + logName + ".wyjscie.log"},
 		FollowLabel:    "moduł",
 	}

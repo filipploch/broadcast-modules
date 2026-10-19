@@ -339,3 +339,22 @@ class HubButtonTest(unittest.TestCase):
             self.assertEqual(self.b(view.build(CAT, None, phase)), ("URUCHOM HUB", "green", True, "start_hub"), phase)
         self.assertEqual(self.b(view.build(CAT, None, "stopped", supervising=False)), ("URUCHOM HUB", "grey", False, ""),
                          "drugi manager nie uruchamia HUB-a")
+
+
+class OdmowaStartuTest(unittest.TestCase):
+    """Zgłoszone w próbie E2d3c2: Garbarnia nie startowała (stara baza), a w managerze nie było widać dlaczego."""
+
+    def test_pasek_z_powodem_gdy_modul_nie_wystartowal(self):
+        s = state()
+        s["last_module"] = {"id": "garbarnia", "status": "error",
+                            "error": "odmowa startu (kod 3): BŁĄD: moduł garbarnia NIE został uruchomiony — baza jest na starszej wersji migracji"}
+        v = view.build(CAT, s, "ok")
+        err = [b.text for b in v.banners if b.level == "error"]
+        self.assertTrue(any("GARBARNIA nie działa" in t and "starszej wersji migracji" in t for t in err), err)
+        self.assertEqual([b.enabled for b in v.buttons], [True, True], "można uruchomić moduł ponownie (np. po migracji)")
+        s["last_module"]["status"] = "stopped"
+        self.assertFalse(any(b.level == "error" for b in view.build(CAT, s, "ok").banners))
+
+    def test_surowe_wyjscie_modulu_w_zakladce(self):
+        s = {"hub": {"log_dir": "C:\l"}, "active": None, "last_module": {"id": "garbarnia"}, "modules": [{"id": "garbarnia", "log_name": "garbarnia"}]}
+        self.assertEqual(logs.module_output_log(s), pathlib.Path("C:\l") / "modul-garbarnia.wyjscie.log")

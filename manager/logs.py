@@ -35,6 +35,12 @@ class Follower:
         return [l.decode("utf-8", "replace").rstrip("\r") for l in lines]
 
 
+def module_output_log(state: Optional[dict]) -> Optional[Path]:
+    """Surowe wyjście procesu modułu (modul-<log_name>.wyjscie.log): tu jest komunikat, gdy moduł odmówi startu (np. stara baza)."""
+    p = module_log(state)
+    return p.with_name(p.name[:-len(".log")] + ".wyjscie.log") if p else None
+
+
 def module_log(state: Optional[dict]) -> Optional[Path]:
     """Log modułu bieżącego uruchomienia: modul-<log_name>.log w folderze logów HUB-a (moduł uruchomiony przez HUB pisze tam)."""
     if not state:

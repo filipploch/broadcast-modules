@@ -98,6 +98,10 @@ def build(catalog, state: Optional[dict], phase: str, root=None, git=None, super
 
     active = state.get("active")
     act_id = (active or {}).get("id")
+    last = state.get("last_module") or {}
+    if active is None and last.get("status") == "error" and last.get("error"):
+        m = next((x for x in mods if x.id == last.get("id")), None)
+        v.banners.append(Banner("error", f"Moduł {m.button if m else last.get('id')} nie działa: {last['error']} (szczegóły w zakładce Moduł)"))
     known_ids = {m.id for m in mods}
     for m in mods:
         if active is None:

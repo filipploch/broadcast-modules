@@ -111,9 +111,14 @@ def build_message(module_name, info):
             f'  Wersja wymagana:  {need}\n{todo}\n{line}\n')
 
 
+# Kod wyjścia "odmowa startu: wymagane działanie operatora". HUB nie uruchamia wtedy modułu ponownie (hub/config.go,
+# moduleExitSchema), a manager pokazuje wiersz "BŁĄD: ..." z komunikatu (zgłoszone w próbie E2d3c2: 5 bezcelowych restartów).
+EXIT_SCHEMA = 3
+
+
 def ensure_schema_current(app, migrations_dir):
-    """Wywołać przy starcie modułu. Przy niezgodności wypisuje jeden komunikat i kończy proces (kod 1)."""
+    """Wywołać przy starcie modułu. Przy niezgodności wypisuje jeden komunikat i kończy proces (kod EXIT_SCHEMA = 3)."""
     info = schema_status(app.config['SQLALCHEMY_DATABASE_URI'], app.instance_path, migrations_dir)
     if info['state'] != 'ok':
         print(build_message(app.config.get('MODULE_NAME', 'moduł'), info), flush=True)
-        sys.exit(1)
+        sys.exit(EXIT_SCHEMA)
