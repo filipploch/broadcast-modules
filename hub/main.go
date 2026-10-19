@@ -156,6 +156,10 @@ func main() {
 	// Start reverse discovery for external plugins
 	hub.StartReverseDiscovery()
 
+	// Budzenie Debiana w tle: HUB na niego nie czeka (recorder-plugin zgłosi się sam, gdy system wstanie)
+	hub.wol = newWolSender(hubCfg.Wol)
+	hub.wakeDebianOnStart()
+
 	// Usługi startują po HUB-ie (moduł łączy się z nim od razu); pluginy lokalne startują dalej na deklarację modułu
 	hub.Services.StartAll()
 

@@ -33,7 +33,7 @@ type ObsConfig struct {
 	ProcessName   string `json:"process_name"`
 }
 
-// WolConfig: Wake-on-LAN Debiana (używane od E2d3).
+// WolConfig: Wake-on-LAN Debiana (E2d3a, wol.go): przy starcie HUB-a i na prośbę modułu (wake_host). Jedyne miejsce adresu MAC.
 type WolConfig struct {
 	Enabled       bool   `json:"enabled"`
 	Mac           string `json:"mac"`
