@@ -88,6 +88,8 @@ class GameManager:
 
     def get_game_by_id(self, game_id):
         """Get game by ID"""
+        if game_id is None:                 # brak otwartej sesji: nie pytamy bazy o klucz NULL (ostrzeżenie SQLAlchemy)
+            return None
         return _get_game().query.get(game_id)
     
     def get_game_by_foreign_id(self, scraper_id, foreign_id):
