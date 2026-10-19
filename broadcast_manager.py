@@ -1,9 +1,5 @@
 """
-Broadcast Manager — TUI: uruchamia HUB, pokazuje jego logi i wyłącza Debiana.
-
-Od E2d3a (okrojony): moduł główny i OBS uruchamia i nadzoruje HUB, więc przycisków startu OBS i modułu ani wyboru modułu
-tu nie ma. Nazwa modułu jest tylko do odczytu, z konfiguracji HUB-a (hub/config/hub.json). Debiana budzi HUB przy starcie
-(sekcja "wol" w hub.json). Decyzja o całkowitym usunięciu tego programu: po zakończeniu E2.
+Broadcast Manager — TUI do zarządzania OBS, HUB i modułami.
 
 Uruchomienie:
     python broadcast_manager.py
@@ -15,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -24,11 +21,9 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.widgets import (
-    Button, Footer, Header, Label, Log, Static,
+    Button, Footer, Header, Label, Log, Select, Static,
     TabbedContent, TabPane,
 )
-
-from broadcast_manager_hub import hub_exe_stale, hub_module_choice, start_hub, stop_hub
 
 # ── Konfiguracja ──────────────────────────────────────────────────────────────
 
@@ -36,7 +31,13 @@ ROOT = Path(__file__).parent
 
 HUB_DIR = ROOT / "hub"
 HUB_EXE = HUB_DIR / "hub.exe"
-HUB_CONFIG_DIR = HUB_DIR / "config"
+
+MODULES = {
+    "garbarnia": ROOT / "modules" / "garbarnia.py",
+    "nalf":      ROOT / "modules" / "nalf.py",
+}
+
+OBS_PATH = r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"
 
 def _load_env(path: Path) -> dict:
     env = {}
@@ -79,7 +80,7 @@ class ServiceStatus(Static):
 class BroadcastManager(App):
 
     TITLE     = "Broadcast Manager"
-    SUB_TITLE = "HUB · Debian"
+    SUB_TITLE = "OBS · HUB · Moduły"
 
     CSS = """
     Screen { background: #0d1117; }
@@ -91,7 +92,7 @@ class BroadcastManager(App):
         grid-size: 2;
         grid-columns: 26 1fr;
         height: 1fr;
-
+    
         padding: 1;
     }
     #controls {
@@ -113,7 +114,6 @@ class BroadcastManager(App):
 
     .section-title { color: #8b949e; text-style: bold; margin-top: 1; }
     .separator { height: 1; background: #21262d; margin: 1 0; }
-    .info { color: #c9d1d9; }
 
     ServiceStatus       { height: 1; padding: 0; color: #f85149; }
     ServiceStatus.running { color: #3fb950; }
@@ -126,6 +126,8 @@ class BroadcastManager(App):
     Button.stop:hover   { background: #6e1c21; }
     Button.danger       { background: #6e1c21; color: #ffa198; border: solid #f85149; }
     Button.danger:hover { background: #b62324; }
+
+    Select { width: 100%; margin-bottom: 1; }
 
     TabbedContent { height: 1fr; }
     TabPane { padding: 0; height: 1fr; }
@@ -145,21 +147,44 @@ class BroadcastManager(App):
 
     TAB_SYSTEM = "system"
     TAB_HUB    = "hub"
+    TAB_MODULE = "modul"
+    TAB_OBS    = "obs"
 
     def __init__(self):
         super().__init__()
-        self._hub_proc: Optional[subprocess.Popen] = None
-        self._module_name, self._module_source = hub_module_choice(HUB_CONFIG_DIR)
+        self._obs_proc:        Optional[subprocess.Popen] = None
+        self._hub_proc:        Optional[subprocess.Popen] = None
+        self._module_proc:     Optional[subprocess.Popen] = None
+        self._selected_module: str = list(MODULES.keys())[0]
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="main-layout"):
             with Vertical(id="controls"):
+                yield Label("USŁUGI", classes="section-title")
+                yield ServiceStatus("obs",    "OBS Studio", id="status-obs")
+                yield ServiceStatus("hub",    "HUB",        id="status-hub")
+                yield ServiceStatus("module", "Moduł",      id="status-module")
+
+                yield Static("", classes="separator")
+                yield Label("OBS", classes="section-title")
+                yield Button("▶  Uruchom OBS",    id="btn-obs-start", classes="start")
+                yield Button("■  Zatrzymaj OBS",   id="btn-obs-stop",  classes="stop")
+
+                yield Static("", classes="separator")
                 yield Label("HUB", classes="section-title")
-                yield ServiceStatus("hub", "HUB", id="status-hub")
-                yield Static(f"Moduł: {self._module_name or '(brak)'}", id="module-name", classes="info")
                 yield Button("▶  Uruchom HUB",    id="btn-hub-start", classes="start")
                 yield Button("■  Zatrzymaj HUB",   id="btn-hub-stop",  classes="stop")
+
+                yield Static("", classes="separator")
+                yield Label("MODUŁ", classes="section-title")
+                yield Select(
+                    [(name, name) for name in MODULES],
+                    value=self._selected_module,
+                    id="module-select",
+                )
+                yield Button("▶  Uruchom moduł",  id="btn-mod-start", classes="start")
+                yield Button("■  Zatrzymaj moduł", id="btn-mod-stop",  classes="stop")
 
                 yield Static("", classes="separator")
                 yield Label("DEBIAN", classes="section-title")
@@ -169,9 +194,12 @@ class BroadcastManager(App):
                 with TabbedContent(initial=self.TAB_SYSTEM, id="tabs"):
                     with TabPane("System", id=self.TAB_SYSTEM):
                         yield Log(id="log-system", auto_scroll=True)
-                    # Konsola HUB-a pokazuje też wiersze modułu (prefiks [moduł]) i pluginów lokalnych
                     with TabPane("HUB",    id=self.TAB_HUB):
                         yield Log(id="log-hub",    auto_scroll=True)
+                    with TabPane("Moduł",  id=self.TAB_MODULE):
+                        yield Log(id="log-modul",  auto_scroll=True)
+                    with TabPane("OBS",    id=self.TAB_OBS):
+                        yield Log(id="log-obs",    auto_scroll=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -180,23 +208,63 @@ class BroadcastManager(App):
         self._log_sys("Broadcast Manager uruchomiony.")
         self._log_sys(f"ROOT: {ROOT}")
         self._log_sys(f"HUB:  {HUB_EXE}")
-        self._log_sys(f"Moduł uruchamiany przez HUB: {self._module_name or '(brak)'} (źródło: {self._module_source})")
-        self._log_sys("Moduł, OBS i budzenie Debiana obsługuje HUB; zmiana modułu: pole \"module\" w hub/config/hub.json.")
-        stale = hub_exe_stale(HUB_EXE, HUB_DIR)
-        if stale:
-            self._log_sys(f"[UWAGA] {stale}")
+        for name, path in MODULES.items():
+            self._log_sys(f"Moduł [{name}]: {path}")
         if not DEBIAN_SSH_HOST:
             self._log_sys("[UWAGA] Brak DEBIAN_SSH_HOST w .env")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         dispatch = {
+            "btn-obs-start":  self._start_obs,
+            "btn-obs-stop":   self._stop_obs,
             "btn-hub-start":  self._start_hub,
             "btn-hub-stop":   self._stop_hub,
+            "btn-mod-start":  self._start_module,
+            "btn-mod-stop":   self._stop_module,
             "btn-debian-off": self._shutdown_debian,
         }
         handler = dispatch.get(event.button.id)
         if handler:
             self.run_worker(handler(), exclusive=False)
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "module-select":
+            self._selected_module = str(event.value)
+            self._log_sys(f"Wybrany moduł: {self._selected_module}")
+
+    # ── OBS ───────────────────────────────────────────────────────────────────
+
+    async def _start_obs(self) -> None:
+        if self._obs_proc and self._obs_proc.poll() is None:
+            self._log_sys("OBS już działa.")
+            return
+        obs_path = Path(OBS_PATH)
+        if not obs_path.exists():
+            self._log_sys(f"[BŁĄD] Nie znaleziono OBS: {obs_path}")
+            return
+        try:
+            self._obs_proc = subprocess.Popen(
+                [str(obs_path)],
+                cwd=str(obs_path.parent),   # OBS szuka locale/ relatywnie do cwd
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            msg = f"OBS uruchomiony (pid {self._obs_proc.pid})"
+            self._log_sys(msg)
+            self._log_tab(self.TAB_OBS, msg)
+            self._set_status("obs", True)
+        except Exception as e:
+            self._log_sys(f"[BŁĄD] OBS: {e}")
+
+    async def _stop_obs(self) -> None:
+        if not self._obs_proc or self._obs_proc.poll() is not None:
+            self._log_sys("OBS nie działa.")
+            self._set_status("obs", False)
+            return
+        self._obs_proc.terminate()
+        self._log_sys("OBS zatrzymany.")
+        self._log_tab(self.TAB_OBS, "OBS zatrzymany.")
+        self._set_status("obs", False)
 
     # ── HUB ───────────────────────────────────────────────────────────────────
 
@@ -207,11 +275,15 @@ class BroadcastManager(App):
         if not HUB_EXE.exists():
             self._log_sys(f"[BŁĄD] Nie znaleziono HUB: {HUB_EXE}")
             return
-        stale = hub_exe_stale(HUB_EXE, HUB_DIR)
-        if stale:
-            self._log_sys(f"[UWAGA] {stale}")
         try:
-            self._hub_proc = start_hub(HUB_EXE, HUB_DIR)
+            self._hub_proc = subprocess.Popen(
+                [str(HUB_EXE)],
+                cwd=str(HUB_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
             self._log_sys(f"HUB uruchomiony (pid {self._hub_proc.pid})")
             self._set_status("hub", True)
             self.run_worker(
@@ -226,9 +298,55 @@ class BroadcastManager(App):
             self._log_sys("HUB nie działa.")
             self._set_status("hub", False)
             return
-        rc = await asyncio.get_event_loop().run_in_executor(None, stop_hub, self._hub_proc, self._log_sys)
-        self._log_sys(f"HUB zatrzymany (kod {rc}).")
+        self._hub_proc.terminate()
+        await asyncio.sleep(0.5)
+        if self._hub_proc.poll() is None:
+            self._hub_proc.kill()
+        self._log_sys("HUB zatrzymany.")
         self._set_status("hub", False)
+
+    # ── Moduł ─────────────────────────────────────────────────────────────────
+
+    async def _start_module(self) -> None:
+        if self._module_proc and self._module_proc.poll() is None:
+            self._log_sys(f"Moduł '{self._selected_module}' już działa.")
+            return
+        module_path = MODULES.get(self._selected_module)
+        if not module_path or not module_path.exists():
+            self._log_sys(f"[BŁĄD] Nie znaleziono modułu: {module_path}")
+            return
+        try:
+            self._module_proc = subprocess.Popen(
+                [sys.executable, str(module_path)],
+                cwd=str(ROOT / "modules"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            self._log_sys(
+                f"Moduł '{self._selected_module}' uruchomiony "
+                f"(pid {self._module_proc.pid})"
+            )
+            self._set_status("module", True)
+            self.run_worker(
+                self._tail(self._module_proc, self.TAB_MODULE, "module"),
+                exclusive=False,
+            )
+        except Exception as e:
+            self._log_sys(f"[BŁĄD] Moduł: {e}")
+
+    async def _stop_module(self) -> None:
+        if not self._module_proc or self._module_proc.poll() is not None:
+            self._log_sys("Moduł nie działa.")
+            self._set_status("module", False)
+            return
+        self._module_proc.terminate()
+        await asyncio.sleep(1)
+        if self._module_proc.poll() is None:
+            self._module_proc.kill()
+        self._log_sys(f"Moduł '{self._selected_module}' zatrzymany.")
+        self._set_status("module", False)
 
     # ── Debian ────────────────────────────────────────────────────────────────
 
@@ -301,10 +419,13 @@ class BroadcastManager(App):
             pass
 
     async def action_quit(self) -> None:
-        # Wyjście zamyka HUB łagodnie (jak przycisk); moduł i OBS zamyka albo zostawia sam HUB według reguł z E2d2
-        if self._hub_proc and self._hub_proc.poll() is None:
-            self._log_sys("Zatrzymuję HUB przed wyjściem...")
-            await asyncio.get_event_loop().run_in_executor(None, stop_hub, self._hub_proc, self._log_sys)
+        for proc, name in [
+            (self._module_proc, "moduł"),
+            (self._hub_proc,    "HUB"),
+        ]:
+            if proc and proc.poll() is None:
+                self._log_sys(f"Zatrzymuję {name}...")
+                proc.terminate()
         self.exit()
 
 
