@@ -1,10 +1,8 @@
 {
   "hub_port": 8080,
   "module": "nalf",
-  "modules": {
-    "nalf": { "script": "modules/nalf.py", "port": 8081, "log_name": "futsal_nalf" },
-    "garbarnia": { "script": "modules/garbarnia.py", "port": 8081, "log_name": "garbarnia" }
-  },
+  "modules_dir": "modules",
+  "control_port": 8079,
   "python_path": "modules/.venv/Scripts/python.exe",
   "module_dir": "modules",
   "module_ready_timeout_s": 60,

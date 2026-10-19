@@ -28,6 +28,7 @@ type StateEntry struct {
 	Address      string `json:"address,omitempty"`
 	StartedByHub bool   `json:"started_by_hub"`
 	RunDir       string `json:"run_dir,omitempty"` // folder logów uruchomienia, w którym proces prowadzi swoje logi
+	Module       string `json:"module,omitempty"`  // usługa "module": id modułu (E2d3c1); brak = wpis sprzed E2d3c1 (moduł z konfiguracji)
 }
 
 // StateSession to zapamiętany status sesji.
