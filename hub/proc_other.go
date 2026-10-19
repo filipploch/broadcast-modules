@@ -9,6 +9,8 @@ import (
 
 func detachedAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true} }
 
+func windowedAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true} }
+
 func killTree(pid int) error {
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err == nil {
 		return nil

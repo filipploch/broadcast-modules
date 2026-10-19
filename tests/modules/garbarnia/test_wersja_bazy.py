@@ -109,7 +109,7 @@ class UruchomienieModulu(unittest.TestCase):
         c.close()
         r = self._run(str(REPO / "modules" / ENTRY), env_extra={"DATABASE_URL": "sqlite:///" + db.as_posix()})
         out = r.stdout + r.stderr
-        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.returncode, 3, "kod 3 = odmowa startu: HUB nie uruchamia modułu ponownie")
         self.assertEqual(out.count("BŁĄD:"), 1)
         self.assertIn("NIE został uruchomiony", out)
         self.assertIn("migrate_db.py", out)

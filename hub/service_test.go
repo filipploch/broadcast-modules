@@ -64,6 +64,9 @@ func TestServiceHelper(t *testing.T) {
 		time.Sleep(60 * time.Second)
 	case "crash":
 		code, _ := strconv.Atoi(os.Getenv("HELPER_EXIT"))
+		if msg := os.Getenv("HELPER_PRINT"); msg != "" {
+			fmt.Println(msg)
+		}
 		time.Sleep(30 * time.Millisecond)
 		os.Exit(code)
 	case "mini-hub":
@@ -420,4 +423,36 @@ func fileSize(p string) int64 {
 func httpGetQuiet(url string) (*http.Response, error) {
 	c := http.Client{Timeout: 3 * time.Second}
 	return c.Get(url)
+}
+
+// Moduł odmawiający startu (kod 3: baza na starej wersji migracji) nie jest uruchamiany ponownie, a jego komunikat "BŁĄD: ..."
+// trafia do ostatniego błędu usługi (widać go w managerze). Zgłoszone w próbie E2d3c2: 5 bezcelowych restartów Garbarni.
+func TestServiceRefusingStartIsNotRestartedAndKeepsReason(t *testing.T) {
+	useRunDir(t)
+	sm := newTestSM(t)
+	cfg := svcCfg("module", "crash", 0, "HELPER_EXIT=3", "HELPER_PRINT=BŁĄD: moduł garbarnia NIE został uruchomiony — baza jest na starszej wersji migracji")
+	cfg.RestartOnCrash, cfg.MaxRestarts = true, 5
+	cfg.NoRestartExitCodes = []int{3}
+	cfg.OutputFile = "modul-test.wyjscie.log"
+	if err := sm.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := sm.Start("module"); err != nil {
+		t.Fatal(err)
+	}
+	waitCond(t, "usługa zakończona", 10*time.Second, func() bool { return sm.Status("module") == "error" })
+	time.Sleep(300 * time.Millisecond) // dłużej niż opóźnienie restartu (10 ms)
+	status, _, _, lastErr, _, alive := sm.Info("module")
+	if alive || status != "error" {
+		t.Fatalf("usługa po odmowie startu: %s, działa=%v", status, alive)
+	}
+	sm.mu.Lock()
+	restarts := sm.services["module"].restarts
+	sm.mu.Unlock()
+	if restarts != 0 {
+		t.Fatalf("odmowa startu nie może dawać restartów, było %d", restarts)
+	}
+	if !strings.Contains(lastErr, "odmowa startu (kod 3)") || !strings.Contains(lastErr, "NIE został uruchomiony") {
+		t.Fatalf("ostatni błąd bez powodu z wyjścia modułu: %q", lastErr)
+	}
 }
