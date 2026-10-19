@@ -1,43 +1,44 @@
 """
-Broadcast Manager — TUI do zarządzania OBS, HUB i modułami.
+Broadcast Manager — panel HUB-a (E2d3c2): przyciski modułów z plików module.json, zatrzymanie HUB-a, Debian.
 
 Uruchomienie:
-    python broadcast_manager.py
+    modules\\.venv\\Scripts\\python.exe broadcast_manager.py [--config hub.json]
 
-Wymaga: pip install textual
+Wymaga: modules\\.venv\\Scripts\\python.exe -m pip install -r modules\\requirements-manager.txt  (textual==8.2.3)
+
+Okno jest tylko panelem: HUB startuje razem z managerem (albo manager podłącza się do działającego), moduł uruchamia HUB na prośbę
+z kanału sterującego, a zamknięcie okna nie zatrzymuje HUB-a ani usług. Cała logika jest w pakiecie manager/ (bez textual).
 """
 
 from __future__ import annotations
 
-import asyncio
-import subprocess
+import argparse
 import sys
-from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Vertical
-from textual.reactive import reactive
-from textual.widgets import (
-    Button, Footer, Header, Label, Log, Select, Static,
-    TabbedContent, TabPane,
-)
+INSTALL_HINT = ("Brak biblioteki textual w tym środowisku Pythona (potrzebna do okna managera).\n"
+                "Zainstaluj ją poleceniem (w katalogu głównym folderu):\n"
+                "    modules\\.venv\\Scripts\\python.exe -m pip install -r modules\\requirements-manager.txt\n"
+                "a potem uruchom manager ponownie:  modules\\.venv\\Scripts\\python.exe broadcast_manager.py")
 
-# ── Konfiguracja ──────────────────────────────────────────────────────────────
+try:
+    from textual.app import App, ComposeResult
+    from textual.binding import Binding
+    from textual.containers import Container, Horizontal, Vertical
+    from textual.screen import ModalScreen
+    from textual.widgets import Button, Footer, Header, Label, Log, Static, TabbedContent, TabPane
+except ImportError:
+    print(INSTALL_HINT, file=sys.stderr)
+    sys.exit(1)
 
-ROOT = Path(__file__).parent
+from manager import catalog, config as mconfig, debian, logs as mlogs, view as mview
+from manager.channel import ChannelError
+from manager.hub_process import Supervisor
 
-HUB_DIR = ROOT / "hub"
-HUB_EXE = HUB_DIR / "hub.exe"
+ROOT = Path(__file__).resolve().parent
+HUB_EXE = ROOT / "hub" / "hub.exe"
 
-MODULES = {
-    "garbarnia": ROOT / "modules" / "garbarnia.py",
-    "nalf":      ROOT / "modules" / "nalf.py",
-}
-
-OBS_PATH = r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"
 
 def _load_env(path: Path) -> dict:
     env = {}
@@ -51,383 +52,281 @@ def _load_env(path: Path) -> dict:
         env[key.strip()] = value.strip().strip('"').strip("'")
     return env
 
+
 _env = _load_env(ROOT / ".env")
 DEBIAN_SSH_HOST = _env.get("DEBIAN_SSH_HOST", "")
 DEBIAN_SSH_USER = _env.get("DEBIAN_SSH_USER", "")
+
 
 def _now() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
-class ServiceStatus(Static):
-    running: reactive[bool] = reactive(False)
+class Confirm(ModalScreen[bool]):
+    """Okno potwierdzenia: tekst i ostrzeżenia, przyciski Tak / Anuluj."""
 
-    def __init__(self, name: str, label: str, **kwargs):
-        super().__init__(**kwargs)
-        self._service_name = name
-        self._label = label
+    def __init__(self, title: str, lines: list, yes: str = "Tak"):
+        super().__init__()
+        self._title, self._lines, self._yes = title, lines, yes
 
-    def render(self) -> str:
-        dot   = "● " if self.running else "○ "
-        state = "DZIAŁA    " if self.running else "zatrzymany"
-        return f"{dot}{self._label:<16} {state}"
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self._title, id="dialog-title")
+            for line in self._lines:
+                yield Label("⚠  " + line, classes="dialog-warning")
+            with Horizontal(id="dialog-buttons"):
+                yield Button(self._yes, id="yes", classes="danger")
+                yield Button("Anuluj", id="no")
 
-    def watch_running(self, value: bool) -> None:
-        self.remove_class("running", "stopped")
-        self.add_class("running" if value else "stopped")
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "yes")
 
 
 class BroadcastManager(App):
 
-    TITLE     = "Broadcast Manager"
-    SUB_TITLE = "OBS · HUB · Moduły"
+    TITLE = "Broadcast Manager"
+    SUB_TITLE = "HUB · moduły · Debian"
 
     CSS = """
     Screen { background: #0d1117; }
     Header { background: #161b22; color: #58a6ff; text-style: bold; }
     Footer { background: #161b22; color: #8b949e; }
-
-    #main-layout {
-        layout: grid;
-        grid-size: 2;
-        grid-columns: 26 1fr;
-        height: 1fr;
-    
-        padding: 1;
-    }
-    #controls {
-        background: #161b22;
-        border: solid #30363d;
-        border-title-color: #58a6ff;
-        border-title-style: bold;
-        padding: 1;
-        height: 100%;
-        overflow-y: auto;
-        margin-right: 1;
-    }
-    #log-panel {
-        height: 100%;
-        border: solid #30363d;
-        border-title-color: #58a6ff;
-        border-title-style: bold;
-    }
-
+    #main-layout { layout: grid; grid-size: 2; grid-columns: 34 1fr; height: 1fr; padding: 1; }
+    #controls { background: #161b22; border: solid #30363d; border-title-color: #58a6ff; border-title-style: bold;
+                padding: 1; height: 100%; overflow-y: auto; margin-right: 1; }
+    #right { height: 100%; }
+    #banners { height: auto; max-height: 8; padding: 0 1; }
+    #log-panel { height: 1fr; border: solid #30363d; border-title-color: #58a6ff; border-title-style: bold; }
     .section-title { color: #8b949e; text-style: bold; margin-top: 1; }
     .separator { height: 1; background: #21262d; margin: 1 0; }
-
-    ServiceStatus       { height: 1; padding: 0; color: #f85149; }
-    ServiceStatus.running { color: #3fb950; }
-    ServiceStatus.stopped { color: #f85149; }
-
-    Button              { width: 100%; margin-bottom: 1; }
-    Button.start        { background: #196c2e; color: #fff; }
-    Button.start:hover  { background: #238636; }
-    Button.stop         { background: #3a1a1a; color: #f85149; }
-    Button.stop:hover   { background: #6e1c21; }
-    Button.danger       { background: #6e1c21; color: #ffa198; border: solid #f85149; }
-    Button.danger:hover { background: #b62324; }
-
-    Select { width: 100%; margin-bottom: 1; }
-
+    .status { color: #c9d1d9; }
+    Button { width: 100%; margin-bottom: 1; }
+    Button.green { background: #196c2e; color: #fff; }
+    Button.red { background: #8b1a1a; color: #fff; }
+    Button.grey { background: #30363d; color: #8b949e; }
+    Button.danger { background: #6e1c21; color: #ffa198; border: solid #f85149; }
     TabbedContent { height: 1fr; }
     TabPane { padding: 0; height: 1fr; }
-    Log {
-        background: #0d1117;
-        color: #c9d1d9;
-        height: 1fr;
-        padding: 0 1;
-    }
-    Tab.-active { color: #58a6ff; }
+    Log { background: #0d1117; color: #c9d1d9; height: 1fr; padding: 0 1; }
+    #dialog { width: 70; height: auto; padding: 1 2; background: #161b22; border: thick #f85149; }
+    #dialog-title { text-style: bold; margin-bottom: 1; }
+    .dialog-warning { color: #ffa198; }
+    #dialog-buttons { height: auto; margin-top: 1; }
+    #dialog-buttons Button { width: 1fr; margin: 0 1; }
+    ModalScreen { align: center middle; }
     """
 
-    BINDINGS = [
-        Binding("q",      "quit", "Wyjście", show=True),
-        Binding("ctrl+c", "quit", "Wyjście", show=False),
-    ]
+    BINDINGS = [Binding("q", "quit", "Wyjście (HUB działa dalej)", show=True), Binding("ctrl+c", "quit", "Wyjście", show=False)]
 
-    TAB_SYSTEM = "system"
-    TAB_HUB    = "hub"
-    TAB_MODULE = "modul"
-    TAB_OBS    = "obs"
-
-    def __init__(self):
+    def __init__(self, config_path=None):
         super().__init__()
-        self._obs_proc:        Optional[subprocess.Popen] = None
-        self._hub_proc:        Optional[subprocess.Popen] = None
-        self._module_proc:     Optional[subprocess.Popen] = None
-        self._selected_module: str = list(MODULES.keys())[0]
+        self.cfg = mconfig.load(config_path)
+        self.sup = Supervisor(self.cfg, HUB_EXE)
+        self.catalog = catalog.scan(self.cfg.modules_dir)
+        self.view = mview.View()
+        self.debian_state = "no_host" if not DEBIAN_SSH_HOST else "unreachable"
+        self.hub_follow, self.mod_follow = mlogs.Follower(), mlogs.Follower()
+        self._button_ids: list = []
+        self._busy = False
+
+    # ── wygląd ──
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="main-layout"):
             with Vertical(id="controls"):
-                yield Label("USŁUGI", classes="section-title")
-                yield ServiceStatus("obs",    "OBS Studio", id="status-obs")
-                yield ServiceStatus("hub",    "HUB",        id="status-hub")
-                yield ServiceStatus("module", "Moduł",      id="status-module")
-
-                yield Static("", classes="separator")
-                yield Label("OBS", classes="section-title")
-                yield Button("▶  Uruchom OBS",    id="btn-obs-start", classes="start")
-                yield Button("■  Zatrzymaj OBS",   id="btn-obs-stop",  classes="stop")
-
-                yield Static("", classes="separator")
                 yield Label("HUB", classes="section-title")
-                yield Button("▶  Uruchom HUB",    id="btn-hub-start", classes="start")
-                yield Button("■  Zatrzymaj HUB",   id="btn-hub-stop",  classes="stop")
-
+                yield Static("HUB: sprawdzam…", id="hub-status", classes="status")
+                yield Label("MODUŁY", classes="section-title")
+                yield Vertical(id="module-buttons")
                 yield Static("", classes="separator")
-                yield Label("MODUŁ", classes="section-title")
-                yield Select(
-                    [(name, name) for name in MODULES],
-                    value=self._selected_module,
-                    id="module-select",
-                )
-                yield Button("▶  Uruchom moduł",  id="btn-mod-start", classes="start")
-                yield Button("■  Zatrzymaj moduł", id="btn-mod-stop",  classes="stop")
-
+                yield Button("ZATRZYMAJ HUB", id="btn-hub-stop", classes="danger", disabled=True)
+                yield Button("Uruchom HUB", id="btn-hub-start", classes="grey", disabled=True)
                 yield Static("", classes="separator")
                 yield Label("DEBIAN", classes="section-title")
-                yield Button("⏻  Wyłącz Debiana", id="btn-debian-off", classes="danger")
-
-            with Vertical(id="log-panel"):
-                with TabbedContent(initial=self.TAB_SYSTEM, id="tabs"):
-                    with TabPane("System", id=self.TAB_SYSTEM):
-                        yield Log(id="log-system", auto_scroll=True)
-                    with TabPane("HUB",    id=self.TAB_HUB):
-                        yield Log(id="log-hub",    auto_scroll=True)
-                    with TabPane("Moduł",  id=self.TAB_MODULE):
-                        yield Log(id="log-modul",  auto_scroll=True)
-                    with TabPane("OBS",    id=self.TAB_OBS):
-                        yield Log(id="log-obs",    auto_scroll=True)
+                yield Static("Debian: sprawdzam…", id="debian-status", classes="status")
+                yield Button("⏻  Wyłącz Debiana", id="btn-debian-off", classes="danger", disabled=True)
+            with Vertical(id="right"):
+                yield Static("", id="banners")
+                with Vertical(id="log-panel"):
+                    with TabbedContent(initial="tab-system", id="tabs"):
+                        with TabPane("System", id="tab-system"):
+                            yield Log(id="log-system", auto_scroll=True)
+                        with TabPane("HUB", id="tab-hub"):
+                            yield Log(id="log-hub", auto_scroll=True)
+                        with TabPane("Moduł", id="tab-modul"):
+                            yield Log(id="log-modul", auto_scroll=True)
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#controls").border_title  = "Sterowanie"
+        self.query_one("#controls").border_title = "Sterowanie"
         self.query_one("#log-panel").border_title = "Logi"
-        self._log_sys("Broadcast Manager uruchomiony.")
-        self._log_sys(f"ROOT: {ROOT}")
-        self._log_sys(f"HUB:  {HUB_EXE}")
-        for name, path in MODULES.items():
-            self._log_sys(f"Moduł [{name}]: {path}")
+        self._log_sys(f"Broadcast Manager uruchomiony. Konfiguracja HUB-a: {self.cfg.source}, kanał 127.0.0.1:{self.cfg.control_port}")
+        if self.cfg.error:
+            self._log_sys(f"[BŁĄD] {self.cfg.error}")
         if not DEBIAN_SSH_HOST:
-            self._log_sys("[UWAGA] Brak DEBIAN_SSH_HOST w .env")
+            self._log_sys("[UWAGA] Brak DEBIAN_SSH_HOST w .env (stan Debiana: brak adresu)")
+        self.set_interval(1.0, self._tick)
+        self.set_interval(5.0, self._ping)
+        self._tick()
+        self._ping()
+
+    # ── cykl: nadzór i odświeżenie (w wątku: kanał ma limit 2 s, okno nie może czekać) ──
+
+    def _tick(self) -> None:
+        if not self._busy:
+            self._busy = True
+            self.run_worker(self._tick_thread, thread=True, exclusive=False)
+
+    def _tick_thread(self) -> None:
+        try:
+            self.sup.tick()
+            cat = catalog.scan(self.cfg.modules_dir)
+            phase = mview.hub_phase(self.sup.phase == "ok", self.sup.seconds_since_start(), self.sup.phase)
+            v = mview.build(cat, self.sup.state, phase, root=ROOT, supervising=self.sup.supervising)
+            events = list(self.sup.events)
+            self.sup.events.clear()
+            hub_lines = self.hub_follow.follow(((self.sup.state or {}).get("hub") or {}).get("hub_log"))
+            mod_lines = self.mod_follow.follow(mlogs.module_log(self.sup.state))
+            self.call_from_thread(self._apply, cat, v, events, hub_lines, mod_lines)
+        finally:
+            self._busy = False
+
+    def _apply(self, cat, v, events, hub_lines, mod_lines) -> None:
+        self.catalog, self.view = cat, v
+        for e in events:
+            self._log_sys(f"[{e.kind}] {e.text}")
+        for line in hub_lines:
+            self.query_one("#log-hub", Log).write_line(line)
+        for line in mod_lines:
+            self.query_one("#log-modul", Log).write_line(line)
+        self.query_one("#hub-status", Static).update(f"HUB: {v.hub_text}" + ("" if self.sup.supervising else " (nadzoruje inny manager)"))
+        colors = {"info": "#8b949e", "warn": "#d29922", "error": "#f85149"}
+        self.query_one("#banners", Static).update("\n".join(f"[{colors[b.level]}]{b.text}[/]" for b in v.banners))
+        self._sync_buttons(v.buttons)
+        stop = self.query_one("#btn-hub-stop", Button)
+        stop.disabled = not v.stop_hub_enabled
+        start = self.query_one("#btn-hub-start", Button)
+        start.disabled = not v.start_hub_enabled
+        start.set_classes("green" if v.start_hub_enabled else "grey")
+
+    def _sync_buttons(self, buttons) -> None:
+        box = self.query_one("#module-buttons", Vertical)
+        ids = [f"mod-{i}-{b.id or 'reczny'}" for i, b in enumerate(buttons)]
+        if ids != self._button_ids:
+            box.remove_children()
+            box.mount_all([Button(b.text, id=wid) for wid, b in zip(ids, buttons)])
+            self._button_ids = ids
+        for wid, b in zip(ids, buttons):
+            w = self.query_one(f"#{wid}", Button)
+            w.label = b.text
+            w.disabled = not b.enabled
+            w.set_classes(b.color)
+            w.mod_action, w.mod_id = b.action, b.id
+
+    # ── Debian ──
+
+    def _ping(self) -> None:
+        self.run_worker(self._ping_thread, thread=True, exclusive=False)
+
+    def _ping_thread(self) -> None:
+        st = debian.ping(DEBIAN_SSH_HOST)
+        self.call_from_thread(self._apply_ping, st)
+
+    def _apply_ping(self, st) -> None:
+        if st != self.debian_state:
+            self._log_sys(f"Debian: {debian.LABELS[st]}")
+        self.debian_state = st
+        self.query_one("#debian-status", Static).update(f"Debian: {debian.LABELS[st]}")
+        self.query_one("#btn-debian-off", Button).disabled = st != "up"
+
+    # ── przyciski ──
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        dispatch = {
-            "btn-obs-start":  self._start_obs,
-            "btn-obs-stop":   self._stop_obs,
-            "btn-hub-start":  self._start_hub,
-            "btn-hub-stop":   self._stop_hub,
-            "btn-mod-start":  self._start_module,
-            "btn-mod-stop":   self._stop_module,
-            "btn-debian-off": self._shutdown_debian,
-        }
-        handler = dispatch.get(event.button.id)
-        if handler:
-            self.run_worker(handler(), exclusive=False)
+        bid = event.button.id or ""
+        if bid.startswith("mod-"):
+            action, mid = getattr(event.button, "mod_action", ""), getattr(event.button, "mod_id", "")
+            if action:
+                self.run_worker(lambda: self._module_action(action, mid), thread=True)
+        elif bid == "btn-hub-stop":
+            self.push_screen(Confirm("Zatrzymać HUB?", ["Moduł, OBS i pluginy zostaną zamknięte według reguł HUB-a.",
+                                                          "Manager nie uruchomi HUB-a ponownie, dopóki nie klikniesz \"Uruchom HUB\"."],
+                                     yes="Zatrzymaj HUB"), self._stop_hub_confirmed)
+        elif bid == "btn-hub-start":
+            self.run_worker(self._start_hub, thread=True)
+        elif bid == "btn-debian-off":
+            self.run_worker(self._debian_prepare, thread=True)
 
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "module-select":
-            self._selected_module = str(event.value)
-            self._log_sys(f"Wybrany moduł: {self._selected_module}")
-
-    # ── OBS ───────────────────────────────────────────────────────────────────
-
-    async def _start_obs(self) -> None:
-        if self._obs_proc and self._obs_proc.poll() is None:
-            self._log_sys("OBS już działa.")
-            return
-        obs_path = Path(OBS_PATH)
-        if not obs_path.exists():
-            self._log_sys(f"[BŁĄD] Nie znaleziono OBS: {obs_path}")
-            return
+    def _module_action(self, action, mid) -> None:
+        path, body = ("/module/start", {"id": mid}) if action == "start" else ("/module/stop", {})
         try:
-            self._obs_proc = subprocess.Popen(
-                [str(obs_path)],
-                cwd=str(obs_path.parent),   # OBS szuka locale/ relatywnie do cwd
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            msg = f"OBS uruchomiony (pid {self._obs_proc.pid})"
-            self._log_sys(msg)
-            self._log_tab(self.TAB_OBS, msg)
-            self._set_status("obs", True)
-        except Exception as e:
-            self._log_sys(f"[BŁĄD] OBS: {e}")
+            code, res = self.sup.channel.post(path, body)
+            msg = "przyjęte" if code == 202 else (res.get("error") or f"kod {code}")
+        except ChannelError as e:
+            msg = str(e)
+        what = f"Uruchomienie modułu {mid}" if action == "start" else "Zatrzymanie modułu"
+        self.call_from_thread(self._log_sys, f"{what}: {msg}")
+        if action == "stop" and msg != "przyjęte":
+            self.call_from_thread(self.notify, msg, severity="warning", timeout=8)
 
-    async def _stop_obs(self) -> None:
-        if not self._obs_proc or self._obs_proc.poll() is not None:
-            self._log_sys("OBS nie działa.")
-            self._set_status("obs", False)
-            return
-        self._obs_proc.terminate()
-        self._log_sys("OBS zatrzymany.")
-        self._log_tab(self.TAB_OBS, "OBS zatrzymany.")
-        self._set_status("obs", False)
+    def _stop_hub_confirmed(self, yes) -> None:
+        if yes:
+            self.run_worker(self._stop_hub, thread=True)
 
-    # ── HUB ───────────────────────────────────────────────────────────────────
+    def _stop_hub(self) -> None:
+        ok, msg = self.sup.stop_hub()
+        self.call_from_thread(self._log_sys, f"ZATRZYMAJ HUB: {msg}")
+        if not ok:
+            self.call_from_thread(self.notify, msg, severity="warning", timeout=8)
 
-    async def _start_hub(self) -> None:
-        if self._hub_proc and self._hub_proc.poll() is None:
-            self._log_sys("HUB już działa.")
-            return
+    def _start_hub(self) -> None:
         if not HUB_EXE.exists():
-            self._log_sys(f"[BŁĄD] Nie znaleziono HUB: {HUB_EXE}")
+            self.call_from_thread(self._log_sys, f"[BŁĄD] Nie znaleziono {HUB_EXE} (zbuduj: hub\\build.bat)")
             return
+        pid = self.sup.start(by_user=True)
+        self.call_from_thread(self._log_sys, f"Uruchomiono HUB (PID {pid})")
+
+    def _debian_prepare(self) -> None:
         try:
-            self._hub_proc = subprocess.Popen(
-                [str(HUB_EXE)],
-                cwd=str(HUB_DIR),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            self._log_sys(f"HUB uruchomiony (pid {self._hub_proc.pid})")
-            self._set_status("hub", True)
-            self.run_worker(
-                self._tail(self._hub_proc, self.TAB_HUB, "hub"),
-                exclusive=False,
-            )
-        except Exception as e:
-            self._log_sys(f"[BŁĄD] HUB: {e}")
+            rec = self.sup.channel.recorder().get("state", "unknown")
+        except ChannelError:
+            rec = "hub_unreachable"
+        session = (self.sup.state or {}).get("session") or {}
+        v = debian.confirm_variant(rec, session.get("open"), bool(session.get("known")))
+        self.call_from_thread(self._debian_confirm, v)
 
-    async def _stop_hub(self) -> None:
-        if not self._hub_proc or self._hub_proc.poll() is not None:
-            self._log_sys("HUB nie działa.")
-            self._set_status("hub", False)
-            return
-        self._hub_proc.terminate()
-        await asyncio.sleep(0.5)
-        if self._hub_proc.poll() is None:
-            self._hub_proc.kill()
-        self._log_sys("HUB zatrzymany.")
-        self._set_status("hub", False)
+    def _debian_confirm(self, v) -> None:
+        def second(yes):
+            if yes and v.confirmations == 2:
+                self.push_screen(Confirm("Na pewno wyłączyć Debiana mimo ostrzeżeń?", v.warnings, yes="Tak, wyłącz"), final)
+            elif yes:
+                final(True)
 
-    # ── Moduł ─────────────────────────────────────────────────────────────────
+        def final(yes):
+            if yes:
+                self.run_worker(self._debian_shutdown, thread=True)
 
-    async def _start_module(self) -> None:
-        if self._module_proc and self._module_proc.poll() is None:
-            self._log_sys(f"Moduł '{self._selected_module}' już działa.")
-            return
-        module_path = MODULES.get(self._selected_module)
-        if not module_path or not module_path.exists():
-            self._log_sys(f"[BŁĄD] Nie znaleziono modułu: {module_path}")
-            return
-        try:
-            self._module_proc = subprocess.Popen(
-                [sys.executable, str(module_path)],
-                cwd=str(ROOT / "modules"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            self._log_sys(
-                f"Moduł '{self._selected_module}' uruchomiony "
-                f"(pid {self._module_proc.pid})"
-            )
-            self._set_status("module", True)
-            self.run_worker(
-                self._tail(self._module_proc, self.TAB_MODULE, "module"),
-                exclusive=False,
-            )
-        except Exception as e:
-            self._log_sys(f"[BŁĄD] Moduł: {e}")
+        self.push_screen(Confirm("Wyłączyć komputer z recorder-pluginem (Debian)?", v.warnings, yes="Wyłącz Debiana"), second)
 
-    async def _stop_module(self) -> None:
-        if not self._module_proc or self._module_proc.poll() is not None:
-            self._log_sys("Moduł nie działa.")
-            self._set_status("module", False)
-            return
-        self._module_proc.terminate()
-        await asyncio.sleep(1)
-        if self._module_proc.poll() is None:
-            self._module_proc.kill()
-        self._log_sys(f"Moduł '{self._selected_module}' zatrzymany.")
-        self._set_status("module", False)
+    def _debian_shutdown(self) -> None:
+        ok, msg = debian.shutdown(DEBIAN_SSH_HOST, DEBIAN_SSH_USER)
+        self.call_from_thread(self._log_sys, ("✓ " if ok else "[BŁĄD] ") + msg)
 
-    # ── Debian ────────────────────────────────────────────────────────────────
-
-    async def _shutdown_debian(self) -> None:
-        if not DEBIAN_SSH_HOST or not DEBIAN_SSH_USER:
-            self._log_sys("[BŁĄD] Brak DEBIAN_SSH_HOST / DEBIAN_SSH_USER w .env")
-            return
-        self._log_sys(f"Wysyłam shutdown → {DEBIAN_SSH_USER}@{DEBIAN_SSH_HOST}...")
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "ssh",
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=5",
-                f"{DEBIAN_SSH_USER}@{DEBIAN_SSH_HOST}",
-                "sudo shutdown -h now",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-            if stdout:
-                self._log_sys(f"[SSH] {stdout.decode().strip()}")
-            if proc.returncode == 0:
-                self._log_sys("✓ Debian wyłącza się.")
-            else:
-                self._log_sys(f"[BŁĄD] SSH kod {proc.returncode}")
-        except asyncio.TimeoutError:
-            self._log_sys("[BŁĄD] SSH timeout — brak połączenia?")
-        except FileNotFoundError:
-            self._log_sys("[BŁĄD] Nie znaleziono 'ssh'. Zainstaluj OpenSSH.")
-        except Exception as e:
-            self._log_sys(f"[BŁĄD] SSH: {e}")
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── pomocnicze ──
 
     def _log_sys(self, msg: str) -> None:
-        self._log_tab(self.TAB_SYSTEM, msg)
-
-    def _log_tab(self, tab_id: str, msg: str) -> None:
         try:
-            self.query_one(f"#log-{tab_id}", Log).write_line(f"{_now()}  {msg}")
-        except Exception:
-            pass
-
-    async def _tail(
-        self,
-        proc: subprocess.Popen,
-        tab_id: str,
-        service_key: str,
-    ) -> None:
-        if proc.stdout is None:
-            return
-        loop = asyncio.get_event_loop()
-        try:
-            while True:
-                line = await loop.run_in_executor(None, proc.stdout.readline)
-                if not line:
-                    break
-                self._log_tab(tab_id, line.rstrip())
-        except Exception:
-            pass
-        rc = proc.poll()
-        self._log_tab(tab_id, f"--- Proces zakończony (kod {rc}) ---")
-        self._log_sys(f"[{tab_id.upper()}] Proces zakończony (kod {rc})")
-        self._set_status(service_key, False)
-
-    def _set_status(self, service: str, running: bool) -> None:
-        try:
-            self.query_one(f"#status-{service}", ServiceStatus).running = running
+            self.query_one("#log-system", Log).write_line(f"{_now()}  {msg}")
         except Exception:
             pass
 
     async def action_quit(self) -> None:
-        for proc, name in [
-            (self._module_proc, "moduł"),
-            (self._hub_proc,    "HUB"),
-        ]:
-            if proc and proc.poll() is None:
-                self._log_sys(f"Zatrzymuję {name}...")
-                proc.terminate()
+        # Zamknięcie okna niczego nie zatrzymuje: HUB, moduł, OBS i pluginy działają dalej (nadzór przejmie kolejny manager)
+        self.sup.close()
         self.exit()
 
 
 if __name__ == "__main__":
-    BroadcastManager().run()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", help="plik konfiguracji HUB-a (próby); domyślnie hub/config/hub.json")
+    BroadcastManager(ap.parse_args().config).run()

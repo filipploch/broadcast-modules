@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -231,6 +232,8 @@ class Supervisor:
         self.started_at: Optional[float] = None
         self.events: list = []
         self._first = True
+        self._mu = threading.RLock()  # okno woła nadzór z kilku wątków (odświeżanie, przyciski)
+        self._closed = False
 
     @property
     def supervising(self) -> bool:
@@ -245,6 +248,10 @@ class Supervisor:
     # -- start i zatrzymanie --
 
     def start(self, by_user=False):
+        with self._mu:
+            return self._start(by_user)
+
+    def _start(self, by_user=False):
         if by_user:
             self.marker.clear()
             self.policy.reset()
@@ -260,6 +267,10 @@ class Supervisor:
         return pid
 
     def stop_hub(self):
+        with self._mu:
+            return self._stop_hub()
+
+    def _stop_hub(self):
         """POST /hub/stop. Zwraca (ok, komunikat). Po przyjęciu: znacznik "zatrzymany celowo" (bez restartu przy żadnym kodzie wyjścia)."""
         pid = ((self.state or {}).get("hub") or {}).get("pid", 0)
         try:
@@ -306,6 +317,11 @@ class Supervisor:
     # -- jeden krok nadzoru --
 
     def tick(self):
+        with self._mu:
+            if not self._closed:  # po zamknięciu okna odświeżanie w tle nie zajmuje ponownie blokady nadzoru
+                self._tick()
+
+    def _tick(self):
         if not self.lock.held and self.lock.acquire() and not self._first:
             self._event("observer", "ten manager przejął nadzór HUB-a")
         try:
@@ -334,7 +350,7 @@ class Supervisor:
                 self._event("exited", f"HUB (PID {pid}) zakończył się z kodem {code}; restart należy do managera-nadzorcy")
             elif self.policy.allow_restart(now):
                 self._event("restarted", f"HUB (PID {pid}) zakończył się z kodem {code}: restart {self.policy.count} z {MAX_RESTARTS}")
-                self.start()
+                self._start()
             else:
                 self.phase = "gave_up"
                 self._event("gave_up", f"HUB (PID {pid}) zakończył się z kodem {code}: limit {MAX_RESTARTS} restartów wyczerpany")
@@ -344,7 +360,7 @@ class Supervisor:
             self.phase = "stopped"
         elif self.proc is None and self._first and self.supervising and self.phase == "not_started":
             self._event("started", "HUB nie odpowiada: uruchamiam hub.exe --module none")
-            self.start()
+            self._start()
         elif self.phase not in ("gave_up", "stopped"):
             since = self.seconds_since_start()
             self.phase = "starting" if since is not None and since < 30 else ("unreachable" if self.proc is not None or self.started_at else "not_started")
@@ -352,5 +368,7 @@ class Supervisor:
 
     def close(self):
         """Zamknięcie okna: zwalnia blokadę nadzoru i uchwyt; HUB działa dalej."""
-        self._set_proc(None)
-        self.lock.release()
+        with self._mu:
+            self._closed = True
+            self._set_proc(None)
+            self.lock.release()
