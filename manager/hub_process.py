@@ -8,7 +8,9 @@ Zasady:
   - Restart wyłącznie po awarii: proces HUB-a zniknął bez polecenia z managera i zakończył się kodem innym niż 0; najwyżej 3 z rzędu,
     licznik zerowany po 5 minutach stabilnej pracy. Kod 0 (np. Ctrl+C) = bez restartu.
   - Po przyjętym POST /hub/stop zapisywany jest znacznik manager-hub-zatrzymany.json: żaden kod wyjścia nie daje wtedy restartu, a drugi
-    manager i ponowne otwarcie go respektują. Znacznik kasuje dopiero przycisk "Uruchom HUB".
+    manager (otwarty przy działającym pierwszym) i przejmujący nadzór go respektują. Wariant A (decyzja właściciela): znacznik chroni tylko,
+    dopóki działa jakiś manager albo HUB; świeży start managera, gdy nie działa żaden inny manager ani HUB, kasuje go i uruchamia HUB
+    (HUB startuje razem z managerem). Znacznik kasuje też przycisk "Uruchom HUB".
   - Proces HUB-a przejmowany po numerze z /state tylko przy zgodnym czasie utworzenia procesu: zapis managera, który go uruchomił
     (manager-hub.json), albo czas pracy z /state (tolerancja 5 s). Niezgodny = nie ten proces: reguła kodu wyjścia nie jest stosowana.
 """
@@ -356,9 +358,16 @@ class Supervisor:
                 self._event("gave_up", f"HUB (PID {pid}) zakończył się z kodem {code}: limit {MAX_RESTARTS} restartów wyczerpany")
             self._first = False
             return
-        if self.proc is None and self.marker.active():
+        fresh = self.proc is None and self._first and self.supervising and self.phase == "not_started"
+        if fresh and self.marker.active():
+            # Wariant A (decyzja właściciela 2026-10-19): zapis chroni przed wskrzeszeniem HUB-a tylko, dopóki działa jakiś manager
+            # albo HUB. Świeży start managera, gdy nie działa ani inny manager (mamy blokadę nadzoru), ani HUB: kasuje zapis i uruchamia HUB.
+            self.marker.clear()
+            self._event("started", "HUB zatrzymany celowo wcześniej, ale nie działa ani HUB, ani inny manager: kasuję zapis i uruchamiam hub.exe --module none")
+            self._start()
+        elif self.proc is None and self.marker.active():
             self.phase = "stopped"
-        elif self.proc is None and self._first and self.supervising and self.phase == "not_started":
+        elif fresh:
             self._event("started", "HUB nie odpowiada: uruchamiam hub.exe --module none")
             self._start()
         elif self.phase not in ("gave_up", "stopped"):

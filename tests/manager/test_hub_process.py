@@ -199,21 +199,69 @@ class SupervisorTest(unittest.TestCase):
         self.assertIn("Najpierw zamknij", msg)
         self.assertFalse(StopMarker(self.run).active())
 
-    def test_ponowne_otwarcie_managera_respektuje_celowe_zatrzymanie(self):
+    def test_przycisk_uruchom_hub_kasuje_zapis(self):
         e = self.env()
         e.sup.tick()
         e.hub_up()
         e.sup.stop_hub()
         e.crash(0)
-        e.sup.close()
-        self.envs.remove(e)
-        e2 = self.env()                       # nowe okno managera
-        e2.sup.tick()
-        self.assertEqual(e2.launches, 0, "po celowym zatrzymaniu nowy manager nie uruchamia HUB-a sam")
-        self.assertEqual(e2.sup.phase, "stopped")
-        e2.sup.start(by_user=True)            # przycisk "Uruchom HUB"
-        self.assertEqual(e2.launches, 1)
+        self.assertEqual(e.sup.phase, "stopped")
+        e.sup.start(by_user=True)             # przycisk "Uruchom HUB"
+        self.assertEqual(e.launches, 2)
         self.assertFalse(StopMarker(self.run).active(), "przycisk Uruchom HUB kasuje znacznik")
+
+    # Wariant A (decyzja właściciela 2026-10-19): zapis chroni tylko, dopóki działa jakiś manager albo HUB.
+    def test_swiezy_start_po_zatrzymaniu_kasuje_zapis_i_uruchamia_hub(self):
+        for code in (0, 1):
+            with self.subTest(code=code):
+                StopMarker(self.run).clear()
+                e = self.env()
+                e.sup.tick()
+                e.hub_up()
+                e.sup.stop_hub()
+                e.crash(code)
+                self.assertEqual(e.launches, 1, f"kod {code} po celowym zatrzymaniu: bez restartu w tym oknie")
+                e.sup.close()                     # wieczorem: okno zamknięte, nic nie działa
+                self.envs.remove(e)
+                e2 = self.env()                   # rano: świeży start managera
+                e2.sup.tick()
+                self.assertEqual(e2.launches, 1, "świeży start managera (nic nie działa) uruchamia HUB")
+                self.assertFalse(StopMarker(self.run).active(), "świeży start kasuje zapis")
+                self.assertTrue(any("kasuję zapis" in ev.text for ev in e2.sup.events))
+                e2.sup.close()
+                self.envs.remove(e2)
+
+    def test_drugie_okno_przy_dzialajacym_pierwszym_respektuje_zapis(self):
+        a = self.env()
+        a.sup.tick()
+        a.hub_up()
+        a.sup.stop_hub()
+        a.crash(1)                                # celowo zatrzymany (dowolny kod), pierwszy manager nadal otwarty
+        b = self.env(clock=a.clock, channel=a.channel)
+        b.sup.tick()
+        self.assertFalse(b.sup.supervising)
+        self.assertEqual(a.launches + b.launches, 1, "drugie okno nie uruchamia HUB-a")
+        self.assertEqual(b.sup.phase, "stopped")
+        self.assertTrue(StopMarker(self.run).active())
+        a.sup.close()                             # pierwszy się zamyka: drugi przejmuje nadzór, ale to nie jest świeży start
+        self.envs.remove(a)
+        b.sup.tick()
+        self.assertTrue(b.sup.supervising)
+        self.assertEqual(b.launches, 0, "przejęcie nadzoru nie kasuje zapisu i nie uruchamia HUB-a")
+        self.assertTrue(StopMarker(self.run).active())
+
+    def test_restart_managera_przy_dzialajacym_hub_ie(self):
+        e = self.env()
+        e.sup.tick()
+        e.hub_up()
+        e.sup.close()                             # okno zamknięte, HUB działa dalej
+        self.envs.remove(e)
+        e2 = self.env(clock=e.clock, channel=e.channel)
+        e2.procs = e.procs
+        e2.sup.tick()
+        self.assertEqual(e2.launches, 0, "HUB działa: nowy manager tylko się podłącza")
+        self.assertEqual(e2.sup.phase, "ok")
+        self.assertIs(e2.sup.proc, e.procs[101])
 
     def test_dwa_managery_jeden_restart(self):
         a = self.env()

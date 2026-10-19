@@ -7,7 +7,8 @@ Folder, porty (HUB 18100, modul 18101, kanal 18102, atrapa OBS 18104) i budowani
   M5. Nadzor uruchamia HUB (--module none), modul startuje kanalem; nadzor sie konczy ("zamkniecie okna"): HUB i modul dzialaja dalej;
       drugi nadzor tylko sie podlacza (ten sam HUB, bez drugiego startu).
   M6. HUB zabity silowo: nadzor uruchamia go ponownie, nowy HUB przejmuje modul (ten sam proces); trzy awarie = trzy restarty, czwarta = koniec
-      (limit); po celowym POST /hub/stop przy zamknietej sesji: bez restartu, znacznik w pliku, kolejny nadzor tez nie uruchamia HUB-a.
+      (limit); po celowym POST /hub/stop przy zamknietej sesji: bez restartu, zapis w pliku; drugi nadzor przy dzialajacym pierwszym
+      go respektuje; swiezy start nadzoru, gdy nic nie dziala, kasuje zapis i uruchamia HUB (wariant A).
   M9. Sprzatanie: nic z proby nie zostaje.
 """
 import json, os, pathlib, signal, subprocess, sys, time
@@ -121,14 +122,23 @@ def main():
         log4 = sup_log("4")
         d.check("M6f po celowym zatrzymaniu: HUB zakonczony, bez restartu", gone and hub_pid() is None and "bez restartu" in log4
                 and log4.count("restart ") == 0, f"({log4[-400:]!r})")
+        s4b = supervisor("4b", 6)                        # drugie okno przy dzialajacym pierwszym (s4 trzyma nadzor)
+        sups.append(s4b)
+        s4b.wait(30)
+        log4b = sup_log("4b")
+        d.check("M6g drugi nadzor przy dzialajacym pierwszym respektuje zapis (bez startu)", "uruchamiam" not in log4b
+                and "stopped (nadzorca: nie)" in log4b and hub_pid() is None and MARKER.exists(), f"({log4b!r})")
         s4.terminate()
         s4.wait(10)
-        s5 = supervisor("5", 6)
+        # wariant A: swiezy start managera, gdy nie dziala ani inny manager, ani HUB: kasuje zapis i uruchamia HUB
+        s5 = supervisor("5", 10)
         sups.append(s5)
+        started = d.wait_for(lambda: hub_pid() is not None, 30)
+        remember_hub()
         s5.wait(30)
         log5 = sup_log("5")
-        d.check("M6g kolejny nadzor respektuje znacznik w pliku (nie uruchamia HUB-a)", "uruchamiam" not in log5 and "stopped" in log5
-                and hub_pid() is None, f"({log5!r})")
+        d.check("M6h swiezy start nadzoru po celowym zatrzymaniu: kasuje zapis i uruchamia HUB", started and "kasuję zapis" in log5
+                and not MARKER.exists(), f"({log5!r})")
     finally:
         d.say("\n== M9. Sprzatanie")
         for s in sups:
