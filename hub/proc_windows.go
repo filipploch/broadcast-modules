@@ -11,13 +11,16 @@ import (
 
 const (
 	createNewProcessGroup = 0x00000200
-	detachedProcess       = 0x00000008
+	createNoWindow        = 0x08000000
 )
 
 // detachedAttr: proces bez konsoli HUB-a i we własnej grupie procesów. Nie ginie przy zamknięciu okna HUB-a,
 // przy Ctrl+C w jego konsoli ani po jego awarii (bez obiektu zadania, który zabijałby procesy potomne razem z HUB-em).
+// Proces dostaje własną, UKRYTĄ konsolę (CREATE_NO_WINDOW), a nie żadną (DETACHED_PROCESS): moduł (venv python.exe) uruchamia
+// prawdziwy interpreter jako proces potomny, który bez konsoli rodzica dostawał nową, widoczną i pustą (próba ręczna E2d3c2;
+// test TestDetachedChildOfServiceGetsNoVisibleConsoleWindow). Ukrytą konsolę dziedziczy potomek, więc okno się nie pojawia.
 func detachedAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{CreationFlags: createNewProcessGroup | detachedProcess}
+	return &syscall.SysProcAttr{CreationFlags: createNewProcessGroup | createNoWindow}
 }
 
 // killTree kończy proces wraz z całym drzewem procesów potomnych (wymuszenie).
