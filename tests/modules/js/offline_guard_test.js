@@ -141,6 +141,94 @@ test('io() jest opakowane: każde połączenie strony jest chronione, własnośc
   assert.ok(ctx.OfflineGuard);
 });
 
+function makeTimers() {
+  const timers = [];
+  return {
+    setInterval(fn) { timers.push({ fn, active: true }); return timers.length - 1; },
+    clearInterval(h) { if (timers[h]) timers[h].active = false; },
+    tick() { timers.filter((t) => t.active).forEach((t) => t.fn()); },
+    active: () => timers.filter((t) => t.active).length,
+  };
+}
+
+test('okno z formularzem otwarte: po powrocie połączenia strona NIE jest przeładowana, pasek informuje', () => {
+  const g = load({}).OfflineGuard;
+  const doc = makeDoc();
+  const t = makeTimers();
+  let reloads = 0; let busy = true;
+  const s = makeSocket(true);
+  g.guardSocket(s, { document: doc, reload() { reloads++; }, isBusy: () => busy, setInterval: t.setInterval, clearInterval: t.clearInterval });
+  s.connected = false; s.fire('disconnect');
+  s.connected = true; s.fire('connect');
+  assert.strictEqual(reloads, 0, 'wpisane dane nie mogą przepaść');
+  const bar = doc.els[g.BAR_ID];
+  assert.strictEqual(bar.style.display, 'block');
+  assert.strictEqual(bar.textContent, g.BAR_TEXT_DEFERRED);
+  t.tick(); t.tick();
+  assert.strictEqual(reloads, 0, 'okno nadal otwarte');
+  busy = false; t.tick();
+  assert.strictEqual(reloads, 1, 'po zamknięciu okna strona pobiera stan od nowa (raz)');
+  assert.strictEqual(doc.els[g.BAR_ID].style.display, 'none');
+  t.tick();
+  assert.strictEqual(reloads, 1);
+  assert.strictEqual(t.active(), 0, 'sondowanie kończy się po przeładowaniu');
+});
+
+test('kolejne rozłączenie w czasie oczekiwania: znów pasek błędu, jedno sondowanie, jedno przeładowanie', () => {
+  const g = load({}).OfflineGuard;
+  const doc = makeDoc();
+  const t = makeTimers();
+  let reloads = 0; let busy = true;
+  const s = makeSocket(true);
+  g.guardSocket(s, { document: doc, reload() { reloads++; }, isBusy: () => busy, setInterval: t.setInterval, clearInterval: t.clearInterval });
+  s.connected = false; s.fire('disconnect');
+  s.connected = true; s.fire('connect');
+  s.connected = false; s.fire('disconnect');
+  assert.strictEqual(doc.els[g.BAR_ID].textContent, 'MODUŁ: brak połączenia');
+  busy = false; t.tick();
+  assert.strictEqual(reloads, 0, 'bez połączenia nie przeładowujemy (strona i tak nie dostałaby stanu)');
+  s.connected = true; s.fire('connect');
+  assert.strictEqual(t.active() <= 1, true);
+  t.tick();
+  assert.strictEqual(reloads, 1);
+});
+
+test('okno otwarte, ale akcje po powrocie połączenia działają (połączenie jest żywe)', () => {
+  const g = load({}).OfflineGuard;
+  const t = makeTimers();
+  const s = makeSocket(true);
+  g.guardSocket(s, { document: makeDoc(), reload() {}, isBusy: () => true, setInterval: t.setInterval, clearInterval: t.clearInterval });
+  s.connected = false; s.fire('disconnect');
+  s.connected = true; s.fire('connect');
+  s.emit('timer_start');
+  assert.deepStrictEqual(s.sent, [['timer_start']]);
+});
+
+function docWith(modals, active) {
+  const doc = makeDoc();
+  doc.querySelectorAll = (sel) => modals[sel] || [];
+  doc.activeElement = active;
+  doc.defaultView = { getComputedStyle: (el) => ({ display: el.display || 'block', visibility: el.visibility || 'visible' }) };
+  return doc;
+}
+
+test('wykrywanie okna: widoczny kontener okna to zajęte, ukryty to wolne', () => {
+  const g = load({}).OfflineGuard;
+  assert.strictEqual(g.isBusy(docWith({ '[id$="modal-overlay"]': [{ display: 'flex' }] })), true);
+  assert.strictEqual(g.isBusy(docWith({ '[id$="modal-overlay"]': [{ display: 'none' }] })), false);
+  assert.strictEqual(g.isBusy(docWith({ '.modal-content:not(.invisible)': [{}] })), true);
+  assert.strictEqual(g.isBusy(docWith({})), false);
+});
+
+test('wykrywanie pisania: pole tekstowe w fokusie to zajęte, przycisk i pole wyboru nie', () => {
+  const g = load({}).OfflineGuard;
+  assert.strictEqual(g.isBusy(docWith({}, { tagName: 'INPUT', type: 'text' })), true);
+  assert.strictEqual(g.isBusy(docWith({}, { tagName: 'TEXTAREA' })), true);
+  assert.strictEqual(g.isBusy(docWith({}, { tagName: 'SELECT' })), true);
+  assert.strictEqual(g.isBusy(docWith({}, { tagName: 'INPUT', type: 'checkbox' })), false);
+  assert.strictEqual(g.isBusy(docWith({}, { tagName: 'BUTTON' })), false);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log('OK   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + e.message); }
