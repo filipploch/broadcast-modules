@@ -1,6 +1,8 @@
 """Recorder Manager - Manages camera recording"""
 from flask import current_app
 
+from core.managers.camera_supervision import CameraSupervision
+
 
 def _get_camera():
     from core.models.base_camera import get_camera_model
@@ -10,8 +12,8 @@ def _get_event_camera():
     from core.models.base_event_camera import get_event_camera_model
     return get_event_camera_model()
 
-class RecorderManager:
-    """Manages recorder plugin and camera recording"""
+class RecorderManager(CameraSupervision):
+    """Manages recorder plugin and camera recording; nadzór nad kamerami (lista, stany, paski, źródła OBS): CameraSupervision"""
     
     def __init__(self, hub_client):
         self.hub_client = hub_client
@@ -244,7 +246,8 @@ class RecorderManager:
         # Point this camera's OBS source at its SRT stream only now that
         # there's actually something listening on the other end — see
         # on_recording_stopped for why it gets cleared again below.
-        self._set_camera_stream_active(camera_id, True)
+        if not self._camera_managed(camera_id):
+            self._set_camera_stream_active(camera_id, True)
 
     def on_recording_stopped(self, msg):
         """Called by hub_client when recorder-plugin reports recording stopped for a camera."""
@@ -270,7 +273,9 @@ class RecorderManager:
         # StreamManager.StartStream) — clear the OBS source's URL so it
         # isn't left retrying a connection to nothing every ~10s until the
         # camera starts recording again.
-        self._set_camera_stream_active(camera_id, False)
+        self._clear_interrupted(camera_id)     # sesja nagrania się skończyła: koniec "przerwy w nagraniu"
+        if not self._camera_managed(camera_id):
+            self._set_camera_stream_active(camera_id, False)
 
     def _set_camera_stream_active(self, camera_id, active):
         try:
@@ -298,6 +303,10 @@ class RecorderManager:
             return
         current_app.logger.info(f"📍 recorder-plugin reported IP: {ip}")
         self.recorder_plugin_ip = ip
+        # Plugin właśnie się zarejestrował (to zgłoszenie idzie przy każdej rejestracji): pełna lista kamer od nowa
+        # i źródła OBS kamer, które już działają.
+        self.on_recorder_registered()
+        self.apply_camera_sources()
 
     def resync_camera_stream_sources(self):
         """Re-applies the last known recorder-plugin IP to the sCameraN
@@ -343,6 +352,7 @@ class RecorderManager:
             f"🔁 Segment rotated for {camera_id} → {payload.get('file_name')} "
             f"(reason={payload.get('reason')}) — restarting matching OBS source"
         )
+        self._clear_interrupted(camera_id)      # nowy segment otwarty: koniec "przerwy w nagraniu"
 
         reported_started_at = None
         started_at_ms = payload.get('started_at')

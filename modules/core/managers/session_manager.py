@@ -135,6 +135,36 @@ def status_for_hub():
     return {'state': s.status, 'session_id': s.id, 'game_id': e.game_id if e else None}
 
 
+def _sync_cameras():
+    """Po każdej zmianie sesji (mecz, otwarcie, zamknięcie) plugin dostaje pełną listę kamer, które mają działać (E2d3b).
+    Powtórzenie tej samej listy jest pomijane. Błąd nie przerywa zmiany sesji."""
+    try:
+        import core.managers as cm
+        if cm._hub_client is not None:
+            cm.get_recorder_manager().sync_cameras()
+    except Exception:
+        logging.getLogger(__name__).warning('Nie udało się zsynchronizować listy kamer z recorder-pluginem', exc_info=True)
+
+
+def _inherit_cameras(from_game_id, to_game_id):
+    """Następny mecz w sesji dostaje kamery poprzedniego (wszystkie mecze sesji mają te same kamery; operator może je potem zmienić).
+    Nadpisuje przypisania nowego meczu. Kamera główna (HDMI 1) zostaje zawsze. Część transakcji zmiany meczu (bez własnego commitu)."""
+    if not from_game_id or from_game_id == to_game_id:
+        return
+    from core.models.base_game_camera import get_game_camera_model
+    GameCamera = get_game_camera_model()
+    source = GameCamera.query.filter_by(game_id=from_game_id).order_by(GameCamera.hdmi_input).all()
+    if not source:
+        return
+    for existing in GameCamera.query.filter_by(game_id=to_game_id).all():
+        db.session.delete(existing)
+    db.session.flush()      # unikalność (game_id, hdmi_input) i (game_id, camera_id) przed dodaniem kopii
+    for gc in source:
+        db.session.add(GameCamera(game_id=to_game_id, camera_id=gc.camera_id, position_id=gc.position_id, location=gc.location,
+                                  hdmi_input=gc.hdmi_input, is_motorized=gc.is_motorized))
+    db.session.flush()
+
+
 def _publish_status():
     """Po każdej zmianie sesji zgłasza HUB-owi jej status (HUB pamięta ostatni znany i na jego podstawie decyduje o restarcie
     i zamykaniu OBS). Nie tworzy klienta HUB-a, jeśli go nie ma; ponowne zgłoszenie idzie po każdym połączeniu. Błąd nie przerywa zmiany sesji."""
@@ -145,6 +175,7 @@ def _publish_status():
             client.send_session_status(status_for_hub())
     except Exception:
         logging.getLogger(__name__).warning('Nie udało się zgłosić statusu sesji HUB-owi', exc_info=True)
+    _sync_cameras()
 
 
 def _before_leaving(entry):
@@ -244,6 +275,7 @@ def activate_game(game_id, auto_open=True):
         entry.active_slot = 1
         entry.started_at = entry.started_at or now
         entry.ended_at = None
+        _inherit_cameras(previous.game_id if previous is not None else None, game_id)
         _commit()
         return entry
     except Exception:
@@ -275,6 +307,7 @@ def next_game():
             queued.status = SessionGame.STATUS_ACTIVE
             queued.active_slot = 1
             queued.started_at = queued.started_at or now
+            _inherit_cameras(current.game_id if current is not None else None, queued.game_id)
         _commit()
         return queued
     except Exception:

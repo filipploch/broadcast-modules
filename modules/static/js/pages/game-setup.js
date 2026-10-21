@@ -144,6 +144,12 @@ function buildCard(item, side, idx) {
             opts + '</select>';
     }
 
+    // ── Stan kamery (E2d3b): wyłączona / startuje / działa / błąd ───────
+    let cameraStateLabel = '';
+    if (side === 'assigned' && _contentType === 'cameras') {
+        cameraStateLabel = _cameraStateHtml(item.hdmi_input);
+    }
+
     // ── Squad inline editor (assigned side, futsal 2-col) ─────────────
     let playerEditor = '';
     if (isSquad && side === 'assigned' && item.pg_id) {
@@ -163,7 +169,7 @@ function buildCard(item, side, idx) {
         centerContent =
             '<div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
             (sub ? '<div style="font-size:.78rem;color:#6c757d;">' + sub + '</div>' : '') +
-            typeSelect + hdmiSelect;
+            typeSelect + hdmiSelect + cameraStateLabel;
     }
 
     const arrow = side === 'available'
@@ -194,6 +200,10 @@ function onDrop(event, targetSide) {
 function moveItem(fromSide, idx) {
     const src = fromSide === 'available' ? _available : _assigned;
     const dst = fromSide === 'available' ? _assigned  : _available;
+    if (fromSide === 'assigned' && _contentType === 'cameras' && src[idx] && src[idx].hdmi_input === 1) {
+        alert('Kamera g\u0142\u00f3wna (HDMI 1) jest zawsze w\u0142\u0105czona \u2014 nie mo\u017cna jej odznaczy\u0107.');
+        return;
+    }
     const item = src.splice(idx, 1)[0];
 
     if (fromSide === 'available' && item.types && !item.type) {
@@ -603,6 +613,25 @@ function submitAddPlayer() {
 // ── SocketIO ───────────────────────────────────────────────────────────
 const _socket = io();
 
+// ── Stan kamer (E2d3b) ─────────────────────────────────────────────────
+let _cameraStates = {};
+const _CAMERA_STATE_LABELS = { off: 'wyłączona', starting: 'startuje', running: 'działa', error: 'błąd' };
+
+function _cameraStateHtml(hdmi) {
+    const info = _cameraStates['camera' + hdmi];
+    if (!info) return '';
+    const label = _CAMERA_STATE_LABELS[info.state] || info.state;
+    const color = info.state === 'running' ? '#198754' : (info.state === 'error' ? '#dc3545' : '#6c757d');
+    const extra = info.recording ? ' · nagrywa' : '';
+    return '<div style="font-size:.75rem;color:' + color + ';margin-top:.15rem;">Obraz: ' + label + extra + '</div>';
+}
+
+_socket.on('camera_states', function(data) {
+    _cameraStates = data.cameras || {};
+    if (_contentType === 'cameras' && typeof renderLists === 'function') renderLists();
+});
+_socket.on('connect', function() { _socket.emit('get_camera_states'); });
+
 _socket.on('player_scraping_completed', function(data) {
     const side = (data.team_id === _homeTeamId) ? 'home-squad' : 'away-squad';
     window.location.href = '/game-setup?open=' + side;
@@ -716,13 +745,27 @@ function saveAssignments() {
         return;
     }
 
+    _postAssignments(false);
+}
+
+// Zapis listy (kamery: z potwierdzeniem, gdy usuwana kamera nagrywa — serwer odpowiada confirm_required).
+function _postAssignments(confirmStopRecording) {
+    const body = { assigned: _assigned };
+    if (confirmStopRecording) body.confirm_stop_recording = true;
     fetch('/api/assign/' + _contentType + '/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assigned: _assigned }),
+        body: JSON.stringify(body),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+        if (data.confirm_required) {
+            const names = (data.cameras || []).map(function(c) { return c.replace('camera', 'KAMERA '); }).join(', ');
+            if (confirm(names + ' nagrywa. Usunięcie zakończy jej nagranie. Kontynuować?')) {
+                _postAssignments(true);
+            }
+            return;
+        }
         if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
         window.location.reload();
     })

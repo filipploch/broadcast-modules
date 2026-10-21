@@ -200,6 +200,14 @@ def register_events(socketio):
 
     # ── Recording ─────────────────────────────────────────────────────────────
 
+    @socketio.on('get_camera_states')
+    def handle_get_camera_states():
+        """Stan kamer (z ostatnich zgłoszeń recorder-pluginu) i lista kamer, które mają działać: dla opcji meczu i paneli."""
+        from flask_socketio import emit
+        from core.managers import get_recorder_manager
+        manager = get_recorder_manager()
+        emit('camera_states', {'cameras': manager.camera_states(), 'wanted': manager.wanted_cameras()})
+
     @socketio.on('get_camera_assignments')
     def handle_get_camera_assignments():
         from flask_socketio import emit

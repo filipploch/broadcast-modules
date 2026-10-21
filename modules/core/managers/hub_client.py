@@ -450,6 +450,12 @@ class HubClient:
                     self.plugin_seen.add(plugin_id)
                 elif plugin_id == 'obs-ws-plugin':
                     self.obs_running = False
+                elif plugin_id == 'recorder-plugin':
+                    try:
+                        from core.managers import get_recorder_manager
+                        get_recorder_manager().on_recorder_disconnected()     # stan kamer nieznany do ponownej rejestracji
+                    except Exception as e:
+                        self._log("error", f"Nie udało się wyczyścić stanu kamer po rozłączeniu recorder-pluginu: {e}")
 
             if status == 'connected':
                 self._report_reachable(plugin_id)
@@ -593,6 +599,14 @@ class HubClient:
                 recorder_manager.on_recorder_plugin_info(msg)
             elif msg_type == 'segment_rotated':
                 recorder_manager.on_segment_rotated(msg)
+            elif msg_type == 'camera_state':
+                recorder_manager.on_camera_state(msg)
+            elif msg_type == 'set_active_cameras_response':
+                recorder_manager.on_set_active_cameras_response(msg)
+            elif msg_type == 'recording_interrupted':
+                recorder_manager.on_recording_interrupted(msg)
+            elif msg_type == 'stream_changed':
+                recorder_manager.on_stream_changed(msg)
 
         if msg_from == 'obs-ws-plugin':
             from core.managers import get_obs_ws_manager
@@ -827,6 +841,13 @@ class HubClient:
 
         if plugin_id == 'obs-ws-plugin':
             self._request_obs_scene_map()
+
+        if plugin_id == 'recorder-plugin':
+            try:
+                from core.managers import get_recorder_manager
+                get_recorder_manager().on_recorder_registered()
+            except Exception as e:
+                self._log("error", f"Nie udało się wysłać listy kamer do recorder-pluginu: {e}")
 
         if plugin_id.startswith('cam-head-'):
             from core.managers import get_servo_manager, get_gopro_manager
