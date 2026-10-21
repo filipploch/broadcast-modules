@@ -8,6 +8,9 @@ from flask import current_app
 import threading
 import logging
 
+# Identyfikator nakładki w HUB-ie (overlay.js: overlayId); tylko ona dostaje przywrócony kontener po prośbie o dane
+OVERLAY_ID = 'stream-overlay'
+
 def _get_game():
     from core.models.base_game import get_game_model
     return get_game_model()
@@ -528,6 +531,20 @@ class GameManager:
 
         return query.order_by(Game.date.desc()).all()
 
+    def _restore_overlay_container(self, hub_client, target):
+        """Wysyła nakładce `show_overlay_container` dla zapamiętanego kontenera. Dane (skład, wynik, strzelcy...) są budowane z bazy
+        w chwili wysyłania, nie ze starej migawki. Błąd budowania nie przerywa odpowiedzi na prośbę o dane."""
+        try:
+            container_id = session_manager.overlay_container_get()
+            if not container_id:
+                return
+            from core.utils.socketio_events_utils import generate_show_overlay_data
+            data = generate_show_overlay_data({'container_id': container_id})
+            hub_client.send_to_plugin(target, 'show_overlay_container', data)
+            logger.info(f'Przywrócono kontener nakładki po jej połączeniu: {container_id}')
+        except Exception:
+            logger.warning('Nie udało się przywrócić kontenera nakładki', exc_info=True)
+
     def handle_request_game_data(self, msg):
         from core.models.base_settings import get_settings_model
         Settings = get_settings_model()
@@ -556,6 +573,10 @@ class GameManager:
         if timer_manager:
             penalties = timer_manager._get_penalties_dict(current_game_id)
             hub_client.send_to_plugin(msg_from, 'penalty_state', penalties)
+
+            # E2e: nakładka, która właśnie się połączyła (start, restart OBS, odświeżenie źródła, awaria HUB-a), wraca do ekranu sprzed awarii
+            if msg_from == OVERLAY_ID:
+                self._restore_overlay_container(hub_client, msg_from)
 
             # Stan zegara głównego: biegnący zegar sam przysyła ticki, ale zatrzymany (przerwa, pauza) nie przyśle nic, więc
             # nakładka uruchomiona później (np. po starcie OBS) nie znałaby czasu. Wysyłamy go w postaci zwykłego timer_updated.

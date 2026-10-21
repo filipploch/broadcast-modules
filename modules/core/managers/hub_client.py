@@ -581,6 +581,15 @@ class HubClient:
                 socketio.emit('active_container_changed', {
                     'container_id': payload.get('container_id'),
                 })
+                # E2e: zapamiętujemy, który kontener jest widoczny (tylko id), żeby po awarii HUB-a albo OBS nakładka wróciła
+                # do tego samego ekranu. Zgłoszenie "reason: load" to świeżo załadowana nakładka (wszystko ukryte): nie jest
+                # decyzją operatora i nie może skasować zapamiętanego kontenera przed jego przywróceniem.
+                if payload.get('reason') != 'load':
+                    try:
+                        from core.managers import session_manager
+                        session_manager.overlay_container_set(payload.get('container_id'))
+                    except Exception as e:
+                        self._log("warning", f"Nie udało się zapamiętać widocznego kontenera nakładki: {e}")
 
         elif msg_from == 'recorder-plugin':
             from core.managers import get_recorder_manager

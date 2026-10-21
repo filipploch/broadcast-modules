@@ -10,7 +10,9 @@ Sesja przechodzi w "na antenie" automatycznie, gdy OBS zgłosi start streamu alb
 on_obs_recording_started), albo ręcznie (go_on_air). Zamknięcie sesji jest wyłącznie ręczne (close_session) i nigdy
 nie następuje samo po zatrzymaniu streamu.
 """
+import json
 import logging
+import threading
 from datetime import datetime
 
 from core.extensions import db
@@ -374,6 +376,136 @@ def close_session():
         raise
 
 
+# ── Stan do odtworzenia po awarii (E2e): recovery_state sesji ────────────────
+#
+# JSON w kolumnie broadcast_sessions.recovery_state. Aktualizujemy zawsze POJEDYNCZY KLUCZ, pod jedną blokadą procesu
+# (odczyt → zmiana klucza → zapis), więc równoległe zapisy różnych kluczy (kontener nakładki z wątku HUB-a, ścieżki nagrań
+# ze zdarzeń OBS) nie gubią się nawzajem. Klucze:
+#   overlay       {"container_id": "<id kontenera widocznego w nakładce albo null>", "at": "<czas>"}  (tylko id: dane budowane z bazy przy ponownym wysłaniu)
+#   record_paths  [{"path", "state": "recording"|"saved"|"interrupted", "started_at", "ended_at"}]  (nigdy nie kasowane w trakcie sesji)
+# Błąd zapisu nie może przerwać obsługi zdarzenia, które go wywołało: funkcje logują i zwracają None.
+
+_RECOVERY_LOCK = threading.RLock()
+
+
+def _parse_recovery(raw):
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning('recovery_state sesji jest uszkodzony (nie JSON): zaczynam od pustego, stara treść zostaje w logu: %r', str(raw)[:200])
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def recovery_get(session=None):
+    """Cały stan do odtworzenia otwartej sesji (słownik) albo {} (brak sesji)."""
+    session = session or get_open_session()
+    return _parse_recovery(session.recovery_state) if session is not None else {}
+
+
+def recovery_update(key, value=None, fn=None):
+    """Aktualizuje jeden klucz recovery_state otwartej sesji. `fn(stara_wartość) -> nowa` ma pierwszeństwo przed `value`.
+    Zwraca nową wartość klucza albo None (brak otwartej sesji lub błąd zapisu)."""
+    with _RECOVERY_LOCK:
+        try:
+            session = get_open_session()
+            if session is None:
+                return None
+            db.session.refresh(session)             # inny wątek mógł zapisać inny klucz od naszego ostatniego odczytu
+            data = _parse_recovery(session.recovery_state)
+            new = fn(data.get(key)) if fn is not None else value
+            data[key] = new
+            session.recovery_state = json.dumps(data, ensure_ascii=False)
+            db.session.commit()
+            return new
+        except Exception:
+            db.session.rollback()
+            logger.warning('Nie udało się zapisać klucza %s w recovery_state sesji', key, exc_info=True)
+            return None
+
+
+def _now_iso():
+    return datetime.utcnow().isoformat(timespec='seconds')
+
+
+# -- kontener widoczny w nakładce
+
+def overlay_container_set(container_id):
+    """Zapamiętuje, który główny kontener nakładki jest widoczny (None = żaden). Tylko identyfikator: dane budujemy z bazy przy wysłaniu."""
+    return recovery_update('overlay', {'container_id': container_id or None, 'at': _now_iso()})
+
+
+def overlay_container_get():
+    """Identyfikator zapamiętanego widocznego kontenera nakładki albo None."""
+    ov = recovery_get().get('overlay')
+    return ov.get('container_id') if isinstance(ov, dict) else None
+
+
+# -- ścieżki nagrań OBS (lista na sesję; ścieżka zostaje także po przerwaniu nagrania awarią OBS)
+
+def record_path_started(path):
+    """Początek nagrania OBS. Starsze obs-websocket (< 5.5.4) podaje pustą ścieżkę przy starcie: wpis powstaje i dostaje ścieżkę przy zatrzymaniu."""
+    def add(lst):
+        lst = list(lst or [])
+        if lst and lst[-1].get('state') == 'recording' and (lst[-1].get('path') or '') == (path or ''):
+            return lst                                            # powtórzone zdarzenie startu
+        lst.append({'path': path or '', 'state': 'recording', 'started_at': _now_iso(), 'ended_at': None})
+        return lst
+    return recovery_update('record_paths', fn=add)
+
+
+def record_path_stopped(path):
+    """Koniec nagrania OBS z ostateczną ścieżką pliku (zdarzenie STOPPED zawsze ją niesie)."""
+    def close(lst):
+        lst = list(lst or [])
+        for entry in reversed(lst):
+            if entry.get('state') in ('recording', 'interrupted'):
+                if path:
+                    entry['path'] = path
+                entry['state'], entry['ended_at'] = 'saved', _now_iso()
+                return lst
+        if path:                                                  # zatrzymanie bez zapisanego startu (np. start przed wdrożeniem)
+            lst.append({'path': path, 'state': 'saved', 'started_at': None, 'ended_at': _now_iso()})
+        return lst
+    return recovery_update('record_paths', fn=close)
+
+
+def record_paths_mark_interrupted():
+    """Nagranie, które trwało, a OBS padł: wpisy 'recording' dostają 'interrupted' (ścieżka zostaje). Zwraca liczbę zmienionych wpisów."""
+    changed = []
+
+    def mark(lst):
+        lst = list(lst or [])
+        for entry in lst:
+            if entry.get('state') == 'recording':
+                entry['state'], entry['ended_at'] = 'interrupted', _now_iso()
+                changed.append(entry.get('path'))
+        return lst
+    if recovery_update('record_paths', fn=mark) is None:
+        return 0
+    return len(changed)
+
+
+def record_paths_list():
+    """Lista nagrań sesji (kopie wpisów)."""
+    lst = recovery_get().get('record_paths')
+    return [dict(e) for e in lst] if isinstance(lst, list) else []
+
+
+def current_record_path():
+    """Ścieżka ostatniego nagrania OBS tej sesji. Gdy sesja jej nie zna (otwarta przed wdrożeniem E2e), zapasowo `Settings.obs_record_filepath`."""
+    for entry in reversed(record_paths_list()):
+        if entry.get('path'):
+            return entry['path']
+    try:
+        from core.models.base_settings import get_settings_model
+        return get_settings_model().get_obs_record_filepath()
+    except Exception:
+        return None
+
+
 def describe():
     """Stan sesji do API/interfejsu: dict albo {'open': False}."""
     s = get_open_session()
@@ -385,6 +517,7 @@ def describe():
         'started_at': s.started_at.isoformat() if s.started_at else None,
         'game_id': e.game_id if e else None,
         'period_id': current_period_id(),
-        'obs': {'scene': s.obs_scene, 'recording': s.obs_recording, 'streaming': s.obs_streaming},
+        'obs': {'scene': s.obs_scene, 'recording': s.obs_recording, 'streaming': s.obs_streaming,
+                'record_paths': record_paths_list()},
         'queue': [{'game_id': x.game_id, 'position': x.position, 'status': x.status} for x in s.session_games],
     }
