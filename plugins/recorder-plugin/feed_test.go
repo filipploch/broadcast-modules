@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -10,16 +11,35 @@ import (
 	"time"
 )
 
-// TestFeedHelperProcess nie jest testem: to proces udający ffmpeg odbioru. FEED_HELPER=sleep trzyma się do SIGINT/Kill,
-// FEED_HELPER=exit kończy się od razu błędem.
+// TestFeedHelperProcess nie jest testem: to proces udający ffmpeg. Tryby (FEED_HELPER):
+//
+//	frames – raportuje rosnący licznik klatek (-progress) do SIGINT/Kill,
+//	exit   – kończy się od razu błędem,
+//	silent – żyje, ale nie raportuje żadnych klatek,
+//	stall  – raportuje klatki przez 400 ms, potem zamiera (żyje, licznik stoi).
 func TestFeedHelperProcess(t *testing.T) {
-	switch os.Getenv("FEED_HELPER") {
-	case "sleep":
-		time.Sleep(time.Minute)
-		os.Exit(0)
+	mode := os.Getenv("FEED_HELPER")
+	if mode == "" {
+		return
+	}
+	switch mode {
+	case "frames":
+		for n := 1; ; n++ {
+			fmt.Printf("frame=%d\nprogress=continue\n", n)
+			time.Sleep(40 * time.Millisecond)
+		}
 	case "exit":
 		os.Exit(3)
+	case "silent":
+		time.Sleep(time.Minute)
+	case "stall":
+		for n := 1; n <= 10; n++ {
+			fmt.Printf("frame=%d\nprogress=continue\n", n)
+			time.Sleep(40 * time.Millisecond)
+		}
+		time.Sleep(time.Minute)
 	}
+	os.Exit(0)
 }
 
 func helperCmd(mode string, launches *int32) func(args []string) *exec.Cmd {
@@ -36,8 +56,10 @@ func helperCmd(mode string, launches *int32) func(args []string) *exec.Cmd {
 func testFeed(mode string, launches *int32) *CameraFeed {
 	f := NewCameraFeed(CameraConfig{ID: "cam1", DevicePath: "/dev/cam1", LoopbackDevice: "/dev/video11"})
 	f.newCmd = helperCmd(mode, launches)
-	f.grace = 150 * time.Millisecond
+	f.firstFrameTimeout = 600 * time.Millisecond
+	f.stallTimeout = 400 * time.Millisecond
 	f.retryDelay = 60 * time.Millisecond
+	f.watchTick = 20 * time.Millisecond
 	return f
 }
 
@@ -57,7 +79,7 @@ func waitState(t *testing.T, f *CameraFeed, want string) {
 func TestBuildFeedArgs(t *testing.T) {
 	args := buildFeedArgs(CameraConfig{ID: "c", DevicePath: "/dev/camera1", LoopbackDevice: "/dev/video11"})
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-input_format mjpeg", "-video_size 1920x1080", "-framerate 30", "-i /dev/camera1", "-pix_fmt yuyv422", "-f v4l2"} {
+	for _, want := range []string{"-progress pipe:1", "-input_format mjpeg", "-video_size 1920x1080", "-framerate 30", "-i /dev/camera1", "-pix_fmt yuyv422", "-f v4l2"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("brak %q w: %s", want, joined)
 		}
@@ -103,7 +125,7 @@ func TestBuildFFmpegArgsDirectModeUnchanged(t *testing.T) {
 
 func TestFeedStartsRunsAndStops(t *testing.T) {
 	var launches int32
-	f := testFeed("sleep", &launches)
+	f := testFeed("frames", &launches)
 	var mu sync.Mutex
 	var seen []string
 	f.SetOnChange(func(id, state, errMsg string) { mu.Lock(); seen = append(seen, state); mu.Unlock() })
@@ -150,7 +172,7 @@ func TestFeedRetriesAfterFailureAndRecovers(t *testing.T) {
 		t.Fatalf("po awarii odbiór ma ponawiać próby (bez limitu), uruchomień: %d", n)
 	}
 
-	f.newCmd = helperCmd("sleep", nil) // kamera wróciła
+	f.newCmd = helperCmd("frames", nil) // kamera wróciła
 	waitState(t, f, FeedRunning)
 	f.Stop()
 }
@@ -175,5 +197,73 @@ func TestFeedWithoutLoopbackCannotStart(t *testing.T) {
 	f := NewCameraFeed(CameraConfig{ID: "c", DevicePath: "/dev/c"})
 	if f.CanFeed() || f.Start() == nil {
 		t.Fatal("kamera bez loopback_device nie ma odbioru")
+	}
+}
+
+func TestFeedNeverRunningWithoutFrames(t *testing.T) {
+	f := testFeed("silent", nil)
+	_ = f.Start()
+	waitState(t, f, FeedStarting)
+	waitState(t, f, FeedError)
+	if _, msg := f.State(); !strings.Contains(msg, "brak klatek") {
+		t.Fatalf("żyjący proces bez klatek to błąd, nie „działa”: %q", msg)
+	}
+	f.Stop()
+}
+
+func TestFeedWatchdogKillsStalledProcessAndRestarts(t *testing.T) {
+	var launches int32
+	f := testFeed("stall", &launches)
+	_ = f.Start()
+	waitState(t, f, FeedRunning)
+	waitState(t, f, FeedError) // po stallTimeout bez nowych klatek
+	if _, msg := f.State(); !strings.Contains(msg, "zamarła") {
+		t.Fatalf("komunikat zamarcia: %q", msg)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for atomic.LoadInt32(&launches) < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if atomic.LoadInt32(&launches) < 2 {
+		t.Fatal("po zamarciu odbiór ma wystartować od nowa")
+	}
+	f.Stop()
+}
+
+func TestFeedSuspendReleasesCameraAndResumeRestores(t *testing.T) {
+	var launches int32
+	f := testFeed("frames", &launches)
+	_ = f.Start()
+	waitState(t, f, FeedRunning)
+
+	f.Suspend()
+	if st, _ := f.State(); st != FeedError || !f.Wanted() || !f.Suspended() {
+		t.Fatalf("po Suspend: stan=%q wanted=%v suspended=%v", st, f.Wanted(), f.Suspended())
+	}
+	n := atomic.LoadInt32(&launches)
+	time.Sleep(250 * time.Millisecond)
+	if atomic.LoadInt32(&launches) != n {
+		t.Fatal("wstrzymany odbiór nie może ponawiać prób")
+	}
+	f.Resume()
+	waitState(t, f, FeedRunning)
+	if f.Suspended() {
+		t.Fatal("po Resume nie jest wstrzymany")
+	}
+	f.Stop()
+}
+
+func TestFeedWritesAndRemovesPidFile(t *testing.T) {
+	dir := t.TempDir()
+	f := testFeed("frames", nil)
+	f.pidDir = dir
+	_ = f.Start()
+	waitState(t, f, FeedRunning)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Fatalf("w czasie pracy ma być plik pid, jest %d", len(entries))
+	}
+	f.Stop()
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatal("po Stop plik pid ma zniknąć")
 	}
 }

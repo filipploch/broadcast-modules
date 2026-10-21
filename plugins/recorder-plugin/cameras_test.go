@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,20 +19,35 @@ func testRM(t *testing.T, ids ...string) (*RecorderManager, map[string]*int32) {
 	}
 	launches := map[string]*int32{}
 	for _, id := range ids {
-		cfg := CameraConfig{ID: id, DevicePath: "/dev/" + id, LoopbackDevice: "/dev/loop-" + id, Enabled: true}
-		cam := NewCameraRecorder(cfg, t.TempDir(), SegmentConfig{}, "libx264", "")
+		dir := t.TempDir()
+		dev, loop := filepath.Join(dir, "dev-"+id), filepath.Join(dir, "loop-"+id) // zwykłe pliki zamiast urządzeń: istnieją, więc tryb z odbioru jest możliwy
+		_ = os.WriteFile(dev, nil, 0o644)
+		_ = os.WriteFile(loop, nil, 0o644)
+		cfg := CameraConfig{ID: id, DevicePath: dev, LoopbackDevice: loop, Enabled: true}
+		cam := NewCameraRecorder(cfg, dir, SegmentConfig{}, "libx264", "")
+		cam.newFFmpeg = helperCmd("frames", nil)
+		cam.recWatchTick = 20 * time.Millisecond
+		cam.recFirstFrameTimeout = 600 * time.Millisecond
+		cam.recStallTimeout = 400 * time.Millisecond
 		feed := NewCameraFeed(cfg)
 		var n int32
 		launches[id] = &n
-		feed.newCmd = helperCmd("sleep", &n)
-		feed.grace = 100 * 1e6
-		feed.retryDelay = 50 * 1e6
+		feed.newCmd = helperCmd("frames", &n)
+		feed.firstFrameTimeout = 600 * time.Millisecond
+		feed.stallTimeout = 400 * time.Millisecond
+		feed.retryDelay = 50 * time.Millisecond
+		feed.watchTick = 20 * time.Millisecond
 		cam.feedRunning = feed.Running
 		feed.SetOnChange(func(cameraID, state, errMsg string) { rm.onFeedChanged(cameraID, state, errMsg) })
 		rm.cameras[id] = cam
 		rm.feeds[id] = feed
 	}
 	t.Cleanup(func() {
+		for _, c := range rm.cameras {
+			if c.IsRecording() {
+				_ = c.StopRecord()
+			}
+		}
 		for _, f := range rm.feeds {
 			f.Stop()
 		}
@@ -111,22 +128,6 @@ func TestSetActiveCamerasKeepsRecordingCameraUnlessConfirmed(t *testing.T) {
 	}
 	if !rm.feeds["camera2"].Running() {
 		t.Fatal("zablokowana kamera dalej działa")
-	}
-}
-
-func TestStartRecordWaitsForFeedWhenCameraIsStarting(t *testing.T) {
-	rm, _ := testRM(t, "camera1")
-	// odbiór chciany, ale proces jeszcze nie przeżył okresu uruchomienia
-	rm.feeds["camera1"].grace = 5 * 1e9
-	_ = rm.feeds["camera1"].Start()
-	waitState(t, rm.feeds["camera1"], FeedStarting)
-
-	err := rm.StartRecord("camera1", RecordingMeta{})
-	if err == nil || !strings.Contains(err.Error(), "jeszcze nie działa") {
-		t.Fatalf("nagrywanie kamery, którą trzyma startujący odbiór, ma się nie uruchomić: %v", err)
-	}
-	if rm.cameras["camera1"].IsRecording() {
-		t.Fatal("nagrywanie nie powinno ruszyć")
 	}
 }
 

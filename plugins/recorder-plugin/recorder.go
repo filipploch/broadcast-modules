@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -58,6 +60,12 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		SignalDelay: time.Duration(cfg.SegmentSignalDelaySeconds) * time.Second,
 	}
 
+	// Procesy odbioru osierocone przez poprzedni egzemplarz pluginu (zabity bez sprzątania) trzymałyby kamery: kończymy je przed startem.
+	pidDir := filepath.Join(os.TempDir(), "recorder-plugin-feeds")
+	if n := ReapOrphanFeeds(pidDir); n > 0 {
+		log.Printf("🧹 Zakończono %d osieroconych procesów odbioru z poprzedniego uruchomienia", n)
+	}
+
 	for _, camCfg := range cfg.Cameras {
 		if !camCfg.Enabled {
 			log.Printf("⏭️  Camera %s is disabled — skipping", camCfg.ID)
@@ -76,6 +84,7 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		})
 		feed := NewCameraFeed(camCfg)
 		if feed.CanFeed() {
+			feed.pidDir = pidDir
 			rm.feeds[camID] = feed
 			cam.feedRunning = feed.Running
 			feed.SetOnChange(func(cameraID, state, errMsg string) { rm.onFeedChanged(cameraID, state, errMsg) })
@@ -252,6 +261,16 @@ func (rm *RecorderManager) notifyRecordingStopped(cameraID string) {
 // handleUnexpectedStop is called by CameraRecorder when ffmpeg exits without
 // an explicit StopRecord command. It notifies main_module and auto-restarts.
 func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingMeta) {
+	// Nagrywanie z odbioru: nie zaczynamy nowej sesji, tylko zamykamy segment i otwieramy następny tej samej sesji po powrocie obrazu.
+	rm.mu.RLock()
+	cam := rm.cameras[cameraID]
+	rm.mu.RUnlock()
+	if feed := rm.feedFor(cameraID); feed != nil && cam != nil && feed.Wanted() && cam.pauseAfterCrash("recorder_exit") {
+		rm.notifyRecordingInterrupted(cameraID, "recorder_exit")
+		go rm.resumeWhenFeedReady(cameraID)
+		return
+	}
+
 	log.Printf("🔄 [%s] Unexpected stop detected — scheduling auto-restart", cameraID)
 
 	// The camera's own ffmpeg (and with it, the loopback feed) just died, so
@@ -316,6 +335,9 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 		}
 
 		log.Printf("🛑 [%s] Auto-restart gave up after %d attempts", cameraID, autoRestartMaxTries)
+		if feed := rm.feedFor(cameraID); feed != nil {
+			feed.Resume() // nagrywanie wprost nie wstało: kamera wraca do odbioru
+		}
 		if hc != nil {
 			_ = hc.Send(&Message{
 				To:      "main-module",
@@ -349,14 +371,25 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 		return fmt.Errorf("unknown camera: %s", cameraID)
 	}
 
-	// Kamera ma włączony odbiór, ale jeszcze nie działa (startuje albo nie ma obrazu): kamery nie wolno otworzyć drugi raz
-	// (trzyma ją odbiór), więc nagrywanie czeka na stan „działa”.
-	if feed := rm.feedFor(cameraID); feed != nil && feed.Wanted() && !feed.Running() {
-		st, errMsg := feed.State()
-		return fmt.Errorf("camera %s: obraz jeszcze nie działa (stan: %s %s) — nagrywanie możliwe po uruchomieniu kamery", cameraID, st, errMsg)
+	// Kamera ma włączony odbiór. Startuje: czekamy krótko na wynik. Działa: nagrywamy z urządzenia pośredniego. Błąd (brak
+	// kamery lub urządzenia pośredniego, zamarcie) albo nie zdążył wstać: nagrywamy WPROST z kamery, jak dotąd, żeby nie
+	// zostać bez nagrania; odbiór oddaje wtedy kamerę (Suspend) i wraca po zakończeniu nagrywania (Resume w StopRecord).
+	var suspendedFeed *CameraFeed
+	if feed := rm.feedFor(cameraID); feed != nil && feed.Wanted() {
+		if st, _ := feed.State(); st == FeedStarting {
+			waitFeedSettled(feed, feedSettleWait)
+		}
+		if !feed.Running() {
+			log.Printf("⚠️  [%s] odbiór nie działa (%s) — nagrywanie wprost z kamery", cameraID, func() string { st, e := feed.State(); return st + " " + e }())
+			feed.Suspend()
+			suspendedFeed = feed
+		}
 	}
 
 	if err := cam.StartRecord(meta); err != nil {
+		if suspendedFeed != nil {
+			suspendedFeed.Resume()
+		}
 		return err
 	}
 
@@ -414,7 +447,25 @@ func (rm *RecorderManager) StopRecord(cameraID string) error {
 		log.Printf("⏭️  [%s] auto-stream stop: %v", cameraID, err)
 	}
 
+	// Nagrywanie wprost zakończone: odbiór dostaje kamerę z powrotem.
+	if feed := rm.feedFor(cameraID); feed != nil {
+		feed.Resume()
+	}
+
 	return nil
+}
+
+// feedSettleWait: ile Start nagrywania czeka, aż startujący odbiór dostarczy pierwszą klatkę albo zgłosi błąd.
+const feedSettleWait = 3 * time.Second
+
+func waitFeedSettled(feed *CameraFeed, d time.Duration) {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if st, _ := feed.State(); st != FeedStarting {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 // StopAll stops recording on every active camera. Called on plugin shutdown.

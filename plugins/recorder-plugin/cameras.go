@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"time"
 )
 
 // cameras.go: zestaw aktywnych kamer. Moduł główny wysyła PEŁNĄ listę kamer, które mają działać ("set_active_cameras");
@@ -43,12 +44,80 @@ func (rm *RecorderManager) onFeedChanged(cameraID, state, errMsg string) {
 				log.Printf("⏭️  [%s] podgląd SRT nie wystartował: %v", cameraID, err)
 			}
 		}()
-	} else if !rm.hasDirectRecording(cameraID) {
-		if err := rm.streamer.StopStream(cameraID); err != nil {
-			log.Printf("⏭️  [%s] zatrzymanie podglądu SRT: %v", cameraID, err)
+		go rm.resumeWhenFeedReady(cameraID) // nagranie w pauzie dostaje nowy segment
+	} else {
+		feed := rm.feedFor(cameraID)
+		if feed == nil || !feed.Suspended() { // wstrzymanie = nagrywanie wprost, nie utrata obrazu
+			go rm.pauseRecordingForFeed(cameraID)
+		}
+		if !rm.hasDirectRecording(cameraID) {
+			if err := rm.streamer.StopStream(cameraID); err != nil {
+				log.Printf("⏭️  [%s] zatrzymanie podglądu SRT: %v", cameraID, err)
+			}
 		}
 	}
 	rm.notifyCameraState(cameraID)
+}
+
+// pauseRecordingForFeed: odbiór stracił obraz — nagrywanie z odbioru zamyka bieżący segment (sesja trwa).
+func (rm *RecorderManager) pauseRecordingForFeed(cameraID string) {
+	rm.mu.RLock()
+	cam := rm.cameras[cameraID]
+	rm.mu.RUnlock()
+	feed := rm.feedFor(cameraID)
+	if cam == nil || feed == nil {
+		return
+	}
+	paused, err := cam.PauseForFeed("feed_lost", func() bool { return !feed.Running() })
+	if err != nil {
+		log.Printf("❌ [%s] pauza nagrania po utracie obrazu: %v", cameraID, err)
+		return
+	}
+	if paused {
+		rm.notifyRecordingInterrupted(cameraID, "feed_lost")
+	}
+}
+
+// resumeWhenFeedReady otwiera nowy segment nagrania w pauzie, gdy obraz działa (ponawia po błędzie uruchomienia).
+func (rm *RecorderManager) resumeWhenFeedReady(cameraID string) {
+	rm.mu.RLock()
+	cam := rm.cameras[cameraID]
+	rm.mu.RUnlock()
+	feed := rm.feedFor(cameraID)
+	if cam == nil || feed == nil {
+		return
+	}
+	for attempt := 1; attempt <= autoRestartMaxTries; attempt++ {
+		if !cam.Paused() || !feed.Running() {
+			return
+		}
+		ok, err := cam.ResumeAfterFeed(feed.Running)
+		if err == nil {
+			_ = ok
+			return
+		}
+		log.Printf("❌ [%s] nowy segment po powrocie obrazu (próba %d/%d): %v", cameraID, attempt, autoRestartMaxTries, err)
+		time.Sleep(autoRestartDelay)
+	}
+	rm.mu.RLock()
+	hc := rm.hubClient
+	rm.mu.RUnlock()
+	if hc != nil {
+		_ = hc.Send(&Message{To: "main-module", Context: rm.cameraContext(cameraID), Type: "recording_restart_failed",
+			Payload: map[string]interface{}{"camera_id": cameraID, "attempts": autoRestartMaxTries}})
+	}
+}
+
+// notifyRecordingInterrupted: nagrywanie trwa jako sesja, ale bieżący segment zamknięto z powodu utraty obrazu lub awarii procesu.
+func (rm *RecorderManager) notifyRecordingInterrupted(cameraID, reason string) {
+	rm.mu.RLock()
+	hc := rm.hubClient
+	rm.mu.RUnlock()
+	if hc == nil {
+		return
+	}
+	_ = hc.Send(&Message{To: "main-module", Context: rm.cameraContext(cameraID), Type: "recording_interrupted",
+		Payload: map[string]interface{}{"camera_id": cameraID, "reason": reason}})
 }
 
 // hasDirectRecording: kamera nagrywa wprost (bez odbioru) i jej strumień trzyma to nagrywanie.
