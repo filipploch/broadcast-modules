@@ -216,11 +216,11 @@ def main():
     try:
         say("== M1. HUB z --module none")
         hub = start_hub("1")
-        up = wait_for(lambda: state()["protocol"] >= 1, 30)
+        up = wait_for(lambda: state()["protocol"] >= 2, 30)
         if not check("M1a kanal sterujacy odpowiada", up):
             return
         st = state()
-        check("M1b /state: protokol 1 i commit z build", st["protocol"] == 1 and st["hub"]["commit"] == "dryrun", f"({st['protocol']}, {st['hub']['commit']})")
+        check("M1b /state: protokol 2 i commit z build", st["protocol"] == 2 and st["hub"]["commit"] == "dryrun", f"({st['protocol']}, {st['hub']['commit']})")
         check("M1c lista modulow z plikow module.json", [m["id"] for m in st["modules"]] == ["proba", "druga"], f"({st['modules']})")
         time.sleep(3)
         check("M1d HUB bez modulu mimo \"module\" w konfiguracji", active() is None and not port_busy(MOD_PORT) and "module" not in status().get("services", {}),

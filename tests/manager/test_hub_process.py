@@ -57,7 +57,7 @@ class FakeChannel:
     def state(self):
         if not self.up:
             raise ChannelError("unreachable", "brak")
-        return {"protocol": 1, "hub": {"pid": self.pid, "uptime_s": self.uptime, "commit": "x"}, "session": {"known": True}}
+        return {"protocol": 2, "hub": {"pid": self.pid, "uptime_s": self.uptime, "commit": "x"}, "session": {"known": True}}
 
     def post(self, path, body=None):
         self.posts.append(path)

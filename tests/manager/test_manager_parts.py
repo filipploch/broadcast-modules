@@ -80,7 +80,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        self._send(200, {"protocol": 1, "path": self.path})
+        self._send(200, {"protocol": 2, "path": self.path})
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
@@ -103,7 +103,7 @@ class ChannelTest(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
             ch = Channel(srv.server_address[1])
-            self.assertEqual(ch.state()["protocol"], 1)
+            self.assertEqual(ch.state()["protocol"], 2)
             code, res = ch.post("/module/stop")
             self.assertEqual(code, 409, "POST z application/json i bez Origin (inaczej atrapa daje 415)")
             self.assertIn("Najpierw zamknij", res["error"])
@@ -141,7 +141,7 @@ class ChannelTest(unittest.TestCase):
 
 # --- wersja HUB-a ---
 
-def st(protocol=1, commit="abc123"):
+def st(protocol=2, commit="abc123"):
     return {"protocol": protocol, "hub": {"commit": commit}}
 
 
@@ -152,7 +152,7 @@ class VersionTest(unittest.TestCase):
         return run
 
     def test_protokol_rozstrzyga(self):
-        n = version.check(st(protocol=2), ROOT, self.git())
+        n = version.check(st(protocol=1), ROOT, self.git())
         self.assertEqual([x.level for x in n], ["error"])
         self.assertIn("przebuduj", n[0].text)
         self.assertEqual(version.check(st(), ROOT, self.git()), [])
@@ -180,9 +180,9 @@ CAT = catalog.Catalog(modules=[catalog.Module("nalf", "FUTSAL NALF", 8081, "futs
                                catalog.Module("garbarnia", "GARBARNIA", 8081, "garbarnia", 20, "garbarnia")])
 
 
-def state(active=None, session=None, protocol=1, stopping=False):
+def state(active=None, session=None, protocol=2, stopping=False, obs_profile=None):
     return {"protocol": protocol, "hub": {"commit": "x", "stopping": stopping}, "active": active,
-            "session": session or {"known": True, "open": False, "state": "none"}}
+            "session": session or {"known": True, "open": False, "state": "none"}, "obs_profile": obs_profile or {}}
 
 
 class ViewTest(unittest.TestCase):
@@ -227,10 +227,10 @@ class ViewTest(unittest.TestCase):
         self.assertTrue(any("hokej" in b.text for b in v.banners))
 
     def test_niezgodny_protokol_blokuje_moduly_ale_nie_zatrzymanie_hub_a(self):
-        v = view.build(CAT, state(protocol=2), "ok")
+        v = view.build(CAT, state(protocol=1), "ok")
         self.assertTrue(all(not b.enabled for b in v.buttons))
         self.assertTrue(v.stop_hub_enabled)
-        self.assertTrue(any(b.level == "error" and "protokół 2" in b.text for b in v.banners))
+        self.assertTrue(any(b.level == "error" and "protokół 1" in b.text for b in v.banners))
 
     def test_paski_sesji_i_drugi_manager(self):
         v = view.build(CAT, state(session={"known": True, "open": True, "state": "on_air"}), "ok")
@@ -241,6 +241,81 @@ class ViewTest(unittest.TestCase):
         self.assertFalse(v.start_hub_enabled)
         self.assertTrue(any("inny otwarty manager" in b.text for b in v.banners))
         self.assertTrue(view.build(CAT, None, "stopped").start_hub_enabled)
+
+
+# --- profil i zbiór scen OBS (E2d3c3, protokół 2) ---
+
+CAT_OBS = catalog.Catalog(modules=[
+    catalog.Module("nalf", "FUTSAL NALF", 8081, "futsal_nalf", 10, "futsal_nalf", "NALF", "NALF"),
+    catalog.Module("garbarnia", "GARBARNIA", 8081, "garbarnia", 20, "garbarnia", "Garbarnia", "Garbarnia")])
+
+
+class ObsProfileViewTest(unittest.TestCase):
+    def banners(self, v):
+        return [(b.level, b.text) for b in v.banners]
+
+    def test_katalog_czyta_dwa_niezalezne_pola(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            write(root / "a" / "module.json", json.dumps({"format": 1, "id": "alfa", "button": "A", "script": "a.py", "port": 1,
+                                                          "obs_profile": "Liga Żółtych Kaczek", "obs_scene_collection": "Zbiór — wiosna"}))
+            write(root / "b" / "module.json", json.dumps({"format": 1, "id": "beta", "button": "B", "script": "b.py", "port": 2,
+                                                          "obs_profile": "Tylko profil"}))
+            write(root / "c" / "module.json", json.dumps({"format": 1, "id": "gamma", "button": "C", "script": "c.py", "port": 3}))
+            cat = catalog.scan(root)
+        self.assertEqual(cat.warnings, [])
+        a, b, c = cat.get("alfa"), cat.get("beta"), cat.get("gamma")
+        self.assertEqual((a.obs_profile, a.obs_scene_collection), ("Liga Żółtych Kaczek", "Zbiór — wiosna"))
+        self.assertEqual((b.obs_profile, b.obs_scene_collection), ("Tylko profil", ""))
+        self.assertEqual((c.obs_profile, c.obs_scene_collection), ("", ""))
+
+    def test_prawdziwe_pliki_modulow_maja_potwierdzone_nazwy(self):
+        cat = catalog.scan(ROOT / "modules")
+        self.assertEqual(cat.warnings, [])
+        nalf, garb = cat.get("nalf"), cat.get("garbarnia")
+        self.assertEqual((nalf.obs_profile, nalf.obs_scene_collection), ("NALF", "NALF"))
+        self.assertEqual((garb.obs_profile, garb.obs_scene_collection), ("Garbarnia", "Garbarnia"))
+
+    def test_nazwy_aktywnego_modulu_przy_przycisku(self):
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "running"}), "ok")
+        self.assertIn(("info", 'FUTSAL NALF → OBS: profil "NALF", zbiór scen "NALF"'), self.banners(v))
+
+    def test_bez_aktywnego_modulu_brak_wiersza_obs(self):
+        v = view.build(CAT_OBS, state(), "ok")
+        self.assertFalse(any("OBS" in b.text for b in v.banners))
+
+    def test_ostrzezenie_zolte_i_czerwone_z_hub_a(self):
+        prof = {"module_id": "nalf", "profile": "NALF", "collection": "NALF", "state": "warning",
+                "message": "nie przełączono OBS (trwa stream lub nagrywanie)"}
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "running"}, obs_profile=prof), "ok")
+        self.assertIn(("warn", "OBS: nie przełączono OBS (trwa stream lub nagrywanie)"), self.banners(v))
+        prof.update(state="error", message='nie ma profilu "NALF" w OBS')
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "running"}, obs_profile=prof), "ok")
+        self.assertIn(("error", 'OBS: nie ma profilu "NALF" w OBS'), self.banners(v))
+
+    def test_oczekiwanie_na_obs_to_informacja(self):
+        prof = {"module_id": "nalf", "profile": "NALF", "collection": "NALF", "state": "pending",
+                "message": "OBS albo obs-ws-plugin jeszcze nie działa"}
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "starting"}, obs_profile=prof), "ok")
+        self.assertIn(("info", "OBS: OBS albo obs-ws-plugin jeszcze nie działa"), self.banners(v))
+
+    def test_zrealizowane_nie_ma_ostrzezenia(self):
+        prof = {"module_id": "nalf", "profile": "NALF", "collection": "NALF", "state": "applied", "message": "OBS ustawiony"}
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "running"}, obs_profile=prof), "ok")
+        self.assertFalse(any(b.level in ("warn", "error") and b.text.startswith("OBS:") for b in v.banners))
+
+    def test_przycisk_pokazuje_przelaczanie_obs_na_czas_przelaczania(self):
+        prof = {"module_id": "nalf", "profile": "NALF", "collection": "NALF", "state": "applying", "message": "przełączanie OBS…"}
+        v = view.build(CAT_OBS, state(obs_profile=prof), "ok")          # przełączenie przed startem procesu modułu
+        self.assertEqual([(b.text, b.enabled) for b in v.buttons], [("PRZEŁĄCZANIE OBS…", False), ("URUCHOM GARBARNIA", True)])
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "starting"}, obs_profile=prof), "ok")
+        self.assertEqual(v.buttons[0].text, "PRZEŁĄCZANIE OBS…")
+        prof["state"] = "applied"
+        v = view.build(CAT_OBS, state(active={"id": "nalf", "state": "starting"}, obs_profile=prof), "ok")
+        self.assertEqual(v.buttons[0].text, "URUCHAMIANIE FUTSAL NALF…")
+
+    def test_protokol_2_jest_oczekiwany(self):
+        self.assertEqual(version.EXPECTED_PROTOCOL, 2)
 
 
 # --- Debian ---

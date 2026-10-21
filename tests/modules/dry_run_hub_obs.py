@@ -175,9 +175,12 @@ def build():
     (DRY / "hub" / "config" / "overlays.json").write_text("{}", encoding="utf-8")
     # Modul proby opisuje plik module.json (E2d3c1) we wlasnym folderze modulow proby
     (DRY / "modules" / "proba").mkdir(parents=True, exist_ok=True)
+    real = json.loads((REPO / "modules" / MODULE / "module.json").read_text(encoding="utf-8-sig"))
     (DRY / "modules" / "proba" / "module.json").write_text(json.dumps({
         "format": 1, "id": "proba", "button": "PROBA", "script": str(REPO / "tests" / "modules" / "dry_run_module.py"),
-        "args": [MODULE], "port": MOD_PORT, "log_name": MODULE}, indent=2), encoding="utf-8")
+        "args": [MODULE], "port": MOD_PORT, "log_name": MODULE,
+        # profil i zbior scen OBS jak w prawdziwym module (E2d3c3)
+        "obs_profile": real.get("obs_profile", ""), "obs_scene_collection": real.get("obs_scene_collection", "")}, indent=2), encoding="utf-8")
     cfg = {
         "hub_port": HUB_PORT, "module": "proba", "modules_dir": str(DRY / "modules"),
         "control_port": 18098,                          # kanal sterujacy proby: poza 8079 i 18080-18091
@@ -261,6 +264,15 @@ def main():
         check("K1b kolejnosc: modul gotowy, potem obs-ws-plugin, potem OBS", 0 <= i_mod < i_plugin < i_obs, f"({i_mod} < {i_plugin} < {i_obs})")
         a = atrapa_log()
         check("K1c OBS z --disable-shutdown-check i katalogiem roboczym bin", "--disable-shutdown-check" in a and f"cwd={OBS_BIN}" in a, f"({a.strip()[:200]})")
+        # E2d3c3: OBS uruchomiony z profilem i zbiorem scen z module.json, a po starcie HUB sprawdza je przez obs-ws-plugin
+        manifest = json.loads((REPO / "modules" / MODULE / "module.json").read_text(encoding="utf-8-sig"))
+        want_p, want_c = manifest.get("obs_profile", ""), manifest.get("obs_scene_collection", "")
+        if want_p or want_c:
+            check("K1e OBS uruchomiony z --profile i --collection modulu", f"--profile {want_p} --collection {want_c}" in a, f"({a.strip()[:260]})")
+            wait_for(lambda: "ApplyObsProfile" in FAKE_LOG.read_text(encoding="utf-8", errors="ignore") if FAKE_LOG.exists() else False, 30, 1)
+            fl = FAKE_LOG.read_text(encoding="utf-8", errors="ignore") if FAKE_LOG.exists() else ""
+            check("K1f po starcie OBS HUB zlecil pluginowi sprawdzenie profilu i zbioru scen (raz)",
+                  fl.count("ApplyObsProfile profil=") == 1 and f'profil="{want_p}"' in fl and f'zbior="{want_c}"' in fl, f"({fl.strip()[-200:]})")
         s = svc("obs")
         check("K1d OBS uruchomiony przez HUB (nie obcy)", s.get("status") == "online" and not s.get("external") and s.get("pid", 0) > 0, f"({s})")
         spawned.extend(v for v in pids().values() if v)

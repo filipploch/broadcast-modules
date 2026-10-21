@@ -5,5 +5,7 @@
   "script": "modules/nalf.py",
   "port": 8081,
   "log_name": "futsal_nalf",
-  "order": 10
+  "order": 10,
+  "obs_profile": "NALF",
+  "obs_scene_collection": "NALF"
 }

@@ -5,5 +5,7 @@
   "script": "modules/garbarnia.py",
   "port": 8081,
   "log_name": "garbarnia",
-  "order": 20
+  "order": 20,
+  "obs_profile": "Garbarnia",
+  "obs_scene_collection": "Garbarnia"
 }

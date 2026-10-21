@@ -98,13 +98,18 @@ def build(catalog, state: Optional[dict], phase: str, root=None, git=None, super
 
     active = state.get("active")
     act_id = (active or {}).get("id")
+    _obs_profile_banners(v, mods, state, act_id)
     last = state.get("last_module") or {}
     if active is None and last.get("status") == "error" and last.get("error"):
         m = next((x for x in mods if x.id == last.get("id")), None)
         v.banners.append(Banner("error", f"Moduł {m.button if m else last.get('id')} nie działa: {last['error']} (szczegóły w zakładce Moduł)"))
     known_ids = {m.id for m in mods}
+    prof = state.get("obs_profile") or {}
+    switching_id = prof.get("module_id") if prof.get("state") == "applying" else None   # HUB przełącza OBS przed startem modułu
     for m in mods:
-        if active is None:
+        if m.id == switching_id and (active is None or act_id == m.id):
+            v.buttons.append(Button(m.id, "PRZEŁĄCZANIE OBS…", GREY, False, ""))
+        elif active is None:
             v.buttons.append(Button(m.id, f"URUCHOM {m.button}", GREEN if not blocked else GREY, not blocked, "start" if not blocked else ""))
         elif m.id == act_id:
             v.buttons.append(_active_button(active, m.button))
@@ -117,6 +122,33 @@ def build(catalog, state: Optional[dict], phase: str, root=None, git=None, super
         else:  # folder działającego modułu zniknął
             v.buttons.append(_active_button(active, active.get("button") or act_id))
     return v
+
+
+def obs_requirement_text(profile: str, collection: str) -> str:
+    """'profil "NALF", zbiór scen "NALF"' albo "" (moduł bez wymagań)."""
+    parts = []
+    if profile:
+        parts.append(f'profil "{profile}"')
+    if collection:
+        parts.append(f'zbiór scen "{collection}"')
+    return ", ".join(parts)
+
+
+def _obs_profile_banners(v: "View", mods, state: dict, act_id) -> None:
+    """Nazwy profilu i zbioru scen OBS aktywnego modułu oraz ostrzeżenie HUB-a o ich realizacji (protokół 2, E2d3c3)."""
+    prof = state.get("obs_profile") or {}
+    if act_id:
+        m = next((x for x in mods if x.id == act_id), None)
+        need = obs_requirement_text(prof.get("profile", ""), prof.get("collection", "")) if prof.get("module_id") == act_id else ""
+        if not need and m is not None:
+            need = obs_requirement_text(m.obs_profile, m.obs_scene_collection)
+        if need:
+            v.banners.append(Banner("info", f"{(m.button if m else act_id)} → OBS: {need}"))
+    level = {"warning": "warn", "error": "error"}.get(prof.get("state", ""))
+    if level and prof.get("message"):
+        v.banners.append(Banner(level, f"OBS: {prof['message']}"))
+    elif prof.get("state") in ("pending", "applying") and prof.get("message"):
+        v.banners.append(Banner("info", f"OBS: {prof['message']}"))
 
 
 def _active_button(active: dict, label: str) -> Button:

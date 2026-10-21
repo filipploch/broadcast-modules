@@ -46,6 +46,30 @@ def make(APP):
             self.assertEqual(args[0], 'service_notices')
             self.assertEqual(args[1][0]['level'], 'warning')
 
+        # -- profil i zbiór scen OBS modułu (E2d3c3): żółte ostrzeżenie, czerwony błąd, zdjęcie po realizacji
+        def test_ostrzezenie_profilu_obs_jest_zolte(self):
+            self.notices.on_service_event('obs-profile', 'warning', 'nie przełączono OBS (trwa stream lub nagrywanie)')
+            self.assertEqual(self._keys(), ['obs-profile-warning'])
+            n = [x for x in self.notices.snapshot() if x['key'] == 'obs-profile-warning'][0]
+            self.assertEqual((n['text'], n['level']), ('OBS: nie przełączono OBS (trwa stream lub nagrywanie)', 'warning'))
+
+        def test_brak_profilu_w_obs_to_czerwony_blad_zastepujacy_ostrzezenie(self):
+            self.notices.on_service_event('obs-profile', 'warning', 'trwa stream')
+            self.notices.on_service_event('obs-profile', 'error', 'nie ma profilu "NALF" w OBS')
+            self.assertEqual(self._keys(), ['obs-profile-error'])
+            self.assertEqual(self._text('obs-profile-error'), 'OBS: nie ma profilu "NALF" w OBS')
+
+        def test_zrealizowanie_wymagania_zdejmuje_ostrzezenia_profilu(self):
+            self.notices.on_service_event('obs-profile', 'warning', 'trwa stream')
+            self.notices.on_service_event('obs-profile', 'recovered', '')
+            self.assertEqual(self._keys(), [])
+
+        def test_ostrzezenie_profilu_nie_rusza_komunikatow_samego_obs(self):
+            self.notices.on_service_event('obs', 'restarted', 'OBS')
+            self.notices.on_service_event('obs-profile', 'warning', 'trwa stream')
+            self.notices.on_service_event('obs-profile', 'recovered', '')
+            self.assertEqual(self._keys(), ['obs-restarted'])
+
         def test_restart_zdejmuje_wczesniejsze_bledy_obs(self):
             self.notices.on_service_event('obs', 'error', 'brak odpowiedzi po 60 s')
             self.notices.on_service_event('obs', 'gave_up', 'OBS: limit automatycznych restartów (3) wyczerpany')

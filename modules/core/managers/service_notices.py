@@ -13,7 +13,7 @@ from flask import current_app
 OBS_RESTARTED_KEY = 'obs-restarted'
 OBS_RESTARTED_TEXT = 'OBS uruchomiony ponownie — wznów stream i nagrywanie'
 
-LABELS = {'obs': 'OBS', 'module': 'Moduł'}
+LABELS = {'obs': 'OBS', 'module': 'Moduł', 'obs-profile': 'OBS'}   # obs-profile: profil i zbiór scen OBS modułu (E2d3c3)
 
 
 class ServiceNotices:
@@ -45,9 +45,14 @@ class ServiceNotices:
         """Przekłada zdarzenie usługi z HUB-a na komunikat w panelu."""
         label = LABELS.get(service_id, service_id)
         message = message or ''
-        problem_keys = (f'{service_id}-error', f'{service_id}-gave-up')
+        problem_keys = (f'{service_id}-error', f'{service_id}-gave-up', f'{service_id}-warning')
         if kind == 'error':
+            self.clear(f'{service_id}-warning')
             self.set(f'{service_id}-error', f'{label}: {message}', 'error')
+        elif kind == 'warning':
+            # ostrzeżenie (żółte), np. OBS nie został przełączony na profil modułu, bo trwa stream (E2d3c3)
+            self.clear(f'{service_id}-error')
+            self.set(f'{service_id}-warning', f'{label}: {message}', 'warning')
         elif kind == 'gave_up':
             self.set(f'{service_id}-gave-up', message or f'{label}: limit automatycznych restartów wyczerpany', 'error')
         elif kind == 'restarted':

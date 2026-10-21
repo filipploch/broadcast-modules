@@ -27,7 +27,7 @@ class FakeChannel:
         self.session = {"known": True, "open": False, "state": "none"}
 
     def state(self):
-        return {"protocol": 1, "hub": {"pid": 0, "uptime_s": 1, "commit": "", "stopping": False, "hub_log": "", "log_dir": ""},
+        return {"protocol": 2, "hub": {"pid": 0, "uptime_s": 1, "commit": "", "stopping": False, "hub_log": "", "log_dir": ""},
                 "modules": [], "active": self.active, "session": self.session, "recorder": {"connected": False}, "last_module": {}}
 
     def recorder(self):
