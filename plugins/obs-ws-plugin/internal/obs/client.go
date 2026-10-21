@@ -66,6 +66,9 @@ type Client struct {
 
 	pendingMu sync.Mutex
 	pending   map[string]*pendingRequest
+
+	// Gate wstrzymuje żądania na czas zmiany zbioru scen (CurrentSceneCollectionChanging/Changed), patrz gate.go.
+	Gate *RequestGate
 }
 
 // NewClient creates a new OBS client
@@ -76,6 +79,7 @@ func NewClient(config *Config) *Client {
 		StatusChanged: make(chan string, 10),
 		stopChan:      make(chan struct{}),
 		pending:       make(map[string]*pendingRequest),
+		Gate:          NewRequestGate(),
 	}
 }
 
@@ -246,6 +250,14 @@ func (c *Client) readMessages() {
 
 			switch msg.Op {
 			case 5: // Event
+				// Bramka żądań reaguje od razu w tej pętli (nie przez kanał zdarzeń), żeby zmiana zbioru scen wstrzymała żądania
+				// zanim plugin zdąży wysłać kolejne.
+				switch msg.Data["eventType"] {
+				case "CurrentSceneCollectionChanging":
+					c.Gate.Changing()
+				case "CurrentSceneCollectionChanged":
+					c.Gate.Changed()
+				}
 				select {
 				case c.Events <- msg.Data:
 				default:
@@ -289,6 +301,15 @@ func (c *Client) SendRequest(requestType string, requestData map[string]interfac
 		return nil, fmt.Errorf("not connected to OBS")
 	}
 
+	// Czas na odpowiedź OBS (też na odczekanie, aż skończy się zmiana zbioru scen)
+	timeout := time.Duration(c.config.ConnectionTimeoutMs) * time.Millisecond
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+	if !c.Gate.Wait(timeout) {
+		return nil, fmt.Errorf("OBS zmienia zbiór scen: żądanie %s wstrzymane i nie doczekało końca zmiany", requestType)
+	}
+
 	requestId := uuid.New().String()
 
 	// Register pending BEFORE sending to avoid race condition
@@ -327,11 +348,6 @@ func (c *Client) SendRequest(requestType string, requestData map[string]interfac
 	}
 
 	// Wait for response
-	timeout := time.Duration(c.config.ConnectionTimeoutMs) * time.Millisecond
-	if timeout == 0 {
-		timeout = 5 * time.Second
-	}
-
 	select {
 	case response, ok := <-ch:
 		if !ok {
