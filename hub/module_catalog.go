@@ -26,6 +26,11 @@ type ModuleManifest struct {
 	LogName string   `json:"log_name,omitempty"` // nazwa w plikach logu i przy rejestracji modułu w HUB-ie (MODULE_NAME); domyślnie id
 	Order   int      `json:"order,omitempty"`
 
+	// Profil i zbiór scen OBS tego modułu (E2d3c3): dwa niezależne pola, nazwy dokładnie jak w OBS. Puste = bez wymagania.
+	// Pola przejściowe: po E2g/E2h przejdą do profilu rozgrywek.
+	ObsProfile         string `json:"obs_profile,omitempty"`
+	ObsSceneCollection string `json:"obs_scene_collection,omitempty"`
+
 	Dir string `json:"-"` // folder, z którego pochodzi plik (do komunikatów)
 }
 
@@ -173,5 +178,8 @@ func (m ModuleManifest) manifestJSON() map[string]interface{} {
 		"log_name": m.EffectiveLogName(),
 		"order":    m.Order,
 		"folder":   filepath.Base(m.Dir),
+
+		"obs_profile":          m.ObsProfile,
+		"obs_scene_collection": m.ObsSceneCollection,
 	}
 }

@@ -116,6 +116,11 @@ type ServiceManager struct {
 	persist func()
 	// procByName zwraca numery procesów o danej nazwie (do wykrywania obcego OBS).
 	procByName func(name string) []int
+	// preStart: hak tuż przed uruchomieniem procesu usługi (start jawny albo pierwszy; nie przy automatycznym restarcie po awarii).
+	// Moduł: realizacja profilu i zbioru scen OBS przed startem (E2d3c3). Może blokować najwyżej kilkadziesiąt sekund.
+	preStart func(id string, cfg ServiceConfig)
+	// extraArgs: dodatkowe argumenty procesu liczone w chwili startu (OBS: --profile i --collection aktywnego modułu).
+	extraArgs func(id string) []string
 
 	stableAfter      time.Duration
 	pollInterval     time.Duration
@@ -454,10 +459,15 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 		return nil
 	}
 	cfg := sp.cfg
+	hook := sm.preStart
 	sm.mu.Unlock()
 
 	if cfg.ForeignOK && sm.detectForeign(id, cfg) {
 		return nil
+	}
+	// Hak przed uruchomieniem procesu (moduł: realizacja profilu i zbioru scen OBS, E2d3c3). Nie dotyczy automatycznych restartów po awarii.
+	if hook != nil && !auto {
+		hook(id, cfg)
 	}
 	if addr := readyAddr(cfg); addr != "" && tcpOpen(addr) {
 		msg := fmt.Sprintf("adres %s jest już zajęty (inny proces, np. z poprzedniego uruchomienia albo wersja transmisyjna); nie uruchamiam drugiej kopii", addr)
@@ -480,7 +490,13 @@ func (sm *ServiceManager) start(id string, auto bool) error {
 		sm.setError(id, fmt.Sprintf("nie można otworzyć pliku wyjścia: %v", err))
 		return err
 	}
-	cmd := exec.Command(execPath, cfg.Args...)
+	args := cfg.Args
+	if sm.extraArgs != nil {
+		if extra := sm.extraArgs(id); len(extra) > 0 {
+			args = append(append([]string(nil), cfg.Args...), extra...)
+		}
+	}
+	cmd := exec.Command(execPath, args...)
 	cmd.Dir = cfg.WorkingDir
 	cmd.Env = append(os.Environ(), cfg.Env...)
 	cmd.Stdin = nil

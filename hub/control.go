@@ -30,7 +30,7 @@ import (
 
 // controlProtocolVersion rozstrzyga zgodność managera z HUB-em: manager oczekuje konkretnej wartości. Każda zmiana kształtu
 // odpowiedzi /state albo /recorder wymaga podniesienia tej liczby (test TestControlResponseShapeIsPinnedToProtocolVersion).
-const controlProtocolVersion = 1
+const controlProtocolVersion = 2
 
 // buildCommit wpisuje hub\build.bat (-ldflags "-X main.buildCommit=<commit>[-dirty]"); zwykłe "go build" zostawia pusty (wersja nieznana).
 var buildCommit = ""
@@ -54,6 +54,16 @@ type controlState struct {
 	LastModule     controlLast     `json:"last_module"`
 	Session        controlSession  `json:"session"`
 	Recorder       controlRecConn  `json:"recorder"`
+	ObsProfile     controlObsProf  `json:"obs_profile"` // protokół 2 (E2d3c3)
+}
+
+// controlObsProf: profil i zbiór scen OBS wymagane przez aktywny moduł i stan ich realizacji (obs_profile.go).
+type controlObsProf struct {
+	ModuleID   string `json:"module_id"`
+	Profile    string `json:"profile"`
+	Collection string `json:"collection"`
+	State      string `json:"state"` // "", pending, applying, applied, warning, error
+	Message    string `json:"message"`
 }
 
 type controlHub struct {
@@ -72,6 +82,9 @@ type controlModule struct {
 	LogName string `json:"log_name"`
 	Order   int    `json:"order"`
 	Folder  string `json:"folder"`
+
+	ObsProfile         string `json:"obs_profile"`          // protokół 2: wymagany profil OBS ("" = brak wymagania)
+	ObsSceneCollection string `json:"obs_scene_collection"` // protokół 2: wymagany zbiór scen OBS
 }
 
 type controlActive struct {
@@ -326,7 +339,7 @@ func (c *controlServer) state() controlState {
 	}
 	for _, m := range cat.Modules {
 		st.Modules = append(st.Modules, controlModule{ID: m.ID, Button: m.Button, Port: m.Port, LogName: m.EffectiveLogName(),
-			Order: m.Order, Folder: filepath.Base(m.Dir)})
+			Order: m.Order, Folder: filepath.Base(m.Dir), ObsProfile: m.ObsProfile, ObsSceneCollection: m.ObsSceneCollection})
 	}
 	st.Active = c.active(cat)
 	if c.hub.Services != nil {
@@ -340,6 +353,8 @@ func (c *controlServer) state() controlState {
 		st.Recorder.Connected = true
 	}
 	c.hub.mu.RUnlock()
+	v := c.hub.obsProfile.view()
+	st.ObsProfile = controlObsProf{ModuleID: v.ModuleID, Profile: v.Profile, Collection: v.Collection, State: v.State, Message: v.Message}
 	return st
 }
 
