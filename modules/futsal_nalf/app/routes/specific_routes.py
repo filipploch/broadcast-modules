@@ -576,6 +576,13 @@ def register_routes(app):
                 from app.models.game_camera import GameCamera
             
 
+                # E2d3b: kamera 1 zawsze; usunięcie kamery, która nagrywa, wymaga potwierdzenia (przed jakąkolwiek zmianą w bazie)
+                from core.managers import get_recorder_manager
+                recorder_manager = get_recorder_manager()
+                rejected = recorder_manager.check_camera_assignment(game_id, data)
+                if rejected is not None:
+                    return jsonify(rejected[1]), rejected[0]
+
                 existing = GameCamera.query.filter_by(game_id=game_id).all()
                 for gc in existing:
                     db.session.delete(gc)
@@ -590,6 +597,8 @@ def register_routes(app):
                         location=item.get('location', ''),
                         is_motorized=item.get('is_motorized', False),
                     )
+                # Zmiana działa natychmiast: plugin dostaje pełną listę kamer (włącza i wyłącza od razu, także bez nagrywania)
+                recorder_manager.after_camera_assignment_saved(data)
                 return jsonify({'ok': True})
 
         except Exception as e:

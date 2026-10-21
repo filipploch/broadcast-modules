@@ -110,6 +110,20 @@ type CameraRecorder struct {
 	segmentGen       uint64 // bumped on every segment start/stop; invalidates stale rotation timers
 	pendingSignal    bool   // a segment-end signal arrived before MinDuration elapsed
 
+	// feedRunning: czy odbiór (CameraFeed) tej kamery działa; wtedy nagrywanie czyta z urządzenia pośredniego (nil = tryb bezpośredni).
+	feedRunning func() bool
+
+	// newFFmpeg tworzy polecenie ffmpeg nagrywania (w testach podmieniane na proces pomocniczy).
+	newFFmpeg func(args []string) *exec.Cmd
+
+	curFromFeed bool // bieżący (lub ostatni) segment czyta z urządzenia pośredniego
+	feedPaused  bool // nagranie trwa jako sesja, ale bieżący segment zamknięty: czeka na powrót obrazu z odbioru
+
+	// watchdog nagrywania z odbioru (zamarły proces ffmpeg, który żyje, ale nie zapisuje klatek)
+	recFirstFrameTimeout time.Duration
+	recStallTimeout      time.Duration
+	recWatchTick         time.Duration
+
 	onUnexpectedStop func(cameraID string, meta RecordingMeta) // callback → RecorderManager
 	onSegmentRotated func(meta RecordingMeta, reason string)   // callback → RecorderManager
 }
@@ -126,11 +140,15 @@ func NewCameraRecorder(cfg CameraConfig, outputDir string, segCfg SegmentConfig,
 		vaapiDevice = "/dev/dri/renderD128"
 	}
 	return &CameraRecorder{
-		config:      cfg,
-		outputDir:   outputDir,
-		segCfg:      segCfg,
-		codec:       codec,
-		vaapiDevice: vaapiDevice,
+		config:               cfg,
+		outputDir:            outputDir,
+		segCfg:               segCfg,
+		codec:                codec,
+		vaapiDevice:          vaapiDevice,
+		recFirstFrameTimeout: recordFirstFrameTimeout,
+		recStallTimeout:      recordStallTimeout,
+		recWatchTick:         time.Second,
+		newFFmpeg:            func(args []string) *exec.Cmd { return exec.Command("ffmpeg", args...) },
 	}
 }
 
@@ -235,15 +253,21 @@ func (cr *CameraRecorder) StopRecord() error {
 	}
 
 	cr.mu.Lock()
-	cr.lastMeta.FinishedAt = time.Now().UnixMilli()
-	cr.lastMeta.EndReason = "manual_stop"
+	wasPaused := cr.feedPaused // segment zamknięty już przy utracie obrazu (jest w historii)
+	cr.feedPaused = false
+	if !wasPaused {
+		cr.lastMeta.FinishedAt = time.Now().UnixMilli()
+		cr.lastMeta.EndReason = "manual_stop"
+	}
 	finalMeta := cr.lastMeta
 	cr.recording = false
 	cr.pendingSignal = false
 	cr.segmentGen++ // invalidate any rotation timers still pending for this segment
 	cr.mu.Unlock()
 
-	_ = cr.appendHistoryMeta(finalMeta)
+	if !wasPaused {
+		_ = cr.appendHistoryMeta(finalMeta)
+	}
 	log.Printf("⏹️  [%s] Recording stopped", cr.config.ID)
 
 	// Clear current.json — recording is over, data moved to history
@@ -465,6 +489,14 @@ func (cr *CameraRecorder) launchSegment(meta RecordingMeta, sessionID string, se
 // [stream] branch (loopback) stays as plain software frames throughout,
 // since a v4l2 output can't accept a hardware surface reference.
 func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePath string) []string {
+	return buildRecordArgs(cfg, codec, vaapiDevice, filePath, false)
+}
+
+// buildRecordArgs buduje argumenty ffmpeg nagrywania. fromFeed == true: obraz czyta z urządzenia pośredniego (surowy yuyv422
+// zapisywany przez CameraFeed), bez otwierania kamery i bez drugiego wyjścia na urządzenie pośrednie — to tryb, w którym
+// kamerę ma odbiór (feed.go), a nagrywanie można włączać i wyłączać w dowolnej chwili bez przerywania podglądu.
+// fromFeed == false: dotychczasowy tryb, nagrywanie wprost z kamery (MJPEG) z kopią na urządzenie pośrednie, jeśli skonfigurowane.
+func buildRecordArgs(cfg CameraConfig, codec string, vaapiDevice string, filePath string, fromFeed bool) []string {
 	if codec == "" {
 		codec = "libx264"
 	}
@@ -472,19 +504,36 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePat
 	if useVaapi && vaapiDevice == "" {
 		vaapiDevice = "/dev/dri/renderD128"
 	}
-	hasLoopback := cfg.LoopbackDevice != ""
+	hasLoopback := cfg.LoopbackDevice != "" && !fromFeed
 
 	var args []string
+	if fromFeed {
+		args = append(args, progressArgs()...) // raport klatek dla watchdogu nagrywania (tryb bezpośredni bez zmian)
+	}
 	if useVaapi {
 		args = append(args, "-vaapi_device", vaapiDevice)
 	}
-	args = append(args,
-		"-f", "v4l2",
-		"-input_format", "mjpeg",
-		"-video_size", "1920x1080",
-		"-framerate", "30",
-		"-i", cfg.DevicePath,
-	)
+	if fromFeed {
+		// Rozmiar i liczba klatek jawne (urządzenie pośrednie nie negocjuje ich z kamerą), a znaczniki czasu z zegara ściennego:
+		// przerwa w obrazie (restart odbioru) nie przesuwa osi czasu w pliku. Przerwa i tak kończy segment (PauseForFeed),
+		// więc w jednym pliku nie ma skoku, a czas rozpoczęcia każdego segmentu jest w metadanych.
+		args = append(args,
+			"-use_wallclock_as_timestamps", "1",
+			"-f", "v4l2",
+			"-input_format", "yuyv422",
+			"-video_size", "1920x1080",
+			"-framerate", "30",
+			"-i", cfg.LoopbackDevice,
+		)
+	} else {
+		args = append(args,
+			"-f", "v4l2",
+			"-input_format", "mjpeg",
+			"-video_size", "1920x1080",
+			"-framerate", "30",
+			"-i", cfg.DevicePath,
+		)
+	}
 
 	switch {
 	case hasLoopback && useVaapi:
@@ -590,17 +639,26 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 	// drop the loopback output here rather than let ffmpeg discover it's
 	// missing on its own.
 	cfg := cr.config
+	fromFeed := false
 	if cfg.LoopbackDevice != "" {
 		if _, err := os.Stat(cfg.LoopbackDevice); err != nil {
 			log.Printf("⚠️  [%s] loopback_device %s not available (%v) — recording without stream mirror this segment",
 				cr.config.ID, cfg.LoopbackDevice, err)
 			cfg.LoopbackDevice = ""
+		} else if cr.feedRunning != nil && cr.feedRunning() {
+			fromFeed = true // kamerę trzyma odbiór: czytamy z urządzenia pośredniego
 		}
 	}
 
-	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cfg, cr.codec, cr.vaapiDevice, filePath)...)
+	cmd := cr.newFFmpeg(buildRecordArgs(cfg, cr.codec, cr.vaapiDevice, filePath, fromFeed))
 
-	cmd.Stdout = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
+	var progress *progressTracker
+	if fromFeed {
+		progress = newProgressTracker()
+		cmd.Stdout = progress
+	} else {
+		cmd.Stdout = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
+	}
 	cmd.Stderr = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
 
 	if err := cmd.Start(); err != nil {
@@ -612,9 +670,13 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 	cr.mu.Lock()
 	cr.cmd = cmd
 	cr.cmdDone = doneCh
+	cr.curFromFeed = fromFeed
 	cr.mu.Unlock()
 
-	log.Printf("🎬 [%s] ffmpeg started (pid %d) → %s", cr.config.ID, cmd.Process.Pid, filePath)
+	log.Printf("🎬 [%s] ffmpeg started (pid %d, źródło: %s) → %s", cr.config.ID, cmd.Process.Pid, map[bool]string{true: "odbiór", false: "kamera"}[fromFeed], filePath)
+	if progress != nil {
+		go cr.watchRecording(cmd, doneCh, progress)
+	}
 
 	// Single, exclusive owner of cmd.Wait() for this process — calling Wait()
 	// more than once on the same *exec.Cmd is not safe, so every other place
