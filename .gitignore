@@ -36,3 +36,5 @@ plugins/timer-plugin/state/
 
 hub/config/hub.json
 /run/
+
+plugins/obs-ws-plugin/obs_scene_map.json
