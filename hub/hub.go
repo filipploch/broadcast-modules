@@ -278,6 +278,12 @@ func (h *Hub) sendCurrentPluginStates(mainModule *Module) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	// Moduł mógł się w tym czasie rozłączyć: jego kanał Send jest już zamknięty (zamykany pod tą samą blokadą),
+	// a wysłanie do zamkniętego kanału wywraca HUB-a ("panic: send on closed channel"). Wtedy nic nie wysyłamy.
+	if h.MainModule != mainModule || !mainModule.IsActive {
+		return
+	}
+
 	for id, plugin := range h.Plugins {
 		if !plugin.IsActive {
 			continue
