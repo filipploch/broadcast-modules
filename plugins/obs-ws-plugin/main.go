@@ -324,6 +324,12 @@ func (p *Plugin) handleObsCommand(msg *hub.Message) {
 	requestID := msg.Payload["request_id"]
 	log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
 
+	// ApplyObsProfile (E2d3c3): HUB zleca przełączenie profilu i zbioru scen OBS na te z module.json aktywnego modułu.
+	if rt, _ := msg.Payload["requestType"].(string); rt == requestApplyObsProfile {
+		p.handleApplyObsProfile(msg)
+		return
+	}
+
 	if !p.obsClient.IsConnected() {
 		log.Printf("⚠️  OBS not connected, cannot forward command")
 		p.hubClient.Send(&hub.Message{
@@ -432,6 +438,10 @@ func (p *Plugin) routeOBSToHub() {
 	log.Println("🔀 Starting OBS → Hub routing")
 	for event := range p.obsClient.Events {
 		log.Printf("📨 OBS → Hub: event received")
+		// Zmiana zbioru scen (także ręczna): identyfikatory elementów scen są inne, więc mapa scen musi zostać odświeżona.
+		if event["eventType"] == "CurrentSceneCollectionChanged" {
+			go p.refreshSceneMap()
+		}
 		p.hubClient.Send(&hub.Message{
 			From:    p.config.Plugin.ID,
 			To:      "broadcast:obs_messages_receiver",

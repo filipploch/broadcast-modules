@@ -70,6 +70,16 @@ var pinnedControlShape = map[int]string{
 		"recorder: cameras{}:bool reason:string state:string",
 		"result: error:string ok:bool reason:string",
 	}, "\n"),
+	2: strings.Join([]string{
+			"state: active.button:string active.error:string active.id:string active.missing:bool active.name:string active.pid:int active.state:string hub.commit:string " +
+			"hub.hub_log:string hub.log_dir:string hub.pid:int hub.stopping:bool hub.uptime_s:int last_module.error:string last_module.id:string " +
+			"last_module.status:string module_warnings[]:string modules[].button:string modules[].folder:string modules[].id:string modules[].log_name:string " +
+			"modules[].obs_profile:string modules[].obs_scene_collection:string modules[].order:int modules[].port:int obs_profile.collection:string " +
+			"obs_profile.message:string obs_profile.module_id:string obs_profile.profile:string obs_profile.state:string protocol:int recorder.connected:bool " +
+			"session.from_file:bool session.known:bool session.open:bool session.session_id:int session.state:string",
+		"recorder: cameras{}:bool reason:string state:string",
+		"result: error:string ok:bool reason:string",
+	}, "\n"),
 }
 
 func currentControlShape() string {

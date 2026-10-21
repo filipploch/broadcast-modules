@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FORMAT = 1
-FIELDS = {"format", "id", "button", "script", "args", "port", "log_name", "order"}
+FIELDS = {"format", "id", "button", "script", "args", "port", "log_name", "order", "obs_profile", "obs_scene_collection"}
 REQUIRED = ("format", "id", "button", "script", "port")
 
 
@@ -21,6 +21,8 @@ class Module:
     log_name: str
     order: int
     folder: str
+    obs_profile: str = ""            # profil OBS wymagany przez moduł ("" = brak wymagania)
+    obs_scene_collection: str = ""   # zbiór scen OBS wymagany przez moduł
 
 
 @dataclass
@@ -66,7 +68,8 @@ def scan(modules_dir: Path) -> Catalog:
             cat.warnings.append(f"{path}: nieznany format {data['format']} (obsługiwany: {FORMAT}), moduł pominięty")
             continue
         found.append(Module(id=data["id"], button=data["button"], port=data["port"], log_name=data.get("log_name") or data["id"],
-                            order=int(data.get("order", 0)), folder=folder.name))
+                            order=int(data.get("order", 0)), folder=folder.name,
+                            obs_profile=str(data.get("obs_profile") or ""), obs_scene_collection=str(data.get("obs_scene_collection") or "")))
     counts = Counter(m.id for m in found)
     for m in found:
         if counts[m.id] > 1:

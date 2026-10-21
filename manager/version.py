@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-EXPECTED_PROTOCOL = 1
+EXPECTED_PROTOCOL = 2
 
 
 @dataclass

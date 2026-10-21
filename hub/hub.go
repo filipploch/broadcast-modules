@@ -31,6 +31,13 @@ type Hub struct {
 
 	wol *wolSender // budzenie Debiana (sekcja "wol" konfiguracji HUB-a); nil = wyłączone
 
+	// Profil i zbiór scen OBS przypisane do modułu (E2d3c3, obs_profile.go)
+	obsProfile     obsProfileStatus
+	catalogFn      func() *ModuleCatalog // katalog modułów czytany z dysku przy każdym użyciu (module.json aktywnego modułu)
+	obsApplyBudget time.Duration         // 0 = obsApplyBudget; testy skracają
+	obsApplyWindow time.Duration
+	obsApplyRetry  time.Duration
+
 	State        *StateStore // plik stanu usług (run/uslugi.json); nil = bez zapisu
 	stateReady   stateGate
 	declaredOnce bool // moduł główny zadeklarował już wymagane pluginy (potrzebne usłudze czekającej na plugin)
@@ -286,6 +293,8 @@ func (h *Hub) registerMainModule(module *Module) {
 	// the current world state right after registration, regardless of which
 	// component started first.
 	go h.sendCurrentPluginStates(module)
+	// Ostrzeżenie o profilu OBS z przełączenia sprzed startu modułu (E2d3c3): moduł dowiaduje się o nim po rejestracji
+	go h.replayObsProfileNotice()
 }
 
 // sendCurrentPluginStates sends plugin_status/connected for every plugin that

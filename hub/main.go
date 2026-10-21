@@ -105,6 +105,19 @@ func main() {
 	// Plik stanu usług (E2d2): przejęcie działających usług i zakończenie sierot PRZED startem pętli HUB-a i pluginów
 	hub.State = NewStateStore(hubCfg.StatePath())
 	hub.Services.persist = hub.persistState
+	// Profil i zbiór scen OBS z module.json aktywnego modułu (E2d3c3)
+	hub.catalogFn = func() *ModuleCatalog { return scanModuleCatalog(hubCfg.abs(hubCfg.ModulesDir)) }
+	hub.Services.preStart = func(id string, cfg ServiceConfig) {
+		if id == "module" {
+			hub.onModuleStarting(cfg.ModuleID)
+		}
+	}
+	hub.Services.extraArgs = func(id string) []string {
+		if id == "obs" {
+			return hub.obsLaunchArgs()
+		}
+		return nil
+	}
 	hub.Services.sessionOpen = func() bool { return hub.SessionStatus().OpenForRestart() }
 	hub.Services.pluginGate = hub.pluginGate
 	hub.Services.notify = hub.notifyService

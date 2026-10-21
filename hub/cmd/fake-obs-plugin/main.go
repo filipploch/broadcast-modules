@@ -2,7 +2,8 @@
 // wysyła heartbeaty i odpowiada na pytania o stan streamu i nagrywania według pliku FAKE_OBS_STATE (JSON), który próba może zmieniać
 // w trakcie pracy: {"stream": false, "record": false, "silent": false, "fail": false}.
 //   - silent: plugin nie odpowiada na polecenia (jak zawieszony),
-//   - fail:   plugin odpowiada obs_error ("OBS not connected").
+//   - fail:   plugin odpowiada obs_error ("OBS not connected"),
+//   - apply:  wynik ApplyObsProfile (E2d3c3): "" = przełączone, "active" = trwa stream, "missing_profile", "missing_collection".
 //
 // Zmienne: HUB_URL (ustawia HUB), PLUGIN_ID (domyślnie obs-ws-plugin), FAKE_OBS_STATE, FAKE_OBS_LOG (dziennik zdarzeń).
 // Po zerwaniu połączenia próbuje łączyć się ponownie (jak prawdziwe pluginy po awarii HUB-a).
@@ -33,6 +34,7 @@ type fakeState struct {
 	Record bool `json:"record"`
 	Silent bool `json:"silent"`
 	Fail   bool `json:"fail"`
+	Apply  string `json:"apply"`
 }
 
 func readState() fakeState {
@@ -126,6 +128,21 @@ func run(id, url string) {
 			data["outputActive"] = s.Stream
 		case "GetRecordStatus":
 			data["outputActive"] = s.Record
+		case "ApplyObsProfile":
+			rd, _ := m.Payload["requestData"].(map[string]interface{})
+			journal("ApplyObsProfile profil=%q zbior=%q wynik=%q", rd["profile"], rd["collection"], s.Apply)
+			item := func(status string) map[string]interface{} { return map[string]interface{}{"status": status} }
+			data["skipped"] = ""
+			data["profile"], data["collection"] = item("switched"), item("switched")
+			switch s.Apply {
+			case "active":
+				data["skipped"], data["detail"] = "active", "trwa stream lub nagrywanie w OBS"
+				data["profile"], data["collection"] = item("skipped"), item("skipped")
+			case "missing_profile":
+				data["profile"] = item("missing")
+			case "missing_collection":
+				data["collection"] = item("missing")
+			}
 		}
 		send(&message{From: id, To: m.From, Type: "obs_response", Context: m.Context,
 			Payload: map[string]interface{}{"requestType": rt, "requestID": m.Payload["request_id"], "responseData": data}})

@@ -25,6 +25,9 @@ func TestServiceHelper(t *testing.T) {
 	}
 	switch mode {
 	case "http":
+		if f := os.Getenv("HELPER_ARGS_FILE"); f != "" { // próby argumentów procesu (E2d3c3)
+			os.WriteFile(f, []byte(strings.Join(os.Args[1:], "\x00")), 0o644)
+		}
 		if ms, _ := strconv.Atoi(os.Getenv("HELPER_DELAY_MS")); ms > 0 {
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}

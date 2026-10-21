@@ -216,11 +216,11 @@ def main():
     try:
         say("== M1. HUB z --module none")
         hub = start_hub("1")
-        up = wait_for(lambda: state()["protocol"] >= 1, 30)
+        up = wait_for(lambda: state()["protocol"] >= 2, 30)
         if not check("M1a kanal sterujacy odpowiada", up):
             return
         st = state()
-        check("M1b /state: protokol 1 i commit z build", st["protocol"] == 1 and st["hub"]["commit"] == "dryrun", f"({st['protocol']}, {st['hub']['commit']})")
+        check("M1b /state: protokol 2 i commit z build", st["protocol"] == 2 and st["hub"]["commit"] == "dryrun", f"({st['protocol']}, {st['hub']['commit']})")
         check("M1c lista modulow z plikow module.json", [m["id"] for m in st["modules"]] == ["proba", "druga"], f"({st['modules']})")
         time.sleep(3)
         check("M1d HUB bez modulu mimo \"module\" w konfiguracji", active() is None and not port_busy(MOD_PORT) and "module" not in status().get("services", {}),
@@ -229,7 +229,7 @@ def main():
         check("M1g /state podaje istniejacy hub.log biezacego uruchomienia", hub_log.exists() and hub_log.parent.parent == LOGS, f"({hub_log})")
         head = hub_log.read_text(encoding="utf-8", errors="replace").splitlines()[:3]
         check("M1e pierwsze wiersze hub.log: brak modulu (argument) i wersja", "brak" in head[0] and "argument --module" in head[0]
-              and any("Wersja HUB-a: commit dryrun, protokół kanału sterującego 1" in l for l in head), f"({head})")
+              and any("Wersja HUB-a: commit dryrun, protokół kanału sterującego 2" in l for l in head), f"({head})")
         check("M1f kanal na wlasnym porcie, nie na porcie WebSocketu", port_busy(CTL_PORT) and port_busy(HUB_PORT))
 
         say("\n== M2. Start modulu kanalem sterujacym")
