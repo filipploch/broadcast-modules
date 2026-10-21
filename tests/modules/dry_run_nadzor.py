@@ -66,7 +66,7 @@ def main():
         d.say("== M5. Nadzor uruchamia HUB; zamkniecie nadzoru niczego nie zatrzymuje; drugi nadzor sie podlacza")
         s1 = supervisor("1", 60)
         sups.append(s1)
-        up = d.wait_for(lambda: d.state()["protocol"] == 1, 40)
+        up = d.wait_for(lambda: d.state()["protocol"] == 2, 40)
         d.check("M5a nadzor uruchomil HUB (kanal odpowiada)", up and "uruchamiam hub.exe --module none" in sup_log("1"), f"({sup_log('1')[-300:]!r})")
         h1 = remember_hub()
         code, res = d.ctl("POST", "/module/start", {"id": "proba"})

@@ -229,7 +229,7 @@ def main():
         check("M1g /state podaje istniejacy hub.log biezacego uruchomienia", hub_log.exists() and hub_log.parent.parent == LOGS, f"({hub_log})")
         head = hub_log.read_text(encoding="utf-8", errors="replace").splitlines()[:3]
         check("M1e pierwsze wiersze hub.log: brak modulu (argument) i wersja", "brak" in head[0] and "argument --module" in head[0]
-              and any("Wersja HUB-a: commit dryrun, protokół kanału sterującego 1" in l for l in head), f"({head})")
+              and any("Wersja HUB-a: commit dryrun, protokół kanału sterującego 2" in l for l in head), f"({head})")
         check("M1f kanal na wlasnym porcie, nie na porcie WebSocketu", port_busy(CTL_PORT) and port_busy(HUB_PORT))
 
         say("\n== M2. Start modulu kanalem sterujacym")
