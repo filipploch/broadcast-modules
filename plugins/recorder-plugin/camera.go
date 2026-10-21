@@ -110,6 +110,9 @@ type CameraRecorder struct {
 	segmentGen       uint64 // bumped on every segment start/stop; invalidates stale rotation timers
 	pendingSignal    bool   // a segment-end signal arrived before MinDuration elapsed
 
+	// feedRunning: czy odbiór (CameraFeed) tej kamery działa; wtedy nagrywanie czyta z urządzenia pośredniego (nil = tryb bezpośredni).
+	feedRunning func() bool
+
 	onUnexpectedStop func(cameraID string, meta RecordingMeta) // callback → RecorderManager
 	onSegmentRotated func(meta RecordingMeta, reason string)   // callback → RecorderManager
 }
@@ -465,6 +468,14 @@ func (cr *CameraRecorder) launchSegment(meta RecordingMeta, sessionID string, se
 // [stream] branch (loopback) stays as plain software frames throughout,
 // since a v4l2 output can't accept a hardware surface reference.
 func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePath string) []string {
+	return buildRecordArgs(cfg, codec, vaapiDevice, filePath, false)
+}
+
+// buildRecordArgs buduje argumenty ffmpeg nagrywania. fromFeed == true: obraz czyta z urządzenia pośredniego (surowy yuyv422
+// zapisywany przez CameraFeed), bez otwierania kamery i bez drugiego wyjścia na urządzenie pośrednie — to tryb, w którym
+// kamerę ma odbiór (feed.go), a nagrywanie można włączać i wyłączać w dowolnej chwili bez przerywania podglądu.
+// fromFeed == false: dotychczasowy tryb, nagrywanie wprost z kamery (MJPEG) z kopią na urządzenie pośrednie, jeśli skonfigurowane.
+func buildRecordArgs(cfg CameraConfig, codec string, vaapiDevice string, filePath string, fromFeed bool) []string {
 	if codec == "" {
 		codec = "libx264"
 	}
@@ -472,19 +483,29 @@ func buildFFmpegArgs(cfg CameraConfig, codec string, vaapiDevice string, filePat
 	if useVaapi && vaapiDevice == "" {
 		vaapiDevice = "/dev/dri/renderD128"
 	}
-	hasLoopback := cfg.LoopbackDevice != ""
+	hasLoopback := cfg.LoopbackDevice != "" && !fromFeed
 
 	var args []string
 	if useVaapi {
 		args = append(args, "-vaapi_device", vaapiDevice)
 	}
-	args = append(args,
-		"-f", "v4l2",
-		"-input_format", "mjpeg",
-		"-video_size", "1920x1080",
-		"-framerate", "30",
-		"-i", cfg.DevicePath,
-	)
+	if fromFeed {
+		args = append(args,
+			"-f", "v4l2",
+			"-input_format", "yuyv422",
+			"-video_size", "1920x1080",
+			"-framerate", "30",
+			"-i", cfg.LoopbackDevice,
+		)
+	} else {
+		args = append(args,
+			"-f", "v4l2",
+			"-input_format", "mjpeg",
+			"-video_size", "1920x1080",
+			"-framerate", "30",
+			"-i", cfg.DevicePath,
+		)
+	}
 
 	switch {
 	case hasLoopback && useVaapi:
@@ -590,15 +611,18 @@ func (cr *CameraRecorder) startFFmpeg(filePath string) error {
 	// drop the loopback output here rather than let ffmpeg discover it's
 	// missing on its own.
 	cfg := cr.config
+	fromFeed := false
 	if cfg.LoopbackDevice != "" {
 		if _, err := os.Stat(cfg.LoopbackDevice); err != nil {
 			log.Printf("⚠️  [%s] loopback_device %s not available (%v) — recording without stream mirror this segment",
 				cr.config.ID, cfg.LoopbackDevice, err)
 			cfg.LoopbackDevice = ""
+		} else if cr.feedRunning != nil && cr.feedRunning() {
+			fromFeed = true // kamerę trzyma odbiór: czytamy z urządzenia pośredniego
 		}
 	}
 
-	cmd := exec.Command("ffmpeg", buildFFmpegArgs(cfg, cr.codec, cr.vaapiDevice, filePath)...)
+	cmd := exec.Command("ffmpeg", buildRecordArgs(cfg, cr.codec, cr.vaapiDevice, filePath, fromFeed)...)
 
 	cmd.Stdout = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))
 	cmd.Stderr = newPrefixedWriter(fmt.Sprintf("[ffmpeg/%s] ", cr.config.ID))

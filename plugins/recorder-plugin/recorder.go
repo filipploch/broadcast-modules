@@ -16,6 +16,7 @@ type RecorderManager struct {
 	outputDir string
 	hubClient *HubClient // used to notify main_module on recording start/stop
 	streamer  *StreamManager
+	feeds     map[string]*CameraFeed // odbiór obrazu z kamer (osobny proces na kamerę); tylko kamery z device_path i loopback_device
 	mu        sync.RWMutex
 
 	// cameraCtx: kontekst transmisji z polecenia, które uruchomiło nagrywanie kamery; niosą go zdarzenia tej kamery
@@ -47,6 +48,7 @@ const (
 func NewRecorderManager(cfg Config) *RecorderManager {
 	rm := &RecorderManager{
 		cameras:   make(map[string]*CameraRecorder),
+		feeds:     make(map[string]*CameraFeed),
 		outputDir: cfg.OutputDir,
 	}
 
@@ -72,6 +74,12 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		cam.SetOnSegmentRotated(func(meta RecordingMeta, reason string) {
 			rm.notifySegmentRotated(camID, meta, reason)
 		})
+		feed := NewCameraFeed(camCfg)
+		if feed.CanFeed() {
+			rm.feeds[camID] = feed
+			cam.feedRunning = feed.Running
+			feed.SetOnChange(func(cameraID, state, errMsg string) { rm.onFeedChanged(cameraID, state, errMsg) })
+		}
 		log.Printf("📷 Camera registered: %s (service: %s, codec: %s, segment: min=%s max=%s delay=%s)",
 			camCfg.ID, camCfg.ServiceName, cam.codec, segCfg.MinDuration, segCfg.MaxDuration, segCfg.SignalDelay)
 	}
@@ -106,12 +114,7 @@ func NewRecorderManager(cfg Config) *RecorderManager {
 		Bitrate:     cfg.StreamBitrate,
 		VaapiDevice: cfg.VaapiDevice,
 	}
-	rm.streamer = NewStreamManager(loopbacks, ports, func(id string) bool {
-		rm.mu.RLock()
-		cam, ok := rm.cameras[id]
-		rm.mu.RUnlock()
-		return ok && cam.IsRecording()
-	}, streamCfg)
+	rm.streamer = NewStreamManager(loopbacks, ports, rm.loopbackHasData, streamCfg)
 	rm.streamer.SetOnStreamChanged(func(cameraID string, active bool, errMsg string) {
 		rm.notifyStreamChanged(cameraID, active, errMsg)
 	})
@@ -254,8 +257,10 @@ func (rm *RecorderManager) handleUnexpectedStop(cameraID string, meta RecordingM
 	// The camera's own ffmpeg (and with it, the loopback feed) just died, so
 	// its stream to Windows has nothing left to read — stop it too. A
 	// successful auto-restart below re-starts the stream via StartRecord.
-	if err := rm.streamer.StopStream(cameraID); err != nil {
-		log.Printf("⏭️  [%s] auto-stream stop after crash: %v", cameraID, err)
+	if !rm.feedRunning(cameraID) { // z odbiorem strumień żyje własnym życiem
+		if err := rm.streamer.StopStream(cameraID); err != nil {
+			log.Printf("⏭️  [%s] auto-stream stop after crash: %v", cameraID, err)
+		}
 	}
 
 	// Powiadom main_module z reason="crash"
@@ -344,12 +349,24 @@ func (rm *RecorderManager) StartRecord(cameraID string, meta RecordingMeta) erro
 		return fmt.Errorf("unknown camera: %s", cameraID)
 	}
 
+	// Kamera ma włączony odbiór, ale jeszcze nie działa (startuje albo nie ma obrazu): kamery nie wolno otworzyć drugi raz
+	// (trzyma ją odbiór), więc nagrywanie czeka na stan „działa”.
+	if feed := rm.feedFor(cameraID); feed != nil && feed.Wanted() && !feed.Running() {
+		st, errMsg := feed.State()
+		return fmt.Errorf("camera %s: obraz jeszcze nie działa (stan: %s %s) — nagrywanie możliwe po uruchomieniu kamery", cameraID, st, errMsg)
+	}
+
 	if err := cam.StartRecord(meta); err != nil {
 		return err
 	}
 
 	rm.setCameraContext(cameraID, meta.Context)
 	rm.notifyRecordingStarted(cam.LastMeta())
+
+	// Odbiór prowadzi podgląd SRT sam (niezależnie od nagrywania): auto-start strumienia tylko w trybie bezpośrednim.
+	if rm.feedRunning(cameraID) {
+		return nil
+	}
 
 	// Auto-start this camera's stream to Windows, if configured — in the
 	// background, since StreamManager.StartStream can now take a few
@@ -386,6 +403,11 @@ func (rm *RecorderManager) StopRecord(cameraID string) error {
 
 	rm.notifyRecordingStopped(cameraID)
 
+	// Tryb z odbiorem: obraz dla OBS trwa po zakończeniu nagrywania.
+	if rm.feedRunning(cameraID) {
+		return nil
+	}
+
 	// The loopback has no data once recording ffmpeg has stopped, so stop
 	// this camera's stream too (best-effort — no-op if it wasn't streaming).
 	if err := rm.streamer.StopStream(cameraID); err != nil {
@@ -413,8 +435,17 @@ func (rm *RecorderManager) StopAll() {
 
 	// Belt-and-braces: StopRecord above already stops each camera's stream,
 	// but this catches anything left running (e.g. a manually-started
-	// stream for a camera that was never recording).
-	rm.streamer.StopAllStreams()
+	// stream for a camera that was never recording). Podgląd kamer z działającym
+	// odbiorem zostaje: kończenie nagrań nie przerywa obrazu dla OBS (ShutdownAll
+	// zatrzymuje wszystko przy końcu pracy pluginu).
+	for _, id := range rm.streamer.ActiveCameras() {
+		if rm.feedRunning(id) {
+			continue
+		}
+		if err := rm.streamer.StopStream(id); err != nil {
+			log.Printf("⚠️  StopAll stream [%s]: %v", id, err)
+		}
+	}
 }
 
 // HandleShutdownHost cleanly stops every active recording/stream (so ffmpeg
@@ -425,7 +456,7 @@ func (rm *RecorderManager) StopAll() {
 // remote alternative to `ssh` + `sudo shutdown`.
 func (rm *RecorderManager) HandleShutdownHost(msg *Message, hubClient *HubClient) {
 	log.Println("🛑 shutdown_host received — stopping all recordings/streams before poweroff")
-	rm.StopAll()
+	rm.ShutdownAll()
 
 	// Acknowledge before the process (and machine) disappear — there is no
 	// second chance to reply once poweroff has started.
@@ -534,6 +565,12 @@ func (rm *RecorderManager) HandleHubMessage(msg *Message, hubClient *HubClient) 
 
 	case "mark_segment_end":
 		rm.handleMarkSegmentEnd(msg, hubClient)
+
+	case "set_active_cameras":
+		rm.handleSetActiveCameras(msg, hubClient)
+
+	case "cameras_status":
+		rm.replyOK(hubClient, msg, map[string]interface{}{"cameras": rm.CamerasStatus()})
 
 	case "start_stream":
 		// Every configured camera can stream concurrently, so this starts

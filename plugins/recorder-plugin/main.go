@@ -112,7 +112,7 @@ func main() {
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("⏹️  Shutting down...")
 
-	recorder.StopAll()
+	recorder.ShutdownAll()
 	discoveryServer.Stop()
 
 	log.Println("✅ Recorder Plugin stopped")
@@ -194,7 +194,7 @@ func handleMessage(msg *Message, hubClient *HubClient, recorder *RecorderManager
 		// nothing to do
 
 	case "start_recording", "stop_recording", "stop_all", "recording_status",
-		"mark_segment_end", "start_stream", "stop_stream":
+		"mark_segment_end", "start_stream", "stop_stream", "set_active_cameras", "cameras_status":
 		recorder.HandleHubMessage(msg, hubClient)
 
 	case "recording_command":
