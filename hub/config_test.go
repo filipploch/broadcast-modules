@@ -178,7 +178,7 @@ func TestModuleServiceDefinition(t *testing.T) {
 		t.Errorf("identyfikatory usługi: %s %s", svc.ID, svc.ModuleID)
 	}
 	env := strings.Join(svc.Env, "|")
-	for _, want := range []string{"BM_HUB_MANAGED=1", "BM_HUB_URL=ws://localhost:18080/ws", "BM_MODULE_PORT=18081", "PYTHONUNBUFFERED=1"} {
+	for _, want := range []string{"BM_HUB_MANAGED=1", "BM_HUB_URL=ws://127.0.0.1:18080/ws", "BM_MODULE_PORT=18081", "PYTHONUNBUFFERED=1"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("brak %s w %s", want, env)
 		}

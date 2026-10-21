@@ -4,6 +4,7 @@ from datetime import datetime
 from core.managers.game_event_manager import GameEventManager
 from core.managers import get_timer_manager
 import threading
+import time
 
 
 class ObsWsManager:
@@ -23,6 +24,12 @@ class ObsWsManager:
         self._pending_requests:  dict = {}
         self._pending_responses: dict = {}
         self._pending_lock = threading.Lock()
+
+        # E2e: powrót OBS po awarii. _obs_link_lost: plugin zgłosił utratę połączenia z OBS (disconnected/reconnecting), więc kolejne
+        # "connected" oznacza powrót OBS (restart pluginu NIE ustawia flagi: moduł widzi wtedy plugin_status, nie obs_status).
+        # _scene_restoring: do zakończenia przywracania sceny zdarzenia zmiany sceny nie nadpisują zapisanej sceny sesji.
+        self._obs_link_lost = False
+        self._scene_restoring = False
 
 
         current_app.logger.info("ObsWsManager initialized")
@@ -79,6 +86,93 @@ class ObsWsManager:
         payload  = msg.get('payload')
         status   = payload.get('status')
         self._emit_to_ui(msg_type, status)
+        self._track_obs_link(status)
+
+    # =========================================================================
+    # POWRÓT OBS PO AWARII (E2e): ścieżki nagrań i scena programu
+    # =========================================================================
+
+    def _track_obs_link(self, status):
+        """Utrata połączenia pluginu z OBS zapamiętujemy; po powrocie ("connected") uzgadniamy nagrania i scenę programu."""
+        if status in ('disconnected', 'reconnecting'):
+            self._obs_link_lost = True
+            return
+        if status != 'connected' or not self._obs_link_lost:
+            return
+        self._obs_link_lost = False
+        try:
+            from core.managers import session_manager
+            session = session_manager.get_open_session()
+            saved_scene = session.obs_scene if session is not None else None
+        except Exception:
+            current_app.logger.warning('Nie udało się odczytać sesji po powrocie OBS', exc_info=True)
+            return
+        if saved_scene:
+            self._scene_restoring = True        # od tej chwili zdarzenia sceny (np. domyślna po starcie OBS) nie nadpisują zapisu
+        app = current_app._get_current_object()
+        threading.Thread(target=self._after_obs_back, args=(app, saved_scene), daemon=True, name='obs-back').start()
+
+    def _after_obs_back(self, app, saved_scene):
+        with app.app_context():
+            try:
+                self._reconcile_recording()
+            except Exception:
+                current_app.logger.warning('Uzgadnianie nagrań po powrocie OBS nie powiodło się', exc_info=True)
+            try:
+                self._restore_program_scene(saved_scene)
+            except Exception:
+                current_app.logger.warning('Przywracanie sceny programu po powrocie OBS nie powiodło się', exc_info=True)
+            finally:
+                time.sleep(1.0)                 # echo własnego przełączenia sceny nie jest "ręczną zmianą operatora"
+                self._scene_restoring = False
+
+    def _reconcile_recording(self):
+        """Po powrocie OBS: jeśli nagranie już nie trwa, a w sesji było 'recording', wpis dostaje 'interrupted' (ścieżka zostaje)."""
+        from core.managers import session_manager
+        resp = self.send_obs_request_sync('GetRecordStatus', {}, timeout=3.0)
+        if resp is None:
+            current_app.logger.warning('Po powrocie OBS brak odpowiedzi na GetRecordStatus: nagrania w sesji bez zmian')
+            return
+        if resp.get('outputActive'):
+            return
+        n = session_manager.record_paths_mark_interrupted()
+        if n:
+            current_app.logger.warning(f'📹 Nagranie OBS przerwane awarią: {n} wpis(ów) oznaczono jako przerwane (ścieżki zachowane)')
+            session_manager.update_obs_state(recording=False)
+            self._emit_to_ui('obs_record_state', {'state': 'disabled'})
+
+    def _restore_program_scene(self, saved_scene):
+        """Przywraca scenę programu sprzed awarii OBS (tylko przy otwartej sesji z zapisaną sceną).
+
+        Zapisana scena to ostatnia, jaką OBS zgłosił modułowi (CurrentProgramSceneChanged) przed awarią:
+        - operator zmienił scenę ręcznie i moduł zdążył odebrać zdarzenie: wraca scena operatora (poprawnie);
+        - awaria tuż po ręcznej zmianie, zanim zdarzenie dotarło: wraca poprzednia scena (operator widzi różnicę
+          i zmienia ją ponownie; w panelu jest informacja, jaka scena została ustawiona i jaka była);
+        - zmiana sceny już po powrocie OBS (zdarzenie albo ręcznie) nie jest cofana: przywracamy tylko jeden raz."""
+        if not saved_scene:
+            return
+        resp = self.send_obs_request_sync('GetCurrentProgramScene', {}, timeout=3.0)
+        current = (resp or {}).get('currentProgramSceneName') or (resp or {}).get('sceneName')
+        if resp is None or not current:
+            current_app.logger.warning('Po powrocie OBS brak odpowiedzi na GetCurrentProgramScene: scena nie przywrócona')
+            return
+        if current == saved_scene:
+            return
+        scenes = self.get_scene_map()
+        if scenes and saved_scene not in scenes:
+            current_app.logger.warning(f'Zapisana scena "{saved_scene}" nie istnieje w OBS: scena nie przywrócona (jest "{current}")')
+            self._notice('obs-scene-restore', f'Scena "{saved_scene}" z przed awarii OBS nie istnieje; jest "{current}"', 'warning')
+            return
+        current_app.logger.info(f'🎬 Przywracam scenę programu po awarii OBS: "{current}" → "{saved_scene}"')
+        self.set_current_program_scene(saved_scene)
+        self._notice('obs-scene-restore', f'Przywrócono scenę OBS "{saved_scene}" (po restarcie była "{current}")', 'info')
+
+    def _notice(self, key, text, level):
+        try:
+            from core.managers import get_service_notices
+            get_service_notices().set(key, text, level)
+        except Exception:
+            current_app.logger.warning('Nie udało się pokazać komunikatu o scenie OBS', exc_info=True)
 
     def on_obs_response(self, msg):
         payload    = msg.get('payload')
@@ -92,8 +186,8 @@ class ObsWsManager:
             try:
                 from core.models.base_settings import get_settings_model
                 Settings = get_settings_model()
-                settings       = Settings.get_settings()
-                video_path     = settings.get_obs_record_filepath()
+                from core.managers import session_manager
+                video_path     = session_manager.current_record_path()      # ścieżka z sesji; zapasowo Settings (sesja sprzed E2e)
                 response_data  = payload.get('responseData')
                 replay_end_time = response_data.get('outputDuration')
                 manager = GameEventManager()
@@ -400,8 +494,9 @@ class ObsWsManager:
                     self._emit_to_ui('obs_record_state', {'state': 'changing'})
                 case 'OBS_WEBSOCKET_OUTPUT_STARTED':
                     obs_record_filepath = event_data.get('outputPath', '')
+                    self._session_update('record_path_started', path=obs_record_filepath)
                     if obs_record_filepath:
-                        Settings.set_obs_record_filepath(obs_record_filepath)
+                        Settings.set_obs_record_filepath(obs_record_filepath)       # zapasowo (sesja otwarta w trakcie wdrożenia)
                         current_app.logger.info(f'📹 OBS recording started: {obs_record_filepath}')
                     else:
                         # OBS WebSocket < 5.5.4 sends empty outputPath on STARTED.
@@ -414,6 +509,7 @@ class ObsWsManager:
                     self._session_update('on_obs_recording_started')
                 case 'OBS_WEBSOCKET_OUTPUT_STOPPED':
                     obs_record_filepath = event_data.get('outputPath', '')
+                    self._session_update('record_path_stopped', path=obs_record_filepath)
                     if obs_record_filepath:
                         # STOPPED always carries the final file path — save it so
                         # any game event that was recorded without a path can be
@@ -427,7 +523,7 @@ class ObsWsManager:
 
         if event_type == 'CurrentProgramSceneChanged':
             scene = (event_data or {}).get('sceneName')
-            if scene:
+            if scene and not self._scene_restoring:      # w trakcie przywracania sceny po awarii OBS zapis sceny sesji jest zamrożony
                 self._session_update('update_obs_state', scene=scene)
 
         if event_type == 'SceneItemEnableStateChanged':

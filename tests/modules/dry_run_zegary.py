@@ -15,6 +15,8 @@ C i D (E2a): plugin sam odtwarza zegar z pliku stanu (czas scienny + przestoj); 
   H. (stala zasada prob) po starcie pluginy pracuja co najmniej 3 minuty bez zadnego restartu (/status HUB-a: restarts == 0)
      i bez timeoutow heartbeatu w logu HUB-a. Sprawdzane PRZED scenariuszami z zabijaniem pluginu.
   I. (E2c) nakladka uruchomiona pozniej (np. po starcie OBS) dostaje pelny biezacy stan: dane meczu, kary i zegar zatrzymany.
+  R. (E2e) nakladka wraca do ekranu sprzed zamkniecia/odswiezenia zrodla w OBS: modul zapamietuje widoczny kontener w sesji, a po ponownej
+     prosbie nakladki o dane (po swiezym zaladowaniu, ktore zglasza pusty ekran z powodem "load") odsyla jej show_overlay_container.
   G. (E2c) zmiana meczu przy biegnacym zegarze: modul wstrzymuje zegar starego meczu PRZED zmiana (odpowiedz pluginu z kontekstem
      starego meczu jest przyjeta i stan trafia do bazy), a pozniejsze zdarzenia tego zegara (kontekst starego meczu) sa odrzucane.
 Wymaga wolnych portow 8080 i 8081 oraz braku uruchomionych hub.exe / timer-plugin.exe (wersja transmisyjna musi byc wylaczona).
@@ -278,6 +280,7 @@ def scenarios(panel, db_path):
     say(f"uszkodzony plik odlozony na bok: {'TAK' if bad else 'NIE'} ({len(bad)})")
     scenario_f(panel, n2)
     scenario_i(panel, n2)
+    scenario_r(panel)
     scenario_g(panel, db_path, gid, n2)
 
 
@@ -352,6 +355,63 @@ def scenario_i(panel, timer_id):
     ok = ("game_data" in got and "penalty_state" in got and tu.get("timer_id") == timer_id and tu.get("state") == "paused"
           and "home_team_goals" in gd and not [e for e in panel.events if e[0] == "plugin_unreachable"])
     say(f"WYNIK I: {'ZALICZONY' if ok else 'NIEZALICZONY'} (dane meczu, kary i zegar zatrzymany dotarly do nakladki, bez paska w panelu)")
+
+
+def scenario_r(panel):
+    say("\n== R. (E2e) Nakladka po odswiezeniu zrodla wraca do ekranu sprzed odswiezenia")
+    import websocket
+
+    def connect_overlay():
+        ws = websocket.create_connection("ws://127.0.0.1:8080/ws", timeout=5)
+        ws.send(json.dumps({"type": "register", "from": "stream-overlay", "to": "hub",
+                            "payload": {"id": "stream-overlay", "component_type": "overlay", "type": "overlay"}}))
+        for _ in range(10):
+            if json.loads(ws.recv()).get("type") == "registered":
+                break
+        ws.send(json.dumps({"type": "subscribe", "from": "stream-overlay", "to": "hub",
+                            "payload": {"class": ["timer", "overlay", "timer_update_receiver", "timer_state_receiver", "game_data_receiver"]}}))
+        return ws
+
+    ws = connect_overlay()
+    ws.send(json.dumps({"type": "active_container_changed", "from": "stream-overlay", "to": "main-module", "payload": {"container_id": "game-container"}}))
+    time.sleep(1)
+    ws.close()                                                  # odswiezenie zrodla w OBS
+    time.sleep(1.5)
+    ws = connect_overlay()                                      # swiezo zaladowana nakladka: wszystko ukryte, prosi o dane
+    ws.send(json.dumps({"type": "request_game_data", "from": "stream-overlay", "to": "main-module"}))
+    ws.send(json.dumps({"type": "active_container_changed", "from": "stream-overlay", "to": "main-module",
+                        "payload": {"container_id": None, "reason": "load"}}))
+    shown = None
+    end = time.time() + 6
+    ws.settimeout(1)
+    while time.time() < end and shown is None:
+        try:
+            m = json.loads(ws.recv())
+        except Exception:
+            continue
+        if m.get("type") == "show_overlay_container":
+            shown = m
+    ws.close()
+    ok = bool(shown) and (shown.get("payload") or {}).get("container_id") == "game-container"
+    say(f"nakladka dostala: {shown.get('payload') if shown else 'nic'}")
+    ws = connect_overlay()                                      # operator chowa ekran: nastepne odswiezenie nic nie przywraca
+    ws.send(json.dumps({"type": "active_container_changed", "from": "stream-overlay", "to": "main-module", "payload": {"container_id": None}}))
+    time.sleep(1)
+    ws.close()
+    time.sleep(1)
+    ws = connect_overlay()
+    ws.send(json.dumps({"type": "request_game_data", "from": "stream-overlay", "to": "main-module"}))
+    again = False
+    end = time.time() + 4
+    ws.settimeout(1)
+    while time.time() < end:
+        try:
+            if json.loads(ws.recv()).get("type") == "show_overlay_container":
+                again = True
+        except Exception:
+            continue
+    ws.close()
+    say(f"WYNIK R: {'ZALICZONY' if ok and not again else 'NIEZALICZONY'} (kontener przywrocony: {ok}; po schowaniu ekranu nie wraca: {not again})")
 
 
 def timer_db_state(db_path, timer_id):

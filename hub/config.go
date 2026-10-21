@@ -288,7 +288,7 @@ func (c *LoadedHubConfig) moduleServiceFor(e ModuleManifest) ServiceConfig {
 		Args:           append([]string{c.abs(e.Script)}, e.Args...),
 		Env: []string{
 			"BM_HUB_MANAGED=1", // moduł nie pisze na konsolę (tylko do pliku), surowe wyjście idzie do pliku .wyjscie.log
-			fmt.Sprintf("BM_HUB_URL=ws://localhost:%d/ws", c.HubPort),
+			fmt.Sprintf("BM_HUB_URL=ws://127.0.0.1:%d/ws", c.HubPort),
 			fmt.Sprintf("BM_MODULE_PORT=%d", e.Port),
 			"PYTHONIOENCODING=utf-8",
 			"PYTHONUNBUFFERED=1",
