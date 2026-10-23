@@ -5,7 +5,7 @@ rem Dziala jedna instancja naraz: dzialajaca instancja drugiego modulu zostaje z
 setlocal
 cd /d "%~dp0"
 if not exist "hub\hub.exe" (
-  echo BLAD: brak hub\hub.exe. Zbuduj go przez hubuild.bat.
+  echo BLAD: brak hub\hub.exe. Zbuduj go przez hub\build.bat.
   pause
   exit /b 1
 )
