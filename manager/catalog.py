@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FORMAT = 1
-FIELDS = {"format", "id", "button", "script", "args", "port", "log_name", "order", "obs_profile", "obs_scene_collection"}
+FIELDS = {"format", "id", "button", "script", "args", "port", "log_name", "order", "obs_profile", "obs_scene_collection", "wp"}
 REQUIRED = ("format", "id", "button", "script", "port")
 
 
@@ -23,6 +23,7 @@ class Module:
     folder: str
     obs_profile: str = ""            # profil OBS wymagany przez moduł ("" = brak wymagania)
     obs_scene_collection: str = ""   # zbiór scen OBS wymagany przez moduł
+    wp: dict | None = None           # blok "wp" (instancja WordPressa modułu, WP-1); poprawność sprawdza HUB
 
 
 @dataclass
@@ -69,7 +70,8 @@ def scan(modules_dir: Path) -> Catalog:
             continue
         found.append(Module(id=data["id"], button=data["button"], port=data["port"], log_name=data.get("log_name") or data["id"],
                             order=int(data.get("order", 0)), folder=folder.name,
-                            obs_profile=str(data.get("obs_profile") or ""), obs_scene_collection=str(data.get("obs_scene_collection") or "")))
+                            obs_profile=str(data.get("obs_profile") or ""), obs_scene_collection=str(data.get("obs_scene_collection") or ""),
+                            wp=data.get("wp") if isinstance(data.get("wp"), dict) else None))
     counts = Counter(m.id for m in found)
     for m in found:
         if counts[m.id] > 1:

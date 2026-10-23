@@ -57,6 +57,8 @@ type HubConfig struct {
 	PluginsConfig string `json:"plugins_config"`
 	// StateFile: plik stanu usług (względem katalogu głównego); "" = run/uslugi.json
 	StateFile string    `json:"state_file"`
+	// WpDir: folder z PHP, WordPressem i bazami instancji WP modułów (WP-1), względem katalogu głównego; poza gitem
+	WpDir string    `json:"wp_dir"`
 	Obs       ObsConfig `json:"obs"`
 	Wol       WolConfig `json:"wol"`
 }
@@ -67,6 +69,7 @@ func defaultHubConfig() HubConfig {
 		HubPort:             8080,
 		Module:              "nalf",
 		ModulesDir:          "modules",
+		WpDir:               wpDefaultDir,
 		ControlPort:         8079,
 		PythonPath:          "modules/.venv/Scripts/python.exe",
 		ModuleDir:           "modules",

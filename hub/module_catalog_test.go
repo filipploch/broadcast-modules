@@ -103,3 +103,65 @@ func TestRepoManifestsMatchModuleNames(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogReadsWpBlock(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, "a", `{"format":1,"id":"alfa","button":"ALFA","script":"a.py","port":8081,"wp":{"port":8091}}`)
+	writeManifest(t, root, "b", `{"format":1,"id":"beta","button":"BETA","script":"b.py","port":8081,"wp":{"port":8092,"db":"beta-db","template":"szablon_b","title":"Beta"}}`)
+	writeManifest(t, root, "c", `{"format":1,"id":"gamma","button":"GAMMA","script":"c.py","port":8081}`)
+	cat := scanModuleCatalog(root)
+	if len(cat.Warnings) != 0 {
+		t.Fatalf("nieoczekiwane ostrzeżenia: %v", cat.Warnings)
+	}
+	a, _ := cat.Get("alfa")
+	if a.Wp == nil || a.Wp.Port != 8091 || a.Wp.EffectiveDB() != "p8091" || a.Wp.EffectiveTemplate() != "_szablon" {
+		t.Fatalf("wartości domyślne bloku wp: %+v", a.Wp)
+	}
+	b, _ := cat.Get("beta")
+	if b.Wp == nil || b.Wp.EffectiveDB() != "beta-db" || b.Wp.EffectiveTemplate() != "szablon_b" || b.Wp.Title != "Beta" {
+		t.Fatalf("jawne wartości bloku wp: %+v", b.Wp)
+	}
+	if g, _ := cat.Get("gamma"); g.Wp != nil {
+		t.Fatalf("moduł bez bloku wp nie ma mieć WP: %+v", g.Wp)
+	}
+	if w, ok := b.manifestJSON()["wp"].(map[string]interface{}); !ok || w["port"] != 8092 || w["db"] != "beta-db" {
+		t.Fatalf("manifestJSON wp: %v", b.manifestJSON()["wp"])
+	}
+}
+
+func TestCatalogDropsBadWpBlockButKeepsModule(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, "a", `{"format":1,"id":"alfa","button":"A","script":"a.py","port":8081,"wp":{"port":8091}}`)
+	writeManifest(t, root, "b", `{"format":1,"id":"beta","button":"B","script":"b.py","port":8081,"wp":{"port":8091}}`)     // ten sam port
+	writeManifest(t, root, "c", `{"format":1,"id":"gamma","button":"C","script":"c.py","port":8081,"wp":{"port":8081}}`)    // port modułu
+	writeManifest(t, root, "d", `{"format":1,"id":"delta","button":"D","script":"d.py","port":8081,"wp":{"port":8093,"db":"../x"}}`) // zła nazwa
+	writeManifest(t, root, "e", `{"format":1,"id":"eps","button":"E","script":"e.py","port":8081,"wp":{"port":8094,"db":"p8091"}}`)   // ta sama baza co alfa
+	writeManifest(t, root, "f", `{"format":1,"id":"zeta","button":"F","script":"f.py","port":8081,"wp":{"port":80}}`)       // port zarezerwowany
+	cat := scanModuleCatalog(root)
+	if len(cat.Modules) != 6 {
+		t.Fatalf("błędny blok wp nie może usuwać modułu: %v", cat.IDs())
+	}
+	wantWp := map[string]bool{"alfa": true}
+	for _, m := range cat.Modules {
+		if (m.Wp != nil) != wantWp[m.ID] {
+			t.Fatalf("moduł %s: wp=%+v, oczekiwano obecności %v", m.ID, m.Wp, wantWp[m.ID])
+		}
+	}
+	if len(cat.Warnings) != 5 {
+		t.Fatalf("oczekiwano 5 ostrzeżeń, jest %d: %v", len(cat.Warnings), cat.Warnings)
+	}
+}
+
+func TestRepoManifestsHaveDistinctWpInstances(t *testing.T) {
+	cat := scanModuleCatalog(filepath.Join(repoRoot(), "modules"))
+	if len(cat.Warnings) != 0 {
+		t.Fatalf("ostrzeżenia katalogu: %v", cat.Warnings)
+	}
+	want := map[string]int{"nalf": 8091, "garbarnia": 8092}
+	for id, port := range want {
+		m, ok := cat.Get(id)
+		if !ok || m.Wp == nil || m.Wp.Port != port {
+			t.Fatalf("moduł %s: oczekiwano bloku wp z portem %d, jest %+v", id, port, m.Wp)
+		}
+	}
+}

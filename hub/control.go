@@ -452,6 +452,10 @@ func (c *controlServer) handleModuleStop(w http.ResponseWriter, r *http.Request)
 	go func() {
 		if err := c.hub.Services.Stop("module"); err != nil {
 			log.Printf("⚠️  Kanał sterujący: zatrzymanie modułu: %v", err)
+			return
+		}
+		if c.hub.wp != nil {
+			c.hub.wp.stopFor(a.ID) // WP uruchomiony przez HUB albo przejęty z .bat zatrzymuje się razem z modułem (WP-1)
 		}
 	}()
 	writeJSON(w, http.StatusAccepted, controlResult{OK: true})

@@ -269,6 +269,17 @@ class ObsProfileViewTest(unittest.TestCase):
         self.assertEqual((b.obs_profile, b.obs_scene_collection), ("Tylko profil", ""))
         self.assertEqual((c.obs_profile, c.obs_scene_collection), ("", ""))
 
+    def test_katalog_przyjmuje_blok_wp(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            write(root / "a" / "module.json", json.dumps({"format": 1, "id": "alfa", "button": "A", "script": "a.py", "port": 1,
+                                                          "wp": {"port": 8091, "title": "A"}}))
+            write(root / "b" / "module.json", json.dumps({"format": 1, "id": "beta", "button": "B", "script": "b.py", "port": 2}))
+            cat = catalog.scan(root)
+        self.assertEqual(cat.warnings, [])
+        self.assertEqual(cat.get("alfa").wp, {"port": 8091, "title": "A"})
+        self.assertIsNone(cat.get("beta").wp)
+
     def test_prawdziwe_pliki_modulow_maja_potwierdzone_nazwy(self):
         cat = catalog.scan(ROOT / "modules")
         self.assertEqual(cat.warnings, [])

@@ -33,6 +33,7 @@ type Hub struct {
 
 	// Profil i zbiór scen OBS przypisane do modułu (E2d3c3, obs_profile.go)
 	obsProfile     obsProfileStatus
+	wp             *wpManager            // instancja WordPressa aktywnego modułu (WP-1)
 	catalogFn      func() *ModuleCatalog // katalog modułów czytany z dysku przy każdym użyciu (module.json aktywnego modułu)
 	obsApplyBudget time.Duration         // 0 = obsApplyBudget; testy skracają
 	obsApplyWindow time.Duration
@@ -295,6 +296,10 @@ func (h *Hub) registerMainModule(module *Module) {
 	go h.sendCurrentPluginStates(module)
 	// Ostrzeżenie o profilu OBS z przełączenia sprzed startu modułu (E2d3c3): moduł dowiaduje się o nim po rejestracji
 	go h.replayObsProfileNotice()
+	// Ostrzeżenie o WP sprzed startu modułu (WP-1): moduł dowiaduje się o nim po rejestracji
+	if h.wp != nil {
+		go h.wp.replay()
+	}
 }
 
 // sendCurrentPluginStates sends plugin_status/connected for every plugin that

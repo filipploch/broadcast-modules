@@ -184,6 +184,9 @@ func serveStatus(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	if hub.Services != nil {
 		status["services"] = hub.Services.Snapshot()
 	}
+	if hub.wp != nil {
+		status["wp"] = hub.wp.view() // instancja WordPressa aktywnego modułu (WP-1)
+	}
 	status["session"] = sessionSnapshot(hub.SessionStatus())
 
 	// Add plugin manager status if available

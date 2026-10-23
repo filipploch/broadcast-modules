@@ -31,6 +31,10 @@ type ModuleManifest struct {
 	ObsProfile         string `json:"obs_profile,omitempty"`
 	ObsSceneCollection string `json:"obs_scene_collection,omitempty"`
 
+	// Instancja WordPressa/SportsPressa tego modułu (WP-1): port, baza i szablon w jednym miejscu dla obu sposobów startu
+	// (plik .bat przez "hub.exe wp <id>" i uruchamianie przez HUB). Brak bloku = moduł nie ma własnej instancji WP.
+	Wp *WpConfig `json:"wp,omitempty"`
+
 	Dir string `json:"-"` // folder, z którego pochodzi plik (do komunikatów)
 }
 
@@ -145,8 +149,39 @@ func scanModuleCatalog(dir string) *ModuleCatalog {
 		}
 		return cat.Modules[i].ID < cat.Modules[j].ID
 	})
+	cat.validateWp()
 	sort.Strings(cat.Warnings)
 	return cat
+}
+
+// validateWp sprawdza bloki "wp": błędny blok jest zerowany z ostrzeżeniem (moduł nadal działa, tylko bez własnego WP).
+// Port i nazwa bazy muszą być różne w całym katalogu (działa jedna instancja naraz, ale ta sama baza dla dwóch modułów to pomyłka).
+func (c *ModuleCatalog) validateWp() {
+	ports := map[int]string{}
+	dbs := map[string]string{}
+	for i := range c.Modules {
+		m := &c.Modules[i]
+		if m.Wp == nil {
+			continue
+		}
+		if msg := m.Wp.problem(m.Port); msg != "" {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s: blok wp: %s, moduł działa bez WP", m.Dir, msg))
+			m.Wp = nil
+			continue
+		}
+		if other, dup := ports[m.Wp.Port]; dup {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s: blok wp: port %d ma już moduł %s, moduł działa bez WP", m.Dir, m.Wp.Port, other))
+			m.Wp = nil
+			continue
+		}
+		if other, dup := dbs[m.Wp.EffectiveDB()]; dup {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s: blok wp: baza %q ma już moduł %s, moduł działa bez WP", m.Dir, m.Wp.EffectiveDB(), other))
+			m.Wp = nil
+			continue
+		}
+		ports[m.Wp.Port] = m.ID
+		dbs[m.Wp.EffectiveDB()] = m.ID
+	}
 }
 
 func (m ModuleManifest) missingFields() []string {
@@ -171,7 +206,7 @@ func (m ModuleManifest) missingFields() []string {
 
 // manifestJSON: opis modułu do odpowiedzi /state (bez pól wewnętrznych).
 func (m ModuleManifest) manifestJSON() map[string]interface{} {
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"id":       m.ID,
 		"button":   m.Button,
 		"port":     m.Port,
@@ -182,4 +217,8 @@ func (m ModuleManifest) manifestJSON() map[string]interface{} {
 		"obs_profile":          m.ObsProfile,
 		"obs_scene_collection": m.ObsSceneCollection,
 	}
+	if m.Wp != nil {
+		out["wp"] = map[string]interface{}{"port": m.Wp.Port, "db": m.Wp.EffectiveDB(), "template": m.Wp.EffectiveTemplate(), "title": m.Wp.Title}
+	}
+	return out
 }

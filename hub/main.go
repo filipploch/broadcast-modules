@@ -11,6 +11,10 @@ import (
 )
 
 func main() {
+	// "hub.exe wp <moduł>": instancja WordPressa modułu w pierwszym planie (pliki .bat), bez uruchamiania HUB-a (WP-1)
+	if len(os.Args) > 1 && os.Args[1] == "wp" {
+		os.Exit(runWpCommand(os.Args[2:], os.Stdout))
+	}
 	configFlag := flag.String("config", "", "ścieżka do pliku konfiguracji HUB-a (domyślnie hub/config/hub.json, a bez niego hub.example.json)")
 	moduleFlag := flag.String("module", "", "moduł do uruchomienia (nadpisuje pole \"module\" z konfiguracji)")
 	flag.Parse()
@@ -107,8 +111,10 @@ func main() {
 	hub.Services.persist = hub.persistState
 	// Profil i zbiór scen OBS z module.json aktywnego modułu (E2d3c3)
 	hub.catalogFn = func() *ModuleCatalog { return scanModuleCatalog(hubCfg.abs(hubCfg.ModulesDir)) }
+	hub.wp = newWpManager(hubCfg, func(kind, msg string) { hub.notifyService(wpServiceID, kind, msg) })
 	hub.Services.preStart = func(id string, cfg ServiceConfig) {
 		if id == "module" {
+			hub.wp.ensureFor(cfg.ModuleID) // WP przed modułem; jego brak nie blokuje startu (WP-1)
 			hub.onModuleStarting(cfg.ModuleID)
 		}
 	}

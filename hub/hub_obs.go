@@ -187,6 +187,10 @@ func (h *Hub) shutdownServices() {
 		h.Services.Detach("obs")
 	}
 	h.Services.StopSome(only)
+	// Moduł zatrzymany razem z HUB-em: jego WP także (przy otwartej sesji moduł i WP zostają, wyżej)
+	if h.wp != nil {
+		h.wp.stopForCurrent()
+	}
 }
 
 // gracefulStopService prosi usługę o zamknięcie się samej. Moduł: komunikat shutdown_module przez WebSocket. OBS: WM_CLOSE do okna

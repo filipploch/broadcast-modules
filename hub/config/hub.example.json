@@ -2,6 +2,7 @@
   "hub_port": 8080,
   "module": "nalf",
   "modules_dir": "modules",
+  "wp_dir": "wp-local",
   "control_port": 8079,
   "python_path": "modules/.venv/Scripts/python.exe",
   "module_dir": "modules",
