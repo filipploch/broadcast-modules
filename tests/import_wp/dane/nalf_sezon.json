@@ -1,0 +1,508 @@
+{
+ "seasons": [
+  {
+   "id": 61,
+   "name": "Jesień 2026",
+   "slug": "jesien-2026"
+  }
+ ],
+ "leagues": [
+  {
+   "id": 19,
+   "name": "Dywizja A",
+   "slug": "dywizja-a"
+  },
+  {
+   "id": 20,
+   "name": "Dywizja B",
+   "slug": "dywizja-b"
+  },
+  {
+   "id": 31,
+   "name": "Puchar Ligi",
+   "slug": "puchar-ligi"
+  }
+ ],
+ "teams": [
+  {
+   "id": 10308,
+   "slug": "k2-2",
+   "title": {
+    "rendered": "K2"
+   },
+   "leagues": [
+    20,
+    31
+   ],
+   "seasons": [
+    61,
+    59
+   ],
+   "abbreviation": ""
+  },
+  {
+   "id": 7612,
+   "slug": "galactik-futsal",
+   "title": {
+    "rendered": "Galactik Futsal"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    57,
+    61,
+    44,
+    47,
+    55,
+    59
+   ],
+   "abbreviation": ""
+  },
+  {
+   "id": 148,
+   "slug": "hattrick",
+   "title": {
+    "rendered": "Hattrick"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    22,
+    35,
+    37,
+    40,
+    43,
+    46,
+    54,
+    57,
+    61,
+    33,
+    36,
+    42,
+    44,
+    47,
+    55,
+    59
+   ],
+   "abbreviation": ""
+  }
+ ],
+ "players": [
+  {
+   "id": 8137,
+   "slug": "bienczycki-lukasz",
+   "title": {
+    "rendered": "Bieńczycki Łukasz"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    54,
+    57,
+    61,
+    47,
+    55,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612,
+    7049
+   ]
+  },
+  {
+   "id": 7775,
+   "slug": "cygan-kamil",
+   "title": {
+    "rendered": "Cygan Kamil"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    57,
+    61,
+    44,
+    47,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612
+   ]
+  },
+  {
+   "id": 7776,
+   "slug": "bienczycki-jakub",
+   "title": {
+    "rendered": "Bieńczycki Jakub"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    57,
+    61,
+    44,
+    55,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612
+   ]
+  },
+  {
+   "id": 7777,
+   "slug": "krul-artur",
+   "title": {
+    "rendered": "Krul Artur"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    54,
+    57,
+    61,
+    44,
+    47,
+    55,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612,
+    1854
+   ]
+  },
+  {
+   "id": 6811,
+   "slug": "pys-mikolaj",
+   "title": {
+    "rendered": "Grzyb Konrad"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    43,
+    46,
+    57,
+    61,
+    42,
+    44,
+    47,
+    55,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612,
+    6577,
+    1854
+   ]
+  },
+  {
+   "id": 6812,
+   "slug": "januszewski-michal",
+   "title": {
+    "rendered": "Januszewski Michał"
+   },
+   "leagues": [
+    19,
+    20,
+    31
+   ],
+   "seasons": [
+    46,
+    61,
+    44,
+    47,
+    59
+   ],
+   "number": "",
+   "teams": [
+    7612,
+    6577
+   ]
+  }
+ ],
+ "events": [
+  {
+   "id": 10834,
+   "date": "2026-10-21T22:15:00",
+   "status": "publish",
+   "format": "league",
+   "leagues": [
+    20
+   ],
+   "seasons": [
+    61
+   ],
+   "teams": [
+    7612,
+    10308
+   ],
+   "day": "5",
+   "minutes": "40",
+   "players": [
+    0,
+    7776,
+    8137,
+    7775,
+    6811,
+    6812,
+    7777,
+    0
+   ],
+   "results": {
+    "7612": {
+     "firsthalf": "",
+     "secondhalf": "",
+     "goals": "4",
+     "outcome": [
+      "win"
+     ]
+    },
+    "10308": {
+     "firsthalf": "",
+     "secondhalf": "",
+     "goals": "3",
+     "outcome": [
+      "loss"
+     ]
+    },
+    "0": {
+     "goals": "Bramki"
+    }
+   },
+   "performance": {
+    "7612": {
+     "0": {
+      "goals": "",
+      "assists": "",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": ""
+     },
+     "7776": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "",
+      "assists": "",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     },
+     "8137": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "",
+      "assists": "",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     },
+     "7775": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "",
+      "assists": "1",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     },
+     "6811": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "1",
+      "assists": "1",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     },
+     "6812": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "1",
+      "assists": "",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     },
+     "7777": {
+      "number": "",
+      "position": [
+       "27"
+      ],
+      "goals": "1",
+      "assists": "1",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": "",
+      "status": "lineup",
+      "sub": "0"
+     }
+    },
+    "10308": {
+     "0": {
+      "goals": "",
+      "assists": "",
+      "yellowcards": "",
+      "redcards": "",
+      "owngoals": "",
+      "pitkakolejki": "",
+      "zawodnikkolejki": ""
+     }
+    },
+    "0": {
+     "position": "Pozycja",
+     "goals": "Gole",
+     "assists": "Asysty",
+     "yellowcards": "Żółte kartki",
+     "redcards": "Czerwone kartki",
+     "owngoals": "Samobójcze",
+     "pitkakolejki": "Piątka kolejki",
+     "zawodnikkolejki": "Zawodnik kolejki"
+    }
+   }
+  },
+  {
+   "id": 10894,
+   "date": "2026-11-25T22:15:00",
+   "status": "future",
+   "format": "league",
+   "leagues": [
+    20
+   ],
+   "seasons": [
+    61
+   ],
+   "teams": [
+    10308,
+    148
+   ],
+   "day": "9",
+   "minutes": "40",
+   "players": [],
+   "results": {
+    "10308": [],
+    "148": [],
+    "0": {
+     "firsthalf": "1st Half",
+     "secondhalf": "2nd Half",
+     "goals": "Bramki",
+     "outcome": "Wynik"
+    }
+   },
+   "performance": [
+    {
+     "position": "Pozycja",
+     "goals": "Gole",
+     "assists": "Asysty",
+     "yellowcards": "Żółte kartki",
+     "redcards": "Czerwone kartki",
+     "owngoals": "Samobójcze",
+     "pitkakolejki": "Piątka kolejki",
+     "zawodnikkolejki": "Zawodnik kolejki"
+    }
+   ]
+  },
+  {
+   "id": 10856,
+   "date": "2027-01-26T20:45:00",
+   "status": "future",
+   "format": "league",
+   "leagues": [
+    31
+   ],
+   "seasons": [
+    61
+   ],
+   "teams": [
+    0,
+    0
+   ],
+   "day": "Finał",
+   "minutes": "40",
+   "players": [],
+   "results": [
+    {
+     "firsthalf": "1st Half",
+     "secondhalf": "2nd Half",
+     "goals": "Bramki",
+     "outcome": "Wynik"
+    }
+   ],
+   "performance": [
+    {
+     "position": "Pozycja",
+     "goals": "Gole",
+     "assists": "Asysty",
+     "yellowcards": "Żółte kartki",
+     "redcards": "Czerwone kartki",
+     "owngoals": "Samobójcze",
+     "pitkakolejki": "Piątka kolejki",
+     "zawodnikkolejki": "Zawodnik kolejki"
+    }
+   ]
+  }
+ ]
+}
