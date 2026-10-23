@@ -27,6 +27,11 @@ with app.app_context():
     from core.managers import session_manager
     from core.models.base_game import get_game_model
     Game = get_game_model()
+    if Game.query.count() == 0:
+        # Po wyzerowaniu danych rozgrywek (I0) baza nie ma meczów, a próby (zegary, kary) potrzebują meczu: dane próbne (2 mecze)
+        import harness
+        harness.seed(app)
+        print("baza bez meczów: dodano dane próbne (harness.seed: 2 mecze, 3 drużyny)")
     print("baza po migracji: meczow", Game.query.count(), "| otwarta sesja:", session_manager.get_open_session())
 
     client = app.test_client()

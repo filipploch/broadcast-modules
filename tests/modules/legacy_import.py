@@ -44,12 +44,13 @@ def make(APP):
             self.assertEqual(self.client.get('/api/status').status_code, 200)
 
         def test_awaryjne_wlaczenie_zdejmuje_blokade(self):
+            # Sprawdzamy sam hak blokady (bez wykonywania prawdziwego pobierania): odpowiedź przy blokadzie i brak odpowiedzi po włączeniu
+            path = '/leagues/1/games/scrape'
+            with APP.test_request_context(path):
+                self.assertEqual(APP.preprocess_request()[1], 403)
             APP.config['LEGACY_IMPORT_ENABLED'] = True
-            trasy = [t for t in self._trasy_pobierania() if t[0] == 'GET']
-            self.assertTrue(trasy)
-            method, path = trasy[0]
-            r = self.client.open(path, method=method)
-            self.assertNotEqual(r.status_code, 403)
+            with APP.test_request_context(path):
+                self.assertIsNone(APP.preprocess_request())
 
         def test_wzorce_blokady(self):
             from core.utils.legacy_import import is_blocked_path
