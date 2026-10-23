@@ -291,6 +291,7 @@ func (c *LoadedHubConfig) moduleServiceFor(e ModuleManifest) ServiceConfig {
 		Args:           append([]string{c.abs(e.Script)}, e.Args...),
 		Env: []string{
 			"BM_HUB_MANAGED=1", // moduł nie pisze na konsolę (tylko do pliku), surowe wyjście idzie do pliku .wyjscie.log
+			"BM_WP_DIR=" + c.wpPaths().Dir, // folder WP (dane logowania modułu do WP, WP-2): ten sam, z którego HUB uruchamia WordPressa
 			fmt.Sprintf("BM_HUB_URL=ws://127.0.0.1:%d/ws", c.HubPort),
 			fmt.Sprintf("BM_MODULE_PORT=%d", e.Port),
 			"PYTHONIOENCODING=utf-8",

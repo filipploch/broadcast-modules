@@ -52,6 +52,16 @@ def register_routes(app, exclude=None):
     exclude = exclude or set()
     """Rejestruje wspólne trasy w instancji Flask aplikacji."""
 
+    @app.route('/wp/competitions')
+    def wp_competitions():
+        """Rozgrywki z WordPressa modułu: lista, wybór i rozgrywki domyślne (WP-2)."""
+        return render_template('wp/competitions.html')
+
+    @app.route('/api/wp/state')
+    def api_wp_state():
+        from core.managers import get_wp_manager
+        return jsonify(get_wp_manager().state())
+
     @app.route('/api/status')
     def api_status():
         return jsonify({

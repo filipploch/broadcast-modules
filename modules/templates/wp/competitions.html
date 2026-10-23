@@ -1,0 +1,36 @@
+{% extends "base/base.html" %}
+{% block title %}Rozgrywki WP{% endblock %}
+{% block extra_css %}
+<style>
+    .wp-status { font-weight: bold; margin: 8px 0; }
+    .wp-ok { color: #1b7f3b; }
+    .wp-bad { color: #b00020; }
+    .wp-unknown { color: #666; }
+    .wp-row { display: flex; gap: 12px; align-items: baseline; padding: 6px 4px; cursor: pointer; border-bottom: 1px solid #ddd; }
+    .wp-row.wp-default { background: rgba(31, 95, 153, .08); }
+    .wp-title { font-weight: bold; min-width: 260px; }
+    .wp-detail { color: #555; }
+    .wp-note { margin: 6px 0; padding: 6px 10px; border-radius: 4px; }
+    .wp-note-info { background: #e3f0fb; }
+    .wp-note-warning { background: #fff0d6; }
+    .wp-note-error { background: #fbe0e3; }
+    #wp-hint { margin: 12px 0 6px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>Rozgrywki z WordPressa</span>
+    </div>
+    <div id="wp-status" class="wp-status wp-unknown">WP: sprawdzam połączenie…</div>
+    <div class="actions"><button id="wp-refresh" type="button" class="btn btn-primary">ODŚWIEŻ LISTĘ</button></div>
+    <div id="wp-list"></div>
+    <div id="wp-hint"></div>
+    <div class="actions"><button id="wp-save" type="button" class="btn btn-primary" disabled>ZAPISZ JAKO DOMYŚLNE</button></div>
+    <div id="wp-result"></div>
+    <div id="wp-notes"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/pages/wp-competitions.js') }}"></script>
+{% endblock %}

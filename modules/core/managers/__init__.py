@@ -14,6 +14,7 @@ import time
 # RLock, bo menedżery tworzą się nawzajem (np. get_obs_ws_manager -> get_hub_client).
 _lazy_lock = threading.RLock()
 _service_notices = None   # komunikaty usług z HUB-a (OBS, moduł) dla paska w panelu
+_wp_manager = None        # połączenie z instancją WordPressa modułu, lista rozgrywek (WP-2)
 
 _hub_client            = None
 _timer_manager         = None
@@ -104,6 +105,12 @@ def initialize_core_managers(app):
             _hub_client.subscribe_to_classes(app.config['SUBSCRIBE_CLASSES'])
             _hub_client.send_session_status()          # status sesji dla HUB-a (wczytana z bazy przed połączeniem)
 
+            # WP modułu (WP-2): stan połączenia i lista rozgrywek w tle; brak WP nigdy nie przerywa startu
+            try:
+                get_wp_manager().start()
+            except Exception as e:
+                app.logger.warning(f"WP: manager nie wystartował: {e}")
+
             # ⭐ ControllerManager — eager init (musi istnieć zanim przyjdą
             # pierwsze sygnały od controller-plugin / replay-plugin).
             from core.managers.controller_manager import ControllerManager
@@ -145,6 +152,29 @@ def get_hub_client():
                 _hub_client = HubClient(current_app.config['HUB_HOST'], current_app)
     return _hub_client
 
+
+
+def get_wp_manager():
+    """WpManager (WP-2): adres z module.json, logowanie z <wp_dir>/dane-api-<id>.json, ustawienia w instance/wp_rozgrywki.json."""
+    global _wp_manager
+    if _wp_manager is None:
+        with _lazy_lock:
+            if _wp_manager is None:
+                import os
+                from core.extensions import socketio
+                from core.managers.wp_client import load_wp_config
+                from core.managers.wp_manager import WpManager
+                module_dir = current_app.config.get('MODULE_DIR') or os.getcwd()
+                cfg = load_wp_config(module_dir)
+                if cfg.problem:
+                    current_app.logger.warning(f'WP: {cfg.problem}')
+                store = os.path.join(current_app.instance_path, 'wp_rozgrywki.json')
+                if current_app.config.get('TESTING'):               # testy nie dotykają prawdziwych ustawień modułu
+                    import tempfile
+                    store = os.path.join(tempfile.gettempdir(), f'bm-wp-test-{cfg.module_id or "modul"}.json')
+                _wp_manager = WpManager(cfg, store, socketio=socketio,
+                                        notices=get_service_notices(), logger=current_app.logger)
+    return _wp_manager
 
 
 def get_service_notices():
@@ -312,9 +342,12 @@ def shutdown_core_managers():
     global _hub_client, _service_notices, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
            _replay_export_manager, _controller_manager, _helper_relay_client, \
-           _helper_relay_manager, _initialized
+           _helper_relay_manager, _initialized, _wp_manager
 
     current_app.logger.info("Shutting down core managers...")
+    if _wp_manager is not None:
+        _wp_manager.stop()
+    _wp_manager            = None
 
     if _hub_client is not None:
         _hub_client.disconnect()

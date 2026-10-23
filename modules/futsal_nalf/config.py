@@ -15,6 +15,7 @@ class Config:
     SOCKETIO_ASYNC_MODE = 'threading'
 
     MODULE_ID = 'main-module'
+    MODULE_DIR = _MODULE_DIR   # folder modułu (module.json z blokiem wp: instancja WordPressa modułu)
     MODULE_NAME = 'futsal_nalf'
     # BM_HUB_URL i BM_MODULE_PORT ustawia HUB, który uruchamia moduł (E2d1); bez nich wartości dotychczasowe
     HUB_HOST = os.environ.get('BM_HUB_URL') or 'ws://localhost:8080/ws'
