@@ -7,5 +7,9 @@
   "log_name": "futsal_nalf",
   "order": 10,
   "obs_profile": "NALF",
-  "obs_scene_collection": "NALF"
+  "obs_scene_collection": "NALF",
+  "wp": {
+    "port": 8091,
+    "title": "NALF"
+  }
 }

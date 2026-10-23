@@ -7,5 +7,9 @@
   "log_name": "garbarnia",
   "order": 20,
   "obs_profile": "Garbarnia",
-  "obs_scene_collection": "Garbarnia"
+  "obs_scene_collection": "Garbarnia",
+  "wp": {
+    "port": 8092,
+    "title": "Garbarnia"
+  }
 }
