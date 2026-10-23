@@ -74,6 +74,30 @@ def register_events(socketio):
         from core.managers import get_service_notices
         emit('service_notices', get_service_notices().snapshot())
 
+    @socketio.on('get_wp_state')
+    def handle_get_wp_state():
+        """Panel Rozgrywki WP pyta o stan połączenia z WP i listę rozgrywek (WP-2)."""
+        from flask_socketio import emit
+        from core.managers import get_wp_manager
+        emit('wp_state', get_wp_manager().state())
+
+    @socketio.on('wp_refresh')
+    def handle_wp_refresh():
+        """Operator prosi o odświeżenie listy: pobranie w tle, wynik wraca zdarzeniem wp_state."""
+        from core.managers import get_wp_manager
+        get_wp_manager().request_refresh()
+
+    @socketio.on('wp_set_default')
+    def handle_wp_set_default(data):
+        """Zapisuje wybraną parę (liga, sezon) jako rozgrywki domyślne modułu."""
+        from flask_socketio import emit
+        from core.managers import get_wp_manager
+        try:
+            ok, error = get_wp_manager().set_default((data or {}).get('league_id'), (data or {}).get('season_id'))
+        except (TypeError, ValueError):
+            ok, error = False, 'nieprawidłowe rozgrywki'
+        emit('wp_result', {'ok': ok, 'error': error})
+
     @socketio.on('dismiss_service_notice')
     def handle_dismiss_service_notice(data):
         """Operator zamyka komunikat usługi (np. "OBS uruchomiony ponownie"); znika we wszystkich panelach."""

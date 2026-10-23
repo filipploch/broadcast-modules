@@ -215,3 +215,21 @@ func TestPrepareWpStartIdleWhenNothingRuns(t *testing.T) {
 		t.Fatal("moduł bez bloku wp powinien dać błąd")
 	}
 }
+
+// Moduł dostaje od HUB-a folder WP (dane logowania do WP leżą obok instalacji, z której HUB uruchamia WordPressa).
+func TestModuleServicePassesWpDir(t *testing.T) {
+	root := t.TempDir()
+	lc := &LoadedHubConfig{Root: root}
+	lc.HubConfig = defaultHubConfig()
+	svc := lc.moduleServiceFor(ModuleManifest{ID: "nalf", Script: "modules/nalf.py", Port: 8081})
+	want := "BM_WP_DIR=" + filepath.Join(root, "wp-local")
+	found := false
+	for _, e := range svc.Env {
+		if e == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("brak %s w środowisku modułu: %v", want, svc.Env)
+	}
+}

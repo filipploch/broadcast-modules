@@ -12,6 +12,7 @@ plik hub\\hub.exe z repozytorium (polecenie "hub.exe wp <modul>", katalog modulo
   W4. Dziala juz WLASCIWA instancja (z .bat): zostaje ta sama (ten sam PID, bez restartu), HUB ja przejmuje; zatrzymanie modulu zamyka ja.
   W5. Port WP zajety przez obcy proces: modul i tak startuje, w /status ostrzezenie, obcy proces nietkniety.
   W6. Zabicie procesu WP w trakcie pracy modulu: HUB uruchamia go ponownie.
+  W8. (WP-2) Modul pod HUB-em laczy sie z WP (/api/wp/state: polaczony, logowanie, lista), zglasza brak WP (W5) i powrot po restarcie WP (W6).
   W7. Sprzatanie: po probie nie zostaje proces z proby (porty 8091/8092 i 181xx wolne).
 Wymaga wolnych portow 8091, 8092, 18110-18113.
 """
@@ -116,6 +117,11 @@ def listener_pid(port):
                           f"Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction SilentlyContinue | ForEach-Object {{ $_.OwningProcess }}"],
                          capture_output=True, text=True).stdout.split()
     return int(out[0]) if out and out[0].isdigit() else 0
+
+
+def module_wp():
+    """Stan WP widziany przez modul (WP-2): GET /api/wp/state modulu 'proba'."""
+    return get_json(f"http://127.0.0.1:{MOD_PORT}/api/wp/state")
 
 
 def wp_state():
@@ -227,6 +233,11 @@ def main():
         wp_pid1 = listener_pid(WP1)
         spawned.append(wp_pid1)
         check("W1d port 8092 wolny (jedna instancja naraz)", not port_busy(WP2))
+        okm = wait_for(lambda: module_wp().get("connected") is True, 60)
+        mw = module_wp()
+        check("W1e modul polaczony z WP (stan, adres, logowanie z pliku, lista z prawdziwego WP)",
+              okm and mw.get("enabled") and mw.get("url") == f"http://127.0.0.1:{WP1}" and mw.get("has_auth") and isinstance(mw.get("items"), list),
+              f"(connected={mw.get('connected')}, auth={mw.get('has_auth')}, pozycji={len(mw.get('items', []))}, bez kategorii={mw.get('unassigned')}, blad={mw.get('error')!r})")
 
         say("\n== W2. Zatrzymanie modulu zatrzymuje WP")
         ok, d = stop_module()
@@ -269,6 +280,9 @@ def main():
         w = wp_state()
         check("W5b /status: ostrzezenie o WP", bool(w.get("warning")), f"({w})")
         check("W5c obcy proces nietkniety", blocker.poll() is None)
+        check("W5e modul zglasza brak polaczenia z WP (obcy proces nie odpowiada jak WP), nadal dziala",
+              wait_for(lambda: module_wp().get("connected") is False, 40) and (state().get("active") or {}).get("state") == "running",
+              f"({ {k: module_wp().get(k) for k in ('connected', 'error_kind')} })")
         stop_module()
         check("W5d po zatrzymaniu modulu obcy proces nadal zyje", blocker.poll() is None)
         blocker.kill()
@@ -280,12 +294,14 @@ def main():
         check("W6b WP dziala", wait_for(lambda: http_code(WP1) in (200, 301, 302), 30))
         pid_a = listener_pid(WP1)
         spawned.append(pid_a)
+        check("W6b2 modul widzi WP (connected)", wait_for(lambda: module_wp().get("connected") is True, 60))
         kill_tree(pid_a)
         check("W6c WP zabity", wait_for(lambda: not port_busy(WP1), 10))
         back = wait_for(lambda: http_code(WP1) in (200, 301, 302), 30)
         pid_b = listener_pid(WP1)
         spawned.append(pid_b)
         check("W6d HUB uruchomil WP ponownie (nowy proces)", back and pid_b and pid_b != pid_a, f"(PID {pid_a} -> {pid_b})")
+        check("W6d2 modul wraca do polaczenia z WP", wait_for(lambda: module_wp().get("connected") is True, 60))
         stop_module()
         check("W6e po zatrzymaniu modulu port wolny", wait_for(lambda: not port_busy(WP1), 20))
     finally:
