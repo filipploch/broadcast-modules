@@ -13,7 +13,7 @@ from flask import current_app
 OBS_RESTARTED_KEY = 'obs-restarted'
 OBS_RESTARTED_TEXT = 'OBS uruchomiony ponownie — wznów stream i nagrywanie'
 
-LABELS = {'obs': 'OBS', 'module': 'Moduł', 'obs-profile': 'OBS'}   # obs-profile: profil i zbiór scen OBS modułu (E2d3c3)
+LABELS = {'obs': 'OBS', 'module': 'Moduł', 'obs-profile': 'OBS', 'wp': 'WP'}   # obs-profile: profil i zbiór scen OBS modułu (E2d3c3)
 
 
 class ServiceNotices:

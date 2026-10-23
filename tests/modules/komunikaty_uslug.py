@@ -70,6 +70,15 @@ def make(APP):
             self.notices.on_service_event('obs-profile', 'recovered', '')
             self.assertEqual(self._keys(), ['obs-restarted'])
 
+        # -- WordPress modułu (WP-1): żółte ostrzeżenie "WP: ...", zdejmowane przy kolejnym starcie modułu
+        def test_ostrzezenie_wp_jest_zolte_i_ma_etykiete_wp(self):
+            self.notices.on_service_event('wp', 'warning', 'WP modułu nalf nie wystartował: port 8091 zajmuje inny proces')
+            self.assertEqual(self._keys(), ['wp-warning'])
+            n = [x for x in self.notices.snapshot() if x['key'] == 'wp-warning'][0]
+            self.assertEqual((n['text'], n['level']), ('WP: WP modułu nalf nie wystartował: port 8091 zajmuje inny proces', 'warning'))
+            self.notices.on_service_event('wp', 'recovered', '')
+            self.assertEqual(self._keys(), [])
+
         def test_restart_zdejmuje_wczesniejsze_bledy_obs(self):
             self.notices.on_service_event('obs', 'error', 'brak odpowiedzi po 60 s')
             self.notices.on_service_event('obs', 'gave_up', 'OBS: limit automatycznych restartów (3) wyczerpany')

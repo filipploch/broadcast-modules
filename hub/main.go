@@ -111,8 +111,10 @@ func main() {
 	hub.Services.persist = hub.persistState
 	// Profil i zbiór scen OBS z module.json aktywnego modułu (E2d3c3)
 	hub.catalogFn = func() *ModuleCatalog { return scanModuleCatalog(hubCfg.abs(hubCfg.ModulesDir)) }
+	hub.wp = newWpManager(hubCfg, func(kind, msg string) { hub.notifyService(wpServiceID, kind, msg) })
 	hub.Services.preStart = func(id string, cfg ServiceConfig) {
 		if id == "module" {
+			hub.wp.ensureFor(cfg.ModuleID) // WP przed modułem; jego brak nie blokuje startu (WP-1)
 			hub.onModuleStarting(cfg.ModuleID)
 		}
 	}
