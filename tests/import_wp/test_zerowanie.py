@@ -33,7 +33,7 @@ create table league_foreign_ids(id integer primary key, league_id integer refere
 create table broadcast_sessions(id integer primary key autoincrement, status text);
 create table session_games(id integer primary key, session_id integer references broadcast_sessions(id), game_id integer references games(id));
 create table banners(id integer primary key, name text);
-create table settings(id integer primary key, browse_season_id integer references seasons(id), is_scoreboard_reversed integer);
+create table settings(id integer primary key, browse_season_id integer references seasons(id), is_scoreboard_reversed integer, obs_record_filepath text);
 """
 
 DANE = """
@@ -55,7 +55,7 @@ insert into league_foreign_ids values (1, 1, 1, 'liga-a');
 insert into broadcast_sessions(status) values ('closed');
 insert into session_games values (1, 1, 1);
 insert into banners values (1, 'baner');
-insert into settings values (1, 1, 0);
+insert into settings values (1, 1, 0, 'D:/Video/stary-mecz.mkv');
 """
 
 
@@ -86,7 +86,7 @@ class AnalizaTests(unittest.TestCase):
             'league_scraper_urls', 'league_foreign_ids', 'broadcast_sessions', 'session_games']))
         self.assertEqual(sorted(a['zostaje']), sorted([
             'alembic_version', 'scrapers', 'active_scraper_configs', 'stadiums', 'cameras', 'banners', 'settings']))
-        self.assertEqual(a['settings_null'], ['browse_season_id'])
+        self.assertEqual(sorted(a['settings_null']), ['browse_season_id', 'obs_record_filepath'])
 
     def test_powod_zaleznosci_jest_podany(self):
         a = self._analiza()
@@ -101,6 +101,7 @@ class AnalizaTests(unittest.TestCase):
         for t, n in (('stadiums', 1), ('cameras', 1), ('banners', 1), ('scrapers', 1), ('active_scraper_configs', 1), ('alembic_version', 1), ('settings', 1)):
             self.assertEqual(con.execute(f'select count(*) from {t}').fetchone()[0], n, t)
         self.assertIsNone(con.execute('select browse_season_id from settings').fetchone()[0])
+        self.assertIsNone(con.execute('select obs_record_filepath from settings').fetchone()[0])
         self.assertEqual(con.execute('select is_scoreboard_reversed from settings').fetchone()[0], 0)
         con.execute("insert into teams(name) values ('Nowa')")
         self.assertEqual(con.execute('select id from teams').fetchone()[0], 1)          # numeracja od początku

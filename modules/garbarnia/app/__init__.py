@@ -65,6 +65,10 @@ def create_app(config_name='default'):
         from core.socketio_events.guard import guard_events
         guard_events(app, socketio)
 
+        # Dotychczasowe pobieranie ze stron zablokowane: dane rozgrywek tylko z WP (I0)
+        from core.utils.legacy_import import block_legacy_imports
+        block_legacy_imports(app)
+
         @app.context_processor
         def inject_global_context():
             try:

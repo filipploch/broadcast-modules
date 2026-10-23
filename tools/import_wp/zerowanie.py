@@ -25,6 +25,8 @@ MODULES = ('futsal_nalf', 'garbarnia')                     # foldery modułów
 KORZENIE = ('seasons', 'leagues', 'teams', 'players', 'games')
 SESJE = ('broadcast_sessions',)                            # sesje transmisji: dane, choć bez klucza obcego do korzeni
 POMIN = ('settings', 'alembic_version')                    # nigdy nie zerowane w całości
+# Wskaźniki w settings bez klucza obcego, które wskazują dane zerowanych meczów (ścieżka ostatniego nagrania meczu): też na NULL
+WSKAZNIKI_POZA_KLUCZEM = ('obs_record_filepath',)
 # Tabele zależne od lig, ale zawierające adresy i identyfikatory starych scraperów: zerowane z ligami, ale eksportowane do kopii
 EKSPORT_ADRESOW = ('league_scraper_urls', 'league_foreign_ids')
 
@@ -59,6 +61,8 @@ def analiza(con):
     settings_null = []
     if 'settings' in wszystkie:
         settings_null = [r[3] for r in con.execute('pragma foreign_key_list("settings")') if r[2] in zero]
+        kolumny = {r[1] for r in con.execute('pragma table_info("settings")')}
+        settings_null += [k for k in WSKAZNIKI_POZA_KLUCZEM if k in kolumny]
     return {
         'zero': dict(sorted(zero.items())),
         'zostaje': [t for t in wszystkie if t not in zero],

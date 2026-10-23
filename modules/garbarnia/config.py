@@ -15,6 +15,9 @@ class Config:
     SOCKETIO_ASYNC_MODE = 'threading'
 
     MODULE_ID = 'main-module'
+    # Dotychczasowe pobieranie danych rozgrywek ze stron (scrapery, kadry od pomocnika) jest domyślnie zablokowane: dane idą z WP (I0).
+    # BM_LEGACY_IMPORT=1 włącza je awaryjnie (core/utils/legacy_import.py).
+    LEGACY_IMPORT_ENABLED = os.environ.get('BM_LEGACY_IMPORT', '0') == '1'
     MODULE_DIR = _MODULE_DIR   # folder modułu (module.json z blokiem wp: instancja WordPressa modułu)
     MODULE_NAME = 'garbarnia'
     # BM_HUB_URL i BM_MODULE_PORT ustawia HUB, który uruchamia moduł (E2d1); bez nich wartości dotychczasowe
