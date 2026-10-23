@@ -11,6 +11,10 @@ import (
 )
 
 func main() {
+	// "hub.exe wp <moduł>": instancja WordPressa modułu w pierwszym planie (pliki .bat), bez uruchamiania HUB-a (WP-1)
+	if len(os.Args) > 1 && os.Args[1] == "wp" {
+		os.Exit(runWpCommand(os.Args[2:], os.Stdout))
+	}
 	configFlag := flag.String("config", "", "ścieżka do pliku konfiguracji HUB-a (domyślnie hub/config/hub.json, a bez niego hub.example.json)")
 	moduleFlag := flag.String("module", "", "moduł do uruchomienia (nadpisuje pole \"module\" z konfiguracji)")
 	flag.Parse()
