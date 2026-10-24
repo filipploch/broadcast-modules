@@ -16,6 +16,22 @@ def skrot(payload):
     return hashlib.sha1(surowe.encode('utf-8')).hexdigest()
 
 
+class MapaId(dict):
+    """Mapa identyfikator ze źródła -> id w WP; klucze porównywane jako tekst (NALF ma id liczbowe, Superscore tekstowe)."""
+
+    def __getitem__(self, k):
+        return super().__getitem__(str(k))
+
+    def __setitem__(self, k, v):
+        super().__setitem__(str(k), v)
+
+    def __contains__(self, k):
+        return super().__contains__(str(k))
+
+    def get(self, k, default=None):
+        return super().get(str(k), default)
+
+
 class Licznik:
     def __init__(self):
         self.nowe = self.zmienione = self.bez_zmian = self.pominiete = self.bledy = 0
@@ -34,18 +50,18 @@ class Import:
         self.na_sucho = na_sucho
         self.log = log
         self.liczniki = {'ligi': Licznik(), 'sezon': Licznik(), 'druzyny': Licznik(), 'zawodnicy': Licznik(), 'mecze': Licznik()}
-        self.id_wp = {'ligi': {}, 'sezon': {}, 'druzyny': {}, 'zawodnicy': {}, 'mecze': {}}   # id ze źródła -> id w WP
+        self.id_wp = {k: MapaId() for k in ('ligi', 'sezon', 'druzyny', 'zawodnicy', 'mecze')}   # id ze źródła -> id w WP
         self.istniejace = {}
 
     # -- kategorie (liga, sezon)
     def _slug(self, rodzaj, src_id):
-        return f'{self.zrodlo}-{"l" if rodzaj == "ligi" else "s"}{src_id}'
+        return f'{self.zrodlo}-{"l" if rodzaj == "ligi" else "s"}{src_id}'.lower()      # WP zapisuje slugi małymi literami (id Superscore ma wielkie)
 
     def kategorie(self, rodzaj, elementy):
         """Zapewnia ligę/sezon w WP (po slugu). Zwraca {id ze źródła: id w WP}. Na sucho: brakujące dostają id 0."""
         trasa = 'sportspress/v2/' + ('leagues' if rodzaj == 'ligi' else 'seasons')
         licz = self.liczniki[rodzaj]
-        mapa = {t['slug']: t for t in self.wp.pobierz_wszystko(trasa, {'_fields': 'id,name,slug'})}
+        mapa = {t['slug'].lower(): t for t in self.wp.pobierz_wszystko(trasa, {'_fields': 'id,name,slug'})}
         for src in elementy:
             slug = self._slug(rodzaj, src['id'])
             if slug in mapa:

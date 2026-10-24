@@ -1,0 +1,1054 @@
+{
+ "fixtures": {
+  "next_page": null,
+  "previous_page": null,
+  "events": [
+   {
+    "team2_red_cards_count": {
+     "value": 0
+    },
+    "team1_red_cards_count": {
+     "value": 0
+    },
+    "match_date_status": 0,
+    "betradar_id": null,
+    "score_coverage_type": 0,
+    "live_minute": null,
+    "match_date": {
+     "nanos": 0,
+     "seconds": 1792850400
+    },
+    "offer_id": null,
+    "sport": "soccer",
+    "red_cards_count": {
+     "value": 0
+    },
+    "match_state": 2,
+    "tournament_round": null,
+    "table_id": {
+     "value": "33lvYo0ca7A3WAZOoKUL4"
+    },
+    "leading_team": 2,
+    "date_modified": {
+     "nanos": 968166000,
+     "seconds": 1792857188
+    },
+    "scores": [
+     {
+      "team2": 2,
+      "team1": 1,
+      "type": 0
+     },
+     {
+      "team2": 1,
+      "team1": 0,
+      "type": 1
+     },
+     {
+      "team2": 1,
+      "team1": 1,
+      "type": 2
+     },
+     {
+      "team2": 2,
+      "team1": 1,
+      "type": 6
+     }
+    ],
+    "tournament": null,
+    "match_status": 100,
+    "team2": {
+     "short_code": {
+      "value": "KAB"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "kabel-krakow"
+      },
+      "hash": {
+       "value": "leea26wi"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "KAB"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "Kabel Krakow",
+     "id": "2Ybae2GKvpS2D54rMaM8lA"
+    },
+    "team1": {
+     "short_code": {
+      "value": "TRZ"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "trzebinia-s"
+      },
+      "hash": {
+       "value": "f4tqkx8s"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "TRZ"
+       },
+       "type": 4
+      }
+     ],
+     "type": 2,
+     "name": "MKS Trzebinia",
+     "id": "4DDogccaJ7TdDNQ2N1Qhu9"
+    },
+    "tournament_id": null,
+    "sport_id": null,
+    "season": {
+     "end_date": null,
+     "start_date": null,
+     "competition_id": "4RC19QK6hD3R9tzeDWjojz",
+     "year": {
+      "value": "2026/2027"
+     },
+     "features": [
+      10,
+      35
+     ],
+     "name": "Małopolskie - 5. Liga - małopolska zachód - 2026/2027",
+     "id": "33lvZK65l7ubf6BfFPjtl"
+    },
+    "competition": {
+     "tournament_ids": [],
+     "seo_id": {
+      "slug": {
+       "value": "5-liga-malopolska-zachod"
+      },
+      "hash": {
+       "value": "0loc9tw7"
+      }
+     },
+     "competition_type": 1,
+     "country_code": {
+      "value": "POL"
+     },
+     "names": [
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 5
+      },
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 6
+      }
+     ],
+     "name": "5. Liga małopolska zachód",
+     "id": "4RC19QK6hD3R9tzeDWjojz"
+    },
+    "week": null,
+    "category": null,
+    "features": [
+     0,
+     1,
+     2,
+     24,
+     33
+    ],
+    "symbol": [],
+    "round": null,
+    "id": "33lvYrP4xFiwva1Gvrbe9"
+   },
+   {
+    "team2_red_cards_count": null,
+    "team1_red_cards_count": null,
+    "match_date_status": 0,
+    "betradar_id": null,
+    "score_coverage_type": 0,
+    "live_minute": null,
+    "match_date": {
+     "nanos": 0,
+     "seconds": 1794657600
+    },
+    "offer_id": null,
+    "sport": "soccer",
+    "red_cards_count": null,
+    "match_state": 0,
+    "tournament_round": null,
+    "table_id": {
+     "value": "33lvYo0ca7A3WAZOoKUL4"
+    },
+    "leading_team": 0,
+    "date_modified": {
+     "nanos": 779221000,
+     "seconds": 1791994628
+    },
+    "scores": [],
+    "tournament": null,
+    "match_status": 0,
+    "team2": {
+     "short_code": {
+      "value": "CHE"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "ks-chelmek"
+      },
+      "hash": {
+       "value": "66r9558e"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "KS Chelmek"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "KS Chelmek"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "KS Chelmek"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "CHE"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "KS Chelmek",
+     "id": "3aUrUEawwLufUNjpLEkr0g"
+    },
+    "team1": {
+     "short_code": {
+      "value": "ORZ"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "orzel-myslenice"
+      },
+      "hash": {
+       "value": "2e2ert7e"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "Orzel Myslenice"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "Orzel Myslenice"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Orzel Myslenice"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "ORZ"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "Orzel Myslenice",
+     "id": "5VVW1JA9qugDKuZ2dNhOMX"
+    },
+    "tournament_id": null,
+    "sport_id": null,
+    "season": {
+     "end_date": null,
+     "start_date": null,
+     "competition_id": "4RC19QK6hD3R9tzeDWjojz",
+     "year": {
+      "value": "2026/2027"
+     },
+     "features": [
+      10,
+      35
+     ],
+     "name": "Małopolskie - 5. Liga - małopolska zachód - 2026/2027",
+     "id": "33lvZK65l7ubf6BfFPjtl"
+    },
+    "competition": {
+     "tournament_ids": [],
+     "seo_id": {
+      "slug": {
+       "value": "5-liga-malopolska-zachod"
+      },
+      "hash": {
+       "value": "0loc9tw7"
+      }
+     },
+     "competition_type": 1,
+     "country_code": {
+      "value": "POL"
+     },
+     "names": [
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 5
+      },
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 6
+      }
+     ],
+     "name": "5. Liga małopolska zachód",
+     "id": "4RC19QK6hD3R9tzeDWjojz"
+    },
+    "week": null,
+    "category": null,
+    "features": [
+     2
+    ],
+    "symbol": [],
+    "round": null,
+    "id": "33lvYjg3x1WKHiCYQFBN3"
+   },
+   {
+    "team2_red_cards_count": {
+     "value": 0
+    },
+    "team1_red_cards_count": {
+     "value": 0
+    },
+    "match_date_status": 0,
+    "betradar_id": null,
+    "score_coverage_type": 0,
+    "live_minute": null,
+    "match_date": {
+     "nanos": 0,
+     "seconds": 1792850400
+    },
+    "offer_id": null,
+    "sport": "soccer",
+    "red_cards_count": {
+     "value": 0
+    },
+    "match_state": 1,
+    "tournament_round": null,
+    "table_id": {
+     "value": "33lvYo0ca7A3WAZOoKUL4"
+    },
+    "leading_team": 2,
+    "date_modified": {
+     "nanos": 968166000,
+     "seconds": 1792857188
+    },
+    "scores": [
+     {
+      "team2": 2,
+      "team1": 1,
+      "type": 0
+     },
+     {
+      "team2": 1,
+      "team1": 0,
+      "type": 1
+     },
+     {
+      "team2": 1,
+      "team1": 1,
+      "type": 2
+     },
+     {
+      "team2": 2,
+      "team1": 1,
+      "type": 6
+     }
+    ],
+    "tournament": null,
+    "match_status": 100,
+    "team2": {
+     "short_code": {
+      "value": "KAB"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "kabel-krakow"
+      },
+      "hash": {
+       "value": "leea26wi"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Kabel Krakow"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "KAB"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "Kabel Krakow",
+     "id": "2Ybae2GKvpS2D54rMaM8lA"
+    },
+    "team1": {
+     "short_code": {
+      "value": "TRZ"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "trzebinia-s"
+      },
+      "hash": {
+       "value": "f4tqkx8s"
+      }
+     },
+     "sport": "soccer",
+     "virtual": {
+      "value": false
+     },
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "MKS Trzebinia"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "TRZ"
+       },
+       "type": 4
+      }
+     ],
+     "type": 2,
+     "name": "MKS Trzebinia",
+     "id": "4DDogccaJ7TdDNQ2N1Qhu9"
+    },
+    "tournament_id": null,
+    "sport_id": null,
+    "season": {
+     "end_date": null,
+     "start_date": null,
+     "competition_id": "4RC19QK6hD3R9tzeDWjojz",
+     "year": {
+      "value": "2026/2027"
+     },
+     "features": [
+      10,
+      35
+     ],
+     "name": "Małopolskie - 5. Liga - małopolska zachód - 2026/2027",
+     "id": "33lvZK65l7ubf6BfFPjtl"
+    },
+    "competition": {
+     "tournament_ids": [],
+     "seo_id": {
+      "slug": {
+       "value": "5-liga-malopolska-zachod"
+      },
+      "hash": {
+       "value": "0loc9tw7"
+      }
+     },
+     "competition_type": 1,
+     "country_code": {
+      "value": "POL"
+     },
+     "names": [
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 5
+      },
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 6
+      }
+     ],
+     "name": "5. Liga małopolska zachód",
+     "id": "4RC19QK6hD3R9tzeDWjojz"
+    },
+    "week": null,
+    "category": null,
+    "features": [
+     0,
+     1,
+     2,
+     24,
+     33
+    ],
+    "symbol": [],
+    "round": null,
+    "id": "LIVE0000000000000000"
+   },
+   {
+    "team2_red_cards_count": {
+     "value": 0
+    },
+    "team1_red_cards_count": {
+     "value": 0
+    },
+    "match_date_status": 0,
+    "betradar_id": null,
+    "score_coverage_type": 0,
+    "live_minute": null,
+    "match_date": {
+     "nanos": 0,
+     "seconds": 1792846800
+    },
+    "offer_id": null,
+    "sport": "soccer",
+    "red_cards_count": {
+     "value": 0
+    },
+    "match_state": 2,
+    "tournament_round": null,
+    "table_id": {
+     "value": "33lvYo0ca7A3WAZOoKUL4"
+    },
+    "leading_team": 0,
+    "date_modified": {
+     "nanos": 199045000,
+     "seconds": 1792866906
+    },
+    "scores": [
+     {
+      "team2": 1,
+      "team1": 1,
+      "type": 0
+     },
+     {
+      "team2": 0,
+      "team1": 1,
+      "type": 1
+     },
+     {
+      "team2": 1,
+      "team1": 0,
+      "type": 2
+     },
+     {
+      "team2": 1,
+      "team1": 1,
+      "type": 6
+     }
+    ],
+    "tournament": null,
+    "match_status": 100,
+    "team2": {
+     "short_code": {
+      "value": "SKB"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "sokol-kocmyrzow-baranowka"
+      },
+      "hash": {
+       "value": "6fu1haf8"
+      }
+     },
+     "sport": "soccer",
+     "virtual": null,
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "Sokół Kocmyrzów Baranówka"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "Sokół Kocmyrzów Baranówka"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Sokół Kocmyrzów Baranówka"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "SKB"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "Sokół Kocmyrzów Baranówka",
+     "id": "39QPU2VsjX9mz0JLuCVIEw"
+    },
+    "team1": {
+     "short_code": {
+      "value": "SWK"
+     },
+     "seo_id": {
+      "slug": {
+       "value": "swit-krzeszowice"
+      },
+      "hash": {
+       "value": "yb0k9pdb"
+      }
+     },
+     "sport": "soccer",
+     "virtual": null,
+     "country_code": {
+      "value": "POL"
+     },
+     "sport_id": null,
+     "features": [
+      20
+     ],
+     "names": [
+      {
+       "value": {
+        "string_value": "Świt Krzeszowice"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "Świt Krzeszowice"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Świt Krzeszowice"
+       },
+       "type": 3
+      },
+      {
+       "value": {
+        "string_value": "SWK"
+       },
+       "type": 4
+      }
+     ],
+     "type": 0,
+     "name": "Świt Krzeszowice",
+     "id": "1BcrQjvhpeUBSWqhQ66f2E"
+    },
+    "tournament_id": null,
+    "sport_id": null,
+    "season": {
+     "end_date": null,
+     "start_date": null,
+     "competition_id": "4RC19QK6hD3R9tzeDWjojz",
+     "year": {
+      "value": "2026/2027"
+     },
+     "features": [
+      10,
+      35
+     ],
+     "name": "Małopolskie - 5. Liga - małopolska zachód - 2026/2027",
+     "id": "33lvZK65l7ubf6BfFPjtl"
+    },
+    "competition": {
+     "tournament_ids": [],
+     "seo_id": {
+      "slug": {
+       "value": "5-liga-malopolska-zachod"
+      },
+      "hash": {
+       "value": "0loc9tw7"
+      }
+     },
+     "competition_type": 1,
+     "country_code": {
+      "value": "POL"
+     },
+     "names": [
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 5
+      },
+      {
+       "value": {
+        "string_value": "5. Liga małopolska zachód"
+       },
+       "type": 6
+      }
+     ],
+     "name": "5. Liga małopolska zachód",
+     "id": "4RC19QK6hD3R9tzeDWjojz"
+    },
+    "week": null,
+    "category": null,
+    "features": [
+     0,
+     1,
+     2,
+     24,
+     33
+    ],
+    "symbol": [],
+    "round": null,
+    "id": "33lvZ1uRPoMxFxvkYQ1ZV"
+   }
+  ]
+ },
+ "squads": {
+  "2e2ert7e": {
+   "defenders": [],
+   "midfielders": [],
+   "attackers": [],
+   "away_jersey": null,
+   "home_jersey": null,
+   "goalkeepers": [],
+   "manager": null,
+   "other": [
+    {
+     "shirt_number": "9",
+     "player": {
+      "preferred_foot_name": null,
+      "seo_id": {
+       "slug": {
+        "value": "bartosz-bargiel"
+       },
+       "hash": {
+        "value": "tfzhe3pi"
+       }
+      },
+      "preferred_foot": 0,
+      "height": null,
+      "birth_date": null,
+      "country_code": {
+       "value": "POL"
+      },
+      "weight": null,
+      "names": [
+       {
+        "value": {
+         "string_value": "Bartosz Bargieł"
+        },
+        "type": 1
+       },
+       {
+        "value": {
+         "string_value": "B. Bargieł"
+        },
+        "type": 2
+       },
+       {
+        "value": {
+         "string_value": "Bartosz Bargieł"
+        },
+        "type": 3
+       }
+      ],
+      "name": "Bargieł, Bartosz",
+      "id": "6gswcPwaJjzHnLHh48v1hV"
+     },
+     "position": 0
+    },
+    {
+     "shirt_number": "6",
+     "player": {
+      "preferred_foot_name": null,
+      "seo_id": null,
+      "preferred_foot": 0,
+      "height": null,
+      "birth_date": null,
+      "country_code": null,
+      "weight": null,
+      "names": [
+       {
+        "value": {
+         "string_value": "Biela, Wiktor"
+        },
+        "type": 1
+       },
+       {
+        "value": {
+         "string_value": "Biela, Wiktor"
+        },
+        "type": 2
+       },
+       {
+        "value": {
+         "string_value": "Biela, Wiktor"
+        },
+        "type": 3
+       }
+      ],
+      "name": "Biela, Wiktor",
+      "id": "fake:player:a4947e2d-e576-4423-8ed5-539a02d30fd2"
+     },
+     "position": 0
+    },
+    {
+     "shirt_number": "",
+     "player": {
+      "preferred_foot_name": null,
+      "seo_id": {
+       "slug": {
+        "value": "tomasz-brozda"
+       },
+       "hash": {
+        "value": "tl8hirwk"
+       }
+      },
+      "preferred_foot": 0,
+      "height": null,
+      "birth_date": null,
+      "country_code": null,
+      "weight": null,
+      "names": [
+       {
+        "value": {
+         "string_value": "Tomasz Brózda"
+        },
+        "type": 1
+       },
+       {
+        "value": {
+         "string_value": "T. Brózda"
+        },
+        "type": 2
+       },
+       {
+        "value": {
+         "string_value": "Tomasz Brózda"
+        },
+        "type": 3
+       }
+      ],
+      "name": "Brózda, Tomasz",
+      "id": "3vjHVuU7IyR1FhkzzSXWuG"
+     },
+     "position": 0
+    }
+   ]
+  }
+ },
+ "druzyny": [
+  "2e2ert7e",
+  "66r9558e",
+  "6fu1haf8",
+  "f4tqkx8s",
+  "leea26wi",
+  "yb0k9pdb"
+ ],
+ "finished_id": "33lvYrP4xFiwva1Gvrbe9",
+ "notstarted_id": "33lvYjg3x1WKHiCYQFBN3",
+ "live_id": "LIVE0000000000000000",
+ "draw_id": "33lvZ1uRPoMxFxvkYQ1ZV",
+ "squad_dup": {
+  "defenders": [],
+  "midfielders": [],
+  "attackers": [],
+  "away_jersey": null,
+  "home_jersey": null,
+  "goalkeepers": [],
+  "manager": null,
+  "other": [
+   {
+    "shirt_number": "9",
+    "player": {
+     "preferred_foot_name": null,
+     "seo_id": {
+      "slug": {
+       "value": "bartosz-bargiel"
+      },
+      "hash": {
+       "value": "tfzhe3pi"
+      }
+     },
+     "preferred_foot": 0,
+     "height": null,
+     "birth_date": null,
+     "country_code": {
+      "value": "POL"
+     },
+     "weight": null,
+     "names": [
+      {
+       "value": {
+        "string_value": "Bartosz Bargieł"
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "string_value": "B. Bargieł"
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "string_value": "Bartosz Bargieł"
+       },
+       "type": 3
+      }
+     ],
+     "name": "Bargieł, Bartosz",
+     "id": "6gswcPwaJjzHnLHh48v1hV"
+    },
+    "position": 0
+   }
+  ]
+ }
+}
