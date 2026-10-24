@@ -93,7 +93,7 @@ def ctl(method, path, body=None):
             return e.code, {}
 
 
-def http_code(port, timeout=5):
+def http_code(port, timeout=20):      # pierwsze zapytanie do świeżo uruchomionego WP (strona główna z danymi) bywa wolne; 5 s dawało sporadyczne HTTP 0
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=timeout) as r:
             return r.status
