@@ -7,6 +7,8 @@
  *  - bm_source, bm_source_id: źródło i identyfikator rekordu w źródle (drużyna, zawodnik, mecz); po nich importer dopasowuje rekordy,
  *  - bm_source_hash: skrót treści ze źródła; importer pomija zapis, gdy skrót się nie zmienił,
  *  - bm_logo (drużyna): ścieżka logo względem folderu logo modułu, np. "garbarnia/Garbarnia.png".
+ * Trasa bm/v1/event/<id>/clear (POST, wymaga prawa edycji): czyści wynik, skład i statystyki zawodników meczu (zapis przez REST SportsPressa
+ * tylko scala dane, więc importer czyści mecz przed aktualizacją).
  * Mecz dodatkowo: bm_live, bm_locked (flagi, jak w pluginie testowym), a REST wystawia minuty zdarzeń (sp_timeline) w polu "timeline".
  */
 if (!defined('ABSPATH')) exit;
@@ -25,6 +27,17 @@ add_action('init', function () {
 });
 
 add_action('rest_api_init', function () {
+	register_rest_route('bm/v1', '/event/(?P<id>\d+)/clear', [
+		'methods' => 'POST',
+		'permission_callback' => fn($req) => current_user_can('edit_post', (int) $req['id']),
+		'callback' => function ($req) {
+			$id = (int) $req['id'];
+			if (get_post_type($id) !== 'sp_event') return new WP_Error('bm_not_event', 'To nie jest mecz', ['status' => 404]);
+			foreach (['sp_player', 'sp_players', 'sp_results'] as $k) delete_post_meta($id, $k);
+			return ['cleared' => $id];
+		},
+	]);
+
 	global $wp_rest_additional_fields;
 	if (isset($wp_rest_additional_fields['sp_event']['timeline'])) return; // wtyczka testowa (bm-test) już je wystawia
 	register_rest_field('sp_event', 'timeline', [

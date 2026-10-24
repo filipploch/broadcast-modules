@@ -1,0 +1,7 @@
+{
+  "nalf": {
+    "modul": "futsal_nalf",
+    "sezon": 61,
+    "uwaga": "id sezonu w API nalffutsal.pl: 61 = Jesień 2026, 59 = Wiosna 2026 (zapas do porównań)"
+  }
+}
