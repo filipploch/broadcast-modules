@@ -7,13 +7,16 @@
     <div class="card-header">
         <span>Zawodnicy — {{ team.name }}</span>
         <div class="actions">
+            {% if config.LEGACY_IMPORT_ENABLED %}
             {% if team.team_url or team_scraper_foreign_id %}
             <button class="btn btn-success" onclick="startPlayerScraping({{ team.id }})" title="Pobierz zawodników z pliku HTML (SingleFile) — dopasowanie automatyczne, bez przeglądu">
                 Pobierz zawodników
             </button>
             {% endif %}
             {{ scraper_cascade('players', 'Scrapuj kadrę', player_scrapers) }}
-            {% if player_scraper and player_scraper.folder == 'laczynaspilka' and team_scraper_foreign_id %}
+            {% else %}<a href="{{ url_for('wp_competitions') }}" class="btn btn-success wp-pull-link" title="Pobierz rozgrywki, drużyny, zawodników i mecze z WP">⬇ Pobierz z WP</a>
+            {% endif %}
+            {% if config.LEGACY_IMPORT_ENABLED and player_scraper and player_scraper.folder == 'laczynaspilka' and team_scraper_foreign_id %}
             <button class="btn btn-secondary" onclick="copyTeamUrlToClipboard(this, 'https://www.laczynaspilka.pl/rozgrywki/druzyna/{{ team_scraper_foreign_id }}')" title="Skopiuj URL drużyny na laczynaspilka.pl">
                 📋 Kopiuj URL
             </button>

@@ -15,7 +15,7 @@
     <div class="card-header">
         <span>Drużyny w lidze: {{ league.name }}</span>
         <div class="actions">
-            {{ scraper_cascade('teams', 'Scrapuj drużyny', team_scrapers) }}
+            {% if config.LEGACY_IMPORT_ENABLED %}{{ scraper_cascade('teams', 'Scrapuj drużyny', team_scrapers) }}{% else %}<a href="{{ url_for('wp_competitions') }}" class="btn btn-success wp-pull-link" title="Pobierz rozgrywki, drużyny, zawodników i mecze z WP">⬇ Pobierz z WP</a>{% endif %}
             <a href="{{ url_for('view_league', league_id=league.id) }}" class="btn btn-secondary">
                 ← Powrót do ligi
             </a>

@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 
 from core.managers.wp_client import WpClient, WpError, fetch_competitions
+from core.managers.wp_pull import pobierz_pare
 
 INTERVAL_OK_S = 60      # pełne odświeżenie listy przy działającym połączeniu
 INTERVAL_FAIL_S = 10    # krok pętli: lekki ping (połączenie działa) albo ponowna próba (brak połączenia)
@@ -39,6 +40,9 @@ class WpManager:
         stored = self._load()
         self._default = stored.get('default')
         self._list = stored.get('list')                 # ostatnia pobrana lista (kopia na czas braku połączenia)
+        self._pull = stored.get('pull')                 # wynik ostatniego podglądu albo pobrania (W7a)
+        self._last_apply_at = stored.get('last_apply_at', '')
+        self._pulling = False
         self._connected = None                          # None = jeszcze nie sprawdzono
         self._error = ''
         self._error_kind = ''
@@ -59,7 +63,8 @@ class WpManager:
         try:
             os.makedirs(os.path.dirname(self.store_path) or '.', exist_ok=True)
             with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump({'default': self._default, 'list': self._list}, f, ensure_ascii=False, indent=2)
+                json.dump({'default': self._default, 'list': self._list, 'pull': self._pull, 'last_apply_at': self._last_apply_at}, f,
+                          ensure_ascii=False, indent=2)
             os.replace(tmp, self.store_path)
         except OSError as e:
             self._warn(f'WP: nie udało się zapisać {self.store_path}: {e}')
@@ -93,6 +98,9 @@ class WpManager:
                 'default_missing': bool(d) and bool(self._list) and d['key'] not in keys,
                 'needs_choice': d is None and len(items) > 1,
                 'no_competitions': self._connected is True and not items,
+                'pull': self._pull,
+                'pulling': self._pulling,
+                'last_apply_at': self._last_apply_at,
             }
 
     def _publish(self):
@@ -199,6 +207,37 @@ class WpManager:
             self._default = None
             self._save()
         self._publish()
+
+    # -- pobieranie pary z WP do bazy modułu (W7a)
+    def pull(self, apply, db, logo_root, logo_folder, kopie_dir, league_id=None, season_id=None):
+        """Podgląd (apply=False) albo zapis zaznaczonej pary (domyślnie rozgrywki domyślne modułu). Blokuje do końca; nie zgłasza wyjątków.
+        Wynik: {'ok', 'zapisano', 'raport'|'blad', 'key', 'at', 'apply'}; ostatni wynik zostaje w stanie (state()['pull'])."""
+        if not self.cfg.enabled:
+            return {'ok': False, 'zapisano': False, 'blad': 'Ten moduł nie ma własnej instancji WP'}
+        with self._lock:
+            d = self._default
+            if league_id is None or season_id is None:
+                if not d:
+                    return {'ok': False, 'zapisano': False, 'blad': 'Najpierw wybierz rozgrywki (Rozgrywki WP)'}
+                league_id, season_id = d['league_id'], d['season_id']
+            item = next((i for i in (self._list or {}).get('items', []) if i['league_id'] == int(league_id) and i['season_id'] == int(season_id)), None)
+            self._pulling = True
+        self._publish()
+        try:
+            wynik = pobierz_pare(self.client, db, int(league_id), int(season_id), logo_root, logo_folder, kopie_dir, apply)
+        finally:
+            with self._lock:
+                self._pulling = False
+        at = datetime.now().isoformat(timespec='seconds')
+        wynik.update(key=f'{int(league_id)}:{int(season_id)}', at=at, apply=bool(apply),
+                     label=f'{item["league_name"]} — {item["season_name"]}' if item else '')
+        with self._lock:
+            self._pull = wynik
+            if wynik.get('ok') and apply:
+                self._last_apply_at = at
+            self._save()
+        self._publish()
+        return wynik
 
     # -- tło
     def start(self):

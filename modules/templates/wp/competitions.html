@@ -15,6 +15,11 @@
     .wp-note-warning { background: #fff0d6; }
     .wp-note-error { background: #fbe0e3; }
     #wp-hint { margin: 12px 0 6px; }
+    .wp-pull-table { border-collapse: collapse; margin: 8px 0; }
+    .wp-pull-table th, .wp-pull-table td { border: 1px solid #ccc; padding: 4px 10px; text-align: right; }
+    .wp-pull-table th:first-child { text-align: left; }
+    #wp-pull-busy { margin-left: 8px; color: #555; }
+    #wp-pull-box { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 10px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -29,8 +34,18 @@
     <div class="actions"><button id="wp-save" type="button" class="btn btn-primary" disabled>ZAPISZ JAKO DOMYŚLNE</button></div>
     <div id="wp-result"></div>
     <div id="wp-notes"></div>
+    <div id="wp-pull-box">
+        <div class="actions">
+            <button id="wp-preview" type="button" class="btn btn-secondary" disabled>SPRAWDŹ ZMIANY</button>
+            <button id="wp-pull" type="button" class="btn btn-success" disabled>POBIERZ Z WP</button>
+            <span id="wp-pull-busy"></span>
+        </div>
+        <div id="wp-pull-stale" class="wp-note wp-note-warning" style="display:none"></div>
+        <div id="wp-pull-result"></div>
+    </div>
 </div>
 {% endblock %}
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/pages/wp-competitions.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pages/wp-pull-view.js') }}"></script>
 {% endblock %}
