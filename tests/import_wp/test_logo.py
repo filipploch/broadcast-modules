@@ -66,10 +66,10 @@ class StaraBazaITestWpTests(unittest.TestCase):
         con = sqlite3.connect(baza)
         con.executescript("""
             create table scrapers(id integer primary key, folder text);
-            create table teams(id integer primary key, name text, name_14 text, logo_path text);
+            create table teams(id integer primary key, name text, name_14 text, logo_path text, short_name text default '');
             create table team_foreign_ids(team_id integer, scraper_id integer, foreign_id text);
             insert into scrapers values (3, 'superscore'), (1, 'nalffutsal');
-            insert into teams values (1, 'Garbarnia Kraków', 'Garbarnia', '/static//images/logos/garbarnia/Garbarnia.png'),
+            insert into teams(id, name, name_14, logo_path) values (1, 'Garbarnia Kraków', 'Garbarnia', '/static//images/logos/garbarnia/Garbarnia.png'),
                                      (2, 'Kabel Krakow', 'Kabel Krakow', 'static/images/logos/garbarnia/Kabel.png'),
                                      (3, 'Tempo Białka', 'Tempo Białka', 'static/images/logos/default.png'),
                                      (4, 'Drużyna Z Ogromną Nazwą', 'Dłuższa niż czternaście', 'static/images/logos/garbarnia/NieMaTegoPliku.png'),
@@ -132,7 +132,7 @@ class StaraBazaITestWpTests(unittest.TestCase):
         (self.logos / 'garbarnia' / 'Hattrick.png').write_bytes(b'png')
         (self.logos / 'garbarnia' / 'DRUGony.png').write_bytes(b'png')
         con = sqlite3.connect(self.baza)
-        con.executescript("insert into teams values (10, 'DRUGony', 'DRUGony', 'static/images/logos/garbarnia/DRUGony.png'),"
+        con.executescript("insert into teams(id, name, name_14, logo_path) values (10, 'DRUGony', 'DRUGony', 'static/images/logos/garbarnia/DRUGony.png'),"
                           " (11, 'Hattrick', 'Hattrick', 'static/images/logos/garbarnia/DRUGony.png');"
                           "insert into team_foreign_ids values (10, 3, 'drug/drug0001'), (11, 3, 'hat/hat00001');")
         con.commit()

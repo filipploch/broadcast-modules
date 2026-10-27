@@ -1,4 +1,4 @@
-"""Loga i nazwy 14-znakowe drużyn do WP (etap I4): mapa z dotychczasowej bazy modułu (kopia z I0) -> pola bm_logo i bm_name14 drużyn w WP.
+"""Loga, nazwy 14-znakowe i skróty drużyn do WP (etapy I4 i W7-0b): mapa z dotychczasowej bazy modułu (kopia z I0) -> pola bm_logo, bm_name14 i bm_short_name drużyn w WP.
 
     python tools/import_wp/logo.py nalf|garbarnia --kopia <katalog kopii z I0> [--na-sucho]
 
@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import importuj  # noqa: E402
+import skroty  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 SCRAPER_FOLDER = {'nalf': 'nalffutsal', 'garbarnia': 'superscore'}        # źródło stałych identyfikatorów drużyn w starej bazie
@@ -98,8 +99,8 @@ def mapa_ze_starej_bazy(baza, folder_scrapera):
                                             (folder_scrapera,)):
             fid[team_id] = foreign.split('/')[-1]               # Superscore „slug/hash” -> hash; NALF: slug strony drużyny
         wynik = []
-        for tid, nazwa, n14, logo in con.execute('select id, name, name_14, logo_path from teams'):
-            wynik.append({'klucz': fid.get(tid), 'nazwa': nazwa, 'name14': (n14 or '').strip(), 'logo': plik_logo(logo)})
+        for tid, nazwa, n14, logo, skrot in con.execute('select id, name, name_14, logo_path, short_name from teams'):
+            wynik.append({'klucz': fid.get(tid), 'nazwa': nazwa, 'name14': (n14 or '').strip(), 'logo': plik_logo(logo), 'skrot': (skrot or '').strip()})
         return wynik
     finally:
         con.close()
@@ -107,11 +108,12 @@ def mapa_ze_starej_bazy(baza, folder_scrapera):
 
 def wczytaj_druzyny_wp(wp):
     wynik = []
-    for r in wp.pobierz_wszystko('sportspress/v2/teams', {'_fields': 'id,title,slug,meta', 'status': STATUSY}):
+    for r in wp.pobierz_wszystko('sportspress/v2/teams', {'_fields': 'id,title,slug,abbreviation,meta', 'status': STATUSY}):
         t = r.get('title')
         meta = r.get('meta') or {}
         wynik.append({'id': r['id'], 'nazwa': html.unescape(t.get('rendered') if isinstance(t, dict) else (t or '')), 'slug': r.get('slug') or '',
-                      'zrodlo_id': str(meta.get('bm_source_id') or ''), 'logo': meta.get('bm_logo') or '', 'name14': meta.get('bm_name14') or ''})
+                      'zrodlo_id': str(meta.get('bm_source_id') or ''), 'logo': meta.get('bm_logo') or '', 'name14': meta.get('bm_name14') or '',
+                      'abbr': (r.get('abbreviation') or '').strip(), 'skrot': (meta.get('bm_short_name') or '').strip()})
     return wynik
 
 
@@ -136,7 +138,30 @@ def dopasuj(stare, wp_druzyny, zrodlo):
     return pary, bez, bez_stare
 
 
-def zastosuj(wp, pary, katalog_logo, na_sucho=False, wolne_pliki=()):
+def ustal_skroty(wp_druzyny, pary):
+    """Skróty dla drużyn WP bez bm_short_name. Kolejność źródeł: (1) natywny skrót w WP (z API: Superscore short_code), (2) stara baza (bez zmian,
+    także ŻAR, NÓD, .K2), (3) wartość wyliczona z nazwy (do sprawdzenia). Zwraca ({id WP: (skrót, źródło, kolizja)}, powtórzenia_stałych)."""
+    stare = {w['id']: s for w, s, _ in pary}
+    wynik, do_wyliczenia = {}, {}
+    for w in wp_druzyny:
+        if w['skrot']:
+            continue                                                   # jest wartość (ręczna albo wcześniejszy zapis): nie ruszamy
+        if w['abbr']:
+            wynik[w['id']] = (w['abbr'].upper()[:3], 'API/skrót w WP', False)
+        elif w['id'] in stare and stare[w['id']]['skrot']:
+            wynik[w['id']] = (stare[w['id']]['skrot'][:3], 'stara baza', False)
+        else:
+            do_wyliczenia[w['id']] = w['nazwa']
+    stale = [v[0] for v in wynik.values()] + [w['skrot'] for w in wp_druzyny if w['skrot']]
+    for wid, (wartosc, kolizja) in skroty.wylicz_unikalne(do_wyliczenia, zajete=stale).items():
+        wynik[wid] = (wartosc, 'wyliczony z nazwy', kolizja)
+    liczniki = {}
+    for v in stale:
+        liczniki[v] = liczniki.get(v, 0) + 1
+    return wynik, sorted(v for v, n in liczniki.items() if n > 1)
+
+
+def zastosuj(wp, pary, katalog_logo, na_sucho=False, wolne_pliki=(), skroty_wp=None):
     """Zapisuje bm_logo i bm_name14. Zwraca słownik liczników i list do raportu. wolne_pliki: pliki z folderu logo do dopasowania po nazwie pliku."""
     r = {'zapisane': 0, 'bez_zmian': 0, 'brak_pliku': [], 'bez_logo': [], 'name14_za_dlugie': [], 'po_nazwie': [], 'z_nazwy_pliku': [],
          'bez_pliku_wcale': [], 'powtorzone': []}
@@ -171,6 +196,8 @@ def zastosuj(wp, pary, katalog_logo, na_sucho=False, wolne_pliki=()):
             r['brak_pliku'].append(f'{w["nazwa"]}: {logo}')
         else:
             r['bez_logo'].append(w['nazwa'])
+        if skroty_wp and w['id'] in skroty_wp:
+            meta['bm_short_name'] = skroty_wp[w['id']][0]
         n14 = s['name14']
         if n14 and len(n14) <= 14:
             if w['name14'] != n14:
@@ -183,7 +210,32 @@ def zastosuj(wp, pary, katalog_logo, na_sucho=False, wolne_pliki=()):
         if not na_sucho:
             wp.zaktualizuj('sportspress/v2/teams', w['id'], {'meta': meta})
         r['zapisane'] += 1
+    w_parach = {w['id'] for w, _, _ in pary}
+    for wid, (wartosc, _, _) in (skroty_wp or {}).items():           # drużyny WP bez pary w starej bazie: tylko skrót
+        if wid not in w_parach:
+            if not na_sucho:
+                wp.zaktualizuj('sportspress/v2/teams', wid, {'meta': {'bm_short_name': wartosc}})
+            r['zapisane'] += 1
     return r
+
+
+def raport_skrotow(wp_druzyny, skroty_wp, powtorzone):
+    """Sekcja „skróty drużyn”: skąd pochodzą nowe wartości, lista wyliczonych do sprawdzenia, powtórzenia."""
+    nazwy = {w['id']: w['nazwa'] for w in wp_druzyny}
+    po_zrodle = {}
+    for wid, (wartosc, zrodlo, kolizja) in skroty_wp.items():
+        po_zrodle.setdefault(zrodlo, []).append((nazwy.get(wid, wid), wartosc, kolizja))
+    ustawione = sum(1 for x in wp_druzyny if x["skrot"])
+    if skroty_wp:
+        podzial = ', '.join(f'{z}: {len(l)}' for z, l in sorted(po_zrodle.items()))
+        w = [f'  skróty drużyn (bm_short_name): już ustawione {ustawione}, zapisane teraz {len(skroty_wp)} ({podzial})']
+    else:
+        w = [f'  skróty drużyn (bm_short_name): wszystkie drużyny już mają wartość ({ustawione})']
+    for nazwa, wartosc, kolizja in sorted(po_zrodle.get('wyliczony z nazwy', [])):
+        w.append(f'    DO SPRAWDZENIA, skrót wyliczony z nazwy: {nazwa} -> {wartosc}' + (' (kolizja z innym skrótem rozwiązana)' if kolizja else ''))
+    if powtorzone:
+        w.append('  UWAGA, powtórzone skróty wśród drużyn (nie zmieniam; popraw ręcznie w WP, jeśli przeszkadza): ' + ', '.join(powtorzone))
+    return '\n'.join(w)
 
 
 def raport(modul, pary, bez_wp, bez_stare, r, pliki_nieuzyte, na_sucho):
@@ -230,9 +282,11 @@ def main(argv=None):
     pary, bez_wp, bez_stare = dopasuj(stare, wp_druzyny, a.zrodlo)
     folder = konf['modul']
     na_dysku = sorted(f'{folder}/{p.name}' for p in (katalog_logo / folder).glob('*') if p.is_file() and p.name.lower() != 'default.png')
-    r = zastosuj(wp, pary, katalog_logo, na_sucho=a.na_sucho, wolne_pliki=na_dysku)
+    skroty_wp, powtorzone = ustal_skroty(wp_druzyny, pary)
+    r = zastosuj(wp, pary, katalog_logo, na_sucho=a.na_sucho, wolne_pliki=na_dysku, skroty_wp=skroty_wp)
     uzyte = {s['logo'] for _, s, _ in pary if s['logo']} | {x.split(' <- ')[1] for x in r['z_nazwy_pliku']}
     print(raport(mod_id, pary, bez_wp, bez_stare, r, [f for f in na_dysku if f not in uzyte], a.na_sucho))
+    print(raport_skrotow(wp_druzyny, skroty_wp, powtorzone))
     return 0
 
 

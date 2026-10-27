@@ -102,7 +102,8 @@ class Import:
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
                                                     'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live')),
                                                     'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t],
-                                                    'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or ''}
+                                                    'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or '',
+                                                    'skrot': meta.get('bm_short_name') or ''}
         self.istniejace[rodzaj] = wynik
         return wynik
 

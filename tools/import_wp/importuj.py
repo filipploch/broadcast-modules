@@ -51,10 +51,18 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
     nazwy = {t['id']: t['name'] for t in dane['druzyny']}
 
     for t in dane['druzyny']:
-        payload = {k: t[k] for k in ('name', 'slug', 'abbreviation')} | {'leagues': [l for l in t['leagues'] if l in dane['ligi']]}
-        imp.upsert('druzyny', TRASY['druzyny'], t['id'], payload, lambda t=t: {
-            'title': t['name'], **({'slug': t['slug']} if t['slug'] else {}), 'status': 'publish', 'abbreviation': t['abbreviation'],
-            'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]})
+        payload = {k: t[k] for k in ('name', 'slug', 'abbreviation')} | {'leagues': [l for l in t['leagues'] if l in dane['ligi']],
+                                                                        'bm_short_name': t['abbreviation'][:3].upper()}
+        ist_dr = imp.istniejace['druzyny'].get(str(t['id']))
+
+        def body_druzyny(t=t, payload=payload, ist=ist_dr):
+            cialo = {'title': t['name'], **({'slug': t['slug']} if t['slug'] else {}), 'status': 'publish', 'abbreviation': t['abbreviation'],
+                     'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]}
+            # skrót z API (Superscore short_code) zapisujemy tylko wtedy, gdy rekord jeszcze nie ma bm_short_name (ręczna poprawka w WP zostaje)
+            if payload['bm_short_name'] and (ist is None or not ist['skrot']):
+                cialo['_meta'] = {'bm_short_name': payload['bm_short_name']}
+            return cialo
+        imp.upsert('druzyny', TRASY['druzyny'], t['id'], payload, body_druzyny)
     imp.raportuj_brakujace('druzyny', [t['id'] for t in dane['druzyny']])
 
     if z_zawodnikami:
