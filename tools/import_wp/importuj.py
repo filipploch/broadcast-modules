@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nalf as zrodlo_nalf  # noqa: E402
 import superscore as zrodlo_superscore  # noqa: E402
-from upsert import Import  # noqa: E402
+from upsert import Import, nazwa_do_porownania  # noqa: E402
 from wp_rest import WpRest, WpRestError, wczytaj_dane_logowania  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
@@ -60,10 +60,23 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
     if z_zawodnikami:
         for p in dane['zawodnicy']:
             payload = {'name': p['name'], 'slug': p['slug'], 'number': p['number'], 'teams': p['teams'],
-                       'leagues': [l for l in p['leagues'] if l in dane['ligi']]}
-            imp.upsert('zawodnicy', TRASY['zawodnicy'], p['id'], payload, lambda p=p, payload=payload: {
-                'title': p['name'], **({'slug': p['slug']} if p['slug'] else {}), 'status': 'publish', **({'number': p['number']} if p['number'] is not None else {}),
-                'teams': _ids(p['teams'], imp.id_wp['druzyny']), 'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]})
+                       'leagues': [l for l in p['leagues'] if l in dane['ligi']], 'last_name': p['last_name'], 'first_name': p['first_name']}
+            ist = imp.istniejace['zawodnicy'].get(str(p['id']))
+
+            def body_zawodnika(p=p, payload=payload, ist=ist):
+                cialo = {'title': p['name'], **({'slug': p['slug']} if p['slug'] else {}), 'status': 'publish',
+                         **({'number': p['number']} if p['number'] is not None else {}),
+                         'teams': _ids(p['teams'], imp.id_wp['druzyny']), 'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]}
+                # imię i nazwisko: zapis przy zakładaniu, przy zmianie nazwy w źródle albo gdy rekord jeszcze ich nie ma; w pozostałych
+                # przypadkach zostaje wartość z WP (np. ręcznie poprawiona po raporcie „nazwiska niepewne”)
+                if ist is None or not (ist['imie'] or ist['nazwisko']) or ist['nazwa'] != nazwa_do_porownania(p['name']):
+                    cialo['_meta'] = {'bm_last_name': p['last_name'], 'bm_first_name': p['first_name']}
+                return cialo
+            imp.upsert('zawodnicy', TRASY['zawodnicy'], p['id'], payload, body_zawodnika)
+            if p.get('name_uncertain'):
+                zapisane = (ist['nazwisko'], ist['imie']) if ist and (ist['imie'] or ist['nazwisko']) else None
+                if zapisane is None or zapisane == (p['last_name'], p['first_name']) or ist['nazwa'] != nazwa_do_porownania(p['name']):
+                    imp.niepewne_nazwiska.append(f'{p["name"]}: nazwisko „{p["last_name"]}”, imię „{p["first_name"]}” (id WP {imp.id_wp["zawodnicy"].get(p["id"])})')
         imp.raportuj_brakujace('zawodnicy', [p['id'] for p in dane['zawodnicy']])
         imp.wykryj_duplikaty_zawodnikow(dane['zawodnicy'])
 
@@ -111,6 +124,12 @@ def raport(imp, na_sucho):
     for k, n in nazwy.items():
         licz = imp.liczniki[k]
         wiersze.append(f'  {n:<10} {licz.linia()}')
+    if getattr(imp, 'niepewne_nazwiska', None):
+        wiersze.append(f'  NAZWISKA NIEPEWNE ({len(imp.niepewne_nazwiska)}): podział „Nazwisko Imię” zgadnięty (jedno słowo albo więcej niż dwa); '
+                       f'popraw w WP w polach własnych bm_last_name i bm_first_name zawodnika, jeśli podział jest błędny (import ich potem nie nadpisze):')
+        wiersze += [f'    - {n}' for n in imp.niepewne_nazwiska[:60]]
+        if len(imp.niepewne_nazwiska) > 60:
+            wiersze.append(f'    ... i {len(imp.niepewne_nazwiska) - 60} kolejnych')
     for k, licz in imp.liczniki.items():
         if licz.nie_ma_w_zrodle:
             wiersze.append(f'  uwaga: w WP jest {len(licz.nie_ma_w_zrodle)} rekordów "{nazwy[k]}" z tego źródła, których nie ma w pobranym sezonie '

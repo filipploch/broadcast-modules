@@ -6,7 +6,8 @@
  * Pola (wszystkie tekstowe, widoczne w REST w polu "meta"):
  *  - bm_source, bm_source_id: źródło i identyfikator rekordu w źródle (drużyna, zawodnik, mecz); po nich importer dopasowuje rekordy,
  *  - bm_source_hash: skrót treści ze źródła; importer pomija zapis, gdy skrót się nie zmienił,
- *  - bm_logo (drużyna): ścieżka logo względem folderu logo modułu, np. "garbarnia/Garbarnia.png".
+ *  - bm_logo (drużyna): ścieżka logo względem folderu logo modułu, np. "garbarnia/Garbarnia.png"; bm_name14 (drużyna): nazwa do 14 znaków dla nakładek,
+ *  - bm_first_name, bm_last_name (zawodnik): imię i nazwisko osobno (tytuł w WP to jedno pole); edytowalne w panelu WP (Pola własne).
  * Trasa bm/v1/event/<id>/clear (POST, wymaga prawa edycji): czyści wynik, skład i statystyki zawodników meczu (zapis przez REST SportsPressa
  * tylko scala dane, więc importer czyści mecz przed aktualizacją).
  * Mecz dodatkowo: bm_live, bm_locked (flagi, jak w pluginie testowym), a REST wystawia minuty zdarzeń (sp_timeline) w polu "timeline".
@@ -21,6 +22,10 @@ add_action('init', function () {
 		}
 	}
 	register_post_meta('sp_team', 'bm_logo', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);
+	register_post_meta('sp_team', 'bm_name14', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);
+	foreach (['bm_first_name', 'bm_last_name'] as $k) {
+		register_post_meta('sp_player', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'string']);
+	}
 	foreach (['bm_live', 'bm_locked'] as $k) {
 		register_post_meta('sp_event', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'boolean']);
 	}

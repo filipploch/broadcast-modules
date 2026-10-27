@@ -8,6 +8,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from nazwy import oczyść, podziel_nazwisko_imie
+
 BASE = 'https://nalffutsal.pl/index.php?rest_route=/sportspress/v2/'
 PRZERWA_S = 1.0
 STATYSTYKI = ('goals', 'assists', 'yellowcards', 'redcards', 'owngoals', 'number', 'status', 'sub')
@@ -65,13 +67,16 @@ def norm_taksonomia(x):
 
 
 def norm_druzyna(t):
-    return {'id': int(t['id']), 'name': t['title']['rendered'], 'slug': t.get('slug') or '', 'abbreviation': _tekst(t.get('abbreviation')),
+    return {'id': int(t['id']), 'name': oczyść(t['title']['rendered']), 'slug': t.get('slug') or '', 'abbreviation': _tekst(t.get('abbreviation')),
             'leagues': sorted(int(i) for i in t.get('leagues') or []), 'seasons': sorted(int(i) for i in t.get('seasons') or [])}
 
 
 def norm_zawodnik(p):
     numer = _tekst(p.get('number')).strip()
-    return {'id': int(p['id']), 'name': p['title']['rendered'], 'slug': p.get('slug') or '', 'number': int(numer) if numer.isdigit() else None,
+    nazwa = oczyść(p['title']['rendered'])
+    nazwisko, imie, pewne = podziel_nazwisko_imie(nazwa)
+    return {'id': int(p['id']), 'name': nazwa, 'last_name': nazwisko, 'first_name': imie, 'name_uncertain': not pewne,
+            'slug': p.get('slug') or '', 'number': int(numer) if numer.isdigit() else None,
             'teams': [int(i) for i in p.get('teams') or [] if int(i)], 'leagues': sorted(int(i) for i in p.get('leagues') or []),
             'seasons': sorted(int(i) for i in p.get('seasons') or [])}
 
