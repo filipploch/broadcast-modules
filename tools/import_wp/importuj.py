@@ -65,6 +65,7 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
                 'title': p['name'], **({'slug': p['slug']} if p['slug'] else {}), 'status': 'publish', **({'number': p['number']} if p['number'] is not None else {}),
                 'teams': _ids(p['teams'], imp.id_wp['druzyny']), 'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]})
         imp.raportuj_brakujace('zawodnicy', [p['id'] for p in dane['zawodnicy']])
+        imp.wykryj_duplikaty_zawodnikow(dane['zawodnicy'])
 
     for m in dane['mecze']:
         if any(t and t not in imp.id_wp['druzyny'] for t in m['teams']):          # 0 = wolne miejsce w fazie pucharowej (para nieznana)
@@ -116,6 +117,10 @@ def raport(imp, na_sucho):
                            f'(mogą należeć do innych sezonów; nic nie usuwam)')
         for u in licz.uwagi[:10]:
             wiersze.append(f'  ! {u}')
+        for d in licz.duplikaty[:20]:
+            wiersze.append(f'  UWAGA, możliwy duplikat zawodnika: {d}')
+        if len(licz.duplikaty) > 20:
+            wiersze.append(f'  ... i {len(licz.duplikaty) - 20} kolejnych możliwych duplikatów')
     return '\n'.join(wiersze)
 
 

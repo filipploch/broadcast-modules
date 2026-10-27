@@ -5,10 +5,15 @@ Przy kolejnym imporcie rekord jest dopasowywany po (źródło, identyfikator); g
 Nic nie jest usuwane: rekordy, których nie ma już w źródle, trafiają do raportu. Mecz z bm_locked albo bm_live jest pomijany.
 Liga i sezon (kategorie SportsPressa) są dopasowywane po slugu nadawanym przez importer: <źródło>-l<id> i <źródło>-s<id>."""
 import hashlib
+import html
 import json
 
 WERSJA_IMPORTU = 1        # zmiana sposobu budowania rekordów wymusza ponowny zapis (wchodzi do skrótu)
 STATUSY = 'publish,future,draft,pending,private'
+
+
+def nazwa_do_porownania(tekst):
+    return ' '.join(html.unescape(tekst or '').casefold().split())
 
 
 def skrot(payload):
@@ -37,6 +42,7 @@ class Licznik:
         self.nowe = self.zmienione = self.bez_zmian = self.pominiete = self.bledy = 0
         self.nie_ma_w_zrodle = []
         self.uwagi = []
+        self.duplikaty = []
 
     def linia(self):
         return (f'{self.nowe} nowych, {self.zmienione} zmienionych, {self.bez_zmian} bez zmian, {self.pominiete} pominiętych, '
@@ -79,11 +85,15 @@ class Import:
     # -- istniejące rekordy
     def wczytaj_istniejace(self, rodzaj, trasa):
         wynik = {}
-        for r in self.wp.pobierz_wszystko(trasa, {'_fields': 'id,meta', 'status': STATUSY}):
+        pola = 'id,meta,title,teams' if rodzaj == 'zawodnicy' else 'id,meta'      # nazwa i drużyny zawodnika: wykrywanie duplikatów
+        for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY}):
             meta = r.get('meta') or {}
             if meta.get('bm_source') == self.zrodlo and meta.get('bm_source_id'):
+                tytul = r.get('title')
+                tytul = tytul.get('rendered') if isinstance(tytul, dict) else tytul
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
-                                                    'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live'))}
+                                                    'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live')),
+                                                    'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t]}
         self.istniejace[rodzaj] = wynik
         return wynik
 
@@ -121,6 +131,22 @@ class Import:
             licz.uwagi.append(f'{rodzaj} {src_id}: {e}')
             self.log(f'  BŁĄD {rodzaj} {src_id}: {e}')
             return self.id_wp[rodzaj].get(src_id, 0)
+
+    def wykryj_duplikaty_zawodnikow(self, zawodnicy_zrodla):
+        """Zawodnik o tej samej nazwie i drużynie, ale z innym identyfikatorem źródła niż rekord już będący w WP (a nieobecny w źródle):
+        typowo Superscore zmieniło zawodnikowi identyfikator (np. fake:player:<uuid>). Import nie usuwa starego rekordu, tylko to zgłasza."""
+        licz = self.liczniki['zawodnicy']
+        stare = self.istniejace.get('zawodnicy', {})
+        w_zrodle = {str(p['id']) for p in zawodnicy_zrodla}
+        osieroceni = {sid: ist for sid, ist in stare.items() if sid not in w_zrodle}
+        if not osieroceni:
+            return
+        for p in zawodnicy_zrodla:
+            nazwa = nazwa_do_porownania(p['name'])
+            druzyny = {self.id_wp['druzyny'].get(t) for t in p['teams']} - {None, 0}
+            for sid, ist in osieroceni.items():
+                if ist['nazwa'] == nazwa and druzyny & set(ist['teams']):
+                    licz.duplikaty.append(f'{p["name"]}: nowy identyfikator {p["id"]}, w WP jest też rekord ze starym identyfikatorem {sid} (id WP {ist["id"]})')
 
     def raportuj_brakujace(self, rodzaj, ids_zrodla):
         licz = self.liczniki[rodzaj]

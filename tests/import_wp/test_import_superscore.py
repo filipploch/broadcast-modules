@@ -171,6 +171,34 @@ class ImportDoWpTests(unittest.TestCase):
         self.assertEqual(imp.liczniki['mecze'].zmienione, 1)
         self.assertIn('results', self.a.po_zrodle('events', W_TOKU))
 
+    def test_zmiana_identyfikatora_zawodnika_w_zrodle_jest_zgloszona_jako_mozliwy_duplikat(self):
+        imp = self._importuj()
+        self.assertEqual(imp.liczniki['zawodnicy'].duplikaty, [])                       # zwykły import: bez fałszywych alarmów
+        kadry = copy.deepcopy(self.AtrapaKadry())
+        for wpis in kadry[ORZEL]['other']:
+            if wpis['player']['name'].startswith('Biela'):
+                wpis['player']['id'] = 'fake:player:00000000-nowy-identyfikator'      # Superscore zmieniło identyfikator
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
+        l = imp.liczniki['zawodnicy']
+        self.assertEqual((l.nowe, l.bez_zmian), (1, 2))
+        self.assertEqual(len(l.duplikaty), 1)
+        self.assertIn('Biela Wiktor', l.duplikaty[0])
+        self.assertIn('00000000-nowy-identyfikator', l.duplikaty[0])
+        self.assertIn('możliwy duplikat zawodnika', importuj.raport(imp, False))
+        self.assertEqual(len(self.a.dane['players']), 4)                                 # stary rekord nie jest usuwany
+
+    def test_ten_sam_zawodnik_w_innej_druzynie_nie_jest_duplikatem(self):
+        self._importuj()
+        kadry = copy.deepcopy(self.AtrapaKadry())
+        kadry[KADRA2] = {'other': [{'shirt_number': '1', 'player': {'id': 'fake:player:inny', 'name': 'Biela, Wiktor'}}]}      # ta sama nazwa, inna drużyna
+        kadry[ORZEL]['other'] = [w for w in kadry[ORZEL]['other'] if not w['player']['name'].startswith('Biela')]
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
+        self.assertEqual(imp.liczniki['zawodnicy'].duplikaty, [])
+
+    @staticmethod
+    def AtrapaKadry():
+        return {ORZEL: FX['squads'][ORZEL], KADRA2: FX['squad_dup']}
+
     def test_rekordy_nalf_nie_sa_dopasowywane_do_rekordow_superscore(self):
         self._importuj()
         for o in self.a.dane['teams'].values():
