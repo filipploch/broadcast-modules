@@ -97,7 +97,7 @@ class WpManager:
 
     def _publish(self):
         st = self.state()
-        sig = json.dumps({k: v for k, v in st.items() if k != 'checked_at'}, sort_keys=True, ensure_ascii=False)
+        sig = json.dumps({k: v for k, v in st.items() if k not in ('checked_at', 'fetched_at')}, sort_keys=True, ensure_ascii=False)
         if sig != self._last_emitted:
             self._last_emitted = sig
             if self.socketio is not None:

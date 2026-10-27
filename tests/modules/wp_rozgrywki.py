@@ -330,6 +330,15 @@ def make(APP):
             self.assertEqual(self.socketio.emit.call_count, n + 1)
             self.assertEqual(self.socketio.emit.call_args[0][0], 'wp_state')
 
+        def test_sam_czas_pobrania_listy_nie_wywoluje_wysylki_stanu(self):
+            self._two_pairs()
+            m = self._mgr()
+            m.refresh()
+            n = self.socketio.emit.call_count
+            m._list['fetched_at'] = '2000-01-01T00:00:00'           # kolejne pobranie w innej sekundzie zmienia tylko ten znacznik
+            m._publish()
+            self.assertEqual(self.socketio.emit.call_count, n)
+
         def test_uszkodzony_plik_ustawien_nie_przeszkadza(self):
             self.store.parent.mkdir(parents=True)
             self.store.write_text('{ nie json', encoding='utf-8')
