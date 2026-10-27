@@ -3,5 +3,21 @@
     "modul": "futsal_nalf",
     "sezon": 61,
     "uwaga": "id sezonu w API nalffutsal.pl: 61 = Jesień 2026, 59 = Wiosna 2026 (zapas do porównań)"
+  },
+  "garbarnia": {
+    "modul": "garbarnia",
+    "zrodlo": "superscore",
+    "sezon": "33lvZK65l7ubf6BfFPjtl",
+    "liga": {
+      "id": "0loc9tw7",
+      "nazwa": "Hal-Mont Małopolska 5. Liga Zachód"
+    },
+    "nazwa_sezonu": "Sezon 2026/2027",
+    "nazwy": {
+      "66r9558e": "KS Chełmek",
+      "izayrj9k": "Michałowianka Michałowice",
+      "2e2ert7e": "Orzeł Myślenice"
+    },
+    "uwaga": "Superscore: sezon 33lvZK65l7ubf6BfFPjtl (5. liga zachód 2026/2027), konkurs 0loc9tw7. 'nazwy' poprawia 3 nazwy drużyn bez polskich znaków w Superscore (nazwy ze starej bazy modułu); klucz = hash drużyny."
   }
 }

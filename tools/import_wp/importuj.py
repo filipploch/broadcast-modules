@@ -1,6 +1,6 @@
-"""Import danych ze stron do WP/SportsPressa instancji modułu (etap I1: NALF).
+"""Import danych ze stron do WP/SportsPressa instancji modułu (I1: NALF, I2: Garbarnia z Superscore).
 
-    python tools/import_wp/importuj.py nalf [--sezon 61] [--na-sucho] [--bez-zawodnikow] [--cache <katalog>]
+    python tools/import_wp/importuj.py nalf|garbarnia [--sezon <id>] [--na-sucho] [--bez-zawodnikow] [--cache <katalog>]
 
 Wymaga uruchomionej instancji WP modułu (wp-nalf.bat) i pliku wp-local\\dane-api-<id>.json. Odczyt ze strony z przerwą 1 s między zapytaniami.
 Import jest powtarzalny: drugie uruchomienie niczego nie dubluje (dopasowanie po bm_source_id), a rekordy bez zmian nie są wysyłane.
@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nalf as zrodlo_nalf  # noqa: E402
+import superscore as zrodlo_superscore  # noqa: E402
 from upsert import Import  # noqa: E402
 from wp_rest import WpRest, WpRestError, wczytaj_dane_logowania  # noqa: E402
 
@@ -39,9 +40,9 @@ def _ids(lista, mapa):
     return [mapa[i] for i in lista if i in mapa]
 
 
-def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
-    """Zapisuje do WP dane znormalizowane przez nalf.pobierz_sezon. Zwraca obiekt Import z licznikami."""
-    imp = Import(wp, 'nalf', na_sucho=na_sucho, log=log)
+def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=print):
+    """Zapisuje do WP dane znormalizowane przez nalf.pobierz_sezon albo superscore.pobierz_sezon. Zwraca obiekt Import z licznikami."""
+    imp = Import(wp, zrodlo, na_sucho=na_sucho, log=log)
     sezon = dane['sezon']
     wp_sezon = imp.kategorie('sezon', [sezon])[sezon['id']]
     wp_ligi = imp.kategorie('ligi', list(dane['ligi'].values()))
@@ -52,7 +53,7 @@ def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
     for t in dane['druzyny']:
         payload = {k: t[k] for k in ('name', 'slug', 'abbreviation')} | {'leagues': [l for l in t['leagues'] if l in dane['ligi']]}
         imp.upsert('druzyny', TRASY['druzyny'], t['id'], payload, lambda t=t: {
-            'title': t['name'], 'slug': t['slug'], 'status': 'publish', 'abbreviation': t['abbreviation'],
+            'title': t['name'], **({'slug': t['slug']} if t['slug'] else {}), 'status': 'publish', 'abbreviation': t['abbreviation'],
             'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]})
     imp.raportuj_brakujace('druzyny', [t['id'] for t in dane['druzyny']])
 
@@ -61,9 +62,10 @@ def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
             payload = {'name': p['name'], 'slug': p['slug'], 'number': p['number'], 'teams': p['teams'],
                        'leagues': [l for l in p['leagues'] if l in dane['ligi']]}
             imp.upsert('zawodnicy', TRASY['zawodnicy'], p['id'], payload, lambda p=p, payload=payload: {
-                'title': p['name'], 'slug': p['slug'], 'status': 'publish', **({'number': p['number']} if p['number'] is not None else {}),
+                'title': p['name'], **({'slug': p['slug']} if p['slug'] else {}), 'status': 'publish', **({'number': p['number']} if p['number'] is not None else {}),
                 'teams': _ids(p['teams'], imp.id_wp['druzyny']), 'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]})
         imp.raportuj_brakujace('zawodnicy', [p['id'] for p in dane['zawodnicy']])
+        imp.wykryj_duplikaty_zawodnikow(dane['zawodnicy'])
 
     for m in dane['mecze']:
         if any(t and t not in imp.id_wp['druzyny'] for t in m['teams']):          # 0 = wolne miejsce w fazie pucharowej (para nieznana)
@@ -74,7 +76,7 @@ def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
 
         def body(m=m):
             gracze = imp.id_wp['zawodnicy']
-            wyniki = {str(imp.id_wp['druzyny'][int(t)]): v for t, v in m['results'].items() if int(t) in imp.id_wp['druzyny']}
+            wyniki = {str(imp.id_wp['druzyny'][t]): v for t, v in m['results'].items() if t in imp.id_wp['druzyny']}
             body = {
                 'title': ' - '.join(nazwy.get(t, 'Do ustalenia') for t in m['teams']), 'status': 'publish', 'date': m['date'], 'format': m['format'],
                 'day': m['day'], 'leagues': _ids(m['leagues'], wp_ligi), 'seasons': [wp_sezon],
@@ -85,8 +87,8 @@ def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
                 body['results'] = wyniki
             if z_zawodnikami and m['performance']:
                 body['performance'] = {
-                    str(imp.id_wp['druzyny'][int(t)]): {str(gracze[int(p)]): w for p, w in rows.items() if int(p) in gracze}
-                    for t, rows in m['performance'].items() if int(t) in imp.id_wp['druzyny']}
+                    str(imp.id_wp['druzyny'][t]): {str(gracze[p]): w for p, w in rows.items() if p in gracze}
+                    for t, rows in m['performance'].items() if t in imp.id_wp['druzyny']}
                 body['players'] = [gracze[p] if p else 0 for p in m['players'] if p == 0 or p in gracze]
             return body
         payload = {**m, 'z_zawodnikami': z_zawodnikami}
@@ -94,12 +96,18 @@ def importuj_nalf(wp, dane, z_zawodnikami=True, na_sucho=False, log=print):
         imp.upsert('mecze', TRASY['mecze'], m['id'], payload, body,
                    przed_aktualizacja=lambda wp_id: wp.zadanie('POST', f'bm/v1/event/{wp_id}/clear'))
     imp.raportuj_brakujace('mecze', [m['id'] for m in dane['mecze']])
+    imp.uwagi_zrodla = list(dane.get('uwagi') or [])
     return imp
+
+
+def importuj_nalf(wp, dane, **kw):
+    return importuj_zrodlo(wp, 'nalf', dane, **kw)
 
 
 def raport(imp, na_sucho):
     nazwy = {'sezon': 'sezon', 'ligi': 'ligi', 'druzyny': 'drużyny', 'zawodnicy': 'zawodnicy', 'mecze': 'mecze'}
     wiersze = [('NA SUCHO: ' if na_sucho else '') + 'wynik importu']
+    wiersze += [f'  uwaga źródła: {u}' for u in getattr(imp, 'uwagi_zrodla', [])]
     for k, n in nazwy.items():
         licz = imp.liczniki[k]
         wiersze.append(f'  {n:<10} {licz.linia()}')
@@ -109,6 +117,10 @@ def raport(imp, na_sucho):
                            f'(mogą należeć do innych sezonów; nic nie usuwam)')
         for u in licz.uwagi[:10]:
             wiersze.append(f'  ! {u}')
+        for d in licz.duplikaty[:20]:
+            wiersze.append(f'  UWAGA, możliwy duplikat zawodnika: {d}')
+        if len(licz.duplikaty) > 20:
+            wiersze.append(f'  ... i {len(licz.duplikaty) - 20} kolejnych możliwych duplikatów')
     return '\n'.join(wiersze)
 
 
@@ -121,18 +133,22 @@ def main(argv=None):
     ap.add_argument('--cache', help='katalog pamięci podręcznej odpowiedzi źródła (do prac deweloperskich; domyślnie wyłączona)')
     a = ap.parse_args(argv)
     konf = ZRODLA[a.zrodlo]
-    if a.zrodlo != 'nalf':
-        sys.exit(f'Źródło {a.zrodlo} nie jest jeszcze obsługiwane (etap I2).')
-    sezon = int(a.sezon or konf['sezon'])
     wp, port, mod_id = polacz_z_wp(konf['modul'])
-    print(f'Import NALF, sezon {sezon} -> WP modułu {mod_id} (127.0.0.1:{port}){" [NA SUCHO]" if a.na_sucho else ""}')
-    api = zrodlo_nalf.NalfApi(cache_dir=a.cache)
-    dane = zrodlo_nalf.pobierz_sezon(api, sezon, z_zawodnikami=not a.bez_zawodnikow)
+    api_zrodla = konf.get('zrodlo', a.zrodlo)
+    print(f'Import {api_zrodla}, moduł {mod_id} -> WP (127.0.0.1:{port}){" [NA SUCHO]" if a.na_sucho else ""}')
+    z_zaw = not a.bez_zawodnikow
+    if api_zrodla == 'nalf':
+        dane = zrodlo_nalf.pobierz_sezon(zrodlo_nalf.NalfApi(cache_dir=a.cache), int(a.sezon or konf['sezon']), z_zawodnikami=z_zaw)
+        nazwa_zrodla = 'nalf'
+    else:
+        konf = {**konf, **({'sezon': a.sezon} if a.sezon else {})}
+        dane = zrodlo_superscore.pobierz_sezon(zrodlo_superscore.SuperscoreApi(cache_dir=a.cache), konf, z_zawodnikami=z_zaw)
+        nazwa_zrodla = 'superscore'
     print(f'  sezon: {dane["sezon"]["name"]}; ligi: ' + ', '.join(l['name'] for l in dane['ligi'].values()))
     try:
-        imp = importuj_nalf(wp, dane, z_zawodnikami=not a.bez_zawodnikow, na_sucho=a.na_sucho)
+        imp = importuj_zrodlo(wp, nazwa_zrodla, dane, z_zawodnikami=z_zaw, na_sucho=a.na_sucho)
     except WpRestError as e:
-        sys.exit(f'Błąd rozmowy z WP: {e}. Czy instancja działa (wp-nalf.bat) i czy bm-pomocnik jest w mu-plugins?')
+        sys.exit(f'Błąd rozmowy z WP: {e}. Czy instancja działa (wp-nalf.bat albo wp-garbarnia.bat) i czy bm-pomocnik jest w mu-plugins?')
     print(raport(imp, a.na_sucho))
     print(f'  zapytań do WP: {wp.zapytania}')
     return 1 if any(l.bledy for l in imp.liczniki.values()) else 0
