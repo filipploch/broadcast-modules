@@ -16,6 +16,13 @@ def nazwa_do_porownania(tekst):
     return ' '.join(html.unescape(tekst or '').casefold().split())
 
 
+def _z_meta(cialo, meta):
+    """Treść żądania: pole '_meta' z budowniczego (dodatkowe pola własne rekordu) trafia do meta obok pól importu."""
+    cialo = dict(cialo)
+    dodatkowe = cialo.pop('_meta', {})
+    return {**cialo, 'meta': {**meta, **dodatkowe}}
+
+
 def skrot(payload):
     surowe = json.dumps([WERSJA_IMPORTU, payload], sort_keys=True, ensure_ascii=False)
     return hashlib.sha1(surowe.encode('utf-8')).hexdigest()
@@ -58,6 +65,7 @@ class Import:
         self.liczniki = {'ligi': Licznik(), 'sezon': Licznik(), 'druzyny': Licznik(), 'zawodnicy': Licznik(), 'mecze': Licznik()}
         self.id_wp = {k: MapaId() for k in ('ligi', 'sezon', 'druzyny', 'zawodnicy', 'mecze')}   # id ze źródła -> id w WP
         self.istniejace = {}
+        self.niepewne_nazwiska = []
 
     # -- kategorie (liga, sezon)
     def _slug(self, rodzaj, src_id):
@@ -93,7 +101,8 @@ class Import:
                 tytul = tytul.get('rendered') if isinstance(tytul, dict) else tytul
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
                                                     'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live')),
-                                                    'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t]}
+                                                    'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t],
+                                                    'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or ''}
         self.istniejace[rodzaj] = wynik
         return wynik
 
@@ -109,7 +118,8 @@ class Import:
                 if self.na_sucho:
                     self.id_wp[rodzaj][src_id] = 0
                     return 0
-                nowy = self.wp.utworz(trasa, {**buduj_body(), 'meta': meta})
+                cialo = buduj_body()
+                nowy = self.wp.utworz(trasa, _z_meta(cialo, meta))
                 self.id_wp[rodzaj][src_id] = nowy['id']
                 return nowy['id']
             self.id_wp[rodzaj][src_id] = ist['id']
@@ -124,7 +134,7 @@ class Import:
             if not self.na_sucho:
                 if przed_aktualizacja:
                     przed_aktualizacja(ist['id'])
-                self.wp.zaktualizuj(trasa, ist['id'], {**buduj_body(), 'meta': meta})
+                self.wp.zaktualizuj(trasa, ist['id'], _z_meta(buduj_body(), meta))
             return ist['id']
         except Exception as e:                              # jeden zły rekord nie przerywa całego importu
             licz.bledy += 1

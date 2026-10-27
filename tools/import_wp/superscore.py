@@ -14,6 +14,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from nazwy import podziel_nazwisko_imie
+
 BASE = 'https://scorealarm-stats.freetls.fastly.net/v2/soccer/'
 FIXTURES = BASE + 'fixtures/season/plsuperscore/pl-PL'
 SQUAD = BASE + 'teams/squad/plsuperscore/pl-PL'
@@ -139,10 +141,14 @@ def norm_zawodnik(wpis, druzyna_hash, liga_id, sezon_id):
     surowe = (p.get('name') or '').strip()
     if not h or not surowe:
         return None
-    nazwisko, _, imie = surowe.partition(',')
-    nazwa = f'{nazwisko.strip()} {imie.strip()}'.strip()               # "Nazwisko, Imię" -> "Nazwisko Imię" (tak jak zawodnicy NALF w WP)
+    nazwisko, przecinek, imie = surowe.partition(',')
+    nazwisko, imie = nazwisko.strip(), imie.strip()
+    pewne = bool(przecinek) and bool(nazwisko) and bool(imie)          # Superscore zapisuje "Nazwisko, Imię": podział dokładny
+    if not pewne:
+        nazwisko, imie, pewne = podziel_nazwisko_imie(surowe)
+    nazwa = f'{nazwisko} {imie}'.strip()                                 # "Nazwisko, Imię" -> "Nazwisko Imię" (tak jak zawodnicy NALF w WP)
     numer = str(wpis.get('shirt_number') or '').strip()
-    return {'id': h, 'name': nazwa, 'slug': _slug(p), 'number': int(numer) if numer.isdigit() else None, 'teams': [druzyna_hash],
+    return {'id': h, 'name': nazwa, 'last_name': nazwisko, 'first_name': imie, 'name_uncertain': not pewne, 'slug': _slug(p), 'number': int(numer) if numer.isdigit() else None, 'teams': [druzyna_hash],
             'leagues': [liga_id], 'seasons': [sezon_id]}
 
 
