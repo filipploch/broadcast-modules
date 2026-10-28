@@ -294,17 +294,30 @@ func runWpCommand(args []string, out io.Writer) int {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	sys := p.defaultOS()
 	select {
 	case <-sig:
-		_ = killTree(cmd.Process.Pid)
+		stopWpInstance(sys, cmd.Process.Pid, m.Wp.Port)
 		<-done
 		return 0
 	case err := <-done:
+		// Ctrl+C trafia też do php wp-cli i kończy go przed nami, a właściwy serwer (php -S, wnuk) zostaje bez rodzica
+		stopWpInstance(sys, cmd.Process.Pid, m.Wp.Port)
 		if err != nil {
 			fmt.Fprintf(out, "WP zakończył pracę: %v\n", err)
 			return 1
 		}
 		return 0
+	}
+}
+
+// stopWpInstance zatrzymuje instancję WP uruchomioną w oknie: drzewo procesu startowego, a potem, po porcie, nasz php.exe, który
+// został bez rodzica (taskkill /T nie znajduje potomków martwego procesu). Obcego procesu na porcie nie zamyka.
+func stopWpInstance(sys wpOS, rootPID, port int) {
+	_ = sys.kill(rootPID)
+	if pid, listening := sys.listenerPID(port); listening && sys.isOurs(pid) {
+		_ = sys.kill(pid)
+		waitPortClosed(sys, port)
 	}
 }
 
