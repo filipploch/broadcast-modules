@@ -80,10 +80,15 @@ class FakeWpPull:
         self.teams.append({'id': tid, 'title': {'rendered': nazwa}, 'meta': meta, 'abbreviation': '', 'leagues': list(leagues), 'seasons': list(seasons),
                            'status': 'publish'})
 
-    def player(self, pid, tytul, teams, number='', first=None, last=None, leagues=(L,), seasons=(S,)):
+    def player(self, pid, tytul, teams, number='', first=None, last=None, leagues=(L,), seasons=(S,), current=None, past=None):
+        """current/past: drużyny aktualne i dawne (SportsPress); bez nich rekord ma tylko wspólną listę 'teams' jak po starym imporcie."""
         meta = {k: v for k, v in (('bm_first_name', first), ('bm_last_name', last)) if v is not None}
-        self.players.append({'id': pid, 'title': {'rendered': tytul}, 'number': number, 'teams': list(teams), 'meta': meta,
-                             'leagues': list(leagues), 'seasons': list(seasons), 'status': 'publish'})
+        rekord = {'id': pid, 'title': {'rendered': tytul}, 'number': number, 'teams': list(teams), 'meta': meta,
+                  'leagues': list(leagues), 'seasons': list(seasons), 'status': 'publish'}
+        if current is not None or past is not None:
+            rekord['current_teams'], rekord['past_teams'] = list(current or []), list(past or [])
+            rekord['teams'] = list(dict.fromkeys([*rekord['current_teams'], *rekord['past_teams']]))
+        self.players.append(rekord)
 
     def event(self, eid, teams, date='2026-09-05T12:00:00', wynik=None, day='1', live=False, locked=False, leagues=(L,), seasons=(S,), tytul=None):
         self.events.append({'id': eid, 'title': {'rendered': tytul or 'A &#8211; B'}, 'date': date, 'status': 'publish' if wynik else 'future',
@@ -360,6 +365,77 @@ def make(APP):
             p = self.modele()[3].query.filter_by(last_name='Kowalski').one()
             self.assertEqual(p.team.name, 'KS Chełmek')
 
+    class AktualneIDawneDruzyny(Podstawa):
+        """W7e-1: do puli pary należy zawodnik z AKTUALNĄ drużyną w parze; dawne drużyny się nie liczą."""
+
+        def _zawodnik(self, current, past, nr=399, nazwa='Wolnicki Piotr'):
+            self.wp.player(nr, nazwa, [], first='Piotr', last='Wolnicki', current=current, past=past)
+
+        def _gracz(self, nazwisko):
+            return self.modele()[3].query.filter_by(last_name=nazwisko).first()
+
+        def test_jedna_aktualna_druzyna_przypisanie_automatyczne_a_dawna_nie_liczy_sie(self):
+            self._zawodnik([102], [101])
+            r = self.pobierz()['raport']
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'KS Chełmek')
+            self.assertFalse(any('Wolnicki' in x for x in r['kilka_aktualnych'] + r['tylko_dawne']))
+            self.assertGreaterEqual(r['przynaleznosc']['jedna'], 1)
+
+        def test_tylko_dawne_w_parze_zawodnik_nie_wchodzi_do_puli_i_jest_w_raporcie(self):
+            self._zawodnik([], [101, 102])
+            self.wp.player(398, 'Inny Adam', [], first='Adam', last='Inny', current=[777], past=[101])          # aktualna drużyna poza parą
+            r = self.pobierz()['raport']
+            self.assertIsNone(self._gracz('Wolnicki'))
+            self.assertIsNone(self._gracz('Inny'))
+            self.assertEqual(r['przynaleznosc']['tylko_dawne'], 2)
+            self.assertTrue(any('Wolnicki' in x and 'Garbarnia Kraków' in x and 'KS Chełmek' in x for x in r['tylko_dawne']))
+            self.assertTrue(any('Inny' in x and 'poza parą: 1' in x for x in r['tylko_dawne']))
+
+        def test_kilka_aktualnych_w_parze_wybor_deterministyczny_i_lista_z_nazwami(self):
+            self._zawodnik([102, 101], [])
+            r = self.pobierz()['raport']
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'Garbarnia Kraków')                    # najniższy numer WP w parze (101)
+            wpis = next(x for x in r['kilka_aktualnych'] if 'Wolnicki' in x)
+            self.assertIn('Garbarnia Kraków', wpis)
+            self.assertIn('KS Chełmek', wpis)
+            self.assertIn('przypisano: Garbarnia Kraków', wpis)
+            self.assertEqual(r['przynaleznosc']['kilka'], 1)
+
+        def test_obecna_druzyna_modulu_zostaje_jesli_wp_nadal_ja_wymienia_jako_aktualna(self):
+            self._zawodnik([102], [])
+            self.pobierz()
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'KS Chełmek')
+            self.wp.znajdz('players', 399)['current_teams'] = [101, 102]
+            self.wp.znajdz('players', 399)['teams'] = [101, 102]
+            r = self.pobierz()['raport']
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'KS Chełmek')                          # zostaje, mimo że 101 jest „pierwsza” po numerze WP
+            self.assertEqual(r['przynaleznosc']['kilka'], 1)
+
+        def test_gdy_wp_nie_wymienia_juz_obecnej_druzyny_jako_aktualnej_zawodnik_przechodzi(self):
+            self._zawodnik([101], [])
+            self.pobierz()
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'Garbarnia Kraków')
+            self.wp.znajdz('players', 399)['current_teams'] = [102]
+            self.wp.znajdz('players', 399)['past_teams'] = [101]
+            self.pobierz()
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'KS Chełmek')
+
+        def test_zawodnik_ktory_stal_sie_tylko_dawnym_w_parze_zostaje_w_module_i_jest_nieobecny(self):
+            self._zawodnik([101], [])
+            self.pobierz()
+            self.wp.znajdz('players', 399)['current_teams'] = [777]
+            self.wp.znajdz('players', 399)['past_teams'] = [101]
+            r = self.pobierz()['raport']
+            self.assertIsNotNone(self._gracz('Wolnicki'))                                                # nigdy nie usuwamy
+            self.assertTrue(any('Wolnicki' in x for x in r['nieobecne']))
+
+        def test_powtorne_pobranie_nie_zmienia_klasyfikacji_ani_bazy(self):
+            self._zawodnik([102, 101], [])
+            self._zawodnik([103], [101], nr=397, nazwa='Dawny Jan')
+            self.pobierz()
+            r = self.pobierz()['raport']
+            self.assertFalse(r['zmieniono'])
+
     class KrawedzieIAwarie(Podstawa):
         def test_dwie_druzyny_o_tej_samej_nazwie_druga_dostaje_koncowke(self):
             self.wp.team(105, 'Garbarnia Kraków', short='GA2')
@@ -378,7 +454,8 @@ def make(APP):
             r = self.pobierz()['raport']
             p = self.modele()[3].query.filter_by(last_name='Kowalski').one()
             self.assertEqual(p.team.name, 'Garbarnia Kraków')
-            self.assertTrue(any('Kowalski' in x for x in r['rozbieznosci']))
+            self.assertTrue(any('Kowalski' in x and 'nie rozróżnia' in x for x in r['kilka_aktualnych']))
+            self.assertEqual(r['przynaleznosc']['kilka'], 1)
 
         def test_nazwa_ligi_powyzej_50_znakow_jest_skracana_z_wpisem(self):
             self.wp.leagues[0]['name'] = 'Bardzo długa nazwa ligi która nie mieści się w pięćdziesięciu znakach'
@@ -640,4 +717,4 @@ def make(APP):
             self.assertEqual(numer_rundy('Mecz o 3. miejsce'), (5, True))
             self.assertEqual(numer_rundy('Coś'), (0, False))
 
-    return PierwszePobranie, ReguleMeczow, KrawedzieIAwarie, TrasaIPanel, NazwyZWp
+    return PierwszePobranie, ReguleMeczow, KrawedzieIAwarie, TrasaIPanel, NazwyZWp, AktualneIDawneDruzyny
