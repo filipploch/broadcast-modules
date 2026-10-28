@@ -5,7 +5,7 @@ import wp_pobieranie
 
 APP, TMP = harness.boot("futsal_nalf")
 
-_Pierwsze, _Reguly, _Krawedzie, _Panel, _Nazwy = wp_pobieranie.make(APP)
+_Pierwsze, _Reguly, _Krawedzie, _Panel, _Nazwy, _Aktualne = wp_pobieranie.make(APP)
 
 
 class PierwszePobranieTests(_Pierwsze):
@@ -28,7 +28,11 @@ class NazwyZWpTests(_Nazwy):
     pass
 
 
-del _Pierwsze, _Reguly, _Krawedzie, _Panel, _Nazwy
+class AktualneIDawneDruzynyTests(_Aktualne):
+    pass
+
+
+del _Pierwsze, _Reguly, _Krawedzie, _Panel, _Nazwy, _Aktualne
 
 
 if __name__ == "__main__":

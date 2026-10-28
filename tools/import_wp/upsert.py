@@ -93,7 +93,7 @@ class Import:
     # -- istniejące rekordy
     def wczytaj_istniejace(self, rodzaj, trasa):
         wynik = {}
-        pola = 'id,meta,title,teams' if rodzaj == 'zawodnicy' else 'id,meta'      # nazwa i drużyny zawodnika: wykrywanie duplikatów
+        pola = 'id,meta,title,teams,current_teams,past_teams' if rodzaj == 'zawodnicy' else 'id,meta'      # nazwa i drużyny zawodnika: wykrywanie duplikatów
         for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY}):
             meta = r.get('meta') or {}
             if meta.get('bm_source') == self.zrodlo and meta.get('bm_source_id'):
@@ -102,13 +102,15 @@ class Import:
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
                                                     'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live')),
                                                     'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t],
+                                                    'cur': [int(t) for t in r.get('current_teams') or [] if t],
+                                                    'past': [int(t) for t in r.get('past_teams') or [] if t],
                                                     'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or '',
                                                     'skrot': meta.get('bm_short_name') or ''}
         self.istniejace[rodzaj] = wynik
         return wynik
 
-    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None):
-        """Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać; przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
+    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None, wymus=False):
+        """Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać (wymus=True: zapis także przy niezmienionym skrócie, np. niespójna lista drużyn w WP); przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
         licz = self.liczniki[rodzaj]
         h = skrot(payload)
         ist = self.istniejace[rodzaj].get(str(src_id))
@@ -128,7 +130,7 @@ class Import:
                 licz.pominiete += 1
                 licz.uwagi.append(f'{rodzaj} {src_id}: pominięty (blokada wyniku albo mecz trwa)')
                 return ist['id']
-            if ist['hash'] == h:
+            if ist['hash'] == h and not wymus:
                 licz.bez_zmian += 1
                 return ist['id']
             licz.zmienione += 1

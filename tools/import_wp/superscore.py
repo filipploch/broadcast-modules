@@ -149,6 +149,8 @@ def norm_zawodnik(wpis, druzyna_hash, liga_id, sezon_id):
     nazwa = f'{nazwisko} {imie}'.strip()                                 # "Nazwisko, Imię" -> "Nazwisko Imię" (tak jak zawodnicy NALF w WP)
     numer = str(wpis.get('shirt_number') or '').strip()
     return {'id': h, 'name': nazwa, 'last_name': nazwisko, 'first_name': imie, 'name_uncertain': not pewne, 'slug': _slug(p), 'number': int(numer) if numer.isdigit() else None, 'teams': [druzyna_hash],
+            # skład drużyny w Superscore to jej aktualna kadra; dawnych drużyn źródło nie podaje
+            'current_teams': [druzyna_hash], 'past_teams': [],
             'leagues': [liga_id], 'seasons': [sezon_id]}
 
 
@@ -175,18 +177,21 @@ def pobierz_sezon(api, konf, z_zawodnikami=True, log=print):
     pominiete = len(zdarzenia) - len(mecze)
     if pominiete:
         uwagi.append(f'{pominiete} meczów bez identyfikatora drużyny pominięto.')
-    zawodnicy, indeks = [], {}
+    zawodnicy, indeks, sklady = [], {}, {}
     if z_zawodnikami:
         for d in druzyny:
             kadra = api.get(SQUAD, **{'team-id': d['id']})
+            sklady[d['id']] = 0                                                  # liczba poprawnych wpisów składu drużyny w źródle
             for klucz in POZYCJE:
                 for wpis in kadra.get(klucz) or []:
                     z = norm_zawodnik(wpis, d['id'], liga_id, sezon_id)
                     if z is None:
                         continue
+                    sklady[d['id']] += 1
                     if z['id'] in indeks:                                       # zawodnik w kadrach dwóch drużyn
                         if d['id'] not in indeks[z['id']]['teams']:
                             indeks[z['id']]['teams'].append(d['id'])
+                            indeks[z['id']]['current_teams'].append(d['id'])
                         continue
                     indeks[z['id']] = z
                     zawodnicy.append(z)
@@ -194,4 +199,4 @@ def pobierz_sezon(api, konf, z_zawodnikami=True, log=print):
         f'(zapytań do strony: {api.zapytania}, z pamięci: {api.z_pamieci})')
     return {'sezon': {'id': sezon_id, 'name': konf['nazwa_sezonu'], 'slug': ''},
             'ligi': {liga_id: {'id': liga_id, 'name': konf['liga']['nazwa'], 'slug': ''}},
-            'druzyny': druzyny, 'zawodnicy': zawodnicy, 'mecze': mecze, 'uwagi': uwagi}
+            'druzyny': druzyny, 'zawodnicy': zawodnicy, 'mecze': mecze, 'uwagi': uwagi, 'sklady': sklady}

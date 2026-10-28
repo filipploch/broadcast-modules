@@ -4,6 +4,9 @@
 const WP_PULL_SECTIONS = [
     ['pominiete', 'Pominięte (mecz trwa lub rozpoczęty w module)', 'warning'],
     ['korekty', 'Korekty zakończonych meczów z WP', 'info'],
+    ['kilka_aktualnych', 'Zawodnicy z kilkoma aktualnymi drużynami w parze (przypisano jedną, do sprawdzenia)', 'warning'],
+    ['tylko_dawne', 'Tylko dawne drużyny w tej parze (poza pulą tej ligi)', 'info'],
+    ['zwolnieni', 'Zwolnieni z drużyny (WP nie wymienia jej już jako aktualnej)', 'warning'],
     ['rozbieznosci', 'Rozbieżności', 'warning'],
     ['brak_logo', 'Brak pliku logo (użyto default.png)', 'warning'],
     ['skroty_wyliczone', 'Skróty wyliczone z nazwy, do sprawdzenia', 'info'],
@@ -20,7 +23,7 @@ function wpMatchesText(n) {
 }
 
 function wpPullViewModel(st, now) {
-    const vm = {busy: false, canPull: false, hasResult: false, title: '', error: '', table: [], sections: [], waiting: '', staleWarning: '', changes: []};
+    const vm = {busy: false, canPull: false, hasResult: false, title: '', error: '', table: [], sections: [], waiting: '', membership: '', staleWarning: '', changes: []};
     if (!st || !st.enabled) return vm;
     vm.busy = !!st.pulling;
     vm.canPull = st.connected !== false && !st.pulling && (st.items || []).length > 0;
@@ -49,6 +52,11 @@ function wpPullViewModel(st, now) {
     vm.sections = WP_PULL_SECTIONS.map(([key, title, level]) => ({key, title, level, items: r[key] || []})).filter(s => s.items.length > 0);
     if (r.do_ustalenia_liczba > 0) {
         vm.waiting = `Czekają na ustalenie par: ${wpMatchesText(r.do_ustalenia_liczba)} (nie wczytano).`;
+    }
+    const pr = r.przynaleznosc;
+    if (pr) {
+        vm.membership = `Przynależność zawodników: ${pr.jedna || 0} z jedną aktualną drużyną, ${pr.kilka || 0} z kilkoma aktualnymi, `
+            + `${pr.tylko_dawne || 0} tylko z dawnymi drużynami w tej parze` + (pr.bez_rozroznienia ? `, ${pr.bez_rozroznienia} ze źródła bez rozróżnienia aktualnych i dawnych` : '') + '.';
     }
     vm.changes = p.apply ? [] : (r.zmiany || []);
     if (p.apply && !p.zapisano) vm.title += ': brak zmian do zapisania';
@@ -105,6 +113,12 @@ if (typeof document !== 'undefined') {
                 table.appendChild(tr);
             });
             box.appendChild(table);
+            if (vm.membership) {
+                const mb = document.createElement('div');
+                mb.className = 'wp-note wp-note-info';
+                mb.textContent = vm.membership;
+                box.appendChild(mb);
+            }
             if (vm.waiting) {
                 const w = document.createElement('div');
                 w.className = 'wp-note wp-note-info';

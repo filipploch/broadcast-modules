@@ -75,6 +75,24 @@ t('pobranie bez zmian jest tak opisane', () => {
   assert.ok(vm.title.endsWith('brak zmian do zapisania'));
 });
 
+t('przynależność zawodników: linia podsumowania i sekcje kilku aktualnych oraz tylko dawnych', () => {
+  const r = raport({przynaleznosc: {jedna: 247, kilka: 2, tylko_dawne: 6, bez_bez: 0}, kilka_aktualnych: ['A: aktualne w parze: X, Y; przypisano: X'],
+    tylko_dawne: ['B: w tej parze tylko dawne drużyny (Z)']});
+  const vm = v.wpPullViewModel(base({pull: pull({raport: r})}), NOW);
+  assert.ok(vm.membership.includes('247 z jedną aktualną drużyną'));
+  assert.ok(vm.membership.includes('2 z kilkoma aktualnymi'));
+  assert.ok(vm.membership.includes('6 tylko z dawnymi'));
+  assert.deepStrictEqual(vm.sections.map(s => s.key), ['kilka_aktualnych', 'tylko_dawne']);
+  assert.strictEqual(v.wpPullViewModel(base({pull: pull()}), NOW).membership, '');
+  assert.ok(v.wpPullViewModel(base({pull: pull({raport: raport({przynaleznosc: {jedna: 1, kilka: 0, tylko_dawne: 0, bez_rozroznienia: 3}})})}), NOW).membership.includes('3 ze źródła bez rozróżnienia'));
+});
+
+t('sekcja zwolnionych z drużyny pojawia się po tylko dawnych', () => {
+  const r = raport({tylko_dawne: ['A'], zwolnieni: ['B: zwolniony z drużyny X, teraz: bez drużyny']});
+  const vm = v.wpPullViewModel(base({pull: pull({raport: r})}), NOW);
+  assert.deepStrictEqual(vm.sections.map(s => s.key), ['tylko_dawne', 'zwolnieni']);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log('OK   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + e.message); }

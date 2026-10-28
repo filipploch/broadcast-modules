@@ -73,6 +73,114 @@ class NormalizacjaTests(unittest.TestCase):
         self.assertIn('Źródło nie ma sezonu o id 999', str(cm.exception))
 
 
+class AktualneIDawneDruzynyTests(unittest.TestCase):
+    """W7e-1: SportsPress rozróżnia drużyny aktualne (current_teams) i dawne (past_teams); importer nie spłaszcza ich do jednej listy."""
+
+    GALACTIK, K2, HATTRICK = 7612, 10308, 148
+
+    def setUp(self):
+        self.wp_atrapa = AtrapaWp()
+        self.addCleanup(self.wp_atrapa.zamknij)
+        self.wp = WpRest(f'http://127.0.0.1:{self.wp_atrapa.port}', 'operator', 'tajne')
+
+    def _fx(self):
+        fx = copy.deepcopy(FX)
+        for p in fx['players']:
+            p['current_teams'] = [self.GALACTIK]
+            p['past_teams'] = [t for t in p['teams'] if t != self.GALACTIK]
+        return fx
+
+    def _importuj(self, fx):
+        return importuj.importuj_nalf(self.wp, dane_zrodla(fx), log=lambda *a: None)
+
+    def test_normalizacja_trzyma_aktualne_i_dawne_osobno_a_brak_pol_to_none(self):
+        dane = dane_zrodla(self._fx())
+        gracz = next(p for p in dane['zawodnicy'] if p['id'] == 8137)
+        self.assertEqual((gracz['teams'], gracz['current_teams'], gracz['past_teams']), ([7612, 7049], [7612], [7049]))
+        stary = next(p for p in dane_zrodla()['zawodnicy'] if p['id'] == 8137)
+        self.assertEqual((stary['current_teams'], stary['past_teams']), (None, None))
+
+    def test_zapis_do_wp_ma_aktualne_i_dawne_osobno_bez_wspolnej_listy_a_dawne_spoza_sezonu_wypadaja(self):
+        fx = self._fx()
+        gracz = next(p for p in fx['players'] if p['id'] == 6811)
+        gracz['current_teams'], gracz['past_teams'] = [self.GALACTIK], [self.HATTRICK, 99999]          # 99999: drużyna spoza sezonu
+        imp = self._importuj(fx)
+        rekord = self.wp_atrapa.po_zrodle('players', 6811)
+        id_g, id_h = imp.id_wp['druzyny'][self.GALACTIK], imp.id_wp['druzyny'][self.HATTRICK]
+        self.assertEqual((rekord['current_teams'], rekord['past_teams']), ([id_g], [id_h]))
+        wyslane = [b for m, t, b in self.wp_atrapa.posty() if t.startswith('sportspress/v2/players') and (b.get('meta') or {}).get('bm_source_id') == '6811']
+        self.assertTrue(wyslane)
+        self.assertTrue(all(b['teams'] == [id_g, id_h] for b in wyslane))     # wspólna lista = aktualne + dawne (nowy rekord nie dostaje jej sam od WP)
+
+    def test_zrodlo_bez_pol_aktualne_dawne_zapisuje_wspolna_liste_i_liczy_to_w_raporcie(self):
+        imp = self._importuj(copy.deepcopy(FX))
+        rekord = self.wp_atrapa.po_zrodle('players', 6811)
+        self.assertEqual(rekord['teams'], [imp.id_wp['druzyny'][self.GALACTIK]])           # drużyny spoza sezonu nie mają odpowiednika w WP
+        self.assertNotIn('current_teams', rekord)
+        self.assertEqual(imp.przynaleznosc['brak_pol'], 6)
+
+    def test_drugi_import_nic_nie_wysyla_a_zmiana_aktualnej_drużyny_aktualizuje_tylko_tego_zawodnika(self):
+        fx = self._fx()
+        self._importuj(fx)
+        self.wp_atrapa.wyzeruj_zapytania()
+        imp = self._importuj(fx)
+        self.assertEqual(self.wp_atrapa.posty(), [])
+        self.assertEqual(imp.liczniki['zawodnicy'].zmienione, 0)
+        fx2 = self._fx()
+        gracz = next(p for p in fx2['players'] if p['id'] == 7775)
+        gracz['current_teams'], gracz['past_teams'] = [self.K2], [self.GALACTIK]
+        imp = self._importuj(fx2)
+        self.assertEqual(imp.liczniki['zawodnicy'].zmienione, 1)
+        rekord = self.wp_atrapa.po_zrodle('players', 7775)
+        self.assertEqual(rekord['current_teams'], [imp.id_wp['druzyny'][self.K2]])
+
+    def test_niespojna_lista_teams_w_wp_jest_naprawiana_mimo_niezmienionego_skrotu(self):
+        fx = self._fx()
+        imp = self._importuj(fx)
+        rekord = self.wp_atrapa.po_zrodle('players', 7775)
+        rekord['teams'] = []                                               # jak po utworzeniu rekordu przez REST bez 'teams'
+        self.wp_atrapa.wyzeruj_zapytania()
+        imp = self._importuj(fx)
+        self.assertEqual(imp.liczniki['zawodnicy'].zmienione, 1)
+        self.assertEqual(rekord['teams'], [imp.id_wp['druzyny'][self.GALACTIK]])
+        self.wp_atrapa.wyzeruj_zapytania()
+        imp = self._importuj(fx)
+        self.assertEqual((imp.liczniki['zawodnicy'].zmienione, self.wp_atrapa.posty()), (0, []))
+
+    def test_raport_klasyfikuje_jedna_kilka_i_tylko_dawne(self):
+        fx = self._fx()
+        by_id = {p['id']: p for p in fx['players']}
+        by_id[6811]['current_teams'] = [self.GALACTIK, self.HATTRICK]
+        by_id[7775]['current_teams'], by_id[7775]['past_teams'] = [], [self.GALACTIK]
+        imp = self._importuj(fx)
+        prz = imp.przynaleznosc
+        self.assertEqual((prz['jedna'], len(prz['kilka']), len(prz['tylko_dawne']), prz['brak_pol']), (4, 1, 1, 0))
+        self.assertIn('Galactik Futsal, Hattrick', prz['kilka'][0])
+        tekst = importuj.raport(imp, False)
+        self.assertIn('KILKA AKTUALNYCH DRUŻYN (1)', tekst)
+        self.assertIn('TYLKO DAWNE DRUŻYNY w sezonie (1)', tekst)
+
+
+class PamiecPodrecznaTests(unittest.TestCase):
+    """Prawdziwy import czyta źródło na żywo; --cache to tryb deweloperski z ostrzeżeniem i odmową bez --stare-dane-ok (W7e-1)."""
+
+    def test_prawdziwy_import_z_cache_jest_odrzucany_bez_flagi(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(SystemExit) as ctx:
+                importuj.main(['nalf', '--cache', d])
+        self.assertIn('Odmowa', str(ctx.exception))
+        self.assertIn('--stare-dane-ok', str(ctx.exception))
+
+    def test_ostrzezenie_podaje_date_najstarszego_zapisu_a_puste_cache_nie_ostrzega(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(importuj.ostrzezenie_cache(d), '')
+            (Path(d) / 'a.json').write_text('{}', encoding='utf-8')
+            tekst = importuj.ostrzezenie_cache(d)
+        self.assertIn('DANE Z PAMIĘCI PODRĘCZNEJ', tekst)
+        self.assertRegex(tekst, r'najstarszy zapis \d{4}-\d{2}-\d{2} \d{2}:\d{2}')
+        self.assertEqual(importuj.ostrzezenie_cache(None), '')
+
+
 class KlientApiTests(unittest.TestCase):
     class Odp:
         def __init__(self, body, strony=1):

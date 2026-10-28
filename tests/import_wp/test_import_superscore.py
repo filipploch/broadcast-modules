@@ -93,6 +93,8 @@ class NormalizacjaTests(unittest.TestCase):
         self.assertEqual(gracze['Bargieł Bartosz']['number'], 9)                   # numer z drugiej kadry nie nadpisuje pierwszego wpisu
         self.assertCountEqual(gracze['Bargieł Bartosz']['teams'], [ORZEL, KADRA2])  # ten sam zawodnik w dwóch kadrach: jeden rekord
         self.assertEqual(len(d['zawodnicy']), 3)
+        self.assertCountEqual(gracze['Bargieł Bartosz']['current_teams'], [ORZEL, KADRA2])      # skład drużyny = aktualna kadra; dawnych drużyn brak
+        self.assertEqual(gracze['Bargieł Bartosz']['past_teams'], [])
         self.assertTrue(next(p for p in d['zawodnicy'] if p['name'].startswith('Biela'))['id'].startswith('fake:player:'))   # bez seo_id też importowany
         self.assertIsNone(next(p for p in d['zawodnicy'] if p['name'].startswith('Br'))['number'])                          # pusty numer koszulki
 
@@ -194,6 +196,80 @@ class ImportDoWpTests(unittest.TestCase):
         kadry[ORZEL]['other'] = [w for w in kadry[ORZEL]['other'] if not w['player']['name'].startswith('Biela')]
         imp = self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
         self.assertEqual(imp.liczniki['zawodnicy'].duplikaty, [])
+
+    def test_zawodnik_w_dwoch_kadrach_ma_dwie_aktualne_druzyny_w_wp_i_w_raporcie(self):
+        imp = self._importuj()
+        rekord = next(o for o in self.a.dane['players'].values() if o['title'].startswith('Bargie'))
+        self.assertEqual(sorted(rekord['current_teams']), sorted([imp.id_wp['druzyny'][ORZEL], imp.id_wp['druzyny'][KADRA2]]))
+        self.assertEqual(rekord['past_teams'], [])
+        self.assertEqual(sorted(rekord['teams']), sorted(rekord['current_teams']))               # wspólna lista wysłana razem z aktualnymi
+        self.assertEqual(len(imp.przynaleznosc['kilka']), 1)
+        self.assertIn('Bargieł Bartosz', imp.przynaleznosc['kilka'][0])
+        self.assertIn('KILKA AKTUALNYCH DRUŻYN (1)', importuj.raport(imp, False))
+
+    # -- W7e-1: zawodnik, którego nie ma już w składzie źródła, przechodzi z current_teams do past_teams (rekord zostaje)
+    def _kadry_bez(self, nazwa_zaczyna_sie, kadra=ORZEL):
+        kadry = copy.deepcopy(self.AtrapaKadry())
+        for klucz in list(kadry[kadra]):
+            kadry[kadra][klucz] = [w for w in (kadry[kadra][klucz] or []) if not w['player']['name'].startswith(nazwa_zaczyna_sie)]
+        return kadry
+
+    def _rekord(self, poczatek):
+        return next(o for o in self.a.dane['players'].values() if o['title'].startswith(poczatek))
+
+    def test_zawodnik_nieobecny_w_skladzie_przechodzi_do_dawnych_a_rekord_zostaje(self):
+        imp = self._importuj()
+        druzyna = imp.id_wp['druzyny'][ORZEL]
+        przed = self._rekord('Br')
+        self.assertEqual(przed['current_teams'], [druzyna])
+        liczba = len(self.a.dane['players'])
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=self._kadry_bez('Br'))))
+        rekord = self._rekord('Br')
+        self.assertEqual((rekord['current_teams'], rekord['past_teams'], rekord['teams']), ([], [druzyna], [druzyna]))
+        self.assertEqual(len(self.a.dane['players']), liczba)                                   # nic nie usunięto
+        self.assertEqual(len(imp.opuscili), 1)
+        self.assertIn('opuścił skład', imp.opuscili[0])
+        self.assertIn('OPUŚCILI SKŁAD W ŹRÓDLE (1)', importuj.raport(imp, False))
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=self._kadry_bez('Br'))))              # powtórka: bez dalszych zmian
+        self.assertEqual((imp.opuscili, self.a.posty()), ([], []))
+
+    def test_na_sucho_wypisuje_przeniesienie_ale_niczego_nie_zapisuje(self):
+        self._importuj()
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=self._kadry_bez('Br'))), na_sucho=True)
+        self.assertEqual(len(imp.opuscili), 1)
+        self.assertEqual(self.a.posty(), [])
+        self.assertTrue(self._rekord('Br')['current_teams'])
+
+    def test_pusty_skład_drużyny_nie_przenosi_nikogo(self):
+        self._importuj()
+        kadry = self._kadry_bez('Br')
+        kadry[ORZEL] = {}                                                                       # pobranie składu zwróciło nic
+        imp = self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
+        self.assertEqual(imp.opuscili, [])
+        self.assertTrue(imp.opuscili_do_decyzji)
+        self.assertTrue(self._rekord('Br')['current_teams'])
+
+    def test_znikanie_ponad_25_procent_skladu_to_tylko_raport_do_decyzji(self):
+        pelny = {'other': [{'shirt_number': str(i), 'player': {'id': f'fake:player:t{i}', 'name': f'Testowy{i}, Jan'}} for i in range(8)]}
+        kadry = {ORZEL: pelny, KADRA2: {}}
+        self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
+        mniejszy = {'other': pelny['other'][:2]}                                                # znika 6 z 8
+        imp = self._importuj(dane(AtrapaSuperscore(kadry={ORZEL: mniejszy, KADRA2: {}})))
+        self.assertEqual(imp.opuscili, [])
+        self.assertEqual(len(imp.opuscili_do_decyzji), 1)
+        self.assertIn('ponad 25%', imp.opuscili_do_decyzji[0])
+        self.assertIn('DO DECYZJI (1)', importuj.raport(imp, False))
+        self.assertTrue(self._rekord('Testowy5')['current_teams'])
+
+    def test_stary_rekord_bez_rozroznienia_traktuje_teams_jak_aktualne(self):
+        imp = self._importuj()
+        druzyna = imp.id_wp['druzyny'][ORZEL]
+        rekord = self._rekord('Br')
+        rekord['current_teams'], rekord['past_teams'] = [], []                                  # jak po starym imporcie: tylko 'teams'
+        self._importuj(dane(AtrapaSuperscore(kadry=self._kadry_bez('Br'))))
+        self.assertEqual((rekord['current_teams'], rekord['past_teams']), ([], [druzyna]))
 
     @staticmethod
     def AtrapaKadry():

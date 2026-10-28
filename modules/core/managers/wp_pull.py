@@ -48,7 +48,7 @@ def pobierz_dane_pary(client, league_id, season_id):
     druzyny = client.get_all('sportspress/v2/teams', {**kat, '_fields': 'id,title,meta,abbreviation'})
     # kadra całej drużyny w sezonie (bez ograniczenia do ligi: drużyna gra w kilku ligach, a w module ma jedną kadrę); zawodnicy bez drużyny pary
     # są odrzucani przy zapisie
-    zawodnicy = client.get_all('sportspress/v2/players', {'seasons': int(season_id), 'status': status, '_fields': 'id,title,number,teams,meta'})
+    zawodnicy = client.get_all('sportspress/v2/players', {'seasons': int(season_id), 'status': status, '_fields': 'id,title,number,teams,current_teams,past_teams,meta'})
     mecze = client.get_all('sportspress/v2/events', {**kat, '_fields': 'id,date,status,title,teams,main_results,day,meta'})
     znane = {int(d['id']) for d in druzyny}
     # drużyna z meczu pary, której WP nie oznaczył kategorią pary: dociągamy po numerze (gra w tej lidze, więc należy do pary)
@@ -70,6 +70,7 @@ class Pobieranie:
         from core.models.base_game import get_game_model
         from core.models.base_game_event import get_game_event_model
         from core.models.base_game_foreign_id import get_game_foreign_id_model
+        from core.models.base_game_player import get_game_player_model
         from core.models.base_game_timer import get_game_timer_model
         from core.models.base_league import get_league_model
         from core.models.base_league_foreign_id import get_league_foreign_id_model
@@ -85,7 +86,7 @@ class Pobieranie:
         from core.models.base_team_foreign_id import get_team_foreign_id_model
         self.m = SimpleNamespace(
             Session=get_broadcast_session_model(), SessionGame=get_session_game_model(), Game=get_game_model(), GameEvent=get_game_event_model(),
-            GameForeignId=get_game_foreign_id_model(), GameTimer=get_game_timer_model(), League=get_league_model(),
+            GameForeignId=get_game_foreign_id_model(), GamePlayer=get_game_player_model(), GameTimer=get_game_timer_model(), League=get_league_model(),
             LeagueForeignId=get_league_foreign_id_model(), Stadium=get_stadium_model(), LeagueTeam=get_league_team_model(), Period=get_period_model(),
             Player=get_player_model(), PlayerForeignId=get_player_foreign_id_model(), Scraper=get_scraper_model(), Season=get_season_model(),
             SeasonForeignId=get_season_foreign_id_model(), Team=get_team_model(), TeamForeignId=get_team_foreign_id_model())
@@ -97,10 +98,12 @@ class Pobieranie:
         self.licz = {k: _kat_licznik() for k in ('druzyny', 'zawodnicy', 'mecze')}
         self.licz_pary = {'sezon': None, 'liga': None}
         self.r = {k: [] for k in ('pominiete', 'korekty', 'do_ustalenia', 'nieobecne', 'rozbieznosci', 'dolaczono', 'brak_logo', 'zablokowane',
-                                  'skroty_wyliczone', 'zmiany', 'bledy')}
+                                  'skroty_wyliczone', 'zmiany', 'bledy', 'kilka_aktualnych', 'tylko_dawne', 'zwolnieni')}
+        self.przyn = {'jedna': 0, 'kilka': 0, 'tylko_dawne': 0, 'bez_rozroznienia': 0}           # klasyfikacja zawodników wg drużyn aktualnych (W7e-1)
         self._nast = 0
         self.scraper_id = None
         self.kadra_pary = set()
+        self.zwolnieni_ids = set()                      # zawodnicy modułu zwolnieni z drużyny w tym przebiegu (nie liczą się jako „nieobecni”)
         self.fid = {}
 
     # -- narzędzia
@@ -319,25 +322,52 @@ class Pobieranie:
         m, d = self.m, self.dane
         wp_ids_druzyn = set(druzyny)
         odwrot_dr = {v: k for k, v in self.fid['druzyna'].items()}          # id drużyny modułu -> id WP (tekst)
+        self._stan_modulu()
+        trwajace = self._mecze_trwajace()
         for z in sorted(d['zawodnicy'], key=lambda x: int(x['id'])):
             wid = int(z['id'])
             tytul = tekst((z.get('title') or {}).get('rendered'))
-            wspolne = sorted(int(t) for t in (z.get('teams') or []) if t and int(t) in wp_ids_druzyn)
-            if not wspolne:
-                continue                                         # zawodnik innych drużyn sezonu: nie dotyczy tej pary
+            aktualne_wp, dawne_wp = z.get('current_teams'), z.get('past_teams')
+            rozrozniane = bool(aktualne_wp) or bool(dawne_wp)         # rekord bez obu list (stary import) ma tylko wspólną listę 'teams'
+            if rozrozniane:
+                # do puli pary należy zawodnik, który MA AKTUALNĄ drużynę w parze; dawne drużyny nie liczą się
+                wszystkie_wp = {int(t) for t in (aktualne_wp or []) if t}
+                wspolne = sorted(t for t in wszystkie_wp if t in wp_ids_druzyn)
+                if not wspolne:
+                    fid_z = self.fid['zawodnik'].get(str(wid))
+                    obj_z = self.db.session.get(m.Player, fid_z) if fid_z is not None else None
+                    self._zwolnij_z_druzyny(obj_z, tytul, wszystkie_wp, wp_ids_druzyn, odwrot_dr, trwajace, druzyny)
+                    dawne_pary = sorted(int(t) for t in (dawne_wp or []) if t and int(t) in wp_ids_druzyn)
+                    if dawne_pary:
+                        self.przyn['tylko_dawne'] += 1
+                        self.r['tylko_dawne'].append(
+                            f'zawodnik {tytul}: w tej parze tylko dawne drużyny ({", ".join(druzyny[t].name for t in dawne_pary)}), '
+                            f'aktualnych drużyn poza parą: {len(wszystkie_wp)}')
+                    continue                                     # zawodnik innych drużyn sezonu albo tylko dawnych w parze: nie dotyczy tej pary
+            else:
+                wszystkie_wp = {int(t) for t in (z.get('teams') or []) if t}
+                wspolne = sorted(t for t in wszystkie_wp if t in wp_ids_druzyn)
+                if not wspolne:
+                    continue
+                self.przyn['bez_rozroznienia'] += 1
             self.kadra_pary.add(str(wid))
             fid = self.fid['zawodnik'].get(str(wid))
             obj = self.db.session.get(m.Player, fid) if fid is not None else None
-            # moduł ma jedną drużynę zawodnika: zostaje obecna, jeśli WP nadal ją wymienia (bez przeskakiwania między parami), inaczej pierwsza
-            # drużyna pary po numerze WP
+            # moduł ma jedną drużynę zawodnika: zostaje obecna, jeśli WP nadal ją wymienia jako aktualną (bez przeskakiwania między parami),
+            # inaczej drużyna pary o najniższym numerze WP
             biezaca = int(odwrot_dr.get(obj.team_id, -1)) if obj is not None and obj.team_id is not None else -1
-            wszystkie_wp = {int(t) for t in (z.get('teams') or []) if t}
             if biezaca in wszystkie_wp:
                 team_id = obj.team_id
             else:
                 team_id = druzyny[wspolne[0]].id
             if len(wspolne) > 1:
-                self.r['rozbieznosci'].append(f'zawodnik {tytul}: w WP w {len(wspolne)} drużynach pary, w module w jednej')
+                self.przyn['kilka'] += 1
+                wybrana = next((druzyny[t].name for t in wspolne if druzyny[t].id == team_id), None) or 'drużyna spoza pary (obecna w module)'
+                self.r['kilka_aktualnych'].append(
+                    f'zawodnik {tytul}: aktualne w parze: {", ".join(druzyny[t].name for t in wspolne)}; przypisano: {wybrana}'
+                    + ('' if rozrozniane else ' (źródło nie rozróżnia drużyn aktualnych i dawnych)'))
+            else:
+                self.przyn['jedna'] += 1
             meta = z.get('meta') or {}
             nazwisko, imie = tekst(meta.get('bm_last_name')), tekst(meta.get('bm_first_name'))
             if not (nazwisko or imie):
@@ -353,6 +383,43 @@ class Pobieranie:
                 self.licz['zawodnicy']['zaktualizowano' if zm else 'bez_zmian'] += 1
                 if zm:
                     self.r['zmiany'].append(f'zawodnik {nazwisko} {imie}: ' + ', '.join(zm))
+
+    def _mecze_trwajace(self):
+        """Mecze, w których nie wolno zmieniać drużyn: aktywne w otwartej sesji albo rozpoczęte w module i niezakończone."""
+        m = self.m
+        rozpoczete_niezakonczone = {r[0] for r in self.db.session.query(m.Game.id).filter(
+            m.Game.id.in_(self.rozpoczete), m.Game.status != m.Game.STATUS_FINISHED)} if self.rozpoczete else set()
+        return set(self.aktywne) | rozpoczete_niezakonczone
+
+    def _zwolnij_z_druzyny(self, obj, tytul, aktualne_wp, wp_ids_druzyn, odwrot_dr, trwajace, druzyny):
+        """Zawodnik modułu powiązany z WP, w parze nie ma już aktualnej drużyny: jeśli jego obecna drużyna modułu należy do pary, przechodzi do
+        swojej aktualnej drużyny z WP istniejącej w module (najniższy numer WP), a gdy takiej nie ma, zostaje bez drużyny. Rekord nie jest usuwany;
+        skład meczowy i zdarzenia mają własne team_id, więc historia się nie zmienia."""
+        m = self.m
+        if obj is None or obj.team_id is None:
+            return
+        biezaca_wp = odwrot_dr.get(obj.team_id)
+        if biezaca_wp is None or int(biezaca_wp) not in wp_ids_druzyn:
+            return
+        nowa = next((self.fid['druzyna'][str(t)] for t in sorted(aktualne_wp) if str(t) in self.fid['druzyna']), None)
+        nazwy = {o.id: o.name for o in druzyny.values()}
+        nazwa_obecnej = nazwy.get(obj.team_id) or self.db.session.get(m.Team, obj.team_id).name
+        mecze = [r[0] for r in self.db.session.query(m.GamePlayer.game_id).filter_by(player_id=obj.id)] if obj.id and obj.id > 0 else []
+        if any(g in trwajace for g in mecze):
+            self.r['zwolnieni'].append(f'zawodnik {tytul}: zostaje w drużynie {nazwa_obecnej} (jest w kadrze meczu, który trwa albo jest rozpoczęty w module); '
+                                       f'zwolnienie przy następnym pobraniu')
+            return
+        zm = self._ustaw(obj, team_id=nowa)
+        self.zwolnieni_ids.add(obj.id)
+        cel = (nazwy.get(nowa) or self.db.session.get(m.Team, nowa).name) if nowa else 'bez drużyny'
+        nierozpoczete = []
+        for g in (self.db.session.query(m.Game).filter(m.Game.id.in_(mecze), m.Game.status == m.Game.STATUS_NOT_STARTED) if mecze else []):
+            nierozpoczete.append(f'{g.home_team.name} – {g.away_team.name}' + (f' ({g.date:%Y-%m-%d})' if g.date else ''))
+        self.r['zwolnieni'].append(f'zawodnik {tytul}: zwolniony z drużyny {nazwa_obecnej}, teraz: {cel}'
+                                   + (f'; nadal w kadrze meczu nierozpoczętego: {"; ".join(nierozpoczete)}' if nierozpoczete else ''))
+        if zm:
+            self.licz['zawodnicy']['zaktualizowano'] += 1
+            self.r['zmiany'].append(f'zawodnik {tytul}: drużyna {nazwa_obecnej} → {cel}')
 
     # -- mecze
     def _stan_modulu(self):
@@ -477,7 +544,7 @@ class Pobieranie:
         ids_druzyn = [o.id for o in druzyny.values() if o.id > 0]
         for p in m.Player.query.filter(m.Player.team_id.in_(ids_druzyn)) if ids_druzyn else []:
             f = odwrot['zawodnik'].get(p.id)
-            if f is not None and f not in wp_zaw:
+            if f is not None and f not in wp_zaw and p.id not in self.zwolnieni_ids:
                 self.r['nieobecne'].append(f'zawodnik {p.last_name} {p.first_name}')
         for lt in m.LeagueTeam.query.filter_by(league_id=liga.id):
             f = odwrot['druzyna'].get(lt.team_id)
@@ -504,7 +571,7 @@ class Pobieranie:
     def raport(self):
         def ucieta(lista):
             return lista[:LIMIT_LISTY] + ([f'… i {len(lista) - LIMIT_LISTY} kolejnych'] if len(lista) > LIMIT_LISTY else [])
-        return {'liczniki': self.licz, 'sezon': self.licz_pary['sezon'], 'liga': self.licz_pary['liga'],
+        return {'liczniki': self.licz, 'przynaleznosc': self.przyn, 'sezon': self.licz_pary['sezon'], 'liga': self.licz_pary['liga'],
                 'zmieniono': self.zmieniono(), 'do_ustalenia_liczba': len(self.r['do_ustalenia']),
                 **{k: ucieta(v) for k, v in self.r.items()}}
 
