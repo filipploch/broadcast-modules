@@ -420,14 +420,92 @@ def make(APP):
             self.pobierz()
             self.assertEqual(self._gracz('Wolnicki').team.name, 'KS Chełmek')
 
-        def test_zawodnik_ktory_stal_sie_tylko_dawnym_w_parze_zostaje_w_module_i_jest_nieobecny(self):
+        def test_zawodnik_ktory_stal_sie_tylko_dawnym_w_parze_zostaje_w_module_bez_druzyny_i_jest_zwolniony(self):
             self._zawodnik([101], [])
             self.pobierz()
             self.wp.znajdz('players', 399)['current_teams'] = [777]
             self.wp.znajdz('players', 399)['past_teams'] = [101]
             r = self.pobierz()['raport']
             self.assertIsNotNone(self._gracz('Wolnicki'))                                                # nigdy nie usuwamy
-            self.assertTrue(any('Wolnicki' in x for x in r['nieobecne']))
+            self.assertIsNone(self._gracz('Wolnicki').team_id)                                           # W7e-1: zwolniony z drużyny (WP jej już nie wymienia)
+            self.assertTrue(any('Wolnicki' in x for x in r['zwolnieni']))
+
+        # -- zwolnienie z drużyny: WP nie wymienia już drużyny pary jako aktualnej
+        def _gry(self):
+            Game = self.modele()[0]
+            return Game.query.order_by(Game.date).all()
+
+        def _dodaj_do_skladu(self, gracz, gra):
+            from app.models import GamePlayer
+            self.db.session.add(GamePlayer(player_id=gracz.id, game_id=gra.id, team_id=gracz.team_id, number=7))
+            self.db.session.commit()
+
+        def _zwolnij_wp(self, current, past):
+            self.wp.znajdz('players', 399)['current_teams'] = list(current)
+            self.wp.znajdz('players', 399)['past_teams'] = list(past)
+            self.wp.znajdz('players', 399)['teams'] = list(dict.fromkeys([*current, *past]))
+
+        def test_zwolniony_z_druzyny_bez_innej_aktualnej_w_module_zostaje_bez_druzyny_i_rekord_zostaje(self):
+            self._zawodnik([101], [])
+            self.pobierz()
+            self._zwolnij_wp([777], [101])
+            r = self.pobierz()['raport']
+            gracz = self._gracz('Wolnicki')
+            self.assertIsNotNone(gracz)                                                           # nigdy nie usuwamy
+            self.assertIsNone(gracz.team_id)
+            self.assertTrue(any('Wolnicki' in x and 'zwolniony z drużyny Garbarnia Kraków' in x and 'bez drużyny' in x for x in r['zwolnieni']))
+            self.assertFalse(any('Wolnicki' in x for x in r['nieobecne']))                       # nie dublujemy w „nieobecnych”
+            self.assertEqual(r['przynaleznosc']['tylko_dawne'], 1)
+
+        def test_zwolniony_przechodzi_do_aktualnej_druzyny_z_wp_ktora_jest_w_module(self):
+            self.wp.team(150, 'Puchar FC', short='PFC', leagues=(2,))
+            self._zawodnik([101], [])
+            self.pobierz()
+            self.pobierz(liga=2)                                                                   # drużyna 150 trafia do modułu (inna para)
+            self._zwolnij_wp([150], [101])
+            r = self.pobierz()['raport']
+            self.assertEqual(self._gracz('Wolnicki').team.name, 'Puchar FC')
+            self.assertTrue(any('teraz: Puchar FC' in x for x in r['zwolnieni']))
+
+        def test_zwolnienie_nie_zmienia_historii_skladu_meczowego_a_mecz_nierozpoczety_jest_w_raporcie(self):
+            from app.models import GamePlayer
+            self._zawodnik([101], [])
+            self.pobierz()
+            gracz, g1, g3 = self._gracz('Wolnicki'), self._gry()[0], self._gry()[2]
+            team_przed = gracz.team_id
+            self._dodaj_do_skladu(gracz, g1)                                                       # mecz zakończony
+            self._dodaj_do_skladu(gracz, g3)                                                       # mecz nierozpoczęty
+            self._zwolnij_wp([777], [101])
+            r = self.pobierz()['raport']
+            self.assertIsNone(self._gracz('Wolnicki').team_id)
+            self.assertEqual({pg.team_id for pg in GamePlayer.query.filter_by(player_id=gracz.id)}, {team_przed})   # zdjęcie drużyny w składach zostaje
+            wpis = next(x for x in r['zwolnieni'] if 'Wolnicki' in x)
+            self.assertIn('nadal w kadrze meczu nierozpoczętego', wpis)
+
+        def test_zwolnienie_wstrzymane_gdy_zawodnik_jest_w_kadrze_meczu_rozpoczetego_w_module(self):
+            from app.models import Period
+            self._zawodnik([101], [])
+            self.pobierz()
+            gracz, g3 = self._gracz('Wolnicki'), self._gry()[2]
+            self._dodaj_do_skladu(gracz, g3)
+            self.db.session.add(Period(game_id=g3.id, period_order=1, description='1. połowa'))
+            self.db.session.commit()
+            team_przed = gracz.team_id
+            self._zwolnij_wp([777], [101])
+            r = self.pobierz()['raport']
+            self.assertEqual(self._gracz('Wolnicki').team_id, team_przed)
+            self.assertTrue(any('Wolnicki' in x and 'trwa albo jest rozpoczęty' in x for x in r['zwolnieni']))
+
+        def test_podglad_zwolnienia_niczego_nie_zapisuje_ale_wypisuje_zwolnionego(self):
+            self._zawodnik([101], [])
+            self.pobierz()
+            team_przed = self._gracz('Wolnicki').team_id
+            self._zwolnij_wp([777], [101])
+            zapisy = self.licznik_zapisow()
+            r = self.pobierz(apply=False)['raport']
+            self.assertEqual(zapisy, [])
+            self.assertEqual(self._gracz('Wolnicki').team_id, team_przed)
+            self.assertTrue(any('Wolnicki' in x for x in r['zwolnieni']))
 
         def test_powtorne_pobranie_nie_zmienia_klasyfikacji_ani_bazy(self):
             self._zawodnik([102, 101], [])

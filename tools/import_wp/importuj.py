@@ -56,6 +56,70 @@ def _klasyfikuj_przynaleznosc(imp, p, nazwy):
         k['jedna'] += 1
 
 
+PROG_ZNIKANIA = 0.25            # ponad tyle składu znikającego naraz (i co najmniej MIN_ZNIKAJACYCH osób) = podejrzenie awarii źródła
+MIN_ZNIKAJACYCH = 5
+
+
+def _opuscili_sklad(imp, wp, dane, zrodlo, na_sucho):
+    """Superscore: zawodnik, którego nie ma już w składach źródła, przechodzi z current_teams do past_teams (rekord nigdy nie jest usuwany).
+    Bezpieczniki: drużyna z pustym/niepobranym składem jest pomijana; gdy z jednej drużyny znika naraz ponad 25% składu (min. 5 osób),
+    przeniesień nie robimy, tylko je wypisujemy do decyzji. Stary rekord bez rozróżnienia (puste current/past) traktuje 'teams' jak aktualne."""
+    imp.opuscili, imp.opuscili_do_decyzji = [], []
+    if zrodlo != 'superscore':
+        return
+    w_zrodle = {str(p['id']) for p in dane['zawodnicy']}
+    sklady = dane.get('sklady') or {}
+    odwrot = {wp_id: src for src, wp_id in imp.id_wp['druzyny'].items() if wp_id}
+    nazwy = {str(t['id']): t['name'] for t in dane['druzyny']}
+    istn = imp.istniejace['zawodnicy']
+
+    def aktualne(ist):
+        return ist['cur'] if (ist['cur'] or ist['past']) else ist['teams']
+
+    rozmiar = {}
+    for ist in istn.values():
+        for t in aktualne(ist):
+            rozmiar[t] = rozmiar.get(t, 0) + 1
+    kandydaci = {}
+    for sid, ist in istn.items():
+        if sid in w_zrodle:
+            continue
+        for t in aktualne(ist):
+            if t in odwrot:
+                kandydaci.setdefault(t, []).append((sid, ist))
+    przenosimy = {}                                                         # sid -> (ist, zbiór drużyn WP do przeniesienia)
+    for t, lista in sorted(kandydaci.items()):
+        nazwa = nazwy.get(str(odwrot[t]), str(t))
+        opis = ', '.join(nazwa_do_porownania_czytelna(ist) for _, ist in lista[:10])
+        if not sklady.get(str(odwrot[t])) and not sklady.get(odwrot[t]):
+            imp.opuscili_do_decyzji.append(f'{nazwa}: skład pobrany pusty albo niepełny, nie przenoszę {len(lista)} zawodników ({opis})')
+            continue
+        if len(lista) >= MIN_ZNIKAJACYCH and len(lista) / max(rozmiar.get(t, 1), 1) > PROG_ZNIKANIA:
+            imp.opuscili_do_decyzji.append(f'{nazwa}: z {rozmiar.get(t, 0)} zawodników znika naraz {len(lista)} (ponad 25%), nie przenoszę, '
+                                           f'do Twojej decyzji (możliwa awaria źródła): {opis}')
+            continue
+        for sid, ist in lista:
+            przenosimy.setdefault(sid, (ist, set()))[1].add(t)
+    licz = imp.liczniki['zawodnicy']
+    for sid, (ist, druzyny_wp) in sorted(przenosimy.items(), key=lambda x: x[1][0]['id']):
+        nowe_cur = [t for t in aktualne(ist) if t not in druzyny_wp]
+        nowe_past = list(dict.fromkeys(ist['past'] + sorted(druzyny_wp)))
+        nazwy_dr = ', '.join(nazwy.get(str(odwrot[t]), str(t)) for t in sorted(druzyny_wp))
+        imp.opuscili.append(f'{nazwa_do_porownania_czytelna(ist)}: opuścił skład ({nazwy_dr}), przeniesiono do dawnych (id WP {ist["id"]})')
+        if na_sucho:
+            continue
+        try:
+            wp.zaktualizuj(TRASY['zawodnicy'], ist['id'], {'current_teams': nowe_cur, 'past_teams': nowe_past,
+                                                         'teams': list(dict.fromkeys(nowe_cur + nowe_past))})
+        except Exception as e:                                              # jeden zły rekord nie przerywa importu
+            licz.bledy += 1
+            licz.uwagi.append(f'zawodnicy {sid}: przeniesienie do dawnych: {e}')
+
+
+def nazwa_do_porownania_czytelna(ist):
+    return ist['nazwa'].title() if ist.get('nazwa') else f'id WP {ist["id"]}'
+
+
 def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=print):
     """Zapisuje do WP dane znormalizowane przez nalf.pobierz_sezon albo superscore.pobierz_sezon. Zwraca obiekt Import z licznikami."""
     imp = Import(wp, zrodlo, na_sucho=na_sucho, log=log)
@@ -117,6 +181,7 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
                     imp.niepewne_nazwiska.append(f'{p["name"]}: nazwisko „{p["last_name"]}”, imię „{p["first_name"]}” (id WP {imp.id_wp["zawodnicy"].get(p["id"])})')
         imp.raportuj_brakujace('zawodnicy', [p['id'] for p in dane['zawodnicy']])
         imp.wykryj_duplikaty_zawodnikow(dane['zawodnicy'])
+        _opuscili_sklad(imp, wp, dane, zrodlo, na_sucho)
 
     for m in dane['mecze']:
         if any(t and t not in imp.id_wp['druzyny'] for t in m['teams']):          # 0 = wolne miejsce w fazie pucharowej (para nieznana)
@@ -178,6 +243,12 @@ def raport(imp, na_sucho):
                 wiersze += [f'    - {n}' for n in prz[klucz][:40]]
                 if len(prz[klucz]) > 40:
                     wiersze.append(f'    ... i {len(prz[klucz]) - 40} kolejnych')
+    if getattr(imp, 'opuscili', None):
+        wiersze.append(f'  OPUŚCILI SKŁAD W ŹRÓDLE ({len(imp.opuscili)}): ' + ('do przeniesienia' if na_sucho else 'przeniesieni') + ' z aktualnych do dawnych drużyn (rekordy zostają):')
+        wiersze += [f'    - {n}' for n in imp.opuscili[:40]]
+    if getattr(imp, 'opuscili_do_decyzji', None):
+        wiersze.append(f'  DO DECYZJI ({len(imp.opuscili_do_decyzji)}): przeniesienia wstrzymane bezpiecznikiem:')
+        wiersze += [f'    - {n}' for n in imp.opuscili_do_decyzji]
     for k, licz in imp.liczniki.items():
         if licz.nie_ma_w_zrodle:
             wiersze.append(f'  uwaga: w WP jest {len(licz.nie_ma_w_zrodle)} rekordów "{nazwy[k]}" z tego źródła, których nie ma w pobranym sezonie '

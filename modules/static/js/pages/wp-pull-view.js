@@ -6,6 +6,7 @@ const WP_PULL_SECTIONS = [
     ['korekty', 'Korekty zakończonych meczów z WP', 'info'],
     ['kilka_aktualnych', 'Zawodnicy z kilkoma aktualnymi drużynami w parze (przypisano jedną, do sprawdzenia)', 'warning'],
     ['tylko_dawne', 'Tylko dawne drużyny w tej parze (poza pulą tej ligi)', 'info'],
+    ['zwolnieni', 'Zwolnieni z drużyny (WP nie wymienia jej już jako aktualnej)', 'warning'],
     ['rozbieznosci', 'Rozbieżności', 'warning'],
     ['brak_logo', 'Brak pliku logo (użyto default.png)', 'warning'],
     ['skroty_wyliczone', 'Skróty wyliczone z nazwy, do sprawdzenia', 'info'],

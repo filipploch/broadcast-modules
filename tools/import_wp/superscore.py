@@ -177,15 +177,17 @@ def pobierz_sezon(api, konf, z_zawodnikami=True, log=print):
     pominiete = len(zdarzenia) - len(mecze)
     if pominiete:
         uwagi.append(f'{pominiete} meczów bez identyfikatora drużyny pominięto.')
-    zawodnicy, indeks = [], {}
+    zawodnicy, indeks, sklady = [], {}, {}
     if z_zawodnikami:
         for d in druzyny:
             kadra = api.get(SQUAD, **{'team-id': d['id']})
+            sklady[d['id']] = 0                                                  # liczba poprawnych wpisów składu drużyny w źródle
             for klucz in POZYCJE:
                 for wpis in kadra.get(klucz) or []:
                     z = norm_zawodnik(wpis, d['id'], liga_id, sezon_id)
                     if z is None:
                         continue
+                    sklady[d['id']] += 1
                     if z['id'] in indeks:                                       # zawodnik w kadrach dwóch drużyn
                         if d['id'] not in indeks[z['id']]['teams']:
                             indeks[z['id']]['teams'].append(d['id'])
@@ -197,4 +199,4 @@ def pobierz_sezon(api, konf, z_zawodnikami=True, log=print):
         f'(zapytań do strony: {api.zapytania}, z pamięci: {api.z_pamieci})')
     return {'sezon': {'id': sezon_id, 'name': konf['nazwa_sezonu'], 'slug': ''},
             'ligi': {liga_id: {'id': liga_id, 'name': konf['liga']['nazwa'], 'slug': ''}},
-            'druzyny': druzyny, 'zawodnicy': zawodnicy, 'mecze': mecze, 'uwagi': uwagi}
+            'druzyny': druzyny, 'zawodnicy': zawodnicy, 'mecze': mecze, 'uwagi': uwagi, 'sklady': sklady}
