@@ -552,6 +552,46 @@ def make(APP):
             self.assertTrue(Path(cel).exists())                                                 # świeża kopia przeżyła sprzątanie
             self.assertTrue(all(f.exists() for f in obce))                                      # obcych plików nie ruszamy
 
+        def test_pusty_numer_w_wp_nie_kasuje_numeru_wpisanego_w_module(self):
+            self.pobierz()
+            nowak = self.modele()[3].query.filter_by(last_name='Nowak').one()
+            self.assertIsNone(nowak.number)                                                        # WP bez numeru: nowy zawodnik bez numeru
+            nowak.number = 12                                                                      # numer wpisany w module (np. w składzie meczowym)
+            self.db.session.commit()
+            r = self.pobierz()['raport']
+            self.db.session.refresh(nowak)
+            self.assertEqual(nowak.number, 12)
+            self.assertTrue(any('Nowak' in x and 'nr 12' in x for x in r['numery_z_modulu']))
+            self.assertFalse(r['zmieniono'])                                                       # nic do zapisania
+            self.pobierz()                                                                         # i przy kolejnym pobraniu nadal
+            self.db.session.refresh(nowak)
+            self.assertEqual(nowak.number, 12)
+
+        def test_numer_z_wp_nadal_nadpisuje_numer_modulu_a_zmiana_w_wp_jest_przejmowana(self):
+            self.pobierz()
+            kowalski = self.modele()[3].query.filter_by(last_name='Kowalski').one()
+            self.assertEqual(kowalski.number, 7)
+            kowalski.number = 99
+            self.db.session.commit()
+            r = self.pobierz()['raport']
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)                                                   # WP z numerem wygrywa
+            self.assertFalse(any('Kowalski' in x for x in r['numery_z_modulu']))
+            self.wp.znajdz('players', 301)['number'] = '8'
+            self.pobierz()
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 8)
+
+        def test_podglad_nie_zmienia_numeru_w_module_i_wypisuje_zachowany_numer(self):
+            self.pobierz()
+            nowak = self.modele()[3].query.filter_by(last_name='Nowak').one()
+            nowak.number = 5
+            self.db.session.commit()
+            zapisy = self.licznik_zapisow()
+            r = self.pobierz(apply=False)['raport']
+            self.assertEqual(zapisy, [])
+            self.assertTrue(any('Nowak' in x for x in r['numery_z_modulu']))
+
         def test_nazwa_ligi_powyzej_50_znakow_jest_skracana_z_wpisem(self):
             self.wp.leagues[0]['name'] = 'Bardzo długa nazwa ligi która nie mieści się w pięćdziesięciu znakach'
             r = self.pobierz()['raport']

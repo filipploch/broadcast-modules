@@ -98,7 +98,7 @@ class Pobieranie:
         self.licz = {k: _kat_licznik() for k in ('druzyny', 'zawodnicy', 'mecze')}
         self.licz_pary = {'sezon': None, 'liga': None}
         self.r = {k: [] for k in ('pominiete', 'korekty', 'do_ustalenia', 'nieobecne', 'rozbieznosci', 'dolaczono', 'brak_logo', 'zablokowane',
-                                  'skroty_wyliczone', 'zmiany', 'bledy', 'kilka_aktualnych', 'tylko_dawne', 'zwolnieni')}
+                                  'skroty_wyliczone', 'zmiany', 'bledy', 'kilka_aktualnych', 'tylko_dawne', 'zwolnieni', 'numery_z_modulu')}
         self.przyn = {'jedna': 0, 'kilka': 0, 'tylko_dawne': 0, 'bez_rozroznienia': 0}           # klasyfikacja zawodników wg drużyn aktualnych (W7e-1)
         self._nast = 0
         self.scraper_id = None
@@ -379,6 +379,10 @@ class Pobieranie:
                 self._powiaz('zawodnik', m.PlayerForeignId, 'player_id', obj.id, str(wid))
                 self.licz['zawodnicy']['dodano'] += 1
             else:
+                if numer is None and obj.number is not None:
+                    # WP nie ma numeru: numer wpisany w module (np. w składzie meczowym) zostaje, pusty numer z WP go nie kasuje
+                    numer = obj.number
+                    self.r['numery_z_modulu'].append(f'{nazwisko} {imie}: nr {obj.number} (WP bez numeru, zostaje numer z modułu)')
                 zm = self._ustaw(obj, first_name=imie[:100], last_name=nazwisko[:100], number=numer, team_id=team_id)
                 self.licz['zawodnicy']['zaktualizowano' if zm else 'bez_zmian'] += 1
                 if zm:
