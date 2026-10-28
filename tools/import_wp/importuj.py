@@ -107,7 +107,10 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
                 if ist is None or not (ist['imie'] or ist['nazwisko']) or ist['nazwa'] != nazwa_do_porownania(p['name']):
                     cialo['_meta'] = {'bm_last_name': p['last_name'], 'bm_first_name': p['first_name']}
                 return cialo
-            imp.upsert('zawodnicy', TRASY['zawodnicy'], p['id'], payload, body_zawodnika)
+            # wspólna lista 'teams' w WP musi być sumą aktualnych i dawnych (SportsPress nie składa jej sam przy tworzeniu rekordu)
+            niespojne = (ist is not None and p.get('current_teams') is not None and set(ist['teams']) != set(
+                _ids(p['current_teams'], imp.id_wp['druzyny']) + _ids(p.get('past_teams') or [], imp.id_wp['druzyny'])))
+            imp.upsert('zawodnicy', TRASY['zawodnicy'], p['id'], payload, body_zawodnika, wymus=niespojne)
             if p.get('name_uncertain'):
                 zapisane = (ist['nazwisko'], ist['imie']) if ist and (ist['imie'] or ist['nazwisko']) else None
                 if zapisane is None or zapisane == (p['last_name'], p['first_name']) or ist['nazwa'] != nazwa_do_porownania(p['name']):

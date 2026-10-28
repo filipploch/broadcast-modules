@@ -134,6 +134,19 @@ class AktualneIDawneDruzynyTests(unittest.TestCase):
         rekord = self.wp_atrapa.po_zrodle('players', 7775)
         self.assertEqual(rekord['current_teams'], [imp.id_wp['druzyny'][self.K2]])
 
+    def test_niespojna_lista_teams_w_wp_jest_naprawiana_mimo_niezmienionego_skrotu(self):
+        fx = self._fx()
+        imp = self._importuj(fx)
+        rekord = self.wp_atrapa.po_zrodle('players', 7775)
+        rekord['teams'] = []                                               # jak po utworzeniu rekordu przez REST bez 'teams'
+        self.wp_atrapa.wyzeruj_zapytania()
+        imp = self._importuj(fx)
+        self.assertEqual(imp.liczniki['zawodnicy'].zmienione, 1)
+        self.assertEqual(rekord['teams'], [imp.id_wp['druzyny'][self.GALACTIK]])
+        self.wp_atrapa.wyzeruj_zapytania()
+        imp = self._importuj(fx)
+        self.assertEqual((imp.liczniki['zawodnicy'].zmienione, self.wp_atrapa.posty()), (0, []))
+
     def test_raport_klasyfikuje_jedna_kilka_i_tylko_dawne(self):
         fx = self._fx()
         by_id = {p['id']: p for p in fx['players']}

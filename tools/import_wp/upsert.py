@@ -107,8 +107,8 @@ class Import:
         self.istniejace[rodzaj] = wynik
         return wynik
 
-    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None):
-        """Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać; przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
+    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None, wymus=False):
+        """Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać (wymus=True: zapis także przy niezmienionym skrócie, np. niespójna lista drużyn w WP); przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
         licz = self.liczniki[rodzaj]
         h = skrot(payload)
         ist = self.istniejace[rodzaj].get(str(src_id))
@@ -128,7 +128,7 @@ class Import:
                 licz.pominiete += 1
                 licz.uwagi.append(f'{rodzaj} {src_id}: pominięty (blokada wyniku albo mecz trwa)')
                 return ist['id']
-            if ist['hash'] == h:
+            if ist['hash'] == h and not wymus:
                 licz.bez_zmian += 1
                 return ist['id']
             licz.zmienione += 1
