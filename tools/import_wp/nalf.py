@@ -71,13 +71,23 @@ def norm_druzyna(t):
             'leagues': sorted(int(i) for i in t.get('leagues') or []), 'seasons': sorted(int(i) for i in t.get('seasons') or [])}
 
 
+def _ids_zrodla(p, klucz):
+    """Lista id drużyn z pola odpowiedzi API; None, gdy źródło w ogóle nie zwraca tego pola (stary WP): wtedy zostaje tylko 'teams'."""
+    if klucz not in p:
+        return None
+    return [int(i) for i in p.get(klucz) or [] if int(i)]
+
+
 def norm_zawodnik(p):
     numer = _tekst(p.get('number')).strip()
     nazwa = oczyść(p['title']['rendered'])
     nazwisko, imie, pewne = podziel_nazwisko_imie(nazwa)
     return {'id': int(p['id']), 'name': nazwa, 'last_name': nazwisko, 'first_name': imie, 'name_uncertain': not pewne,
             'slug': p.get('slug') or '', 'number': int(numer) if numer.isdigit() else None,
-            'teams': [int(i) for i in p.get('teams') or [] if int(i)], 'leagues': sorted(int(i) for i in p.get('leagues') or []),
+            'teams': [int(i) for i in p.get('teams') or [] if int(i)],
+            # SportsPress rozróżnia drużyny aktualne (current_teams) i dawne (past_teams); 'teams' to ich suma bez rozróżnienia
+            'current_teams': _ids_zrodla(p, 'current_teams'), 'past_teams': _ids_zrodla(p, 'past_teams'),
+            'leagues': sorted(int(i) for i in p.get('leagues') or []),
             'seasons': sorted(int(i) for i in p.get('seasons') or [])}
 
 
@@ -118,7 +128,7 @@ def pobierz_sezon(api, sezon_id, z_zawodnikami=True, log=print):
         'events', seasons=sezon_id, _fields='id,date,status,format,day,minutes,leagues,seasons,teams,players,results,performance')]
     zawodnicy = []
     if z_zawodnikami:
-        zawodnicy = [norm_zawodnik(p) for p in api.get_all('players', seasons=sezon_id, _fields='id,slug,title,number,teams,leagues,seasons')]
+        zawodnicy = [norm_zawodnik(p) for p in api.get_all('players', seasons=sezon_id, _fields='id,slug,title,number,teams,current_teams,past_teams,leagues,seasons')]
     log(f'  źródło: {len(druzyny)} drużyn, {len(zawodnicy)} zawodników, {len(mecze)} meczów '
         f'(zapytań do strony: {api.zapytania}, z pamięci: {api.z_pamieci})')
     uzyte = {l for m in mecze for l in m['leagues']} | {l for t in druzyny for l in t['leagues']}

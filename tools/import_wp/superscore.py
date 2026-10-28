@@ -149,6 +149,8 @@ def norm_zawodnik(wpis, druzyna_hash, liga_id, sezon_id):
     nazwa = f'{nazwisko} {imie}'.strip()                                 # "Nazwisko, Imię" -> "Nazwisko Imię" (tak jak zawodnicy NALF w WP)
     numer = str(wpis.get('shirt_number') or '').strip()
     return {'id': h, 'name': nazwa, 'last_name': nazwisko, 'first_name': imie, 'name_uncertain': not pewne, 'slug': _slug(p), 'number': int(numer) if numer.isdigit() else None, 'teams': [druzyna_hash],
+            # skład drużyny w Superscore to jej aktualna kadra; dawnych drużyn źródło nie podaje
+            'current_teams': [druzyna_hash], 'past_teams': [],
             'leagues': [liga_id], 'seasons': [sezon_id]}
 
 
@@ -187,6 +189,7 @@ def pobierz_sezon(api, konf, z_zawodnikami=True, log=print):
                     if z['id'] in indeks:                                       # zawodnik w kadrach dwóch drużyn
                         if d['id'] not in indeks[z['id']]['teams']:
                             indeks[z['id']]['teams'].append(d['id'])
+                            indeks[z['id']]['current_teams'].append(d['id'])
                         continue
                     indeks[z['id']] = z
                     zawodnicy.append(z)

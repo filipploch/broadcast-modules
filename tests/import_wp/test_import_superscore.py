@@ -93,6 +93,8 @@ class NormalizacjaTests(unittest.TestCase):
         self.assertEqual(gracze['Bargieł Bartosz']['number'], 9)                   # numer z drugiej kadry nie nadpisuje pierwszego wpisu
         self.assertCountEqual(gracze['Bargieł Bartosz']['teams'], [ORZEL, KADRA2])  # ten sam zawodnik w dwóch kadrach: jeden rekord
         self.assertEqual(len(d['zawodnicy']), 3)
+        self.assertCountEqual(gracze['Bargieł Bartosz']['current_teams'], [ORZEL, KADRA2])      # skład drużyny = aktualna kadra; dawnych drużyn brak
+        self.assertEqual(gracze['Bargieł Bartosz']['past_teams'], [])
         self.assertTrue(next(p for p in d['zawodnicy'] if p['name'].startswith('Biela'))['id'].startswith('fake:player:'))   # bez seo_id też importowany
         self.assertIsNone(next(p for p in d['zawodnicy'] if p['name'].startswith('Br'))['number'])                          # pusty numer koszulki
 
@@ -194,6 +196,15 @@ class ImportDoWpTests(unittest.TestCase):
         kadry[ORZEL]['other'] = [w for w in kadry[ORZEL]['other'] if not w['player']['name'].startswith('Biela')]
         imp = self._importuj(dane(AtrapaSuperscore(kadry=kadry)))
         self.assertEqual(imp.liczniki['zawodnicy'].duplikaty, [])
+
+    def test_zawodnik_w_dwoch_kadrach_ma_dwie_aktualne_druzyny_w_wp_i_w_raporcie(self):
+        imp = self._importuj()
+        rekord = next(o for o in self.a.dane['players'].values() if o['title'].startswith('Bargie'))
+        self.assertEqual(sorted(rekord['current_teams']), sorted([imp.id_wp['druzyny'][ORZEL], imp.id_wp['druzyny'][KADRA2]]))
+        self.assertEqual(rekord['past_teams'], [])
+        self.assertEqual(len(imp.przynaleznosc['kilka']), 1)
+        self.assertIn('Bargieł Bartosz', imp.przynaleznosc['kilka'][0])
+        self.assertIn('KILKA AKTUALNYCH DRUŻYN (1)', importuj.raport(imp, False))
 
     @staticmethod
     def AtrapaKadry():

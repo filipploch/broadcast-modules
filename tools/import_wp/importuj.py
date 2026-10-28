@@ -40,6 +40,21 @@ def _ids(lista, mapa):
     return [mapa[i] for i in lista if i in mapa]
 
 
+def _klasyfikuj_przynaleznosc(imp, p, nazwy):
+    """Zlicza zawodnika do jednej z grup: jedna aktualna drużyna sezonu / kilka aktualnych (lista z nazwami) / tylko dawne / źródło bez pól."""
+    k = imp.przynaleznosc
+    if p.get('current_teams') is None:
+        k['brak_pol'] += 1
+        return
+    aktualne = [t for t in p['current_teams'] if t in nazwy]
+    if len(aktualne) > 1:
+        k['kilka'].append(f'{p["name"]}: ' + ', '.join(nazwy[t] for t in aktualne))
+    elif not aktualne:
+        k['tylko_dawne'].append(f'{p["name"]}: dawne ' + (', '.join(nazwy[t] for t in (p.get('past_teams') or []) if t in nazwy) or 'brak'))
+    else:
+        k['jedna'] += 1
+
+
 def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=print):
     """Zapisuje do WP dane znormalizowane przez nalf.pobierz_sezon albo superscore.pobierz_sezon. Zwraca obiekt Import z licznikami."""
     imp = Import(wp, zrodlo, na_sucho=na_sucho, log=log)
@@ -65,16 +80,25 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
         imp.upsert('druzyny', TRASY['druzyny'], t['id'], payload, body_druzyny)
     imp.raportuj_brakujace('druzyny', [t['id'] for t in dane['druzyny']])
 
+    imp.przynaleznosc = {'jedna': 0, 'brak_pol': 0, 'kilka': [], 'tylko_dawne': []}      # klasyfikacja zawodników wg drużyn aktualnych (raport)
     if z_zawodnikami:
         for p in dane['zawodnicy']:
+            _klasyfikuj_przynaleznosc(imp, p, nazwy)
             payload = {'name': p['name'], 'slug': p['slug'], 'number': p['number'], 'teams': p['teams'],
+                       'current_teams': p.get('current_teams'), 'past_teams': p.get('past_teams'),
                        'leagues': [l for l in p['leagues'] if l in dane['ligi']], 'last_name': p['last_name'], 'first_name': p['first_name']}
             ist = imp.istniejace['zawodnicy'].get(str(p['id']))
 
             def body_zawodnika(p=p, payload=payload, ist=ist):
                 cialo = {'title': p['name'], **({'slug': p['slug']} if p['slug'] else {}), 'status': 'publish',
                          **({'number': p['number']} if p['number'] is not None else {}),
-                         'teams': _ids(p['teams'], imp.id_wp['druzyny']), 'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]}
+                         'leagues': _ids(payload['leagues'], wp_ligi), 'seasons': [wp_sezon]}
+                # drużyny aktualne i dawne osobno (SportsPress sam składa z nich 'teams'); źródło bez tych pól: tylko wspólna lista 'teams'
+                if p.get('current_teams') is None:
+                    cialo['teams'] = _ids(p['teams'], imp.id_wp['druzyny'])
+                else:
+                    cialo['current_teams'] = _ids(p['current_teams'], imp.id_wp['druzyny'])
+                    cialo['past_teams'] = _ids(p.get('past_teams') or [], imp.id_wp['druzyny'])
                 # imię i nazwisko: zapis przy zakładaniu, przy zmianie nazwy w źródle albo gdy rekord jeszcze ich nie ma; w pozostałych
                 # przypadkach zostaje wartość z WP (np. ręcznie poprawiona po raporcie „nazwiska niepewne”)
                 if ist is None or not (ist['imie'] or ist['nazwisko']) or ist['nazwa'] != nazwa_do_porownania(p['name']):
@@ -138,6 +162,16 @@ def raport(imp, na_sucho):
         wiersze += [f'    - {n}' for n in imp.niepewne_nazwiska[:60]]
         if len(imp.niepewne_nazwiska) > 60:
             wiersze.append(f'    ... i {len(imp.niepewne_nazwiska) - 60} kolejnych')
+    prz = getattr(imp, 'przynaleznosc', None)
+    if prz:
+        wiersze.append(f'  przynależność zawodników: {prz["jedna"]} z jedną aktualną drużyną, {len(prz["kilka"])} z kilkoma aktualnymi, '
+                       f'{len(prz["tylko_dawne"])} tylko z dawnymi, {prz["brak_pol"]} ze źródła bez rozróżnienia (zostaje wspólna lista)')
+        for tytul, klucz in (('KILKA AKTUALNYCH DRUŻYN', 'kilka'), ('TYLKO DAWNE DRUŻYNY w sezonie', 'tylko_dawne')):
+            if prz[klucz]:
+                wiersze.append(f'  {tytul} ({len(prz[klucz])}):')
+                wiersze += [f'    - {n}' for n in prz[klucz][:40]]
+                if len(prz[klucz]) > 40:
+                    wiersze.append(f'    ... i {len(prz[klucz]) - 40} kolejnych')
     for k, licz in imp.liczniki.items():
         if licz.nie_ma_w_zrodle:
             wiersze.append(f'  uwaga: w WP jest {len(licz.nie_ma_w_zrodle)} rekordów "{nazwy[k]}" z tego źródła, których nie ma w pobranym sezonie '
