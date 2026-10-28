@@ -589,7 +589,9 @@ def kopia_bazy(db, kopie_dir):
     finally:
         dst.close()
         src.close()
-    for stara in sorted(Path(kopie_dir).glob(f'{Path(sciezka).stem}-*.db'))[:-KOPII_ZACHOWANYCH]:
+    # tylko pliki o dokładnie takiej nazwie jak własne kopie (nazwa-RRRRMMDD-GGMMSS-mikrosekundy.db): wzorzec 'nazwa-*.db' łapał też obce pliki,
+    # np. kopie bazy 'database-proba', i usuwał świeżą kopię jako „najstarszą”
+    for stara in sorted(Path(kopie_dir).glob(f'{Path(sciezka).stem}-????????-??????-??????.db'))[:-KOPII_ZACHOWANYCH]:
         try:
             stara.unlink()
         except OSError:

@@ -535,6 +535,23 @@ def make(APP):
             self.assertTrue(any('Kowalski' in x and 'nie rozróżnia' in x for x in r['kilka_aktualnych']))
             self.assertEqual(r['przynaleznosc']['kilka'], 1)
 
+        def test_kopia_pliku_bazy_nie_ginie_przez_obce_pliki_o_podobnej_nazwie_w_folderze_kopii(self):
+            # regresja z W7d: kopie bazy „<nazwa>-proba-…” (inna baza) sortowały się „nowsze” i sprzątanie usuwało świeżą kopię
+            from core.managers.wp_pull import kopia_bazy
+            from types import SimpleNamespace
+            import sqlite3
+            baza = self.tmp / 'database.db'
+            sqlite3.connect(str(baza)).close()
+            fałszywa_baza = SimpleNamespace(engine=SimpleNamespace(url=SimpleNamespace(database=str(baza))))
+            self.kopie.mkdir(parents=True, exist_ok=True)
+            obce = [self.kopie / f'{baza.stem}-proba-20261028-00{i}000-000000.db' for i in range(6)]
+            for f in obce:
+                f.write_bytes(b'x')
+            cel = kopia_bazy(fałszywa_baza, self.kopie)
+            self.assertIsNotNone(cel)
+            self.assertTrue(Path(cel).exists())                                                 # świeża kopia przeżyła sprzątanie
+            self.assertTrue(all(f.exists() for f in obce))                                      # obcych plików nie ruszamy
+
         def test_nazwa_ligi_powyzej_50_znakow_jest_skracana_z_wpisem(self):
             self.wp.leagues[0]['name'] = 'Bardzo długa nazwa ligi która nie mieści się w pięćdziesięciu znakach'
             r = self.pobierz()['raport']
