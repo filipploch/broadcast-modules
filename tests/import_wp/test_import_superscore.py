@@ -202,6 +202,7 @@ class ImportDoWpTests(unittest.TestCase):
         rekord = next(o for o in self.a.dane['players'].values() if o['title'].startswith('Bargie'))
         self.assertEqual(sorted(rekord['current_teams']), sorted([imp.id_wp['druzyny'][ORZEL], imp.id_wp['druzyny'][KADRA2]]))
         self.assertEqual(rekord['past_teams'], [])
+        self.assertEqual(sorted(rekord['teams']), sorted(rekord['current_teams']))               # wspólna lista wysłana razem z aktualnymi
         self.assertEqual(len(imp.przynaleznosc['kilka']), 1)
         self.assertIn('Bargieł Bartosz', imp.przynaleznosc['kilka'][0])
         self.assertIn('KILKA AKTUALNYCH DRUŻYN (1)', importuj.raport(imp, False))

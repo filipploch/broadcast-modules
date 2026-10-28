@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -99,6 +100,8 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
                 else:
                     cialo['current_teams'] = _ids(p['current_teams'], imp.id_wp['druzyny'])
                     cialo['past_teams'] = _ids(p.get('past_teams') or [], imp.id_wp['druzyny'])
+                    # wspólną listę wysyłamy też: SportsPress NIE składa jej sam dla nowo utworzonych rekordów (potwierdzone na prawdziwym WP)
+                    cialo['teams'] = list(dict.fromkeys(cialo['current_teams'] + cialo['past_teams']))
                 # imię i nazwisko: zapis przy zakładaniu, przy zmianie nazwy w źródle albo gdy rekord jeszcze ich nie ma; w pozostałych
                 # przypadkach zostaje wartość z WP (np. ręcznie poprawiona po raporcie „nazwiska niepewne”)
                 if ist is None or not (ist['imie'] or ist['nazwisko']) or ist['nazwa'] != nazwa_do_porownania(p['name']):
@@ -185,14 +188,31 @@ def raport(imp, na_sucho):
     return '\n'.join(wiersze)
 
 
+def ostrzezenie_cache(katalog):
+    """Tekst ostrzeżenia o danych z pamięci podręcznej (z datą najstarszego zapisu) albo '' przy braku katalogu/plików."""
+    pliki = [f for f in Path(katalog).glob('*.json') if f.is_file()] if katalog and Path(katalog).is_dir() else []
+    if not pliki:
+        return ''
+    najstarszy = datetime.fromtimestamp(min(f.stat().st_mtime for f in pliki))
+    return (f'UWAGA: DANE Z PAMIĘCI PODRĘCZNEJ ({katalog}), najstarszy zapis {najstarszy:%Y-%m-%d %H:%M}. '
+            f'To nie jest stan źródła na żywo; nie używaj tego do prawdziwego importu.')
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('zrodlo', choices=sorted(ZRODLA))
     ap.add_argument('--sezon', help='id sezonu w źródle (domyślnie z zrodla.json)')
     ap.add_argument('--na-sucho', action='store_true')
     ap.add_argument('--bez-zawodnikow', action='store_true')
-    ap.add_argument('--cache', help='katalog pamięci podręcznej odpowiedzi źródła (do prac deweloperskich; domyślnie wyłączona)')
+    ap.add_argument('--cache', help='katalog pamięci podręcznej odpowiedzi źródła (do prac deweloperskich; domyślnie wyłączona: import czyta źródło na żywo)')
+    ap.add_argument('--stare-dane-ok', action='store_true', help='pozwala na PRAWDZIWY import z danych pamięci podręcznej (domyślnie odrzucany)')
     a = ap.parse_args(argv)
+    if a.cache and not a.na_sucho and not a.stare_dane_ok:
+        sys.exit('Odmowa: --cache w prawdziwym imporcie czytałby stare dane zamiast stanu źródła na żywo (mogą cofnąć rekordy w WP). '
+                 'Uruchom bez --cache albo dodaj --na-sucho; świadomie: --stare-dane-ok.')
+    uwaga_cache = ostrzezenie_cache(a.cache) if a.cache else ''
+    if uwaga_cache:
+        print(uwaga_cache)
     konf = ZRODLA[a.zrodlo]
     wp, port, mod_id = polacz_z_wp(konf['modul'])
     api_zrodla = konf.get('zrodlo', a.zrodlo)
@@ -210,6 +230,8 @@ def main(argv=None):
         imp = importuj_zrodlo(wp, nazwa_zrodla, dane, z_zawodnikami=z_zaw, na_sucho=a.na_sucho)
     except WpRestError as e:
         sys.exit(f'Błąd rozmowy z WP: {e}. Czy instancja działa (wp-nalf.bat albo wp-garbarnia.bat) i czy bm-pomocnik jest w mu-plugins?')
+    if uwaga_cache:
+        imp.uwagi_zrodla.insert(0, uwaga_cache)
     print(raport(imp, a.na_sucho))
     print(f'  zapytań do WP: {wp.zapytania}')
     return 1 if any(l.bledy for l in imp.liczniki.values()) else 0

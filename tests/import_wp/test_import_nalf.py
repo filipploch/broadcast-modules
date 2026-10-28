@@ -110,7 +110,7 @@ class AktualneIDawneDruzynyTests(unittest.TestCase):
         self.assertEqual((rekord['current_teams'], rekord['past_teams']), ([id_g], [id_h]))
         wyslane = [b for m, t, b in self.wp_atrapa.posty() if t.startswith('sportspress/v2/players') and (b.get('meta') or {}).get('bm_source_id') == '6811']
         self.assertTrue(wyslane)
-        self.assertTrue(all('teams' not in b for b in wyslane))              # wspólną listę składa SportsPress
+        self.assertTrue(all(b['teams'] == [id_g, id_h] for b in wyslane))     # wspólna lista = aktualne + dawne (nowy rekord nie dostaje jej sam od WP)
 
     def test_zrodlo_bez_pol_aktualne_dawne_zapisuje_wspolna_liste_i_liczy_to_w_raporcie(self):
         imp = self._importuj(copy.deepcopy(FX))
@@ -146,6 +146,26 @@ class AktualneIDawneDruzynyTests(unittest.TestCase):
         tekst = importuj.raport(imp, False)
         self.assertIn('KILKA AKTUALNYCH DRUŻYN (1)', tekst)
         self.assertIn('TYLKO DAWNE DRUŻYNY w sezonie (1)', tekst)
+
+
+class PamiecPodrecznaTests(unittest.TestCase):
+    """Prawdziwy import czyta źródło na żywo; --cache to tryb deweloperski z ostrzeżeniem i odmową bez --stare-dane-ok (W7e-1)."""
+
+    def test_prawdziwy_import_z_cache_jest_odrzucany_bez_flagi(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(SystemExit) as ctx:
+                importuj.main(['nalf', '--cache', d])
+        self.assertIn('Odmowa', str(ctx.exception))
+        self.assertIn('--stare-dane-ok', str(ctx.exception))
+
+    def test_ostrzezenie_podaje_date_najstarszego_zapisu_a_puste_cache_nie_ostrzega(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(importuj.ostrzezenie_cache(d), '')
+            (Path(d) / 'a.json').write_text('{}', encoding='utf-8')
+            tekst = importuj.ostrzezenie_cache(d)
+        self.assertIn('DANE Z PAMIĘCI PODRĘCZNEJ', tekst)
+        self.assertRegex(tekst, r'najstarszy zapis \d{4}-\d{2}-\d{2} \d{2}:\d{2}')
+        self.assertEqual(importuj.ostrzezenie_cache(None), '')
 
 
 class KlientApiTests(unittest.TestCase):

@@ -91,9 +91,6 @@ class AtrapaWp:
                     obj['meta'].update(v)
                 else:
                     obj[k] = v
-            if kol == 'players' and ('current_teams' in (body or {}) or 'past_teams' in (body or {})):
-                # SportsPress sam składa wspólną listę 'teams' z drużyn aktualnych i dawnych (potwierdzone próbą na prawdziwym WP)
-                obj['teams'] = list(dict.fromkeys([*obj.get('current_teams', []), *obj.get('past_teams', [])]))
             return (201 if rid is None else 200), obj, {}
         return 405, {}, {}
 
