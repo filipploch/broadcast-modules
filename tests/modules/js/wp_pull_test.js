@@ -98,6 +98,11 @@ t('sekcja numerów wpisanych w module jest informacyjna', () => {
   assert.deepStrictEqual(vm.sections.map(s => [s.key, s.level]), [['numery_z_modulu', 'info']]);
 });
 
+t('numer ręczny różny od WP i ostrzeżenia mają sekcje ostrzegawcze', () => {
+  const vm = v.wpPullViewModel(base({pull: pull({raport: raport({numery_reczne: ['A B: w module nr 9, w WP nr 7'], ostrzezenia: ['Brak pliku stanu numerów']})})}), NOW);
+  assert.deepStrictEqual(vm.sections.map(s => [s.key, s.level]), [['numery_reczne', 'warning'], ['ostrzezenia', 'warning']]);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log('OK   ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n     ' + e.message); }

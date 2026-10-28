@@ -567,20 +567,155 @@ def make(APP):
             self.db.session.refresh(nowak)
             self.assertEqual(nowak.number, 12)
 
-        def test_numer_z_wp_nadal_nadpisuje_numer_modulu_a_zmiana_w_wp_jest_przejmowana(self):
-            self.pobierz()
-            kowalski = self.modele()[3].query.filter_by(last_name='Kowalski').one()
-            self.assertEqual(kowalski.number, 7)
-            kowalski.number = 99
+        # -- numer zawodnika: ślad ostatnio pobranych numerów (instance/wp_numery.json + PRAGMA user_version), wariant C
+        def _stan(self):
+            import json
+            return json.loads((self.tmp / 'wp_numery.json').read_text(encoding='utf-8'))
+
+        def _uv(self):
+            from sqlalchemy import text
+            return int(self.db.session.execute(text('PRAGMA user_version')).scalar() or 0)
+
+        def _gracz(self, nazwisko):
+            return self.modele()[3].query.filter_by(last_name=nazwisko).one()
+
+        def _ustaw_numer(self, nazwisko, numer):
+            g = self._gracz(nazwisko)
+            g.number = numer
             self.db.session.commit()
+            return g
+
+        def test_pierwsze_pobranie_zapisuje_slad_numerow_i_wersje_bazy(self):
+            r = self.pobierz()['raport']
+            stan = self._stan()
+            self.assertEqual(stan['seq'], self._uv())                                              # ślad spięty z bazą (numer wersji rośnie o 1 przy każdym zapisie)
+            self.assertGreater(stan['seq'], 0)
+            self.assertEqual((stan['numery']['301'], stan['numery']['303']), (7, None))             # numer z WP albo brak
+            self.assertEqual(r['ostrzezenia'], [])
+            self.assertEqual(r['numery_reczne'], [])
+
+        def test_numer_reczny_rozny_od_wp_nie_jest_nadpisywany_i_trafia_do_raportu(self):
+            self.pobierz()
+            seq0 = self._stan()['seq']
+            kowalski = self._ustaw_numer('Kowalski', 99)                                           # ręcznie w module po pobraniu
+            for _ in range(2):                                                                     # raport powtarza się przy kolejnych pobraniach
+                r = self.pobierz()['raport']
+                self.db.session.refresh(kowalski)
+                self.assertEqual(kowalski.number, 99)
+                self.assertTrue(any('Kowalski' in x and 'w module nr 99, w WP nr 7' in x for x in r['numery_reczne']), r['numery_reczne'])
+                self.assertFalse(r['zmieniono'])
+            self.assertEqual(self._stan()['seq'], seq0)                                            # bez zmian w bazie plik stanu nie jest ruszany
+
+        def test_wp_wygrywa_gdy_numer_w_module_nie_byl_zmieniany_po_ostatnim_pobraniu(self):
+            self.pobierz()
+            seq0 = self._stan()['seq']
+            kowalski = self._gracz('Kowalski')
+            self.wp.znajdz('players', 301)['number'] = '8'                                         # organizator zmienia numer w WP
             r = self.pobierz()['raport']
             self.db.session.refresh(kowalski)
-            self.assertEqual(kowalski.number, 7)                                                   # WP z numerem wygrywa
-            self.assertFalse(any('Kowalski' in x for x in r['numery_z_modulu']))
-            self.wp.znajdz('players', 301)['number'] = '8'
-            self.pobierz()
-            self.db.session.refresh(kowalski)
             self.assertEqual(kowalski.number, 8)
+            self.assertEqual(r['numery_reczne'], [])
+            stan = self._stan()
+            self.assertEqual((stan['numery']['301'], stan['seq'], self._uv()), (8, seq0 + 1, seq0 + 1))
+
+        def test_zmiana_w_wp_nie_nadpisuje_numeru_recznego(self):
+            self.pobierz()
+            kowalski = self._ustaw_numer('Kowalski', 99)
+            self.wp.znajdz('players', 301)['number'] = '8'
+            r = self.pobierz()['raport']
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 99)
+            self.assertTrue(any('w module nr 99, w WP nr 8' in x for x in r['numery_reczne']))
+            self.assertTrue(r['zmieniono'] is False)
+
+        def test_numer_wpisany_w_module_przy_pustym_wp_nie_jest_nadpisany_gdy_wp_dostanie_inny_numer(self):
+            self.pobierz()
+            nowak = self._ustaw_numer('Nowak', 12)
+            self.pobierz()                                                                         # WP bez numeru: zostaje 12
+            self.db.session.refresh(nowak)
+            self.assertEqual(nowak.number, 12)
+            self.wp.znajdz('players', 303)['number'] = '5'
+            r = self.pobierz()['raport']
+            self.db.session.refresh(nowak)
+            self.assertEqual(nowak.number, 12)                                                     # to numer ręczny, a nie ostatnio pobrany z WP (brak numeru)
+            self.assertTrue(any('Nowak' in x and 'nr 12' in x and 'WP nr 5' in x for x in r['numery_reczne']))
+
+        def test_brak_pliku_stanu_wp_wygrywa_z_ostrzezeniem_a_slad_wraca(self):
+            self.pobierz()
+            kowalski = self._ustaw_numer('Kowalski', 99)
+            (self.tmp / 'wp_numery.json').unlink()
+            r = self.pobierz()['raport']
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)                                                   # brak śladu = numer niezmieniony ręcznie
+            self.assertTrue(any('Brak pliku stanu numerów' in x for x in r['ostrzezenia']))
+            self.assertTrue((self.tmp / 'wp_numery.json').exists())                                # ślad założony przy zapisie
+            self.assertEqual(self.pobierz()['raport']['ostrzezenia'], [])
+
+        def test_pierwsze_pobranie_do_pustej_bazy_bez_pliku_nie_ostrzega(self):
+            self.assertFalse((self.tmp / 'wp_numery.json').exists())
+            self.assertEqual(self.pobierz()['raport']['ostrzezenia'], [])
+
+        def test_rozjazd_pliku_i_bazy_po_przywroceniu_kopii_wp_wygrywa_z_ostrzezeniem(self):
+            import json
+            self.pobierz()
+            plik = self.tmp / 'wp_numery.json'
+            d = json.loads(plik.read_text(encoding='utf-8'))
+            d['seq'] = d['seq'] + 6                                                                # plik "z przyszłości" względem bazy (baza wróciła z kopii)
+            oczekiwany = d['seq'] + 1
+            plik.write_text(json.dumps(d), encoding='utf-8')
+            kowalski = self._ustaw_numer('Kowalski', 99)
+            r = self.pobierz()['raport']
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)
+            self.assertTrue(any('nie pasuje do bazy' in x for x in r['ostrzezenia']))
+            stan = self._stan()
+            self.assertEqual((stan['seq'], self._uv()), (oczekiwany, oczekiwany))                  # ślad odtworzony i spięty z bazą
+            self.assertEqual(self.pobierz()['raport']['ostrzezenia'], [])
+
+        def test_uszkodzony_plik_stanu_nie_psuje_pobrania_i_jest_odtwarzany(self):
+            self.pobierz()
+            (self.tmp / 'wp_numery.json').write_text('{to nie jest json', encoding='utf-8')
+            kowalski = self._ustaw_numer('Kowalski', 99)
+            wynik = self.pobierz()
+            self.assertTrue(wynik['ok'], wynik)
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)
+            self.assertTrue(any('uszkodzony' in x for x in wynik['raport']['ostrzezenia']))
+            self.assertEqual(self._stan()['numery']['301'], 7)                                     # plik znów poprawny
+
+        def test_brak_sladu_dla_jednego_zawodnika_w_poprawnym_pliku_wp_wygrywa_i_jest_licznik(self):
+            import json
+            self.pobierz()
+            plik = self.tmp / 'wp_numery.json'
+            d = json.loads(plik.read_text(encoding='utf-8'))
+            del d['numery']['301']
+            plik.write_text(json.dumps(d), encoding='utf-8')
+            kowalski = self._ustaw_numer('Kowalski', 99)
+            r = self.pobierz()['raport']
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)
+            self.assertTrue(any('Brak śladu' in x and '1 zawodników' in x for x in r['ostrzezenia']))
+
+        def test_podglad_nie_zapisuje_sladu_ani_wersji_bazy(self):
+            self.pobierz()
+            przed = (self._stan(), self._uv())
+            self.wp.znajdz('players', 301)['number'] = '8'
+            r = self.pobierz(apply=False)['raport']
+            self.assertTrue(r['zmieniono'])
+            self.assertEqual((self._stan(), self._uv()), przed)
+
+        def test_awaria_przy_zatwierdzaniu_wycofuje_tez_wersje_bazy_i_nie_rusza_pliku_stanu(self):
+            from unittest import mock
+            self.pobierz()
+            przed = (self._stan(), self._uv())
+            kowalski = self._gracz('Kowalski')
+            self.wp.znajdz('players', 301)['number'] = '8'
+            with mock.patch.object(self.db.session, 'commit', side_effect=RuntimeError('awaria przy commit')):
+                wynik = self.pobierz()
+            self.assertFalse(wynik['ok'])
+            self.assertEqual((self._stan(), self._uv()), przed)                                    # PRAGMA user_version wycofany razem z danymi
+            self.db.session.refresh(kowalski)
+            self.assertEqual(kowalski.number, 7)
 
         def test_podglad_nie_zmienia_numeru_w_module_i_wypisuje_zachowany_numer(self):
             self.pobierz()
