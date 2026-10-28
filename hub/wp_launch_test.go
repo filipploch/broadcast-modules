@@ -216,6 +216,28 @@ func TestPrepareWpStartIdleWhenNothingRuns(t *testing.T) {
 	}
 }
 
+// Regresja (W7a, zgłoszenie z prób ręcznych): po Ctrl+C w oknie .bat ginął wp-cli, a php -S zostawał na porcie bez rodzica.
+func TestStopWpInstanceKillsOrphanedServerOnPort(t *testing.T) {
+	f := &fakeWpOS{listeners: map[int]int{8092: 21060}, ours: map[int]bool{21060: true}}
+	stopWpInstance(f.os(), 24484, 8092)
+	if !reflect.DeepEqual(f.killed, []int{24484, 21060}) || len(f.listeners) != 0 {
+		t.Fatalf("zamknięto %v, porty %v", f.killed, f.listeners)
+	}
+}
+
+func TestStopWpInstanceLeavesForeignProcessAndIdlePort(t *testing.T) {
+	f := &fakeWpOS{listeners: map[int]int{8092: 600}, ours: map[int]bool{}}
+	stopWpInstance(f.os(), 1, 8092)
+	if !reflect.DeepEqual(f.killed, []int{1}) {
+		t.Fatalf("obcy proces nie może być zamknięty: %v", f.killed)
+	}
+	f = &fakeWpOS{listeners: map[int]int{}, ours: map[int]bool{}}
+	stopWpInstance(f.os(), 1, 8092)
+	if !reflect.DeepEqual(f.killed, []int{1}) {
+		t.Fatalf("wolny port: %v", f.killed)
+	}
+}
+
 // Moduł dostaje od HUB-a folder WP (dane logowania do WP leżą obok instalacji, z której HUB uruchamia WordPressa).
 func TestModuleServicePassesWpDir(t *testing.T) {
 	root := t.TempDir()

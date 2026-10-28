@@ -91,6 +91,7 @@ if (typeof document !== 'undefined') {
             list.innerHTML = '';
             if (selected && !vm.rows.some(r => r.key === selected)) selected = null;
             if (selected === null) selected = vm.selectedKey;
+            window._wpSelected = selected;
             vm.rows.forEach(r => {
                 const label = document.createElement('label');
                 label.className = 'wp-row' + (r.isDefault ? ' wp-default' : '');
@@ -99,7 +100,7 @@ if (typeof document !== 'undefined') {
                 radio.name = 'wp-competition';
                 radio.value = r.key;
                 radio.checked = r.key === selected;
-                radio.addEventListener('change', () => { selected = r.key; });
+                radio.addEventListener('change', () => { selected = r.key; window._wpSelected = selected; });
                 const title = document.createElement('span');
                 title.className = 'wp-title';
                 title.textContent = r.label + (r.isDefault ? ' (domyślne)' : '');

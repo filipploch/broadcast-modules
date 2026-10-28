@@ -115,7 +115,7 @@
         <!-- Header -->
         <div id="assign-modal-header">
             <h3 id="modal-title" style="margin:0;font-size:1.1rem;">...</h3>
-            <button id="scrape-btn" onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
+            {% if config.LEGACY_IMPORT_ENABLED %}<button id="scrape-btn" onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>{% else %}<a id="scrape-btn" href="{{ url_for('wp_competitions') }}" target="_blank" class="btn btn-success" title="Kadry pobiera się z WP">⬇ Pobierz z WP</a>{% endif %}
             <button id="copy-team-url-btn" onclick="copyTeamUrl()" class="btn btn-secondary" style="display:none;" title="Skopiuj URL drużyny na laczynaspilka.pl">📋 Kopiuj URL</button>
             <button id="add-player-btn" onclick="openAddPlayerForm()" class="btn btn-primary">➕ Dodaj zawodnika</button>
             <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
@@ -226,7 +226,7 @@
                 <span id="modal-scrape-status" style="font-size:.85rem;color:#6c757d;margin-left:.5rem;"></span>
             </div>
             <button onclick="closeAssignModal()" class="btn btn-secondary">Anuluj</button>
-            <button onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>
+            {% if config.LEGACY_IMPORT_ENABLED %}<button onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>{% else %}<a href="{{ url_for('wp_competitions') }}" target="_blank" class="btn btn-success">⬇ Pobierz z WP</a>{% endif %}
             <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
         </div>
     </div>

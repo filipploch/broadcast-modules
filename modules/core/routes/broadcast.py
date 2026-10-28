@@ -62,6 +62,20 @@ def register_routes(app, exclude=None):
         from core.managers import get_wp_manager
         return jsonify(get_wp_manager().state())
 
+    @app.route('/api/wp/pull', methods=['POST'])
+    def api_wp_pull():
+        """Podgląd (apply=false) albo zapis (apply=true) zaznaczonej pary z WP do bazy modułu (W7a). Odpowiedź: wynik jak w WpManager.pull."""
+        import os
+        from pathlib import Path
+        from core.extensions import db
+        from core.managers import get_wp_manager
+        data = request.get_json(silent=True) or {}
+        logo_root = Path(__file__).resolve().parents[2] / 'static' / 'images' / 'logos'
+        folder = Path(current_app.config.get('MODULE_DIR') or os.getcwd()).name
+        kopie = Path(current_app.config.get('WP_PULL_COPIES_DIR') or Path(current_app.instance_path) / 'kopie-wp')
+        wynik = get_wp_manager().pull(bool(data.get('apply')), db, logo_root, folder, kopie, data.get('league_id'), data.get('season_id'))
+        return jsonify(wynik)
+
     @app.route('/api/status')
     def api_status():
         return jsonify({

@@ -15,7 +15,7 @@
         <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
-                {{ scraper_cascade('games', 'Scrapuj mecze', game_scrapers) }}
+                {% if config.LEGACY_IMPORT_ENABLED %}{{ scraper_cascade('games', 'Scrapuj mecze', game_scrapers) }}{% else %}<a href="{{ url_for('wp_competitions') }}" class="btn btn-success wp-pull-link" title="Pobierz rozgrywki, drużyny, zawodników i mecze z WP">⬇ Pobierz z WP</a>{% endif %}
                 {% if has_game_conflicts_review %}
                 <a href="{{ url_for('review_game_conflicts', league_id=league.id) }}" class="btn {{ 'btn-danger' if open_game_conflicts_count else 'btn-secondary' }}">
                     ⚠️ Niespójności{% if open_game_conflicts_count %} ({{ open_game_conflicts_count }}){% endif %}
@@ -60,7 +60,7 @@
     </table>
     {% else %}
     <p style="text-align:center;padding:2rem;color:#7f8c8d;">
-        Brak meczów.
+        Brak meczów.{% if not config.LEGACY_IMPORT_ENABLED %} <a href="{{ url_for('wp_competitions') }}" style="color:#3498db;">Pobierz z WP</a> ·{% endif %}
         <a href="{{ url_for('create_game', league_id=league.id) if league else url_for('create_game') }}" style="color:#3498db;">Dodaj pierwszy mecz</a>
     </p>
     {% endif %}
