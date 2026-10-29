@@ -37,6 +37,9 @@ type Config struct {
 	Logging struct {
 		Level string `json:"level"`
 	} `json:"logging"`
+	// AllowedRequests: tryb ograniczony (próby na prawdziwym OBS). Gdy lista nie jest pusta, plugin przekazuje do OBS WYŁĄCZNIE wymienione
+	// żądania (dokładne nazwy requestType, np. "GetStreamStatus"); pozostałe odrzuca z obs_error. Pusta lista = brak ograniczeń (zachowanie domyślne).
+	AllowedRequests []string `json:"allowed_requests"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -323,6 +326,16 @@ func (p *Plugin) routeHubToOBS() {
 func (p *Plugin) handleObsCommand(msg *hub.Message) {
 	requestID := msg.Payload["request_id"]
 	log.Printf("📨 Hub → OBS: %s from %s", msg.Type, msg.From)
+
+	// Tryb ograniczony: żądanie spoza listy nigdy nie trafia do OBS (także ApplyObsProfile).
+	if rt, _ := msg.Payload["requestType"].(string); !p.config.requestAllowed(rt) {
+		log.Printf("🚫 Żądanie %q zablokowane (tryb ograniczony: allowed_requests)", rt)
+		p.hubClient.Send(&hub.Message{
+			From: p.config.Plugin.ID, To: msg.From, Context: msg.Context, Type: "obs_error",
+			Payload: map[string]interface{}{"error": "żądanie zablokowane w trybie ograniczonym (allowed_requests)", "requestType": rt, "request_id": requestID},
+		})
+		return
+	}
 
 	// ApplyObsProfile (E2d3c3): HUB zleca przełączenie profilu i zbioru scen OBS na te z module.json aktywnego modułu.
 	if rt, _ := msg.Payload["requestType"].(string); rt == requestApplyObsProfile {

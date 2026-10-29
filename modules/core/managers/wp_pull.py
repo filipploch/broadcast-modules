@@ -6,7 +6,11 @@
 - Nigdy nie usuwa: rekordy modułu powiązane z WP, których WP już nie ma, trafiają do raportu.
 - Powiązania z WP: istniejące tabele *_foreign_ids ze źródłem „wp” (folder wp); klucz to numer rekordu w WP, dla ligi „liga:sezon”.
 - Mecz trwający lub rozpoczęty w module nie jest zmieniany; zakończony dostaje korekty z WP (jawnie w raporcie); WP bez wyniku nie kasuje wyniku modułu.
-- Mecz z drużyną „Do ustalenia” (id 0) nie jest wczytywany i nie powstaje drużyna; raport podaje ich liczbę."""
+- Mecz z drużyną „Do ustalenia” (id 0) nie jest wczytywany i nie powstaje drużyna; raport podaje ich liczbę.
+- Numer zawodnika: pusty numer z WP nie kasuje numeru z modułu; numer zmieniony ręcznie w module po ostatnim pobraniu nie jest nadpisywany
+  (raport „numer ręczny różny od WP”). Ślad ostatnio pobranych numerów: plik instance/wp_numery.json, spięty z bazą numerem w PRAGMA user_version
+  (bez migracji; kopia bazy przywrócona albo brak/uszkodzenie pliku = numery traktowane jako niezmienione ręcznie, z ostrzeżeniem w raporcie)."""
+import json
 import os
 import re
 import sqlite3
@@ -15,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+from sqlalchemy import text
+
 from core.managers.wp_client import WpError
 from core.utils.wp_names import nazwa_14, numer_rundy, podziel_nazwisko_imie, tekst, wylicz_unikalne
 
@@ -22,6 +28,7 @@ SCRAPER_NAME = 'WordPress/SportsPress'
 SCRAPER_FOLDER = 'wp'
 KOPIE_DIR = 'kopie-wp'
 KOPII_ZACHOWANYCH = 5
+PLIK_STANU_NUMEROW = 'wp_numery.json'
 LIMIT_LISTY = 200                  # dłuższe listy w raporcie są ucinane (liczniki zostają dokładne)
 LOGO_PREFIX = 'static/images/logos/'
 
@@ -30,6 +37,39 @@ _lock = threading.Lock()
 
 def _kat_licznik():
     return {'dodano': 0, 'zaktualizowano': 0, 'bez_zmian': 0, 'pominieto': 0}
+
+
+def wczytaj_stan_numerow(sciezka):
+    """(stan, status): status 'ok' (plik poprawny), 'brak' (nie ma pliku) albo 'uszkodzony'. stan = {'seq': int, 'numery': {id WP (tekst): numer|None}}."""
+    try:
+        surowe = Path(sciezka).read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return None, 'brak'
+    except OSError:
+        return None, 'uszkodzony'
+    try:
+        d = json.loads(surowe)
+        seq, numery = int(d['seq']), d['numery']
+        if not isinstance(numery, dict):
+            raise ValueError('numery')
+    except (ValueError, KeyError, TypeError):
+        return None, 'uszkodzony'
+    return {'seq': seq, 'numery': numery}, 'ok'
+
+
+def zapisz_stan_numerow(sciezka, seq, numery):
+    """Zapis atomowy (plik tymczasowy + podmiana)."""
+    sciezka = Path(sciezka)
+    sciezka.parent.mkdir(parents=True, exist_ok=True)
+    tmp = sciezka.with_suffix('.tmp')
+    tmp.write_text(json.dumps({'wersja': 1, 'seq': seq, 'zapisano': datetime.now().isoformat(timespec='seconds'), 'numery': numery},
+                              ensure_ascii=False, indent=1), encoding='utf-8')
+    os.replace(tmp, sciezka)
+
+
+def _wersja_bazy(db):
+    """Numer pobrania zapisany w nagłówku pliku SQLite (PRAGMA user_version); przechodzi z kopią bazy, bez migracji."""
+    return int(db.session.execute(text('PRAGMA user_version')).scalar() or 0)
 
 
 def kanoniczna_sciezka_logo(sciezka):
@@ -65,7 +105,7 @@ def pobierz_dane_pary(client, league_id, season_id):
 class Pobieranie:
     """Jedno wykonanie: podgląd albo zapis. Obiekt jednorazowy."""
 
-    def __init__(self, db, dane, logo_root, logo_folder, apply):
+    def __init__(self, db, dane, logo_root, logo_folder, apply, numery_stan=None, status_stanu='ok'):
         from core.models.base_broadcast_session import get_broadcast_session_model, get_session_game_model
         from core.models.base_game import get_game_model
         from core.models.base_game_event import get_game_event_model
@@ -95,10 +135,14 @@ class Pobieranie:
         self.logo_root = Path(logo_root)
         self.logo_folder = logo_folder
         self.apply = apply
+        self.numery_stan = numery_stan              # {id WP: ostatnio pobrany numer} gdy plik stanu pasuje do bazy; None = brak śladu (WP wygrywa)
+        self.status_stanu = status_stanu            # 'ok' | 'brak' | 'uszkodzony' | 'rozjazd'
+        self.numery_wp = {}                         # numery z WP zawodników przetworzonych w tym przebiegu (nowy ślad)
+        self.bez_sladu = 0
         self.licz = {k: _kat_licznik() for k in ('druzyny', 'zawodnicy', 'mecze')}
         self.licz_pary = {'sezon': None, 'liga': None}
         self.r = {k: [] for k in ('pominiete', 'korekty', 'do_ustalenia', 'nieobecne', 'rozbieznosci', 'dolaczono', 'brak_logo', 'zablokowane',
-                                  'skroty_wyliczone', 'zmiany', 'bledy', 'kilka_aktualnych', 'tylko_dawne', 'zwolnieni')}
+                                  'skroty_wyliczone', 'zmiany', 'bledy', 'kilka_aktualnych', 'tylko_dawne', 'zwolnieni', 'numery_z_modulu', 'numery_reczne', 'ostrzezenia')}
         self.przyn = {'jedna': 0, 'kilka': 0, 'tylko_dawne': 0, 'bez_rozroznienia': 0}           # klasyfikacja zawodników wg drużyn aktualnych (W7e-1)
         self._nast = 0
         self.scraper_id = None
@@ -375,10 +419,25 @@ class Pobieranie:
             nr_txt = str(z.get('number') if z.get('number') is not None else '').strip()
             numer = int(nr_txt) if nr_txt.isdigit() else None
             if obj is None:
+                self.numery_wp[str(wid)] = numer
                 obj = self._dodaj(m.Player, first_name=imie[:100], last_name=nazwisko[:100], number=numer, team_id=team_id)
                 self._powiaz('zawodnik', m.PlayerForeignId, 'player_id', obj.id, str(wid))
                 self.licz['zawodnicy']['dodano'] += 1
             else:
+                numer_wp = numer
+                if numer is None and obj.number is not None:
+                    # WP nie ma numeru: numer wpisany w module (np. w składzie meczowym) zostaje, pusty numer z WP go nie kasuje
+                    numer = obj.number
+                    self.r['numery_z_modulu'].append(f'{nazwisko} {imie}: nr {obj.number} (WP bez numeru, zostaje numer z modułu)')
+                elif numer is not None and obj.number is not None and obj.number != numer:
+                    # numery różne: WP wygrywa tylko, gdy numer w module nie był zmieniany ręcznie po ostatnim pobraniu (ślad w wp_numery.json)
+                    slad = self.numery_stan
+                    if slad is not None and str(wid) in slad and slad[str(wid)] != obj.number:
+                        self.r['numery_reczne'].append(f'{nazwisko} {imie}: w module nr {obj.number}, w WP nr {numer} (zostaje numer z modułu)')
+                        numer = obj.number
+                    elif slad is not None and str(wid) not in slad:
+                        self.bez_sladu += 1
+                self.numery_wp[str(wid)] = numer_wp
                 zm = self._ustaw(obj, first_name=imie[:100], last_name=nazwisko[:100], number=numer, team_id=team_id)
                 self.licz['zawodnicy']['zaktualizowano' if zm else 'bez_zmian'] += 1
                 if zm:
@@ -556,12 +615,28 @@ class Pobieranie:
         if self.apply and self.db.session.get(self.m.Stadium, 1) is None:
             raise RuntimeError('brak domyślnego stadionu (id 1) w bazie modułu')
         self._wczytaj_powiazania()
+        self.istnieli = bool(self.fid['zawodnik'])              # zawodnicy powiązani z WP były w bazie PRZED tym przebiegiem
         sezon = self._sezon()
         liga = self._liga(sezon)
         druzyny = self._druzyny(liga)
         self._zawodnicy(druzyny)
         self._mecze(liga, druzyny)
+        self._ostrzezenia_numerow()
         return self.raport()
+
+    def _ostrzezenia_numerow(self):
+        istnieli = self.istnieli
+        if self.status_stanu == 'rozjazd':
+            self.r['ostrzezenia'].append('Plik stanu numerów (wp_numery.json) nie pasuje do bazy (baza przywrócona z kopii albo plik z innej bazy): numery z WP '
+                                         'zastępują numery w module, nie da się rozpoznać numerów zmienionych ręcznie. Ślad zostanie odtworzony przy tym zapisie.')
+        elif self.status_stanu == 'uszkodzony':
+            self.r['ostrzezenia'].append('Plik stanu numerów (wp_numery.json) jest uszkodzony: numery z WP zastępują numery w module, nie da się rozpoznać numerów '
+                                         'zmienionych ręcznie. Ślad zostanie odtworzony przy tym zapisie.')
+        elif self.status_stanu == 'brak' and istnieli:
+            self.r['ostrzezenia'].append('Brak pliku stanu numerów (wp_numery.json) przy zawodnikach już pobranych z WP: numery z WP zastępują numery w module, nie da się '
+                                         'rozpoznać numerów zmienionych ręcznie. Ślad zostanie założony przy tym zapisie.')
+        if self.bez_sladu:
+            self.r['ostrzezenia'].append(f'Brak śladu ostatnio pobranego numeru dla {self.bez_sladu} zawodników: ich numery z WP zastąpiły numery w module.')
 
     def zmieniono(self):
         return (any(self.licz[k][c] for k in self.licz for c in ('dodano', 'zaktualizowano'))
@@ -589,7 +664,9 @@ def kopia_bazy(db, kopie_dir):
     finally:
         dst.close()
         src.close()
-    for stara in sorted(Path(kopie_dir).glob(f'{Path(sciezka).stem}-*.db'))[:-KOPII_ZACHOWANYCH]:
+    # tylko pliki o dokładnie takiej nazwie jak własne kopie (nazwa-RRRRMMDD-GGMMSS-mikrosekundy.db): wzorzec 'nazwa-*.db' łapał też obce pliki,
+    # np. kopie bazy 'database-proba', i usuwał świeżą kopię jako „najstarszą”
+    for stara in sorted(Path(kopie_dir).glob(f'{Path(sciezka).stem}-????????-??????-??????.db'))[:-KOPII_ZACHOWANYCH]:
         try:
             stara.unlink()
         except OSError:
@@ -597,7 +674,7 @@ def kopia_bazy(db, kopie_dir):
     return str(cel)
 
 
-def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply):
+def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply, stan_numerow=None):
     """Podgląd (apply=False) albo zapis jednej pary. Zwraca {'ok': bool, 'zapisano': bool, 'raport': {...}, 'blad': str}. Nie zgłasza wyjątków."""
     if not _lock.acquire(blocking=False):
         return {'ok': False, 'zapisano': False, 'blad': 'Pobieranie z WP już trwa'}
@@ -608,18 +685,31 @@ def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie
             return {'ok': False, 'zapisano': False, 'blad': f'Pobieranie przerwane, baza bez zmian: {e}'}
         try:
             db.session.rollback()
-            podglad = Pobieranie(db, dane, logo_root, logo_folder, apply=False).wykonaj()
+            sciezka_stanu = Path(stan_numerow) if stan_numerow else Path(kopie_dir).parent / PLIK_STANU_NUMEROW
+            stan, status = wczytaj_stan_numerow(sciezka_stanu)
+            seq_bazy = _wersja_bazy(db)
+            if status == 'ok' and stan['seq'] != seq_bazy:
+                status = 'rozjazd'
+            slad = stan['numery'] if status == 'ok' else None
+            podglad = Pobieranie(db, dane, logo_root, logo_folder, apply=False, numery_stan=slad, status_stanu=status).wykonaj()
             db.session.rollback()
             if not apply or not podglad['zmieniono']:
                 return {'ok': True, 'zapisano': False, 'raport': podglad, 'pobrano': dane['pobrano']}
             kopia = kopia_bazy(db, kopie_dir)
             try:
-                raport = Pobieranie(db, dane, logo_root, logo_folder, apply=True).wykonaj()
+                pobranie = Pobieranie(db, dane, logo_root, logo_folder, apply=True, numery_stan=slad, status_stanu=status)
+                raport = pobranie.wykonaj()
+                nowy_seq = max(seq_bazy, stan['seq'] if stan else 0) + 1
+                db.session.execute(text(f'PRAGMA user_version = {int(nowy_seq)}'))     # w tej samej transakcji co zapis danych
                 db.session.commit()
             except Exception:
                 db.session.rollback()
                 raise
             raport['kopia'] = kopia
+            try:                                                                       # ślad numerów po udanym zapisie bazy; błąd = rozjazd przy następnym pobraniu
+                zapisz_stan_numerow(sciezka_stanu, nowy_seq, {**(slad or {}), **pobranie.numery_wp})
+            except OSError as e:
+                raport['ostrzezenia'].append(f'Nie zapisano pliku stanu numerów ({e}); przy następnym pobraniu pojawi się ostrzeżenie o rozjeździe.')
             return {'ok': True, 'zapisano': True, 'raport': raport, 'pobrano': dane['pobrano']}
         except Exception as e:
             db.session.rollback()
