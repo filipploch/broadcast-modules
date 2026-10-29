@@ -279,4 +279,7 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except importuj.WpRestError as e:
+        sys.exit(f'Błąd rozmowy z WP: {e}. Czy instancja działa (wp-nalf.bat albo wp-garbarnia.bat)? Zaraz po starcie pierwsze żądanie bywa wolne: spróbuj ponownie.')
