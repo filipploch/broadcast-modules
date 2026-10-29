@@ -41,6 +41,11 @@ def zapisz_konfiguracje():
     # manifest modułu próby: bez obs_profile, obs_scene_collection i bloku wp
     manifest = {k: v for k, v in manifest_src.items() if k not in ('obs_profile', 'obs_scene_collection', 'wp')}
     manifest.update(script=str(REPO / 'tests' / 'modules' / 'dry_run_module.py'), args=[MODULE], port=MODULE_PORT, log_name=MODULE)
+    if (BASE / 'modules').is_dir():                                    # manifesty innych modułów z poprzednich prób nie mogą zostać
+        for stary in (BASE / 'modules').iterdir():
+            if stary.is_dir() and stary.name != mid:
+                shutil.rmtree(stary)
+    (BASE / 'uslugi.json').unlink(missing_ok=True)                     # plik stanu HUB-a z poprzedniej próby kazałby mu przejąć usługi innego modułu
     (BASE / 'modules' / mid).mkdir(parents=True, exist_ok=True)
     (BASE / 'modules' / mid / 'module.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
     common = {'type': 'local', 'args': [], 'auto_start': True, 'restart_on_crash': True, 'max_restarts': 10, 'restart_delay_ms': 3000,
@@ -116,6 +121,9 @@ set "ROOTFWD=%ROOT:\=/%"
 set "DATABASE_URL=sqlite:///%ROOTFWD%/modules/%MODULE%/instance/database-proba.db"
 set "BM_REQUIRED_PLUGINS=timer-plugin,obs-ws-plugin"
 set "BM_LOGS_DIR=%BASE%\logs"
+rem plik stanu HUB-a z poprzedniej proby (inny modul!) kazalby mu przejac jego uslugi, wiec go kasujemy
+del /q "%BASE%\uslugi.json" 2>nul
+if exist "%BASE%\timer-plugin\state" rmdir /s /q "%BASE%\timer-plugin\state"
 echo [4/5] Uruchamiam HUB w osobnym oknie (uruchomi modul, timer-plugin i obs-ws-plugin) ...
 start "Probe HUB W7d" /D "%BASE%" cmd /k .\hub.exe --config "%BASE%\hub.json"
 echo [5/5] Czekam na modul (port 8081) ...
