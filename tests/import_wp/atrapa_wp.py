@@ -70,6 +70,9 @@ class AtrapaWp:
         if not m or m.group(1) not in KOLEKCJE:
             return 404, {'code': 'rest_no_route'}, {}
         kol, rid = m.group(1), m.group(2)
+        if metoda == 'GET' and rid is not None:
+            obj = self.dane[kol].get(int(rid))
+            return (200, obj, {}) if obj is not None else (404, {'code': 'rest_post_invalid_id'}, {})
         if metoda == 'GET' and rid is None:
             per, strona = int(params.get('per_page', 10)), int(params.get('page', 1))
             wszystkie = sorted(self.dane[kol].values(), key=lambda o: o['id'])
