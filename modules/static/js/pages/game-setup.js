@@ -37,6 +37,11 @@ function openAssignModal(contentType) {
     }
     document.getElementById('assign-modal-overlay').style.display = 'flex';
 
+    const outsideBtn = document.getElementById('add-outside-btn');
+    if (outsideBtn) outsideBtn.style.display = isSquad ? 'inline-flex' : 'none';
+    const outsidePanel = document.getElementById('outside-panel');
+    if (outsidePanel) outsidePanel.style.display = 'none';
+
     const scrapeBtn = document.getElementById('scrape-btn');
     if (isSquad) {
         scrapeBtn.style.display = 'block';
@@ -68,6 +73,75 @@ function openAssignModal(contentType) {
             }
         })
         .catch(function() { alert('Błąd wczytywania danych'); closeAssignModal(); });
+}
+
+// ── Dodaj spoza kadry (W7e-2b): awaryjnie, każdy zawodnik z bazy modułu; nie tworzy nowych zawodników ─────────
+let _outsideTimer = null;
+let _outsideList = [];
+
+function toggleOutsidePanel() {
+    const p = document.getElementById('outside-panel');
+    const open = p.style.display === 'none';
+    p.style.display = open ? 'block' : 'none';
+    if (open) { document.getElementById('outside-search').value = ''; loadOutsidePlayers(); }
+}
+
+function onOutsideSearch() {
+    clearTimeout(_outsideTimer);
+    _outsideTimer = setTimeout(loadOutsidePlayers, 250);
+}
+
+function loadOutsidePlayers() {
+    const free = document.querySelector('input[name="outside-mode"][value="free"]').checked;
+    const q = document.getElementById('outside-search').value.trim();
+    fetch('/api/assign/' + _contentType + '/outside?q=' + encodeURIComponent(q) + (free ? '&only_free=1' : ''))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { document.getElementById('outside-list').textContent = data.error; return; }
+            _outsideList = data.players || [];
+            renderOutsideList();
+        })
+        .catch(function() { document.getElementById('outside-list').textContent = 'Błąd połączenia'; });
+}
+
+function _esc(t) {
+    return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderOutsideList() {
+    const el = document.getElementById('outside-list');
+    if (!_outsideList.length) { el.innerHTML = '<div style="padding:.6rem;color:#adb5bd;">Brak zawodników</div>'; return; }
+    el.innerHTML = _outsideList.map(function(p, i) {
+        const grey = p.w_drugiej_druzynie ? 'opacity:.55;' : '';
+        const info = [p.team_name || 'bez drużyny', p.number != null ? '#' + p.number : '', p.tag, p.w_drugiej_druzynie ? 'w drugiej drużynie meczu' : '']
+            .filter(function(x) { return x; }).map(_esc).join(' · ');
+        return '<div style="display:flex;align-items:center;gap:.5rem;padding:.25rem .5rem;border-bottom:1px solid #f1f3f5;' + grey + '">' +
+            '<span style="font-weight:600;">' + _esc(p.label) + '</span>' +
+            '<span style="color:#6c757d;font-size:.78rem;flex:1;">' + info + '</span>' +
+            '<button class="btn btn-success btn-small" onclick="addOutsidePlayer(' + i + ')">Dodaj</button></div>';
+    }).join('');
+}
+
+function addOutsidePlayer(i) {
+    const p = _outsideList[i];
+    if (!p) return;
+    let pytanie = null;
+    if (p.w_drugiej_druzynie) {
+        pytanie = p.label + ' jest w składzie drugiej drużyny tego meczu. Po dodaniu zostanie usunięty ze składu drugiej drużyny. Przenieść go do tego składu?';
+    } else if (p.tag) {
+        pytanie = p.label + ' jest z ' + (p.tag === 'inny klub' ? 'innego klubu' : 'innej drużyny') + (p.team_name ? ' (' + p.team_name + ')' : '') + '. Dodać do tego meczu?';
+    }
+    if (pytanie && !confirm(pytanie)) return;
+    const item = { player_id: p.player_id, label: p.label, last_name: p.last_name, first_name: p.first_name, number: p.number };
+    document.getElementById('outside-panel').style.display = 'none';
+    if (_useThreeCol()) {
+        item.role = 'substitute';
+        _substitutes.push(item);
+        _save3ColThenReload();
+    } else {
+        _assigned.push(item);
+        _saveSquadThenReload();
+    }
 }
 
 // Informacja o składzie (powtórzony numer): tylko dyskretna uwaga, nigdy nie blokuje zapisu ani wyświetlania (numery to sprawa organizatora rozgrywek)
@@ -332,6 +406,7 @@ function _buildThreeCard(item, side, idx) {
             '<span style="font-weight:600;">' + label + '</span>' +
             (numStr ? '<span style="color:#6c757d;font-size:.78rem;">' + numStr + '</span>' : '') +
             badges(item) +
+            (item.spoza_kadry ? '<span style="color:#6c757d;font-size:.72rem;margin-left:.3rem;">spoza kadry</span>' : '') +
         '</div>' +
         rightBtn +
         '</div>';
@@ -428,7 +503,7 @@ function _save3ColThenReload() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        if (data.error) { alert('Błąd zapisu: ' + data.error); _reloadModal(); return; }
         _reloadModal();
     })
     .catch(function() { alert('Błąd połączenia'); });
@@ -437,6 +512,10 @@ function _save3ColThenReload() {
 // ═══════════════════════════════════════════════════════════════════════
 // WSPÓLNY edytor zawodnika (używany w obu trybach)
 // ═══════════════════════════════════════════════════════════════════════
+
+function _outsideNote(item) {
+    return item.spoza_kadry ? '<span style="font-size:.72rem;color:#6c757d;">spoza kadry</span>' : '';
+}
 
 function _buildPlayerEditor(item, contentType) {
     const num   = item.number != null ? item.number : '';
@@ -462,6 +541,7 @@ function _buildPlayerEditor(item, contentType) {
 
     return (
         '<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">' +
+            _outsideNote(item) +
             '<input type="number" min="1" max="99" placeholder="#" value="' + num + '" ' +
                 'data-pg="' + pgId + '" data-field="number" ' +
                 'style="' + inp + 'width:3rem;" ' +
@@ -657,7 +737,7 @@ function _saveSquadThenReload() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        if (data.error) { alert('Błąd zapisu: ' + data.error); _reloadModal(); return; }
         _reloadModal();
     })
     .catch(function() { alert('Błąd połączenia'); });

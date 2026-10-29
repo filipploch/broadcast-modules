@@ -585,6 +585,34 @@ def make(APP):
             self.db.session.commit()
             return g
 
+        def test_zawodnik_dodany_awaryjnie_do_meczu_zostaje_w_meczu_po_ponownym_pobraniu_i_restarcie(self):
+            # W7e-2b: "Pobierz z WP" zmienia karty zawodników (drużyna, numer), ale nie rusza składów meczowych, także zawodników spoza kadry
+            from app.managers import GamePlayerManager
+            from app.models.game_player import GamePlayer
+            Game, League, LeagueTeam, Player, Season, Team = self.modele()
+            self.pobierz()
+            chelmek = Team.query.filter_by(name='KS Chełmek').one()
+            mecz = Game.query.filter_by(home_team_id=chelmek.id).filter(Game.status == Game.STATUS_NOT_STARTED).first()
+            kowalski = self._gracz('Kowalski')
+            self.assertNotEqual(kowalski.team_id, chelmek.id)
+            GamePlayerManager().assign_player_to_game(kowalski.id, mecz.id, override_team_id=chelmek.id)
+            pid, gid = kowalski.id, mecz.id
+            self.wp.znajdz('players', 301)['teams'] = [104]                                         # w WP przechodzi do innej drużyny (karta się zmieni)
+            self.wp.znajdz('players', 301)['number'] = '9'
+            r = self.pobierz()
+            self.assertTrue(r['ok'], r)
+            self.db.session.expire_all()
+            pg = GamePlayer.query.filter_by(player_id=pid, game_id=gid).one()
+            self.assertEqual(pg.team_id, chelmek.id)                                                # w meczu nadal drużyna składu
+            self.assertNotEqual(self.db.session.get(Player, pid).team_id, chelmek.id)
+            # "restart modułu": nowe połączenie do pliku bazy
+            import sqlite3
+            baza = self.db.engine.url.database
+            self.db.session.remove()
+            self.db.engine.dispose()
+            with sqlite3.connect(baza) as c:
+                self.assertEqual(c.execute('select team_id from game_players where player_id=? and game_id=?', (pid, gid)).fetchall(), [(chelmek.id,)])
+
         def test_powtorzony_numer_w_druzynie_nie_blokuje_pobrania(self):
             # numery należą do organizatora rozgrywek: zdublowany numer w drużynie jest dozwolony i niczego nie odrzuca
             self.pobierz()

@@ -7,7 +7,7 @@ Rejestracja przez: futsal_routes.register_routes(app)
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.extensions import db
-from core.utils.squad_checks import squad_warnings
+from core.utils.squad_checks import squad_warnings, outside_players, is_outside_squad, move_from_other_squad, players_blocking_move, MOVE_BLOCKED_MESSAGE
 from app.managers import (
     GameManager, TeamManager, LeagueManager, SeasonManager,
     GameEventManager, CameraManager, GameCameraManager,
@@ -157,6 +157,21 @@ def register_routes(app):
     # league_manager = LeagueManager()
 
 
+    @app.route('/api/assign/<content_type>/outside')
+    def api_assign_outside(content_type):
+        """W7e-2b: zawodnicy z bazy modułu do awaryjnego dodania do składu (spoza kadry drużyny). ?q=szukany tekst&only_free=1"""
+        from flask import jsonify, request as req
+        from app.models.game import Game
+        from app.models.settings import Settings
+        if content_type not in ('home-squad', 'away-squad'):
+            return jsonify({'error': 'Tylko dla składów'}), 400
+        settings = Settings.get_settings()
+        game = Game.query.get(settings.current_game_id) if settings.current_game_id else None
+        if not game:
+            return jsonify({'error': 'Brak wybranego meczu'}), 400
+        team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
+        return jsonify({'players': outside_players(game, team_id, req.args.get('q', ''), req.args.get('only_free') in ('1', 'true'))})
+
     @app.route('/api/assign/<content_type>/data')
     def api_assign_data(content_type):
         """Return JSON with assigned and available elements for the assignment modal."""
@@ -209,6 +224,7 @@ def register_routes(app):
                     'is_goalkeeper': pg.is_goalkeeper,
                     'is_youth':     pg.is_youth,
                     'role':         pg.role,
+                    'spoza_kadry':  is_outside_squad(pg),
                 }
  
             all_players = (Player.query
@@ -1074,8 +1090,12 @@ def register_routes(app):
                 # W7e-2a: zawodnik z innej drużyny (dodany awaryjnie) zachowuje numer, bramkarza i opaskę z tego meczu
                 obcy = {pg.player_id: (pg.number, pg.is_goalkeeper, pg.is_captain)
                         for pg in existing if pg.player and pg.player.team_id != team_id}
+                # W7e-2b: zawodnik z drugiego składu, który ma w tym meczu zdarzenia, zmiany albo kary, nie może być przeniesiony (przed jakąkolwiek zmianą w bazie)
+                if players_blocking_move(game_id, team_id, [i['player_id'] for i in data.get('starters', []) + data.get('substitutes', [])]):
+                    return jsonify({'error': MOVE_BLOCKED_MESSAGE}), 400
                 for pg in existing:
                     db.session.delete(pg)
+                move_from_other_squad(game_id, team_id, [i['player_id'] for i in data.get('starters', []) + data.get('substitutes', [])])      # W7e-2b: przeniesienie z drugiego składu (po potwierdzeniu w UI)
                 db.session.commit()
 
                 def _kw(item):
