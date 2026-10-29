@@ -118,6 +118,7 @@
             {% if config.LEGACY_IMPORT_ENABLED %}<button id="scrape-btn" onclick="scrapeSquad()" class="btn btn-success">🔍 Pobierz zawodników</button>{% else %}<a id="scrape-btn" href="{{ url_for('wp_competitions') }}" target="_blank" class="btn btn-success" title="Kadry pobiera się z WP">⬇ Pobierz z WP</a>{% endif %}
             <button id="copy-team-url-btn" onclick="copyTeamUrl()" class="btn btn-secondary" style="display:none;" title="Skopiuj URL drużyny na laczynaspilka.pl">📋 Kopiuj URL</button>
             <button id="add-player-btn" onclick="openAddPlayerForm()" class="btn btn-primary">➕ Dodaj zawodnika</button>
+            <button id="add-outside-btn" onclick="toggleOutsidePanel()" class="btn btn-secondary" style="display:none;" title="Awaryjnie dodaj do składu zawodnika spoza kadry drużyny">Dodaj spoza kadry</button>
             <button onclick="saveAssignments()" class="btn btn-success">✅ Zapisz i zamknij</button>
             <button onclick="closeAssignModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6c757d;">✕</button>
         </div>
@@ -145,6 +146,15 @@
             </div>
         </div>
 
+        <div id="outside-panel" style="display:none; padding:.6rem 1.2rem; border-bottom:1px solid #dee2e6; background:#f8f9fa;">
+            <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.4rem;">
+                <input id="outside-search" type="text" class="form-control" placeholder="Szukaj: nazwisko, imię lub drużyna" style="width:260px;" oninput="onOutsideSearch()">
+                <label style="font-size:.85rem; margin:0; display:flex; align-items:center; gap:.25rem; cursor:pointer;"><input type="radio" name="outside-mode" value="all" checked onchange="loadOutsidePlayers()"> Wszyscy</label>
+                <label style="font-size:.85rem; margin:0; display:flex; align-items:center; gap:.25rem; cursor:pointer;"><input type="radio" name="outside-mode" value="free" onchange="loadOutsidePlayers()"> Tylko bez drużyny</label>
+                <button onclick="toggleOutsidePanel()" class="btn btn-secondary btn-small" style="margin-left:auto;">Zamknij</button>
+            </div>
+            <div id="outside-list" style="max-height:220px; overflow-y:auto; background:#fff; border:1px solid #dee2e6; border-radius:4px; font-size:.85rem;"></div>
+        </div>
         <div id="assign-warnings" style="display:none; padding:.2rem 1.2rem; color:#6c757d; font-size:.75rem;"></div>
 
         <!-- Body: standard two-column (non-squad or futsal squad) -->

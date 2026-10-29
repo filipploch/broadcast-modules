@@ -7,7 +7,7 @@ Rejestracja przez: futsal_routes.register_routes(app)
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.extensions import db
-from core.utils.squad_checks import squad_warnings
+from core.utils.squad_checks import squad_warnings, outside_players, is_outside_squad, move_from_other_squad
 from app.managers import (
     GameManager, TeamManager, LeagueManager, SeasonManager,
     GameEventManager, CameraManager, GameCameraManager,
@@ -78,6 +78,21 @@ def register_routes(app):
     # league_manager = LeagueManager()
 
 
+    @app.route('/api/assign/<content_type>/outside')
+    def api_assign_outside(content_type):
+        """W7e-2b: zawodnicy z bazy modułu do awaryjnego dodania do składu (spoza kadry drużyny). ?q=szukany tekst&only_free=1"""
+        from flask import jsonify, request as req
+        from app.models.game import Game
+        from app.models.settings import Settings
+        if content_type not in ('home-squad', 'away-squad'):
+            return jsonify({'error': 'Tylko dla składów'}), 400
+        settings = Settings.get_settings()
+        game = Game.query.get(settings.current_game_id) if settings.current_game_id else None
+        if not game:
+            return jsonify({'error': 'Brak wybranego meczu'}), 400
+        team_id = game.home_team_id if content_type == 'home-squad' else game.away_team_id
+        return jsonify({'players': outside_players(game, team_id, req.args.get('q', ''), req.args.get('only_free') in ('1', 'true'))})
+
     @app.route('/api/assign/<content_type>/data')
     def api_assign_data(content_type):
         """Return JSON with assigned and available elements for the assignment modal."""
@@ -117,6 +132,7 @@ def register_routes(app):
                 'number': pg.number,
                 'is_captain': pg.is_captain,
                 'is_goalkeeper': pg.is_goalkeeper,
+                'spoza_kadry': is_outside_squad(pg),
             } for pg in assigned_pgs]
 
             all_players = (Player.query
@@ -538,6 +554,7 @@ def register_routes(app):
 
                 for pg in existing:
                     db.session.delete(pg)
+                move_from_other_squad(game_id, team_id, [i['player_id'] for i in data.get('assigned', [])])      # W7e-2b: przeniesienie z drugiego składu (po potwierdzeniu w UI)
                 db.session.commit()
 
                 # Re-assign from submitted list; drużyna w meczu to drużyna składu, nie drużyna z karty zawodnika
