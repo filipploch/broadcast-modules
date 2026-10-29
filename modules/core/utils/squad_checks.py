@@ -2,7 +2,7 @@
 
 
 def duplicate_number_warnings(rows):
-    """Ostrzeżenia o powtórzonym numerze w JEDNYM składzie meczowym jednej drużyny (nie blokują zapisu).
+    """Informacja o powtórzonym numerze w JEDNYM składzie meczowym jednej drużyny (zasada właściciela: numery są sprawą organizatora rozgrywek, powtórzenie niczego nie blokuje).
 
     rows: pary (numer, nazwa zawodnika) z całego składu (w Garbarni: grający i rezerwowi razem).
     Numer pusty się nie liczy. Zwraca listę tekstów, po jednym na powtórzony numer, rosnąco po numerze."""

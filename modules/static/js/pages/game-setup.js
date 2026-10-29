@@ -70,12 +70,13 @@ function openAssignModal(contentType) {
         .catch(function() { alert('Błąd wczytywania danych'); closeAssignModal(); });
 }
 
-// Ostrzeżenia składu (np. powtórzony numer): nie blokują zapisu
+// Informacja o składzie (powtórzony numer): tylko dyskretna uwaga, nigdy nie blokuje zapisu ani wyświetlania (numery to sprawa organizatora rozgrywek)
 function _showSquadWarnings(data) {
     const el = document.getElementById('assign-warnings');
     if (!el) return;
     const w = data.warnings || [];
-    el.textContent = w.length ? '⚠ ' + w.join(' · ') : '';
+    el.textContent = w.length ? 'Uwaga: ten numer jest w składzie użyty więcej niż raz' : '';
+    el.title = w.join(' | ');
     el.style.display = w.length ? 'block' : 'none';
 }
 
