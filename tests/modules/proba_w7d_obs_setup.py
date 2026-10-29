@@ -1,6 +1,9 @@
 """W7d, krok 5: przygotowanie próby minimum z PRAWDZIWYM OBS (OBS uruchamia i ustawia właściciel; ta próba niczego w nim nie zmienia).
 
-    python tests/modules/proba_w7d_obs_setup.py <futsal_nalf|garbarnia> [--konfiguracja]
+    python tests/modules/proba_w7d_obs_setup.py <futsal_nalf|garbarnia> [--konfiguracja] [--minuta]
+
+--minuta: wariant BEZ OBS do próby ręcznej reguły minuty (krok B2): folder wp-local/probe-b-minuta, tylko timer-plugin (bez obs-ws-plugin), a uruchom.bat po
+przygotowaniu kopii bazy dodaje do niej zdarzenia o dokładnych czasach (tests/modules/proba_minuta_dane.py). Nakładki ogląda się w przeglądarce.
 
 --konfiguracja: tylko zapisuje pliki konfiguracyjne i skrypty .bat (bez budowania i bez uruchamiania czegokolwiek).
 Bez flagi: dodatkowo buduje hub.exe, timer-plugin.exe i obs-ws-plugin.exe do wp-local/probe-w7d-obs/ i kopiuje nakładki.
@@ -24,7 +27,8 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
 MODULE = ARGS[0] if ARGS else 'futsal_nalf'
 ONLY_CONFIG = '--konfiguracja' in sys.argv
-BASE = REPO / 'wp-local' / 'probe-w7d-obs'
+MINUTA = '--minuta' in sys.argv
+BASE = REPO / 'wp-local' / ('probe-b-minuta' if MINUTA else 'probe-w7d-obs')
 HUB_PORT, MODULE_PORT, CONTROL_PORT = 8080, 8081, 18099
 # Żądania do OBS dozwolone w próbie: odczyty i odświeżenie źródła przeglądarki (to samo robi "Odśwież nakładkę w OBS")
 DOZWOLONE_ZADANIA = ['GetVersion', 'GetStreamStatus', 'GetRecordStatus', 'GetSceneList', 'GetSceneItemList', 'GetSceneItemEnabled', 'PressInputPropertiesButton']
@@ -56,6 +60,8 @@ def zapisz_konfiguracje():
         'obs-ws-plugin': {**common, 'id': 'obs-ws-plugin', 'name': 'OBS WebSocket Plugin (tryb ograniczony, próba W7d)',
                           'executable_path': str(BASE / 'obs-ws-plugin.exe'), 'working_dir': str(BASE / 'obs-ws-plugin'), 'env': ['PLUGIN_ID=obs-ws-plugin']},
     }
+    if MINUTA:
+        plugins.pop('obs-ws-plugin')                                       # próba reguły minuty działa bez OBS
     (BASE / 'hub' / 'config' / 'plugins.json').write_text(json.dumps(plugins, indent=2, ensure_ascii=False), encoding='utf-8')
     (BASE / 'hub' / 'config' / 'overlays.json').write_text('{}', encoding='utf-8')
     hub_cfg = {
@@ -68,16 +74,19 @@ def zapisz_konfiguracje():
     }
     (BASE / 'hub.json').write_text(json.dumps(hub_cfg, indent=2, ensure_ascii=False), encoding='utf-8')
     shutil.copy(REPO / 'plugins' / 'timer-plugin' / 'config.json', BASE / 'timer-plugin' / 'config.json')
-    obs_cfg = json.loads((REPO / 'plugins' / 'obs-ws-plugin' / 'config.json').read_text(encoding='utf-8-sig'))
-    obs_cfg['allowed_requests'] = DOZWOLONE_ZADANIA
-    (BASE / 'obs-ws-plugin' / 'config.json').write_text(json.dumps(obs_cfg, indent=2, ensure_ascii=False), encoding='utf-8')
-    (BASE / 'uruchom.bat').write_text(BAT_URUCHOM, encoding='ascii', newline='\r\n')
-    (BASE / 'zatrzymaj.bat').write_text(BAT_ZATRZYMAJ, encoding='ascii', newline='\r\n')
+    if not MINUTA:
+        obs_cfg = json.loads((REPO / 'plugins' / 'obs-ws-plugin' / 'config.json').read_text(encoding='utf-8-sig'))
+        obs_cfg['allowed_requests'] = DOZWOLONE_ZADANIA
+        (BASE / 'obs-ws-plugin' / 'config.json').write_text(json.dumps(obs_cfg, indent=2, ensure_ascii=False), encoding='utf-8')
+    (BASE / 'uruchom.bat').write_text(bat_uruchom(), encoding='ascii', newline='\r\n')
+    (BASE / 'zatrzymaj.bat').write_text(BAT_ZATRZYMAJ.replace('probe-w7d-obs', 'probe-b-minuta') if MINUTA else BAT_ZATRZYMAJ, encoding='ascii', newline='\r\n')
 
 
 def zbuduj():
     for name, cwd, target in (('hub.exe', REPO / 'hub', '.'), ('timer-plugin.exe', REPO / 'plugins' / 'timer-plugin', './cmd/timer-plugin'),
                               ('obs-ws-plugin.exe', REPO / 'plugins' / 'obs-ws-plugin', '.')):
+        if MINUTA and name == 'obs-ws-plugin.exe':
+            continue
         r = subprocess.run(['go', 'build', '-o', str(BASE / name), target], cwd=cwd, capture_output=True, text=True)
         if r.returncode:
             sys.exit(f'Budowanie {name} nie powiodlo sie:\n{r.stderr}')
@@ -147,6 +156,30 @@ exit /b 0
 pause
 exit /b 1
 '''
+
+def bat_uruchom():
+    """uruchom.bat: wariant W7d (z OBS) albo --minuta (bez OBS, z danymi do próby reguły minuty w kopii bazy)."""
+    if not MINUTA:
+        return BAT_URUCHOM
+    wiersze = []
+    for w in BAT_URUCHOM.splitlines():
+        if 'IMAGENAME eq obs64.exe' in w:
+            continue
+        w = w.replace('set "BM_REQUIRED_PLUGINS=timer-plugin,obs-ws-plugin"', 'set "BM_REQUIRED_PLUGINS=timer-plugin"')
+        w = w.replace('Proba minimum W7d z PRAWDZIWYM OBS (modul na KOPII bazy roboczej)', 'Proba reguly minuty (krok B2) BEZ OBS (modul na KOPII bazy roboczej)')
+        w = w.replace('echo === Proba W7d z prawdziwym OBS: modul %MODULE% ===', 'echo === Proba reguly minuty (bez OBS): modul %MODULE% ===')
+        w = w.replace('Buduje hub.exe, timer-plugin.exe i obs-ws-plugin.exe (tryb ograniczony)', 'Buduje hub.exe i timer-plugin.exe')
+        w = w.replace('probe-w7d-obs', 'probe-b-minuta')
+        w = w.replace('proba_w7d_obs_setup.py" %MODULE%', 'proba_w7d_obs_setup.py" %MODULE% --minuta')
+        wiersze.append(w)
+        if 'Gotowa baza testowa' in w:
+            wiersze += ['"%PY%" "%ROOT%\\tests\\modules\\proba_minuta_dane.py" %MODULE% > "%TEMP%\\b-minuta-dane.txt" 2>&1',
+                        'if errorlevel 1 (type "%TEMP%\\b-minuta-dane.txt" & echo BLAD: nie dodano zdarzen probnych do kopii bazy. & goto :fail)',
+                        'echo       dodano zdarzenia probne o dokladnych czasach; tabela oczekiwanych minut: %BASE%\\oczekiwane-minuty-%MODULE%.txt']
+        if w.strip() == 'echo  Zatrzymanie: zatrzymaj.bat':
+            wiersze.append('echo  Nakladka w przegladarce: http://localhost:8080/overlays/futsal-nalf/overlay.html (NALF) albo .../garbarnia/overlay.html')
+    return chr(10).join(wiersze) + chr(10)
+
 
 BAT_ZATRZYMAJ = r'''@echo off
 rem Zatrzymuje probe W7d: konczy procesy uruchomione z folderu probe-w7d-obs (HUB, timer-plugin, obs-ws-plugin) oraz proces modulu na porcie 8081.

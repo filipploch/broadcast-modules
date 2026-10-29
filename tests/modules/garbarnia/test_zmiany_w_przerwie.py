@@ -10,7 +10,7 @@ import pathlib
 import shutil
 import subprocess
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import harness
 
 APP, TMP = harness.boot("garbarnia")
@@ -43,6 +43,14 @@ def overlay_header_time(game_time_ms, period_end_s, overlay="garbarnia"):
     header = _run_js(overlay, "substitution", json.dumps(
         {"game_time_ms": game_time_ms, "period_end_s": period_end_s, "team_short_name": ""}))
     return header.split(" ZMIANA")[0]
+
+
+def overlay_header_time_s(payload, overlay="garbarnia"):
+    """Jak overlay_header_time, ale z pelnym ladunkiem show_substitution (razem z period_start_s)."""
+    dane = {"game_time_ms": payload["game_time_ms"], "period_end_s": payload["period_end_s"], "team_short_name": ""}
+    if "period_start_s" in payload:
+        dane["period_start_s"] = payload["period_start_s"]
+    return _run_js(overlay, "substitution", json.dumps(dane)).split(" ZMIANA")[0]
 
 
 class ZmianyNaZywo(unittest.TestCase):
@@ -172,6 +180,23 @@ class ZmianyNaZywo(unittest.TestCase):
         self.pm.finish_period(self.p1.id)
         self.assertEqual(sm.current_period_id(), self.p1.id)
 
+    # -- panel: edytor zmiany dostaje poczatek biezacego okresu (domyslna minuta wg reguly minuty)
+    def _edytor_zmiany(self):
+        from core.extensions import socketio
+        c = socketio.test_client(APP)
+        with patch('core.utils.timer_utils.get_current_time_in_seconds', return_value=123), patch.object(socketio, 'emit') as emit:    # zegar w tescie jest atrapa
+            c.emit('request_ui_monitor_content', {'type': 'addSubstitution', 'payload': {'teamType': 'home'}})
+        odebrane = [x.args[1] for x in emit.call_args_list if x.args and x.args[0] == 'show_ui_monitor_content']
+        self.assertEqual(len(odebrane), 1)
+        return odebrane[0]
+
+    def test_edytor_zmiany_dostaje_poczatek_biezacego_okresu(self):
+        self.pm.start_period(self.p1.id)
+        self.assertEqual(self._edytor_zmiany()['period_start_s'], 0)
+        self.pm.finish_period(self.p1.id)
+        self.pm.start_period(self.p2.id)
+        self.assertEqual(self._edytor_zmiany()['period_start_s'], HALF // 1000)
+
     # -- grafika zmiany (show_substitution)
     def _show(self, sub):
         from core.extensions import socketio
@@ -188,6 +213,16 @@ class ZmianyNaZywo(unittest.TestCase):
         payload = self._show(self._sub(game_time_ms=2650000))
         self.assertEqual(payload['game_time_ms'], HALF + BREAK_OFFSET)
         self.assertEqual(payload['period_end_s'], 2 * HALF // 1000)     # koniec NASTEPNEJ czesci (do formatowania doliczonego)
+        self.assertEqual(payload['period_start_s'], HALF // 1000)       # poczatek NASTEPNEJ czesci (regula minuty: pierwsza chwila okresu)
+
+    def test_grafika_zmiany_z_ladunkiem_ma_te_sama_minute_co_regula_w_1_polowie_i_w_przerwie(self):
+        self.pm.start_period(self.p1.id)
+        payload = self._show(self._sub(game_time_ms=0))                       # zmiana w 1. sekundzie 1. czesci
+        self.assertEqual(payload['period_start_s'], 0)
+        self.assertEqual(overlay_header_time_s(payload), "1'")
+        self.pm.finish_period(self.p1.id)
+        przerwa = self._show(self._sub(pair=(3, 1)))                           # w przerwie: czas = poczatek 2. czesci + 1 s
+        self.assertEqual(overlay_header_time_s(przerwa), "46'")
 
     def test_grafika_pokazuje_pierwsza_minute_czesci_po_przerwie_2x45(self):
         """Wlasciciel: zmiana w przerwie = pierwsza minuta czesci po przerwie (46' przy 2x45)."""
@@ -205,14 +240,16 @@ class ZmianyNaZywo(unittest.TestCase):
         payload = self._show(self._sub())
         self.assertEqual(overlay_header_time(payload['game_time_ms'], payload['period_end_s']), "41'")
 
-    def test_znane_ograniczenie_wzoru_grafiki_na_granicy_minuty(self):
-        """Do E2 (bez naprawiania): ceil(sekundy/60) na DOKLADNEJ granicy minuty daje minute o 1 mniejsza niz konwencja pilkarska
-        (45:00 -> 45', a pierwsza minuta 2. polowy to 46'). Dlatego czas zmiany w przerwie to initial_time + 1 s.
+    def test_wzor_grafiki_bez_poczatku_okresu_dziala_jak_dotad_na_granicy_minuty(self):
+        """Zachowanie STAREGO ladunku (bez period_start_s): ceil(sekundy/60) na DOKLADNEJ granicy minuty daje minute o 1 mniejsza niz konwencja pilkarska
+        (45:00 -> 45', a pierwsza minuta 2. polowy to 46'); dlatego czas zmiany w przerwie to initial_time + 1 s (nadal tak zapisywany).
+        Od kroku B2 grafika z period_start_s pokazuje 46' takze dla dokladnie 45:00 (test_minuta_regula.py, tests/modules/js/minuta_test.js).
         Sprawdzane na prawdziwym formatGameTimeDisplay z obu nakladek."""
         for overlay in ("garbarnia", "futsal-nalf"):
             with self.subTest(overlay=overlay):
                 self.assertEqual(_run_js(overlay, "format", HALF // 1000, 2 * HALF // 1000), "45'")
                 self.assertEqual(_run_js(overlay, "format", HALF // 1000 + 1, 2 * HALF // 1000), "46'")
+                self.assertEqual(_run_js(overlay, "format", HALF // 1000, 2 * HALF // 1000, HALF // 1000), "46'")     # z poczatkiem okresu (B2)
                 self.assertEqual(_run_js(overlay, "format", 2 * HALF // 1000 + 60, 2 * HALF // 1000), "90+1'")
 
     def test_naglowek_zmiany_w_czasie_doliczonym(self):

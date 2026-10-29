@@ -442,6 +442,7 @@ def register_events(socketio):
                     'player_team_short_name': gpd.get('team_short_name'),
                     'game_time':           ged['game_time'],
                     'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
+                    'period_start_s':   game_event.period.initial_time // 1000,       # początek okresu (reguła minuty: pierwsza chwila okresu)
                 })
             socketio.emit('game_event_display_updated', {
                 'active_game_event_id': result['game_event_id'],

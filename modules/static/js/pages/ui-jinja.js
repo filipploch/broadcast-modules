@@ -1009,6 +1009,17 @@ var _substState = {
 };
 var MAX_MID = 5;
 
+// Domyślna minuta w edytorze zmiany: ta sama reguła co minuta zdarzenia na nakładkach (docs/regula-minuty.md), jako liczba minut
+// (pole „czas” to liczba minut, z której powstaje game_time_ms). t <= S (pierwsza chwila okresu): S/60 + 1; w pozostałych przypadkach ceil(t/60)
+// (także w czasie doliczonym: 46 min w 1. połowie to 45+1' na nakładce). Brak początku okresu w danych (stary ładunek): ceil(t/60) jak dotąd.
+function substDefaultMinute(gameTimeS, periodStartS) {
+    var maStart = typeof periodStartS === 'number' && isFinite(periodStartS) && periodStartS >= 0;
+    if (maStart && gameTimeS <= periodStartS) {
+        return Math.floor(periodStartS / 60) + 1;
+    }
+    return Math.ceil(gameTimeS / 60);
+}
+
 function _buildAddSubstitutionView(data, uiMonitorContent) {
     uiMonitorContent.innerHTML = '';
     uiMonitorContent.dataset.isEventsUpdateBlocked = 'true';
@@ -1017,6 +1028,7 @@ function _buildAddSubstitutionView(data, uiMonitorContent) {
     _substState.teamShortName = data.team_short_name;
     _substState.teamId        = data.team_id;
     _substState.gameTimeS        = data.game_time_s;
+    _substState.periodStartS     = data.period_start_s;
     _substState.starters      = data.starters    || [];
     _substState.substitutes   = data.substitutes || [];
     _substState.midStarters   = [];
@@ -1036,7 +1048,7 @@ function _renderSubstEditor(uiMonitorContent) {
     titleEl.className = 'subst-editor-title';
     titleEl.textContent = _substState.teamShortName;
     header.appendChild(titleEl);
-    let _timeMm = Math.ceil(_substState.gameTimeS/60);
+    let _timeMm = substDefaultMinute(_substState.gameTimeS, _substState.periodStartS);
      var timerEl = document.createElement('span');
     timerEl.className = 'subst-editor-title';
     timerEl.innerHTML =

@@ -16,7 +16,7 @@ function showSubstitutionOverlay(data) {
     // Czas w minutach
     var totalSec   = Math.floor((data.game_time_ms || 0) / 1000);
     var periodEndS = data.period_end_s || 0;
-    var timeDisplay = formatGameTimeDisplay(totalSec, periodEndS);
+    var timeDisplay = formatGameTimeDisplay(totalSec, periodEndS, data.period_start_s);
  
     // header.textContent = minutes + " ZMIANA (" + (data.team_short_name || '') + ")";
     header.textContent = timeDisplay + " ZMIANA (" + (data.team_short_name || '') + ")";

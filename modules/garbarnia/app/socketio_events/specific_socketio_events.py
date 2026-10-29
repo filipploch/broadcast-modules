@@ -496,6 +496,7 @@ def register_events(socketio):
                     'player_team_short_name': gpd.get('team_short_name'),
                     'game_time':           ged['game_time'],
                     'period_limit_s':   (game_event.period.initial_time + game_event.period.limit) // 1000,
+                    'period_start_s':   game_event.period.initial_time // 1000,       # początek okresu (reguła minuty: pierwsza chwila okresu)
                 })
             socketio.emit('game_event_display_updated', {
                 'active_game_event_id': result['game_event_id'],
@@ -559,6 +560,7 @@ def register_events(socketio):
             hub_client.send_to_plugin('stream-overlay', 'show_substitution', {
                 'game_time_ms':    game_time_ms,
                 'period_end_s':    period_end_s,   # do formatowania czasu doliczonego
+                'period_start_s':  period.initial_time // 1000,   # początek okresu (reguła minuty: pierwsza chwila okresu)
                 'team_short_name': team.short_name if team else '',
                 'substitutions':   substitutions_payload,
             })
@@ -901,7 +903,9 @@ def _module_content_handler(content_type, data):
         )]
 
         from core.utils.timer_utils import get_current_time_in_seconds
+        from app.models.period import Period as _PeriodSubst
         subst_time = get_current_time_in_seconds(settings.current_period_id)
+        okres_zmiany = _PeriodSubst.query.get(settings.current_period_id) if settings.current_period_id else None
 
         return {
             'content_type':   'addSubstitution',
@@ -912,6 +916,7 @@ def _module_content_handler(content_type, data):
             'starters':       starters,
             'substitutes':    subs,
             'game_time_s':    subst_time,
+            'period_start_s': (okres_zmiany.initial_time // 1000) if okres_zmiany else None,   # domyślna minuta w edytorze zmiany (reguła minuty)
         }
 
     elif content_type == 'confirmSubstitution':
