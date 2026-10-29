@@ -98,6 +98,81 @@ def make(APP, modul):
             self.assertIn(self.p['B1'], [r['player_id'] for r in self._wiersze_skladu('home-squad')])
             self.assertNotIn(self.p['B1'], [r['player_id'] for r in self._wiersze_skladu('away-squad')])      # w meczu może być tylko w jednym składzie
 
+        # -- przeniesienie z drugiego składu jest odrzucone, gdy zawodnik ma w tym meczu zdarzenia, zmiany albo kary
+        KOMUNIKAT = "Zawodnik ma w tym meczu zdarzenia, nie można go przenieść do drugiego składu"
+
+        def _zdarzenie(self, player_key):
+            from app.models import Event, GameEvent, Period
+            from core.managers.period_manager import PeriodManager
+            if Period.query.filter_by(game_id=self.g1).count() == 0:
+                PeriodManager().create_default_periods(game_id=self.g1)
+            okres = Period.query.filter_by(game_id=self.g1).order_by(Period.period_order).first()
+            ev = Event.query.first()
+            if ev is None:
+                ev = Event(name='Bramka', short_name='BRA', image_path='static/images/x.png')
+                self.db.session.add(ev)
+                self.db.session.flush()
+            self.db.session.add(GameEvent(game_id=self.g1, event_id=ev.id, period_id=okres.id, team_id=self.B, player_id=self.p[player_key], game_time=60))
+            self.db.session.commit()
+
+        def _sprawdz_odrzucone(self):
+            gosc, gospodarz = self._wiersze_skladu('away-squad'), self._wiersze_skladu('home-squad')
+            body = ({'starters': [{'player_id': self.p['A1']}], 'substitutes': [{'player_id': self.p['B1']}]} if garbarnia
+                    else {'assigned': [{'player_id': self.p['A1']}, {'player_id': self.p['B1']}]})
+            r = self.client.post('/api/assign/home-squad/save', json=body)
+            self.assertEqual(r.status_code, 400)
+            self.assertEqual(r.get_json()['error'], self.KOMUNIKAT)
+            # nic się nie zmieniło: B1 nadal w składzie gości, skład gospodarzy bez zmian
+            self.assertEqual([x['player_id'] for x in self._wiersze_skladu('away-squad')], [x['player_id'] for x in gosc])
+            self.assertEqual([x['player_id'] for x in self._wiersze_skladu('home-squad')], [x['player_id'] for x in gospodarz])
+            self.assertIn(self.p['B1'], [x['player_id'] for x in self._wiersze_skladu('away-squad')])
+
+        def test_przeniesienie_zawodnika_ze_zdarzeniami_w_meczu_jest_odrzucone(self):
+            self._zapisz('away-squad', [self.p['B1']])
+            self._zapisz('home-squad', [self.p['A1'], self.p['A2']])
+            self._zdarzenie('B1')
+            self._sprawdz_odrzucone()
+
+        def test_zawodnik_bez_zdarzen_jest_przenoszony_a_zdarzenia_innego_zawodnika_nie_przeszkadzaja(self):
+            self._zapisz('away-squad', [self.p['B1'], self.p['B2']])
+            self._zdarzenie('B2')                                                          # zdarzenia ma B2, przenosimy B1
+            self._zapisz('home-squad', [self.p['A1'], self.p['B1']])
+            self.assertIn(self.p['B1'], [x['player_id'] for x in self._wiersze_skladu('home-squad')])
+            self.assertNotIn(self.p['B1'], [x['player_id'] for x in self._wiersze_skladu('away-squad')])
+
+        def test_zawodnik_ze_zdarzeniami_zostaje_na_swoim_skladzie_przy_zwyklym_zapisie(self):
+            # odrzucenie dotyczy tylko PRZENIESIENIA z drugiego składu: zapis składu, w którym zawodnik już jest, działa jak dotąd
+            self._zapisz('away-squad', [self.p['B1'], self.p['B2']])
+            self._zdarzenie('B1')
+            self._zapisz('away-squad', [self.p['B1'], self.p['B2']])
+            self.assertEqual({x['player_id'] for x in self._wiersze_skladu('away-squad')}, {self.p['B1'], self.p['B2']})
+
+        def test_kara_w_meczu_blokuje_przeniesienie(self):
+            from core.models.base_game_timer import get_game_timer_model
+            GameTimer = get_game_timer_model()
+            self._zapisz('away-squad', [self.p['B1']])
+            self.db.session.add(GameTimer(game_id=self.g1, timer_type='penalty', team='away', state='running', player_id=self.p['B1']))
+            self.db.session.commit()
+            self._sprawdz_odrzucone()
+
+        if garbarnia:
+            def test_zmiana_w_meczu_blokuje_przeniesienie_gdy_zawodnik_wchodzi_albo_schodzi(self):
+                from app.models import Period
+                from app.models.substitution import Substitution
+                from core.managers.period_manager import PeriodManager
+                for klucz_in, klucz_out in (('B1', 'B2'), ('B2', 'B1')):
+                    self.db.session.rollback()
+                    self._zapisz('away-squad', [self.p['B1'], self.p['B2']])
+                    if Period.query.filter_by(game_id=self.g1).count() == 0:
+                        PeriodManager().create_default_periods(game_id=self.g1)
+                    okres = Period.query.filter_by(game_id=self.g1).first()
+                    self.db.session.add(Substitution(substitution_group=1, game_time_ms=60000, game_id=self.g1, period_id=okres.id, team_id=self.B,
+                                                     player_in_id=self.p[klucz_in], player_out_id=self.p[klucz_out]))
+                    self.db.session.commit()
+                    self._sprawdz_odrzucone()
+                    Substitution.query.delete()
+                    self.db.session.commit()
+
         def test_znacznik_spoza_kadry_tylko_dla_dodanych_awaryjnie(self):
             self._zapisz('home-squad', [self.p['A1'], self.p['B1'], self.p['X1']])
             znaczniki = {r['player_id']: r['spoza_kadry'] for r in self._wiersze_skladu()}

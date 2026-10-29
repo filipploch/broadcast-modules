@@ -87,7 +87,7 @@ ok('zawodnik z drugiej drużyny meczu: pytanie o przeniesienie, po potwierdzeniu
   const e = makeEnv(false, LISTA);
   e.ctx.__f.set(LISTA);
   e.ctx.__f.addOutsidePlayer(2);
-  assert.ok(e.pytania[0].includes('drugiej drużyny tego meczu') && e.pytania[0].includes('Przenieść'));
+  assert.ok(e.pytania[0].includes('drugiej drużyny tego meczu') && e.pytania[0].includes('zostanie usunięty ze składu drugiej drużyny') && e.pytania[0].includes('Przenieść'));
   eq(e.ctx.__f.state().assigned.map((a) => a.player_id), [3]);
 });
 

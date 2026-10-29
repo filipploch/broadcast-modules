@@ -127,7 +127,7 @@ function addOutsidePlayer(i) {
     if (!p) return;
     let pytanie = null;
     if (p.w_drugiej_druzynie) {
-        pytanie = p.label + ' jest już w składzie drugiej drużyny tego meczu. Przenieść go do tego składu?';
+        pytanie = p.label + ' jest w składzie drugiej drużyny tego meczu. Po dodaniu zostanie usunięty ze składu drugiej drużyny. Przenieść go do tego składu?';
     } else if (p.tag) {
         pytanie = p.label + ' jest z ' + (p.tag === 'inny klub' ? 'innego klubu' : 'innej drużyny') + (p.team_name ? ' (' + p.team_name + ')' : '') + '. Dodać do tego meczu?';
     }
@@ -503,7 +503,7 @@ function _save3ColThenReload() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        if (data.error) { alert('Błąd zapisu: ' + data.error); _reloadModal(); return; }
         _reloadModal();
     })
     .catch(function() { alert('Błąd połączenia'); });
@@ -737,7 +737,7 @@ function _saveSquadThenReload() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) { alert('Błąd zapisu: ' + data.error); return; }
+        if (data.error) { alert('Błąd zapisu: ' + data.error); _reloadModal(); return; }
         _reloadModal();
     })
     .catch(function() { alert('Błąd połączenia'); });

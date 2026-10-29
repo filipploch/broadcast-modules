@@ -92,6 +92,37 @@ def outside_players(game, team_id, query='', only_free=False, limit=300):
     return out[:limit]
 
 
+MOVE_BLOCKED_MESSAGE = "Zawodnik ma w tym meczu zdarzenia, nie można go przenieść do drugiego składu"
+
+
+def players_blocking_move(game_id, team_id, player_ids):
+    """Zawodnicy z listy, którzy są w składzie drugiej drużyny meczu i mają w tym meczu zdarzenia (bramki, kartki, faule itd.), zmiany albo kary:
+    nie wolno ich przenieść do składu team_id (historia meczu wskazywałaby na zawodnika, którego nie ma w składzie). Zwraca ich identyfikatory."""
+    from core.models.base_game_event import get_game_event_model
+    from core.models.base_game_player import get_game_player_model
+    from core.models.base_game_timer import get_game_timer_model
+    GamePlayer, GameEvent, GameTimer = get_game_player_model(), get_game_event_model(), get_game_timer_model()
+    if not player_ids:
+        return []
+    kandydaci = {r.player_id for r in GamePlayer.query.filter(
+        GamePlayer.game_id == game_id, GamePlayer.team_id != team_id, GamePlayer.player_id.in_(list(player_ids))).all()}
+    zablokowani = set()
+    for pid in kandydaci:
+        if (GameEvent.query.filter_by(game_id=game_id, player_id=pid).first() is not None
+                or GameTimer.query.filter_by(game_id=game_id, player_id=pid).first() is not None):
+            zablokowani.add(pid)
+    try:
+        from app.models.substitution import Substitution        # tylko moduły ze zmianami jako osobną tabelą (Garbarnia)
+    except ImportError:
+        Substitution = None
+    if Substitution is not None:
+        for pid in kandydaci - zablokowani:
+            if (Substitution.query.filter_by(game_id=game_id, player_in_id=pid).first() is not None
+                    or Substitution.query.filter_by(game_id=game_id, player_out_id=pid).first() is not None):
+                zablokowani.add(pid)
+    return sorted(zablokowani)
+
+
 def move_from_other_squad(game_id, team_id, player_ids):
     """Zawodnik może być w meczu tylko w jednym składzie (unikalna para zawodnik+mecz): dodanie do składu team_id zawodnika, który jest
     w składzie drugiej drużyny tego meczu, przenosi go (po potwierdzeniu w interfejsie). Zwraca liczbę przeniesionych; commit robi wywołujący."""

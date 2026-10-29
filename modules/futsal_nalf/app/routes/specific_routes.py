@@ -7,7 +7,7 @@ Rejestracja przez: futsal_routes.register_routes(app)
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.extensions import db
-from core.utils.squad_checks import squad_warnings, outside_players, is_outside_squad, move_from_other_squad
+from core.utils.squad_checks import squad_warnings, outside_players, is_outside_squad, move_from_other_squad, players_blocking_move, MOVE_BLOCKED_MESSAGE
 from app.managers import (
     GameManager, TeamManager, LeagueManager, SeasonManager,
     GameEventManager, CameraManager, GameCameraManager,
@@ -551,6 +551,10 @@ def register_routes(app):
                 # W7e-2a: zawodnik z innej drużyny (dodany awaryjnie) zachowuje numer, bramkarza i opaskę z tego meczu
                 obcy = {pg.player_id: (pg.number, pg.is_goalkeeper, pg.is_captain)
                         for pg in existing if pg.player and pg.player.team_id != team_id}
+
+                # W7e-2b: zawodnik z drugiego składu, który ma w tym meczu zdarzenia, zmiany albo kary, nie może być przeniesiony (przed jakąkolwiek zmianą w bazie)
+                if players_blocking_move(game_id, team_id, [i['player_id'] for i in data.get('assigned', [])]):
+                    return jsonify({'error': MOVE_BLOCKED_MESSAGE}), 400
 
                 for pg in existing:
                     db.session.delete(pg)
