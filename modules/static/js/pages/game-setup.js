@@ -52,6 +52,7 @@ function openAssignModal(contentType) {
             document.getElementById('modal-title').textContent = data.title;
             if (data.team_id) _squadTeamId = data.team_id;
             _squadTeamUrl = data.laczynaspilka_url || null;
+            _showSquadWarnings(data);
             const copyBtn = document.getElementById('copy-team-url-btn');
             if (copyBtn) copyBtn.style.display = _squadTeamUrl ? 'inline-flex' : 'none';
 
@@ -67,6 +68,16 @@ function openAssignModal(contentType) {
             }
         })
         .catch(function() { alert('Błąd wczytywania danych'); closeAssignModal(); });
+}
+
+// Informacja o składzie (powtórzony numer): tylko dyskretna uwaga, nigdy nie blokuje zapisu ani wyświetlania (numery to sprawa organizatora rozgrywek)
+function _showSquadWarnings(data) {
+    const el = document.getElementById('assign-warnings');
+    if (!el) return;
+    const w = data.warnings || [];
+    el.textContent = w.length ? 'Uwaga: ten numer jest w składzie użyty więcej niż raz' : '';
+    el.title = w.join(' | ');
+    el.style.display = w.length ? 'block' : 'none';
 }
 
 function closeAssignModal() {
@@ -660,6 +671,7 @@ function _reloadModal() {
             if (data.error) return;
             if (data.team_id) _squadTeamId = data.team_id;
             _editingPgId = null;   // zamknij edycję po każdym przeładowaniu
+            _showSquadWarnings(data);
             if (_useThreeCol()) {
                 _starters    = data.starters    || [];
                 _substitutes = data.substitutes || [];

@@ -7,6 +7,7 @@ Rejestracja przez: futsal_routes.register_routes(app)
 from flask import (render_template, jsonify, current_app,
                    flash, redirect, url_for, request)
 from core.extensions import db
+from core.utils.squad_checks import squad_warnings
 from app.managers import (
     GameManager, TeamManager, LeagueManager, SeasonManager,
     GameEventManager, CameraManager, GameCameraManager,
@@ -236,6 +237,7 @@ def register_routes(app):
                 'substitutes':        [_pg_dict(pg) for pg in substitutes],
                 'available':          available,
                 'max_starters':       11,
+                'warnings':           squad_warnings(starters + substitutes),
             })
 
         # ── referees ─────────────────────────────────────────────────────────────
@@ -992,7 +994,7 @@ def register_routes(app):
         If is_captain=True, clears is_captain for all other GamePlayer rows of same team in same game."""
         from flask import jsonify, request as req
         from app.models.game_player import GamePlayer
-    
+        from core.utils.squad_checks import plays_for_own_team
 
         pg = GamePlayer.query.get(pg_id)
         if not pg:
@@ -1000,22 +1002,23 @@ def register_routes(app):
 
         from app.models.player import Player
         player = Player.query.get(pg.player_id)
+        own_team = plays_for_own_team(player, pg)       # W7e-2a: zawodnik dodany awaryjnie do cudzego składu nie zmienia swojej karty
 
         data = req.get_json()
         try:
             if 'number' in data:
                 val = data['number']
                 pg.number = int(val) if val not in (None, '', 'null') else None
-                if player:
+                if own_team:
                     player.number = pg.number
             if 'is_goalkeeper' in data:
                 pg.is_goalkeeper = bool(data['is_goalkeeper'])
-                if player:
+                if own_team:
                     player.is_goalkeeper = pg.is_goalkeeper
             if 'is_captain' in data:
                 is_captain = bool(data['is_captain'])
                 pg.is_captain = is_captain
-                if player:
+                if own_team:
                     player.is_captain = is_captain
                 if is_captain:
                     # Clear captain for others in same team/game (GamePlayer)
@@ -1026,14 +1029,15 @@ def register_routes(app):
                     ).all()
                     for other in others:
                         other.is_captain = False
-                    # Clear captain for others in same team (Player)
-                    from app.models.player import Player as _P
-                    other_players = _P.query.filter(
-                        _P.team_id == pg.team_id,
-                        _P.id != pg.player_id,
-                    ).all()
-                    for op in other_players:
-                        op.is_captain = False
+                    # Clear captain for others in same team (Player); tylko gdy kapitan gra dla swojej drużyny
+                    if own_team:
+                        from app.models.player import Player as _P
+                        other_players = _P.query.filter(
+                            _P.team_id == pg.team_id,
+                            _P.id != pg.player_id,
+                        ).all()
+                        for op in other_players:
+                            op.is_captain = False
             db.session.commit()
             return jsonify({'ok': True, 'pg': {'id': pg.id, 'number': pg.number, 'is_goalkeeper': pg.is_goalkeeper, 'is_captain': pg.is_captain}})
         except Exception as e:
@@ -1067,15 +1071,25 @@ def register_routes(app):
 
                 pg_mgr = GamePlayerManager()
                 existing = GamePlayer.query.filter_by(game_id=game_id, team_id=team_id).all()
+                # W7e-2a: zawodnik z innej drużyny (dodany awaryjnie) zachowuje numer, bramkarza i opaskę z tego meczu
+                obcy = {pg.player_id: (pg.number, pg.is_goalkeeper, pg.is_captain)
+                        for pg in existing if pg.player and pg.player.team_id != team_id}
                 for pg in existing:
                     db.session.delete(pg)
                 db.session.commit()
 
+                def _kw(item):
+                    # drużyna w meczu to drużyna składu, nie drużyna z karty zawodnika
+                    kw = {'override_team_id': team_id}
+                    if item['player_id'] in obcy:
+                        kw['override_number'], kw['override_is_goalkeeper'], kw['override_is_captain'] = obcy[item['player_id']]
+                    return kw
+
                 for item in data.get('starters', []):
-                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_STARTER)
+                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_STARTER, **_kw(item))
                 for item in data.get('substitutes', []):
-                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_SUBSTITUTE)
-                return jsonify({'ok': True})
+                    pg_mgr.assign_player_to_game(item['player_id'], game_id, role=ROLE_SUBSTITUTE, **_kw(item))
+                return jsonify({'ok': True, 'warnings': squad_warnings(GamePlayer.query.filter_by(game_id=game_id, team_id=team_id).all())})
 
             # ── referees ─────────────────────────────────────────────────────────
             if content_type == 'referees':

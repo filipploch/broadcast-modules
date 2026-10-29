@@ -585,6 +585,19 @@ def make(APP):
             self.db.session.commit()
             return g
 
+        def test_powtorzony_numer_w_druzynie_nie_blokuje_pobrania(self):
+            # numery należą do organizatora rozgrywek: zdublowany numer w drużynie jest dozwolony i niczego nie odrzuca
+            self.pobierz()
+            kowalski = self._gracz('Kowalski')
+            nr = kowalski.number
+            self.assertIsNotNone(nr)
+            nowak = self._ustaw_numer('Nowak', nr)                                                  # ten sam numer w module (ręcznie)
+            r = self.pobierz()['raport']
+            self.db.session.refresh(nowak)
+            self.db.session.refresh(kowalski)
+            self.assertEqual((nowak.number, kowalski.number), (nr, nr))
+            self.assertFalse([x for x in r['ostrzezenia'] if 'numer' in x.lower() and 'powt' in x.lower()])
+
         def test_pierwsze_pobranie_zapisuje_slad_numerow_i_wersje_bazy(self):
             r = self.pobierz()['raport']
             stan = self._stan()
