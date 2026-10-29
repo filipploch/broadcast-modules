@@ -1230,7 +1230,7 @@ ws.onmessage = (event) => {
 
             actionImgElement.src = `${rootApp}${data.event_image_path}`;
             actionTimeElement.textContent = (data.period_limit_s !== undefined)
-                ? formatGameTimeDisplay(data.game_time, data.period_limit_s)
+                ? formatGameTimeDisplay(data.game_time, data.period_limit_s, data.period_start_s)
                 : FutsalFormatters.formatElapsedTime(data.game_time, 0, { 'format': 'min', 'unit': 's' });
             actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
             actionPlayerTeamShortNameElement.textContent =

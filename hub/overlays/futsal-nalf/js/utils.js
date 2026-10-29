@@ -68,7 +68,16 @@ function getCurrentDate() {
     return `${day}-${month}-${year}`;
 }
 
-function formatGameTimeDisplay(gameTimeS, periodEndS) {
+// Minuta zdarzenia (reguła właściciela: docs/regula-minuty.md; przypadki: tests/modules/js/minuta_przypadki.json). Czasy w sekundach zegara meczu.
+//   t <= S (pierwsza chwila okresu albo czas sprzed jego początku): S/60 + 1   (0:00 -> 1', początek 2. połowy 45:00 -> 46', NALF 20:00 -> 21')
+//   S < t <= E:                                                     ceil(t/60) (dokładny koniec okresu zostaje w okresie: 45:00 -> 45')
+//   t > E (doliczony czas, tylko Garbarnia):                        E/60 + k', k = ceil((t - E)/60)   (45:05 -> 45+1', 46:01 -> 45+2')
+// periodStartS jest opcjonalny: gdy go brak w danych (stary ładunek), zachowanie jak dotąd (bez wyjątku pierwszej chwili okresu).
+function formatGameTimeDisplay(gameTimeS, periodEndS, periodStartS) {
+    var maStart = typeof periodStartS === "number" && isFinite(periodStartS) && periodStartS >= 0;
+    if (maStart && gameTimeS <= periodStartS) {
+        return (Math.floor(periodStartS / 60) + 1) + "'";
+    }
     if (periodEndS > 0 && gameTimeS > periodEndS) {
         var baseMin  = Math.floor(periodEndS / 60);
         var extraMin = Math.ceil((gameTimeS - periodEndS) / 60);

@@ -1,5 +1,5 @@
 // Uruchamia PRAWDZIWY kod grafik (hub/overlays/<nakladka>/js) w piaskownicy Node i wypisuje wynik jako JSON.
-//   node overlay_time.js <nakladka> format <sekundy> <koniec_okresu_s>      -> formatGameTimeDisplay z utils.js
+//   node overlay_time.js <nakladka> format <sekundy> <koniec_okresu_s> [poczatek_okresu_s|brak|null|NaN|tekst]   -> formatGameTimeDisplay z utils.js
 //   node overlay_time.js <nakladka> substitution <json z danymi zmiany>      -> tekst naglowka z showSubstitutionOverlay (substitution.js)
 // Zamiast portu wzoru w Pythonie: testy wolaja ten skrypt, wiec zmiana wzoru w grafice od razu zmienia wynik testu.
 const fs = require('fs');
@@ -41,7 +41,9 @@ function load(file) {
 load('utils.js');
 let out;
 if (mode === 'format') {
-  out = vm.runInContext(`formatGameTimeDisplay(${Number(args[0])}, ${Number(args[1])})`, sandbox);
+  const s = args[2];
+  const sLit = (s === undefined || s === 'brak') ? 'undefined' : (s === 'null' ? 'null' : (s === 'NaN' ? 'NaN' : (isNaN(Number(s)) ? JSON.stringify(s) : String(Number(s)))));
+  out = vm.runInContext(`formatGameTimeDisplay(${Number(args[0])}, ${Number(args[1])}, ${sLit})`, sandbox);
 } else if (mode === 'substitution') {
   load('substitution.js');
   sandbox.__data = JSON.parse(args[0]);
