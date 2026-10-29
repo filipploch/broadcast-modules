@@ -52,7 +52,7 @@ app = create_app('testing')
 with app.app_context():
     from core.extensions import db
     from core.managers.period_manager import PeriodManager
-    from app.models import Event, Game, GameEvent, Period
+    from app.models import Event, Game, GameEvent, Period, Player
     game = db.session.get(Game, GAME_ID)
     if game is None:
         sys.exit(f'W kopii bazy nie ma meczu {GAME_ID}')
@@ -62,6 +62,7 @@ with app.app_context():
     p1.initial_time, p1.limit = 0, L * 1000
     p2.initial_time, p2.limit = L * 1000, L * 1000
     ev = Event.query.filter_by(name='Bramka').first() or Event.query.first()
+    zawodnik = Player.query.filter_by(team_id=game.home_team_id).order_by(Player.last_name).first()      # bez zawodnika panel nie daje przycisku „pokaż na nakładce”
     stare = GameEvent.query.filter_by(game_id=GAME_ID, comment='PROBA MINUTY').all()
     for s in stare:
         db.session.delete(s)
@@ -71,11 +72,11 @@ with app.app_context():
         p = p1 if okres == 1 else p2
         S, E = p.initial_time // 1000, (p.initial_time + p.limit) // 1000
         t = S + rel
-        db.session.add(GameEvent(game_id=GAME_ID, event_id=ev.id, period_id=p.id, team_id=game.home_team_id, game_time=t, comment='PROBA MINUTY',
-                                 home_team_goals=0, away_team_goals=0))
+        db.session.add(GameEvent(game_id=GAME_ID, event_id=ev.id, period_id=p.id, team_id=game.home_team_id, player_id=zawodnik.id if zawodnik else None,
+                                 event_place='H5', game_time=t, comment='PROBA MINUTY', home_team_goals=0, away_team_goals=0))     # H5: środek boiska (A-O, 1-9)
         wiersze.append((okres, mmss(t), oczekiwane(t, S, E, MODULE == 'garbarnia')))
     db.session.commit()
-    tekst = [f'Próba minuty, moduł {MODULE}, mecz {GAME_ID} ({game.home_team.name} – {game.away_team.name}); okresy po {L // 60} min; zdarzenia typu „{ev.name}”, komentarz „PROBA MINUTY”',
+    tekst = [f'Próba minuty, moduł {MODULE}, mecz {GAME_ID} ({game.home_team.name} – {game.away_team.name}); okresy po {L // 60} min; zdarzenia typu „{ev.name}” zawodnika {zawodnik.last_name if zawodnik else "(brak)"}, komentarz „PROBA MINUTY”',
              'okres | czas na zegarze | oczekiwana minuta na nakładce']
     tekst += [f'  {o}. połowa | {c:>7} | {m}' for o, c, m in wiersze]
     wyjscie = '\n'.join(tekst)
