@@ -674,7 +674,14 @@ def kopia_bazy(db, kopie_dir):
     return str(cel)
 
 
-def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply, stan_numerow=None):
+def pobierz_pare(*args, **kwargs):
+    """Jak _pobierz_pare, ale zmiany meczów z odczytu WP nie trafiają do kolejki zapisu do WP (ochrona przed pętlą WP -> moduł -> WP, W8a)."""
+    from core.managers.wp_zapis import bez_zapisu_do_wp
+    with bez_zapisu_do_wp():
+        return _pobierz_pare(*args, **kwargs)
+
+
+def _pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply, stan_numerow=None):
     """Podgląd (apply=False) albo zapis jednej pary. Zwraca {'ok': bool, 'zapisano': bool, 'raport': {...}, 'blad': str}. Nie zgłasza wyjątków."""
     if not _lock.acquire(blocking=False):
         return {'ok': False, 'zapisano': False, 'blad': 'Pobieranie z WP już trwa'}

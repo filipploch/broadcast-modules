@@ -21,11 +21,13 @@ PER_PAGE = 100
 
 
 class WpError(Exception):
-    """Błąd rozmowy z WP. kind: connection | auth | http | format."""
+    """Błąd rozmowy z WP. kind: connection | auth | http | format | conflict (HTTP 409 z trasy zapisu: code, data z odpowiedzi WP)."""
 
-    def __init__(self, kind, message):
+    def __init__(self, kind, message, code='', data=None):
         super().__init__(message)
         self.kind = kind
+        self.code = code
+        self.data = data or {}
 
 
 @dataclass
@@ -71,6 +73,9 @@ def load_wp_config(module_dir, wp_dir=None):
     if not isinstance(port, int) or not 1024 <= port <= 65535:
         cfg.problem = f'blok wp w {path.name}: nieprawidłowy port {port!r}'
         return cfg
+    override = os.environ.get('BM_WP_PORT', '')
+    if override.isdigit() and 1024 <= int(override) <= 65535:      # tylko próby (np. WP testowy na innym porcie); produkcja używa portu z module.json
+        port = int(override)
     cfg.enabled, cfg.port, cfg.title = True, port, str(block.get('title') or '')
     cfg.url = f'http://127.0.0.1:{port}'
     creds = Path(wp_dir) if wp_dir else default_wp_dir(module_dir)
@@ -90,20 +95,30 @@ class WpClient:
         self.cfg = cfg
         self.timeout = timeout
 
-    def _request(self, route, params=None):
+    def _request(self, route, params=None, method='GET', body=None):
         q = urllib.parse.urlencode(params or {}, safe=',')
         url = f'{self.cfg.url}/index.php?rest_route=/{route.lstrip("/")}' + (f'&{q}' if q else '')
         headers = {'Accept': 'application/json'}
         if self.cfg.has_auth:
             token = base64.b64encode(f'{self.cfg.user}:{self.cfg.password}'.encode()).decode()
             headers['Authorization'] = f'Basic {token}'
-        req = urllib.request.Request(url, headers=headers)
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode('utf-8')
+            headers['Content-Type'] = 'application/json'
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 body, hdrs = r.read(), r.headers
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
                 raise WpError('auth', f'WP odrzucił dane logowania (HTTP {e.code})')
+            if e.code == 409:                                      # trasy zapisu bm-pomocnik: konflikt z regułami WP (blokada, wynik organizatora)
+                try:
+                    odp = json.loads(e.read().decode('utf-8'))
+                except (ValueError, OSError):
+                    odp = {}
+                raise WpError('conflict', str((odp or {}).get('message') or 'konflikt z WP'), str((odp or {}).get('code') or ''), (odp or {}).get('data'))
             raise WpError('http', f'WP odpowiedział błędem HTTP {e.code}')
         except (urllib.error.URLError, OSError) as e:
             raise WpError('connection', f'brak połączenia z WP ({self.cfg.url}): {getattr(e, "reason", e)}')
@@ -127,6 +142,11 @@ class WpClient:
             if page >= pages:
                 return out
             page += 1
+
+    def post_json(self, route, body):
+        """POST z ciałem JSON (trasy bm-pomocnik); zwraca odpowiedź jako słownik."""
+        data, _ = self._request(route, method='POST', body=body)
+        return data
 
     def ping(self):
         self._request('sportspress/v2/leagues', {'per_page': 1, '_fields': 'id'})

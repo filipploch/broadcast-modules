@@ -76,6 +76,69 @@ def register_routes(app, exclude=None):
         wynik = get_wp_manager().pull(bool(data.get('apply')), db, logo_root, folder, kopie, data.get('league_id'), data.get('season_id'))
         return jsonify(wynik)
 
+    # -- W8a: zapis stanu i wyniku meczu do WP (kolejka, wyłącznik) i świadome zakończenie meczu
+
+    def _nazwa_meczu(game):
+        return f'{game.home_team.name} – {game.away_team.name}' if game is not None and game.home_team and game.away_team else ''
+
+    def _niezakonczone():
+        """Bieżący mecz, którego wszystkie części są zakończone, a który nie jest oznaczony jako zakończony (pasek „Mecz nie jest zakończony”)."""
+        Game, Settings = _get_game(), _get_settings()
+        settings = Settings.get_settings()
+        game = Game.query.get(settings.current_game_id) if settings.current_game_id else None
+        if game is None or game.status == Game.STATUS_FINISHED:
+            return []
+        okresy = game.get_periods_list()
+        Period = _get_period()
+        if not okresy or not all(p.status == Period.STATUS_FINISHED for p in okresy):
+            return []
+        remis = bool(game.league is not None and not game.league.allows_draw and game.home_team_goals is not None
+                     and game.home_team_goals == game.away_team_goals and game.shootout is None)
+        return [{'game_id': game.id, 'nazwa': _nazwa_meczu(game), 'wynik': f'{game.home_team_goals}:{game.away_team_goals}',
+                 'remis_bez_rozstrzygniecia': remis}]
+
+    @app.route('/api/wp-zapis/status')
+    def api_wp_zapis_status():
+        from core.managers.wp_zapis import get_wp_zapis
+        z = get_wp_zapis()
+        s = z.status() if z is not None else {'skonfigurowany': False, 'wlaczony': False, 'w_kolejce': 0, 'najstarszy_s': 0, 'ostatni_blad': None,
+                                              'ostatni_ok': None, 'odrzucone': []}
+        Game = _get_game()
+        for o in s['odrzucone']:
+            o['nazwa'] = _nazwa_meczu(Game.query.get(o['game_id']))
+        s['niezakonczone'] = _niezakonczone()
+        return jsonify(s)
+
+    @app.route('/api/wp-zapis/wlacznik', methods=['POST'])
+    def api_wp_zapis_wlacznik():
+        from core.managers.wp_zapis import get_wp_zapis
+        z = get_wp_zapis()
+        if z is None or not z.skonfigurowany:
+            return jsonify({'error': 'Zapis do WP nie jest skonfigurowany dla tej bazy'}), 400
+        z.ustaw_wlaczony(bool((request.get_json(silent=True) or {}).get('wlaczony', True)))
+        return jsonify(z.status())
+
+    @app.route('/api/wp-zapis/ponow', methods=['POST'])
+    def api_wp_zapis_ponow():
+        from core.managers.wp_zapis import get_wp_zapis
+        z = get_wp_zapis()
+        if z is None or not z.skonfigurowany:
+            return jsonify({'error': 'Zapis do WP nie jest skonfigurowany dla tej bazy'}), 400
+        z.ponow_teraz()
+        return jsonify(z.status())
+
+    @app.route('/api/games/<int:game_id>/finish', methods=['POST'])
+    def api_finish_game(game_id):
+        """Świadome zakończenie meczu przez operatora (okno „Zakończyć mecz?” albo pasek „Mecz nie jest zakończony”)."""
+        Game = _get_game()
+        game = Game.query.get(game_id)
+        if game is None:
+            return jsonify({'error': 'Nie znaleziono meczu'}), 404
+        if game.status != Game.STATUS_FINISHED:
+            game.set_finished()
+            db.session.commit()
+        return jsonify({'ok': True, 'game_id': game.id, 'status': game.status})
+
     @app.route('/api/status')
     def api_status():
         return jsonify({

@@ -2147,10 +2147,8 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 all_finished = all(p.status == Period.STATUS_FINISHED for p in all_periods)
             
                 if all_finished:
-                    # All periods finished - finish the game
-                    game.set_finished()
-                    db.session.commit()
-                    flash(f'Zakończono {period.description}. Mecz zakończony!', 'success')
+                    # W8a: mecz kończy świadome kliknięcie operatora (okno „Zakończyć mecz?” albo pasek „Mecz nie jest zakończony”), nie koniec ostatniego okresu
+                    flash(f'Zakończono {period.description}. Wszystkie części zakończone: zakończ mecz w panelu.', 'success')
                 else:
                     flash(f'Zakończono {period.description}', 'success')
         
@@ -2190,6 +2188,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             game = Game.query.get(period.game_id)
             if game:
                 score_changed = False
+                if game.status == Game.STATUS_NOT_STARTED:
+                    # W8a: start pierwszej (dowolnej) części oznacza, że mecz trwa; stan trafia do WP przez nasłuch zmian
+                    game.set_live()
+                    score_changed = True
                 if game.home_team_goals is None:
                     game.home_team_goals = 0
                     score_changed = True
@@ -2253,12 +2255,12 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             # pozwala index() i socket handlerowi poprawnie załadować dane meczu.
             # current_period_id zostanie nadpisane przy starcie kolejnego periodu.
             game = Game.query.get(period.game_id)
+            all_finished = False
             if game:
                 all_periods = game.get_periods_list()
-                if all(p.status == Period.STATUS_FINISHED for p in all_periods):
-                    game.set_finished()
-                    db.session.commit()
-            return jsonify({'ok': True})
+                all_finished = bool(all_periods) and all(p.status == Period.STATUS_FINISHED for p in all_periods)
+            # W8a: mecz kończy świadome kliknięcie operatora (POST /api/games/<id>/finish); odpowiedź mówi tylko, że wszystkie części są zakończone
+            return jsonify({'ok': True, 'all_finished': all_finished, 'game_id': game.id if game else None})
         except Exception as e:
             logger.error(f"API error finishing period {period_id}: {e}")
             return jsonify({'error': str(e)}), 500

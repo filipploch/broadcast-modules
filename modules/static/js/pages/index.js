@@ -968,6 +968,8 @@ function onFinishPeriodDblClick() {
         .then(data => {
             if (!data.ok) {
                 alert(`Błąd kończenia okresu: ${data.error || 'Nieznany błąd'}`);
+            } else if (data.all_finished && typeof window.wpZapisOdswiez === 'function') {
+                window.wpZapisOdswiez();      // W8a: wszystkie części zakończone: od razu okno „Zakończyć mecz?”
             }
             _showPeriodChoiceFrame();
         })

@@ -69,6 +69,10 @@ def create_app(config_name='default'):
         from core.utils.legacy_import import block_legacy_imports
         block_legacy_imports(app)
 
+        # W8a: zapis stanu i wyniku meczu do lokalnego WP (nasłuch zmian + kolejka + wątek w tle; nieaktywny dla baz próbnych i testów)
+        from core.managers.wp_zapis import init_wp_zapis
+        init_wp_zapis(app)
+
         @app.context_processor
         def inject_global_context():
             try:
