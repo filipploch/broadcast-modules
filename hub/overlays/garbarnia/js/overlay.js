@@ -90,7 +90,7 @@ function renderGenericContent(container, data) {
     } else if (typeof data === 'object') {
         wrapper.appendChild(renderGenericRecord(data));
     } else {
-        wrapper.textContent = String(data);
+        wrapper.textContent = String(displayText(data));
     }
     container.appendChild(wrapper);
 }
@@ -112,7 +112,7 @@ function renderGenericTable(rows) {
             keys.forEach(k => {
                 const td = document.createElement('td');
                 const v = row[k];
-                td.textContent = (v === null || v === undefined) ? '' : String(v);
+                td.textContent = String(displayText(v));
                 tr.appendChild(td);
             });
             table.appendChild(tr);
@@ -121,7 +121,7 @@ function renderGenericTable(rows) {
         rows.forEach(item => {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
-            td.textContent = String(item);
+            td.textContent = String(displayText(item));
             tr.appendChild(td);
             table.appendChild(tr);
         });
@@ -136,7 +136,7 @@ function renderGenericRecord(obj) {
         const dt = document.createElement('dt');
         dt.textContent = k;
         const dd = document.createElement('dd');
-        dd.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+        dd.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(displayText(v)));
         dl.appendChild(dt);
         dl.appendChild(dd);
     });
@@ -314,11 +314,11 @@ function buildTableContent(resultsEl, rows, headerText) {
 
         let name = document.createElement('div');
         name.className = 'results-name14';
-        name.textContent = row.team_name14;
+        name.textContent = displayText(row.team_name14);
 
         let pts = document.createElement('div');
         pts.className = 'results-points';
-        pts.textContent = row.points;
+        pts.textContent = displayText(row.points);
 
         el.appendChild(diff);
         el.appendChild(standing);
@@ -390,11 +390,11 @@ function buildResultsContentGame(resultsEl, games) {
 
         let homeName = document.createElement('div');
         homeName.className = 'results-home-team-name14 results-team-name14';
-        homeName.textContent = game.home_team_name14;
+        homeName.textContent = displayText(game.home_team_name14);
 
         let homeResult = document.createElement('div');
         homeResult.className = 'results-home-team-result results-team-result';
-        homeResult.textContent = game.home_team_goals ?? '-';
+        homeResult.textContent = displayText(game.home_team_goals ?? '-');
 
         let separator = document.createElement('div');
         separator.className = 'results-separator';
@@ -402,11 +402,11 @@ function buildResultsContentGame(resultsEl, games) {
 
         let awayResult = document.createElement('div');
         awayResult.className = 'results-away-team-result results-team-result';
-        awayResult.textContent = game.away_team_goals ?? '-';
+        awayResult.textContent = displayText(game.away_team_goals ?? '-');
 
         let awayName = document.createElement('div');
         awayName.className = 'results-away-team-name14 results-team-name14';
-        awayName.textContent = game.away_team_name14;
+        awayName.textContent = displayText(game.away_team_name14);
 
         row.appendChild(homeName);
         row.appendChild(homeResult);
@@ -460,11 +460,11 @@ function buildTableContentHorizontal(resultsEl, rows, headerText) {
 
         let name = document.createElement('div');
         name.className = 'results-cell-name';
-        name.textContent = row.team_short_name || row.team_name14;
+        name.textContent = displayText(row.team_short_name || row.team_name14);
 
         let pts = document.createElement('div');
         pts.className = 'results-cell-points';
-        pts.textContent = row.points;
+        pts.textContent = displayText(row.points);
 
         cell.appendChild(standing);
         cell.appendChild(name);
@@ -486,7 +486,7 @@ function animateTableSwapHorizontal(container, officialRows, virtualRows) {
         const el = cellEls[indexA];
 
         const ptsEl = el.querySelector('.results-cell-points');
-        if (ptsEl) ptsEl.textContent = itemB.points;
+        if (ptsEl) ptsEl.textContent = displayText(itemB.points);
         const standingEl = el.querySelector('.results-cell-standing');
         if (standingEl) standingEl.textContent = indexB + 1;
 
@@ -516,7 +516,7 @@ function animateTableSwap(container, officialRows, virtualRows) {
         const el = rowEls[indexA];
 
         const ptsEl = el.querySelector('.results-points');
-        if (ptsEl) ptsEl.textContent = itemB.points;
+        if (ptsEl) ptsEl.textContent = displayText(itemB.points);
         const standingEl = el.querySelector('.results-standing');
         if (standingEl) standingEl.textContent = indexB + 1;
 
@@ -788,10 +788,10 @@ function updateInterviewData(_data) {
         image.src = _data.image ? `${rootApp}${_data.image}` : '';
     }
     if (name && _data.name !== undefined) {
-        name.innerText = _data.name || '';
+        name.innerText = displayText(_data.name || '');
     }
     if (description && _data.description !== undefined) {
-        description.innerText = _data.description || '';
+        description.innerText = displayText(_data.description || '');
     }
 }
 
@@ -951,10 +951,10 @@ function updateUniformElements(_uniform, _uniformEelements) {
 
 function updateScoreboard(data) {
     if (typeof data.home_team_goals != "undefined") {
-        homeTeamScoreElement.textContent = (data.home_team_goals === null || data.home_team_goals === '') ? 0 : data.home_team_goals;
+        homeTeamScoreElement.textContent = displayText((data.home_team_goals === null || data.home_team_goals === '') ? 0 : data.home_team_goals);
     }
     if (typeof data.away_team_goals != "undefined") {
-        awayTeamScoreElement.textContent = (data.away_team_goals === null || data.away_team_goals === '') ? 0 : data.away_team_goals;
+        awayTeamScoreElement.textContent = displayText((data.away_team_goals === null || data.away_team_goals === '') ? 0 : data.away_team_goals);
     }
     if (typeof data.home_team_value2 != "undefined") {
         updateRedCardsElement(data.home_team_value2, homeTeamRedCardsElement);
@@ -985,7 +985,8 @@ ws.onopen = () => {
 
 function actionPlayerTeamShortNameElementGenerator(_playerTeamShortName, _eventTypeId) {
     if (_eventTypeId === 2) {
-        return `(${_playerTeamShortName})`;
+        const teamShort = displayText(_playerTeamShortName);
+        return teamShort !== '' ? `(${teamShort})` : '';      // W7f-null: bez pustych nawiasów
     }
     return '';
 }
@@ -1152,7 +1153,7 @@ ws.onmessage = (event) => {
     if (msg.type === 'banner_show') {
         const data = msg.payload || msg.data;
         const bannerContainer = document.getElementById('banner-container');
-        bannerContainer.innerHTML = data.source || '';
+        bannerContainer.innerHTML = displayText(data.source || '');
         bannerContainer.style.display = 'block';
         if (data.activation_function && typeof window[data.activation_function] === 'function') {
             window[data.activation_function]();
@@ -1193,25 +1194,25 @@ ws.onmessage = (event) => {
 
         if (typeof data.home_team_short_name != "undefined") {
             homeTeamShortNameElements.forEach(element => {
-                element.textContent = data.home_team_short_name ?? '';
+                element.textContent = displayText(data.home_team_short_name ?? '');
             })
         }
 
         if (typeof data.away_team_short_name != "undefined") {
             awayTeamShortNameElements.forEach(element => {
-                element.textContent = data.away_team_short_name ?? '';
+                element.textContent = displayText(data.away_team_short_name ?? '');
             })
         }
 
         if (typeof data.home_team_goals != "undefined") {
             homeTeamScoreElements.forEach(element => {
-                element.textContent = data.home_team_goals ?? 0;
+                element.textContent = displayText(data.home_team_goals ?? 0);
             })
         }
 
         if (typeof data.away_team_goals != "undefined") {
             awayTeamScoreElements.forEach(element => {
-                element.textContent = data.away_team_goals ?? 0;
+                element.textContent = displayText(data.away_team_goals ?? 0);
             })
         }
 
@@ -1259,10 +1260,10 @@ ws.onmessage = (event) => {
             actionTimeElement.textContent = (data.period_limit_s !== undefined)
                 ? formatGameTimeDisplay(data.game_time, data.period_limit_s, data.period_start_s)
                 : FutsalFormatters.formatElapsedTime(data.game_time, 0, { 'format': 'min', 'unit': 's' });
-            actionPlayerInfoElement.textContent = `${data.player_number ?? ''} ${data.player_name ?? ''}`.trim();
+            actionPlayerInfoElement.textContent = `${displayText(data.player_number ?? '')} ${displayText(data.player_name ?? '')}`.trim();
             actionPlayerTeamShortNameElement.textContent =
                 actionPlayerTeamShortNameElementGenerator(data.player_team_short_name ?? '', data.event_type_id);
-            actionTeamNameElement.textContent = data.team_name ?? '';
+            actionTeamNameElement.textContent = displayText(data.team_name ?? '');
 
             showNotificationContainer(actionInfoContainer, 'match-notification', 'block', 11100,
                 { kind: 'action_info', id: data.game_event_id });

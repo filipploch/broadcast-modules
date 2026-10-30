@@ -241,7 +241,7 @@ function createTeamSquad(_arr, _logo, _coach) {
         addClassName(squadPlayerRow, `rotate-show-element${index}`);
         addClassName(squadPlayerRow, 'animated-element');
         squadPlayerRow.dataset.animationOrder = '3';
-        squadPlayerRow.innerHTML = `<span class="squad-player-number">${element.number}</span><span class="squad-player-name">${element.player_name}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
+        squadPlayerRow.innerHTML = `<span class="squad-player-number">${displayText(element.number)}</span><span class="squad-player-name">${displayText(element.player_name)}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
         squadContent.appendChild(squadPlayerRow);
     });
 
@@ -332,7 +332,7 @@ function garbarniaExpandStartBottomSpecificContainer(_headerText, _arr) {
         html += header;
         let _body = '';
         _arr.forEach(el => {
-            let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
+            let _bodyElement = `<div class="start-bottom-body">${displayText(el.name)}</div>`;
             _body += _bodyElement;
         });
         html += _body;
@@ -363,11 +363,11 @@ function garbarniaExpandStartBottomInfoContainer(_gameData) {
     let address1Element = document.createElement('div');
     addClassName(address1Element, 'start-bottom-header');
     addClassName(address1Element, 'specific-colors');
-    address1Element.innerText = stadium.name;
+    address1Element.innerText = displayText(stadium.name);
     let address2Element = document.createElement('div');
     addClassName(address2Element, 'start-bottom-header');
     addClassName(address2Element, 'specific-colors');
-    address2Element.innerText = stadium.address;
+    address2Element.innerText = displayText(stadium.address);
     let currentDateElement = document.createElement('div');
     addClassName(currentDateElement, 'start-bottom-body');
     currentDateElement.innerText = currentDate;
@@ -437,7 +437,7 @@ function garbarniaExpandStartContainer(_gameData, _break = false) {
         startBodyLogosContainer.style.height = '200px';
         startBodyLogosContainer.style.paddingTop = '20px';
         leagueLogoImg.remove();
-        leagueLogoContainer.innerText = _gameData.result;
+        leagueLogoContainer.innerText = displayText(_gameData.result);
         let scorersContainer = document.createElement('div');
         scorersContainer.id = 'scorers-container';
         scorersContainer.style.display = 'none';
@@ -475,12 +475,12 @@ function garbarniaExpandStartContainer(_gameData, _break = false) {
         addClassName(homeTeamNameElement, 'start-team');
         addClassName(homeTeamNameElement, 'specific-colors');
         addClassName(homeTeamNameElement, 'rotate-show-element1');
-        homeTeamNameElement.innerText = data.home_team_name;
+        homeTeamNameElement.innerText = displayText(data.home_team_name);
         let awayTeamNameElement = document.createElement('div');
         addClassName(awayTeamNameElement, 'start-team');
         addClassName(awayTeamNameElement, 'specific-colors');
         addClassName(awayTeamNameElement, 'rotate-show-element1');
-        awayTeamNameElement.innerText = data.away_team_name;
+        awayTeamNameElement.innerText = displayText(data.away_team_name);
         startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
         startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
         startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
@@ -570,14 +570,14 @@ function garbarniaGenerateScorersList(_scorers, _side) {
         Object.assign(firstName.style, {
             marginLeft: '30px'
         });
-        firstName.textContent = scorer.player_first_name ?? '';
+        firstName.textContent = displayText(scorer.player_first_name ?? '');
 
         const lastName = document.createElement('span');
         Object.assign(lastName.style, {
             paddingLeft: '10px',
             fontWeight: '700'
         });
-        lastName.textContent = scorer.player_last_name ?? '';
+        lastName.textContent = displayText(scorer.player_last_name ?? '');
 
         const goalTime = document.createElement('span');
         Object.assign(goalTime.style, {
@@ -587,7 +587,7 @@ function garbarniaGenerateScorersList(_scorers, _side) {
         });
         goalTime.textContent = '';
         scorer.goals.forEach(goal => {
-            let min = goal.minute;
+            let min = displayText(goal.minute);
             if (goal.added_time > 0) min += `+${goal.added_time}`;
             goalTime.textContent += goal.is_own_goal ? `(s)${min}' ` : `${min}' `;
         });
@@ -788,10 +788,10 @@ function garbarniaExpandBreakContainer(_data) {
         fontWeight: '700',
         animation: 'moveHomeTeamNameElement 500ms ease-in-out 1000ms both'
     });
-    homeNameEl.textContent = (_data.home_team_name_14 || '').toUpperCase();
+    homeNameEl.textContent = (displayText(_data.home_team_name_14) || '').toUpperCase();
     homeNameWrap.appendChild(homeNameEl);
 
-    const resultParts = ((_data.result || '0 : 0').toString()).split(':').map(s => s.trim());
+    const resultParts = ((displayText(_data.result) || '0 : 0').toString()).split(':').map(s => s.trim());
     const resultEl = document.createElement('div');
     Object.assign(resultEl.style, {
         fontSize: '75px',
@@ -812,7 +812,7 @@ function garbarniaExpandBreakContainer(_data) {
     const homeResultEl = document.createElement('div');
     homeResultEl.id = 'home-team-result-element';
     Object.assign(homeResultEl.style, { flex: '2', textAlign: 'center' });
-    homeResultEl.textContent = resultParts[0] || '0';
+    homeResultEl.textContent = displayText(resultParts[0]) || '0';
 
     const leagueLogoEl = document.createElement('div');
     Object.assign(leagueLogoEl.style, {
@@ -834,7 +834,7 @@ function garbarniaExpandBreakContainer(_data) {
     const awayResultEl = document.createElement('div');
     awayResultEl.id = 'away-team-result-element';
     Object.assign(awayResultEl.style, { flex: '2', textAlign: 'center' });
-    awayResultEl.textContent = resultParts[1] || '0';
+    awayResultEl.textContent = displayText(resultParts[1]) || '0';
 
     resultEl.appendChild(homeResultEl);
     resultEl.appendChild(leagueLogoEl);
@@ -867,7 +867,7 @@ function garbarniaExpandBreakContainer(_data) {
         fontWeight: '700',
         animation: 'moveAwayTeamNameElement 500ms ease-in-out 1000ms both'
     });
-    awayNameEl.textContent = (_data.away_team_name_14 || '').toUpperCase();
+    awayNameEl.textContent = (displayText(_data.away_team_name_14) || '').toUpperCase();
     awayNameWrap.appendChild(awayNameEl);
 
     xContainer.appendChild(homeNameWrap);
@@ -975,11 +975,11 @@ function garbarniaBuildResultsContent(resultsEl, games) {
 
         let homeName = document.createElement('div');
         homeName.className = 'results-home-team-name14 results-team-name14';
-        homeName.textContent = game.home_team_name14;
+        homeName.textContent = displayText(game.home_team_name14);
 
         let homeResult = document.createElement('div');
         homeResult.className = 'results-home-team-result results-team-result';
-        homeResult.textContent = game.home_team_goals;
+        homeResult.textContent = displayText(game.home_team_goals);
 
         let separator = document.createElement('div');
         separator.className = 'results-separator';
@@ -987,11 +987,11 @@ function garbarniaBuildResultsContent(resultsEl, games) {
 
         let awayResult = document.createElement('div');
         awayResult.className = 'results-away-team-result results-team-result';
-        awayResult.textContent = game.away_team_goals;
+        awayResult.textContent = displayText(game.away_team_goals);
 
         let awayName = document.createElement('div');
         awayName.className = 'results-away-team-name14 results-team-name14';
-        awayName.textContent = game.away_team_name14;
+        awayName.textContent = displayText(game.away_team_name14);
 
         row.appendChild(homeName);
         row.appendChild(homeResult);
@@ -1100,7 +1100,7 @@ function garbarniaBuildFullTableContent(resultsEl, rows) {
         el.className = `results-table-row specific-colors rotate-show-element${index + 1}`;
         el.dataset.teamName14 = row.team_name14;
 
-        const gd = (row.goal_difference > 0 ? '+' : '') + row.goal_difference;
+        const gd = (row.goal_difference > 0 ? '+' : '') + displayText(row.goal_difference);
         [
             { text: index + 1,          specificClassName: 'results-table-standing' },
             { text: row.team_name14,    specificClassName: 'results-table-name' },
@@ -1118,7 +1118,7 @@ function garbarniaBuildFullTableContent(resultsEl, rows) {
             if (specificClassName) {
                 cell.classList.add(specificClassName);
             }
-            cell.textContent = text;
+            cell.textContent = displayText(text);
             el.appendChild(cell);
         });
 
@@ -1182,7 +1182,7 @@ function garbarniaAnimateFullTableSwap(container, officialRows, virtualRows) {
         const cells = el.querySelectorAll('.results-table-cell');
 
         if (cells[0]) cells[0].textContent = indexB + 1;
-        if (cells[9]) cells[9].textContent = itemB.points;
+        if (cells[9]) cells[9].textContent = displayText(itemB.points);
 
         const indicator = el.querySelector('.results-table-indicator');
         if (indicator) {

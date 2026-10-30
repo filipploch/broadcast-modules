@@ -23,6 +23,7 @@
     'use strict';
 
     function clockString(totalSeconds) {
+        if (!isFinite(totalSeconds)) return '';      // W7f-null: brak czasu to pusty tekst, nie "NaN:NaN"
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = totalSeconds % 60;
         return `${minutes}:${String(seconds).padStart(2, '0')}`;

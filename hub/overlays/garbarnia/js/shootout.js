@@ -65,10 +65,10 @@ function fillShootoutContainer(data) {
     let homeTeamResult = document.querySelector('#shootout-away-team-result');
     let awayTeamResult = document.querySelector('#shootout-away-team-result');
 
-    homeTeamNameElement.innerText = data.home_team_name;
-    awayTeamNameElement.innerText = data.away_team_name;
-    homeTeamResult.innerText = data.home_team_shootouts;
-    awayTeamResult.innerText = data.away_team_shootouts;
+    homeTeamNameElement.innerText = displayText(data.home_team_name);
+    awayTeamNameElement.innerText = displayText(data.away_team_name);
+    homeTeamResult.innerText = displayText(data.home_team_shootouts);
+    awayTeamResult.innerText = displayText(data.away_team_shootouts);
     homeTeamLogoImg.src = rootApp+`${data.home_team_logo}`;
     awayTeamLogoImg.src = rootApp+`${data.away_team_logo}`;
 }
