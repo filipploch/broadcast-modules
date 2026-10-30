@@ -198,7 +198,23 @@ function testMutacji() {
   return liczba;
 }
 
-if (!ZAPISZ) testFunkcji();
+// ── 2b. nagłówek zmiany: skrót drużyny w nawiasach tylko gdy niepusty ─────────────────────────────────────
+function testNaglowkaZmiany() {
+  const naglowek = (n, skrot) => {
+    const p = loadOverlayPage(n); p.send('registered', {}); p.advance(100); p.log.length = 0;
+    const payload = { game_time_ms: 754000, period_end_s: 2400, period_start_s: 0, substitutions: [{ player_out_number: 7, player_out_name: 'A', player_in_number: 10, player_in_name: 'B' }] };
+    if (skrot !== undefined) payload.team_short_name = skrot;
+    p.send('show_substitution', payload);
+    const l = p.log.find((x) => x.startsWith('div#substitution-header'));
+    return l ? JSON.parse(l.split('	')[2]) : null;
+  };
+  for (const n of NAKLADKI) {
+    const oczek = [['GAR', "13' ZMIANA (GAR)"], ['', "13' ZMIANA"], [undefined, "13' ZMIANA"], [null, "13' ZMIANA"], ['None', "13' ZMIANA"], ['null', "13' ZMIANA"], ['NaN', "13' ZMIANA"]];
+    for (const [skrot, wynik] of oczek) if (naglowek(n, skrot) !== wynik) raportuj(`${n}: nagłówek zmiany dla skrótu ${JSON.stringify(skrot)} = ${JSON.stringify(naglowek(n, skrot))}, oczekiwano ${JSON.stringify(wynik)}`);
+  }
+}
+
+if (!ZAPISZ) { testFunkcji(); testNaglowkaZmiany(); }
 let wzorzec = null;
 if (!ZAPISZ) {
   if (!fs.existsSync(WZORZEC)) { console.log('Brak wzorca: uruchom z --zapisz-wzorzec na kodzie sprzed zmiany'); process.exit(2); }

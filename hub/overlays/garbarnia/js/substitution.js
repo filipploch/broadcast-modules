@@ -19,7 +19,8 @@ function showSubstitutionOverlay(data) {
     var timeDisplay = formatGameTimeDisplay(totalSec, periodEndS, data.period_start_s);
  
     // header.textContent = minutes + " ZMIANA (" + (data.team_short_name || '') + ")";
-    header.textContent = timeDisplay + " ZMIANA (" + displayText(data.team_short_name || '') + ")";
+    var teamShort = displayText(data.team_short_name || '');
+    header.textContent = timeDisplay + " ZMIANA" + (teamShort !== '' ? " (" + teamShort + ")" : "");      // W7f-null: bez pustych nawiasów
  
     // Zbuduj slot dla każdej pary
     (data.substitutions || []).forEach(function (sub) {
