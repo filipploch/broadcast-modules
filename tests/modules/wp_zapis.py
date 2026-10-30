@@ -366,6 +366,39 @@ def make(APP, modul):
             self.assertEqual(self.wyslij(), 1)
             self.assertEqual(self.client.get('/api/wp-zapis/status').get_json()['w_kolejce'], 0)
 
+        def test_nieaktywny_zapis_podaje_powod_w_statusie_i_w_samokontroli(self):
+            """Próba W8a-min nie przeszła, bo zapis był cicho nieaktywny (HUB wskazał moduł folder WP bez danych logowania): powód musi być widoczny."""
+            import os
+            from core.managers.wp_client import WpConfig
+            pw = self.wp_zapis.powod_nieaktywnosci
+            app = type('A', (), {'config': {}})()
+            stare = {k: os.environ.pop(k, None) for k in ('BM_WP_ZAPIS', 'BM_WP_ZAPIS_PROBA')}
+            try:
+                self.assertIsNone(pw(app, WpConfig(enabled=True, user='u', password='p'), 'database.db'))
+                self.assertIn('brak danych logowania', pw(app, WpConfig(enabled=True, creds_file='X:/nie-ma/dane-api-nalf.json'), 'database.db'))
+                self.assertIn('dane-api-nalf.json', pw(app, WpConfig(enabled=True, creds_file='X:/nie-ma/dane-api-nalf.json'), 'database.db'))
+                self.assertIn('BM_WP_ZAPIS_PROBA=1', pw(app, WpConfig(enabled=True, user='u', password='p'), 'database-proba.db'))
+                self.assertIn('nie ma własnego WP', pw(app, WpConfig(enabled=False), 'database.db'))
+                self.assertIn('BM_WP_ZAPIS=0', (os.environ.__setitem__('BM_WP_ZAPIS', '0'), pw(app, WpConfig(enabled=True, user='u', password='p'), 'database.db'))[1])
+            finally:
+                for k, v in stare.items():
+                    os.environ.pop(k, None)
+                    if v is not None:
+                        os.environ[k] = v
+            self.z.skonfigurowany, self.z.powod = False, 'baza database-proba.db nie jest bazą operacyjną'
+            s = self.client.get('/api/wp-zapis/status').get_json()
+            self.assertFalse(s['skonfigurowany'])
+            self.assertIn('database-proba.db', s['powod'])
+            self.wp_zapis.ustaw_instancje(None)                                                             # moduł bez zainicjowanego zapisu też odpowiada, z powodem
+            s = self.client.get('/api/wp-zapis/status').get_json()
+            self.assertFalse(s['skonfigurowany'])
+            self.assertTrue(s['powod'])
+
+        def test_aktywny_zapis_podaje_adres_i_wersje_w_statusie(self):
+            self.z.adres, self.z.wersja = 'http://127.0.0.1:8099', 'etap/test, abc1234'
+            s = self.client.get('/api/wp-zapis/status').get_json()
+            self.assertEqual((s['adres'], s['wersja'], s['powod']), ('http://127.0.0.1:8099', 'etap/test, abc1234', ''))
+
         def test_panel_bez_konfiguracji_zapisu_odpowiada_i_odrzuca_zmiany(self):
             self.z.skonfigurowany = False
             s = self.client.get('/api/wp-zapis/status').get_json()
@@ -403,6 +436,35 @@ def make(APP, modul):
                 self.wyslij()
                 cialo = self.fake.zapytania[-1][1]
                 self.assertEqual(cialo['state'], 'zakonczony')
+            finally:
+                cm._hub_client = None
+                cm._timer_manager = None
+
+        def test_start_zegara_glownego_rozpoczyna_mecz_i_trafia_do_wp(self):
+            """Wymaganie właściciela: mecz trwa od wciśnięcia START zegara (potwierdzenie z timer-pluginu), niezależnie od drogi startu."""
+            from unittest.mock import MagicMock
+            import core.managers as cm
+            from core.managers.period_manager import PeriodManager
+            from app.managers.timer_manager import TimerManager
+            from app.models import Period, GameTimer
+            cm._hub_client = MagicMock()
+            tm = TimerManager(cm._hub_client)
+            tm._broadcast_penalty_state = lambda *a, **k: None
+            cm._timer_manager = tm
+            try:
+                PeriodManager().create_default_periods(game_id=self.g1)
+                p1 = Period.query.filter_by(game_id=self.g1).order_by(Period.period_order).first()
+                self.db.session.add(GameTimer(game_id=self.g1, period_id=p1.id, timer_type=GameTimer.TYPE_MAIN, plugin_timer_id=p1.main_timer_name,
+                                              elapsed_time_ms=0, limit_ms=p1.limit, state='idle'))
+                self.db.session.commit()
+                self.assertEqual((self.mecz().status, p1.status), (self.Game.STATUS_NOT_STARTED, Period.STATUS_NOT_STARTED))
+                tm.on_timer_started({'type': 'timer_started', 'payload': {'timer_id': p1.main_timer_name, 'state': 'running', 'elapsed_time': 0, 'limit': p1.limit}})
+                self.assertEqual(self.mecz().status, self.Game.STATUS_PENDING)
+                self.assertEqual(self.wyslij(), 1)
+                self.assertEqual(self.fake.zapytania[-1][1]['state'], 'trwa')
+                self.zmien(status=self.Game.STATUS_FINISHED)                                                 # mecz zakończony nie wraca do „trwa” przez zegar
+                tm.on_timer_started({'type': 'timer_started', 'payload': {'timer_id': p1.main_timer_name, 'state': 'running', 'elapsed_time': 0, 'limit': p1.limit}})
+                self.assertEqual(self.mecz().status, self.Game.STATUS_FINISHED)
             finally:
                 cm._hub_client = None
                 cm._timer_manager = None
@@ -461,6 +523,6 @@ def make_node():
             skrypt = Path(__file__).resolve().parent / 'js' / 'wp_zapis_ui_test.js'
             r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn('OK 4 przypadków', r.stdout)
+            self.assertIn('OK 5 przypadków', r.stdout)
 
     return WpZapisUiNode

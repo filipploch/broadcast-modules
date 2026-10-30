@@ -99,10 +99,9 @@ def register_routes(app, exclude=None):
 
     @app.route('/api/wp-zapis/status')
     def api_wp_zapis_status():
-        from core.managers.wp_zapis import get_wp_zapis
+        from core.managers.wp_zapis import get_wp_zapis, WpZapis
         z = get_wp_zapis()
-        s = z.status() if z is not None else {'skonfigurowany': False, 'wlaczony': False, 'w_kolejce': 0, 'najstarszy_s': 0, 'ostatni_blad': None,
-                                              'ostatni_ok': None, 'odrzucone': []}
+        s = z.status() if z is not None else WpZapis.status_nieaktywny()
         Game = _get_game()
         for o in s['odrzucone']:
             o['nazwa'] = _nazwa_meczu(Game.query.get(o['game_id']))

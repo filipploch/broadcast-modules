@@ -8,15 +8,17 @@
 
     // ── logika (bez DOM) ────────────────────────────────────────────────
     function opisPaska(s) {
-        if (!s || !s.skonfigurowany) return null;                       // zapis do WP nieaktywny dla tej bazy: pasek się nie pokazuje
+        // pasek jest ZAWSZE widoczny: także szary „NIEAKTYWNY” (baza próbna, brak danych logowania, brak odpowiedzi modułu), z powodem
+        if (!s || s.brak_odpowiedzi) return { kolor: 'szary', tekst: 'Zapis do WP: brak odpowiedzi modułu', pokazPonow: false, pokazPrzelacznik: false };
+        if (!s.skonfigurowany) return { kolor: 'szary', tekst: 'Zapis do WP: NIEAKTYWNY' + (s.powod ? ' (' + s.powod + ')' : ''), pokazPonow: false, pokazPrzelacznik: false };
         const n = s.w_kolejce || 0;
         const blad = s.ostatni_blad ? s.ostatni_blad.tekst : '';
-        if (!s.wlaczony) return { kolor: 'szary', tekst: 'Zapis do WP: WYŁĄCZONY' + (n ? ` (niezapisane: ${n})` : ''), pokazPonow: false };
+        if (!s.wlaczony) return { kolor: 'szary', tekst: 'Zapis do WP: WYŁĄCZONY' + (n ? ` (niezapisane: ${n})` : ''), pokazPonow: false, pokazPrzelacznik: true };
         if (blad || (n > 0 && (s.najstarszy_s || 0) > PROG_CZERWONY_S)) {
-            return { kolor: 'czerwony', tekst: `WP: niezapisane: ${n}` + (blad ? ` · błąd: ${blad}` : ''), pokazPonow: n > 0 };
+            return { kolor: 'czerwony', tekst: `WP: niezapisane: ${n}` + (blad ? ` · błąd: ${blad}` : ''), pokazPonow: n > 0, pokazPrzelacznik: true };
         }
-        if (n > 0) return { kolor: 'zolty', tekst: `WP: niezapisane: ${n}`, pokazPonow: true };
-        return { kolor: 'zielony', tekst: 'WP: zapisane', pokazPonow: false };
+        if (n > 0) return { kolor: 'zolty', tekst: `WP: niezapisane: ${n}`, pokazPonow: true, pokazPrzelacznik: true };
+        return { kolor: 'zielony', tekst: 'WP: zapisane', pokazPonow: false, pokazPrzelacznik: true };
     }
 
     function odrzuconeTeksty(s) {
@@ -108,6 +110,7 @@
             el.pasek.style.background = KOLORY[opis.kolor];
             el.tekst.textContent = opis.tekst;
             el.ponow.style.display = opis.pokazPonow ? '' : 'none';
+            el.przelacz.style.display = opis.pokazPrzelacznik ? '' : 'none';
             el.przelacz.textContent = s.wlaczony ? 'Wyłącz zapis' : 'Włącz zapis';
         } else {
             el.pasek.style.display = 'none';
@@ -128,7 +131,7 @@
     }
 
     function odswiez() {
-        return fetch('/api/wp-zapis/status').then(r => r.json()).then(pokaz).catch(() => {});
+        return fetch('/api/wp-zapis/status').then(r => r.json()).then(pokaz).catch(() => pokaz({ brak_odpowiedzi: true, niezakonczone: [], odrzucone: [] }));
     }
 
     function start() {

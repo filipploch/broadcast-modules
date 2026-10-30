@@ -115,8 +115,9 @@ class Kolejka:
 
 
 class WpZapis:
-    def __init__(self, app, kolejka_sciezka, ustawienia_sciezka, klient_fabryka, skonfigurowany, zegar=time.time):
+    def __init__(self, app, kolejka_sciezka, ustawienia_sciezka, klient_fabryka, skonfigurowany, zegar=time.time, powod='', adres='', wersja=''):
         self.app = app
+        self.powod, self.adres, self.wersja = powod, adres, wersja     # tylko do pokazania w statusie (panel, samokontrola)
         self._kolejka_sciezka = kolejka_sciezka
         self._kolejka = None
         self.ustawienia = Path(ustawienia_sciezka)
@@ -218,10 +219,15 @@ class WpZapis:
 
     def status(self):
         if not self.skonfigurowany:
-            return {'skonfigurowany': False, 'wlaczony': False, 'w_kolejce': 0, 'najstarszy_s': 0, 'ostatni_blad': None, 'ostatni_ok': None, 'odrzucone': []}
+            return self.status_nieaktywny(self.powod)
         s = self.kolejka.status(self.zegar())
-        s.update({'skonfigurowany': self.skonfigurowany, 'wlaczony': self.wlaczony()})
+        s.update({'skonfigurowany': self.skonfigurowany, 'wlaczony': self.wlaczony(), 'powod': '', 'adres': self.adres, 'wersja': self.wersja})
         return s
+
+    @staticmethod
+    def status_nieaktywny(powod=''):
+        return {'skonfigurowany': False, 'wlaczony': False, 'w_kolejce': 0, 'najstarszy_s': 0, 'ostatni_blad': None, 'ostatni_ok': None, 'odrzucone': [],
+                'powod': powod or 'zapis do WP nie został zainicjowany', 'adres': '', 'wersja': ''}
 
     # -- wątek w tle
     def start(self):
@@ -296,19 +302,42 @@ def _zainstaluj_nasluch():
         session.info.pop('bm_wp_zapis_ids', None)
 
 
-def _skonfigurowany(app, cfg, nazwa_bazy=None):
+def powod_nieaktywnosci(app, cfg, nazwa_bazy=None):
+    """None, gdy zapis do WP ma być aktywny; w przeciwnym razie krótki polski powód (pokazuje go pasek w panelu, log i samokontrola skryptu próby)."""
     forced = app.config.get('WP_ZAPIS_FORCE')
     if forced is not None:
-        return bool(forced)
-    if os.environ.get('BM_WP_ZAPIS') == '0' or app.config.get('TESTING'):
-        return False
-    if not cfg.enabled or not cfg.has_auth:
-        return False
+        return None if forced else 'wyłączony ustawieniem aplikacji'
+    if os.environ.get('BM_WP_ZAPIS') == '0':
+        return 'wyłączony zmienną BM_WP_ZAPIS=0'
+    if app.config.get('TESTING'):
+        return 'tryb testowy'
+    if not cfg.enabled:
+        return 'moduł nie ma własnego WP' + (f' ({cfg.problem})' if cfg.problem else '')
+    if not cfg.has_auth:
+        return f'brak danych logowania do WP (oczekiwany plik {os.path.basename(cfg.creds_file or "dane-api-<moduł>.json")} w folderze {os.path.dirname(cfg.creds_file or "")})'
     if nazwa_bazy is None:
         from core.extensions import db
         nazwa_bazy = os.path.basename(str(db.engine.url.database or ''))
-    nazwa = nazwa_bazy
-    return nazwa == 'database.db' or os.environ.get('BM_WP_ZAPIS_PROBA') == '1'
+    if nazwa_bazy != 'database.db' and os.environ.get('BM_WP_ZAPIS_PROBA') != '1':
+        return f'baza {nazwa_bazy} nie jest bazą operacyjną (database.db); dla próby ustaw BM_WP_ZAPIS_PROBA=1'
+    return None
+
+
+def _skonfigurowany(app, cfg, nazwa_bazy=None):
+    return powod_nieaktywnosci(app, cfg, nazwa_bazy) is None
+
+
+def _commit():
+    """Skrócony commit kodu modułu (informacyjnie, do samokontroli; brak gita = '?')."""
+    import subprocess
+    try:
+        kw = dict(cwd=os.path.dirname(os.path.abspath(__file__)), capture_output=True, text=True, timeout=5)
+        c = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], **kw).stdout.strip()
+        b = subprocess.run(['git', 'branch', '--show-current'], **kw).stdout.strip()
+        brudny = bool(subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'], **kw).stdout.strip())
+        return f'{b or "?"}, {c or "?"}' + ('-dirty' if brudny else '')
+    except Exception:
+        return '?'
 
 
 def init_wp_zapis(app):
@@ -317,15 +346,17 @@ def init_wp_zapis(app):
     module_dir = app.config.get('MODULE_DIR') or os.getcwd()
     cfg = load_wp_config(module_dir)
     with app.app_context():
-        skonf = _skonfigurowany(app, cfg)
+        powod = powod_nieaktywnosci(app, cfg)
+    skonf = powod is None
     instance = Path(app.instance_path)
     z = WpZapis(app, app.config.get('WP_KOLEJKA_PATH') or instance / 'wp_kolejka.db', app.config.get('WP_ZAPIS_USTAWIENIA') or instance / 'wp_zapis.json',
-                lambda: WpClient(load_wp_config(module_dir), timeout=LIMIT_CZASU_S), skonf)
+                lambda: WpClient(load_wp_config(module_dir), timeout=LIMIT_CZASU_S), skonf, powod=powod or '', adres=cfg.url if skonf else '',
+                wersja=_commit() if skonf else '')
     ustaw_instancje(z)
     _zainstaluj_nasluch()
     if skonf and not app.config.get('TESTING'):
         z.start()
-        logger.info('Zapis do WP: włączony (kolejka %s, wyłącznik %s)', z.kolejka.sciezka, 'wlaczony' if z.wlaczony() else 'WYŁĄCZONY')
+        logger.info('Zapis do WP: %s -> %s (%s)', 'WŁĄCZONY' if z.wlaczony() else 'WYŁĄCZONY wyłącznikiem', z.adres, z.wersja)
     else:
-        logger.info('Zapis do WP: nieaktywny dla tej bazy/konfiguracji')
+        logger.info('Zapis do WP: NIEAKTYWNY: %s', powod)
     return z

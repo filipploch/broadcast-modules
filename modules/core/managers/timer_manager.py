@@ -866,6 +866,14 @@ class TimerManager:
                 if period and period.status == Period.STATUS_NOT_STARTED:
                     period.status = Period.STATUS_PENDING
                     db.session.commit()
+                # W8a: START zegara głównego oznacza też, że mecz trwa (stan „trwa” trafia do WP przez nasłuch zmian modelu Game),
+                # niezależnie od drogi startu (przycisk START, dwuklik, wznowienie po odświeżeniu); mecz zakończony zostaje zakończony
+                if period:
+                    from core.models.base_game import get_game_model
+                    game = get_game_model().query.get(period.game_id)
+                    if game and game.status == game.STATUS_NOT_STARTED:
+                        game.set_live()
+                        db.session.commit()
 
             # Log próbek TYLKO głównego timera okresu (nie kar) — do zamiany
             # czasu meczowego na czas ścienny (patrz base_timer_sample.py).

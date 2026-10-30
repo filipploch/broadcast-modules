@@ -45,9 +45,7 @@ const baza = { skonfigurowany: true, wlaczony: true, w_kolejce: 0, najstarszy_s:
 (async () => {
 await ok('opis paska: kolory i teksty dla stanów kolejki', () => {
   const { UI } = srodowisko([baza]);
-  assert.strictEqual(UI.opisPaska(null), null);
-  assert.strictEqual(UI.opisPaska({ ...baza, skonfigurowany: false }), null);
-  eq(UI.opisPaska(baza), { kolor: 'zielony', tekst: 'WP: zapisane', pokazPonow: false });
+  eq(UI.opisPaska(baza), { kolor: 'zielony', tekst: 'WP: zapisane', pokazPonow: false, pokazPrzelacznik: true });
   assert.strictEqual(UI.opisPaska({ ...baza, w_kolejce: 2, najstarszy_s: 3 }).kolor, 'zolty');
   assert.strictEqual(UI.opisPaska({ ...baza, w_kolejce: 2, najstarszy_s: 25 }).kolor, 'czerwony');
   const blad = UI.opisPaska({ ...baza, w_kolejce: 1, najstarszy_s: 1, ostatni_blad: { tekst: 'brak połączenia z WP' } });
@@ -56,6 +54,26 @@ await ok('opis paska: kolory i teksty dla stanów kolejki', () => {
   const wyl = UI.opisPaska({ ...baza, wlaczony: false, w_kolejce: 3 });
   assert.strictEqual(wyl.kolor, 'szary');
   assert.ok(wyl.tekst.includes('WYŁĄCZONY') && wyl.tekst.includes('niezapisane: 3'));
+});
+
+await ok('pasek jest ZAWSZE widoczny: nieaktywny zapis (z powodem) i brak odpowiedzi modułu to szary pasek bez przycisków', async () => {
+  const { UI } = srodowisko([baza]);
+  eq(UI.opisPaska({ ...baza, skonfigurowany: false, powod: 'brak danych logowania do WP' }),
+     { kolor: 'szary', tekst: 'Zapis do WP: NIEAKTYWNY (brak danych logowania do WP)', pokazPonow: false, pokazPrzelacznik: false });
+  assert.strictEqual(UI.opisPaska(null).kolor, 'szary');
+  // prawdziwy DOM-owy przepływ: odpowiedź „nieaktywny” i błąd pobrania statusu muszą dać widoczny pasek
+  const nieakt = { skonfigurowany: false, wlaczony: false, powod: 'baza database-proba.db nie jest bazą operacyjną', odrzucone: [], niezakonczone: [] };
+  const e = srodowisko([nieakt]);
+  await e.UI.odswiez();
+  const pasek = e.znajdz('wp-zapis-bar');
+  assert.strictEqual(pasek.style.display, 'flex');
+  assert.ok(pasek.children[0].textContent.includes('NIEAKTYWNY') && pasek.children[0].textContent.includes('database-proba.db'));
+  assert.strictEqual(e.znajdz('wp-zapis-przelacz').style.display, 'none');
+  const e2 = srodowisko([]);
+  e2.ctx.fetch = () => Promise.reject(new Error('moduł nie odpowiada'));
+  await e2.UI.odswiez();
+  assert.strictEqual(e2.znajdz('wp-zapis-bar').style.display, 'flex');
+  assert.ok(e2.znajdz('wp-zapis-bar').children[0].textContent.includes('brak odpowiedzi'));
 });
 
 await ok('odrzucone zapisy (409) mają nazwę meczu i powód', () => {
