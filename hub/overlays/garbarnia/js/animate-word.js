@@ -466,7 +466,7 @@ function animateWord(
 
         const team = document.createElement("div");
 
-        team.textContent = (teamName14 || "").toUpperCase().slice(0, 14);
+        team.textContent = (displayText(teamName14) || "").toUpperCase().slice(0, 14);
         team.style.fontSize = teamFont + "px";
         team.style.display = "flex";
         team.style.alignItems = "center";

@@ -28,10 +28,10 @@ function nalfExpandSquadContainer(_containerId, _teamName, _teamShortName, _arr,
     addClassName(infoHead, 'specific-colors');
     infoHead.dataset.animationOrder = '1';
     let spanTeamName = document.createElement('span');
-    spanTeamName.innerHTML = _teamName;
+    spanTeamName.innerHTML = displayText(_teamName);
     addClassName(spanTeamName, 'main-head-text');
     let spanTeamShortName = document.createElement('span');
-    spanTeamShortName.innerHTML = ` (${_teamShortName})`;
+    spanTeamShortName.innerHTML = ` (${displayText(_teamShortName)})`;
     addClassName(spanTeamShortName, 'squad-team-short-name');
     infoHead.appendChild(spanTeamName);
     infoHead.appendChild(spanTeamShortName);
@@ -84,7 +84,7 @@ function nalfCreateTeamSquad(_arr, _logo) {
         addClassName(squadPlayerRow, `rotate-show-element${index}`);
         addClassName(squadPlayerRow, 'animated-element');
         squadPlayerRow.dataset.animationOrder = '3';
-        squadPlayerRow.innerHTML = `<span class="squad-player-number">${element.number}</span><span class="squad-player-name">${element.player_name}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
+        squadPlayerRow.innerHTML = `<span class="squad-player-number">${displayText(element.number)}</span><span class="squad-player-name">${displayText(element.player_name)}</span><span class="squad-player-func">${goalkeeper}${captain}</span>`;
         squadContent.appendChild(squadPlayerRow);
     });
     return squadContent;
@@ -130,7 +130,7 @@ function nalfExpandStartBottomSpecificContainer(_headerText, _arr) {
         html += header;
         let _body = '';
         _arr.forEach(el => {
-            let _bodyElement = `<div class="start-bottom-body">${el.name}</div>`;
+            let _bodyElement = `<div class="start-bottom-body">${displayText(el.name)}</div>`;
             _body += _bodyElement;
         });
         html += _body;
@@ -161,11 +161,11 @@ function nalfExpandStartBottomInfoContainer(_gameData) {
     let address1Element = document.createElement('div');
     addClassName(address1Element, 'start-bottom-header');
     addClassName(address1Element, 'specific-colors');
-    address1Element.innerText = stadium.name;
+    address1Element.innerText = displayText(stadium.name);
     let address2Element = document.createElement('div');
     addClassName(address2Element, 'start-bottom-header');
     addClassName(address2Element, 'specific-colors');
-    address2Element.innerText = stadium.address;
+    address2Element.innerText = displayText(stadium.address);
     let currentDateElement = document.createElement('div');
     addClassName(currentDateElement, 'start-bottom-body');
     currentDateElement.innerText = currentDate;
@@ -193,12 +193,12 @@ function nalfGenerateScorersList(_scorers) {
         addClassName(lastName, 'break-scorer-last-name');
         let goalTimeContainer = document.createElement('span');
         addClassName(goalTimeContainer, 'break-goal-time');
-        firstName.innerText = scorer.player_first_name ?? '';
-        lastName.innerText = scorer.player_last_name ?? '';
+        firstName.innerText = displayText(scorer.player_first_name ?? '');
+        lastName.innerText = displayText(scorer.player_last_name ?? '');
         goalTimeContainer.innerText = '';
         let goals = scorer.goals;
         goals.forEach(goal => {
-            let displayedMinute = goal.minute;
+            let displayedMinute = displayText(goal.minute);
             if (goal.added_time > 0) displayedMinute += `+${goal.added_time}`
             if (goal.is_own_goal === true) {
                 goalTimeContainer.innerText += `(s)${displayedMinute}' `;
@@ -231,7 +231,7 @@ function nalfExpandStartContainer(_gameData, _break = false) {
     leagueTitleElement.innerText = setLeagueName();
     let roundTitleElement = document.createElement('div');
     addClassName(roundTitleElement, 'start-container-round-title');
-    roundTitleElement.innerText = data.round_name ?? '';
+    roundTitleElement.innerText = displayText(data.round_name ?? '');
     infoHead.appendChild(leagueTitleElement);
     infoHead.appendChild(roundTitleElement);
     startContainer.appendChild(infoHead);
@@ -281,7 +281,7 @@ function nalfExpandStartContainer(_gameData, _break = false) {
         startBodyLogosContainer.style.height = '200px';
         startBodyLogosContainer.style.paddingTop = '20px';
         leagueLogoImg.remove();
-        leagueLogoContainer.innerText = _gameData.result;
+        leagueLogoContainer.innerText = displayText(_gameData.result);
         let scorersContainer = document.createElement('div');
         scorersContainer.id = 'scorers-container';
         scorersContainer.style.display = 'none';
@@ -319,12 +319,12 @@ function nalfExpandStartContainer(_gameData, _break = false) {
         addClassName(homeTeamNameElement, 'start-team');
         addClassName(homeTeamNameElement, 'specific-colors');
         addClassName(homeTeamNameElement, 'rotate-show-element1');
-        homeTeamNameElement.innerText = data.home_team_name ?? '';
+        homeTeamNameElement.innerText = displayText(data.home_team_name ?? '');
         let awayTeamNameElement = document.createElement('div');
         addClassName(awayTeamNameElement, 'start-team');
         addClassName(awayTeamNameElement, 'specific-colors');
         addClassName(awayTeamNameElement, 'rotate-show-element1');
-        awayTeamNameElement.innerText = data.away_team_name ?? '';
+        awayTeamNameElement.innerText = displayText(data.away_team_name ?? '');
         startBodyTeamsInternalElement.appendChild(homeTeamNameElement);
         startBodyTeamsInternalElement.appendChild(awayTeamNameElement);
         startBodyTeamsContainer.appendChild(startBodyTeamsInternalElement);
@@ -512,7 +512,7 @@ function nalfAnimateTableSwap(container, officialRows, virtualRows) {
         const el = rowEls[indexA];
 
         const ptsEl = el.querySelector('.results-points');
-        if (ptsEl) ptsEl.textContent = itemB.points;
+        if (ptsEl) ptsEl.textContent = displayText(itemB.points);
         const standingEl = el.querySelector('.results-standing');
         if (standingEl) standingEl.textContent = indexB + 1;
 
@@ -695,10 +695,10 @@ function nalfFillShootoutContainer(data) {
     let homeTeamResult = document.querySelector('#shootout-home-team-result');
     let awayTeamResult = document.querySelector('#shootout-away-team-result');
 
-    homeTeamNameElement.innerText = data.home_team_name;
-    awayTeamNameElement.innerText = data.away_team_name;
-    homeTeamResult.innerText = data.home_team_shootouts;
-    awayTeamResult.innerText = data.away_team_shootouts;
+    homeTeamNameElement.innerText = displayText(data.home_team_name);
+    awayTeamNameElement.innerText = displayText(data.away_team_name);
+    homeTeamResult.innerText = displayText(data.home_team_shootouts);
+    awayTeamResult.innerText = displayText(data.away_team_shootouts);
     homeTeamLogoImg.src = rootApp + `${data.home_team_logo}`;
     awayTeamLogoImg.src = rootApp + `${data.away_team_logo}`;
 }

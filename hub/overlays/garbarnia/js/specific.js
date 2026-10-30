@@ -37,7 +37,7 @@ window.addEventListener('load', function () {
             var goalkeeper = element.is_goalkeeper ? ' (B) ' : '';
             var captain    = element.is_captain    ? ' (C) ' : '';
             var youth      = element.is_youth      ? ' (M) ' : '';
-            var number     = element.number != null ? element.number : '';
+            var number     = displayText(element.number);
 
             var row = document.createElement('div');
             row.classList.add(
@@ -50,7 +50,7 @@ window.addEventListener('load', function () {
             row.dataset.animationOrder = '3';
             row.innerHTML =
                 '<span class="squad-player-number">' + number + '</span>' +
-                '<span class="squad-player-name">' + element.player_name + '</span>' +
+                '<span class="squad-player-name">' + displayText(element.player_name) + '</span>' +
                 '<span class="squad-player-func">' + goalkeeper + captain + youth + '</span>';
             return row;
         }
@@ -70,7 +70,7 @@ window.addEventListener('load', function () {
 
         function buildCoachRow(element, rotateElementNr) {
             var row = document.createElement('div');
-            if(coach === null) return row; 
+            if (displayText(coach) === '') return row; 
             row.classList.add(
                 'squad-player-row',
                 'specific-colors',
@@ -82,7 +82,7 @@ window.addEventListener('load', function () {
             console.log('coach: ', coach);
             if(coach[0] !== null){
                 row.innerHTML = '<span class="squad-player-number"> trener </span>' +
-                    '<span class="squad-coach-name">' + coach + '</span>';
+                    '<span class="squad-coach-name">' + displayText(coach) + '</span>';
             }else{
                 row.style.display = 'none';
             }

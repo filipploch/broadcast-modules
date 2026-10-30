@@ -19,26 +19,28 @@ function showSubstitutionOverlay(data) {
     var timeDisplay = formatGameTimeDisplay(totalSec, periodEndS, data.period_start_s);
  
     // header.textContent = minutes + " ZMIANA (" + (data.team_short_name || '') + ")";
-    header.textContent = timeDisplay + " ZMIANA (" + (data.team_short_name || '') + ")";
+    header.textContent = timeDisplay + " ZMIANA (" + displayText(data.team_short_name || '') + ")";
  
     // Zbuduj slot dla każdej pary
     (data.substitutions || []).forEach(function (sub) {
         var slot = document.createElement('div');
         slot.className = 'substitution-slot';
  
-        var numOut  = sub.player_out_number != null ? sub.player_out_number + '.' : '';
-        var numIn   = sub.player_in_number  != null ? sub.player_in_number  + '.' : '';
+        var numOut  = displayText(sub.player_out_number);
+        var numIn   = displayText(sub.player_in_number);
+        numOut = numOut !== '' ? numOut + '.' : '';
+        numIn  = numIn  !== '' ? numIn  + '.' : '';
  
         slot.innerHTML =
             '<div class="substitution-row subst-player-out substitution-player">' +
                 '<div class="substitution-out-icon substitution-icon">&#9660</div>' +
                 '<div class="subst-player-number">' + numOut + '</div>' +
-                '<div class="subst-player-name">'   + (sub.player_out_name || '') + '</div>' +
+                '<div class="subst-player-name">'   + displayText(sub.player_out_name || '') + '</div>' +
             '</div>' +
             '<div class="substitution-row subst-player-in substitution-player">' +
                 '<div class="substitution-in-icon substitution-icon">&#9650</div>' +
                 '<div class="subst-player-number">' + numIn + '</div>' +
-                '<div class="subst-player-name">'   + (sub.player_in_name  || '') + '</div>' +
+                '<div class="subst-player-name">'   + displayText(sub.player_in_name  || '') + '</div>' +
             '</div>';
  
         innerWrap.appendChild(slot);

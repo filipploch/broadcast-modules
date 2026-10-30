@@ -114,12 +114,12 @@ let _gameInfoSlideIndex = 0;
 let _gameInfoSlideTimer = null;
 
 function renderSeasonName(seasonNumber) {
-    if (seasonNumber == null) return '';
+    if (displayText(seasonNumber) === '') return '';
     return 'NALFx' + seasonNumber;
 }
 
 function renderRoundName(roundName) {
-    if (!roundName) return '';
+    if (!displayText(roundName)) return '';
     if (roundName.includes('Mecz o 3. miejsce')) return 'MAŁY FINAŁ';
     if (roundName.includes('Puchar')) return roundName.replace(' Pucharu Ligi', '');
     if (roundName.includes('Dywizji')) return roundName.slice(0, -10);
@@ -132,7 +132,7 @@ function updateGameInfo(data) {
     const roundEl  = document.getElementById('scoreboard-round-info');
     if (!leagueEl || !seasonEl || !roundEl) return;
 
-    leagueEl.textContent = data.league_name ?? '';
+    leagueEl.textContent = displayText(data.league_name ?? '');
     seasonEl.textContent = renderSeasonName(data.season_number);
     roundEl.textContent  = renderRoundName(data.round_name);
 

@@ -1,3 +1,12 @@
+// W7f-null: wartość do wyświetlenia na ekranie. null, undefined, NaN oraz teksty dokładnie "null", "undefined", "NaN" i "None" (cały tekst pola, wielkość liter
+// jak podano, bez przycinania fragmentów dłuższych tekstów) dają "". Wszystko inne (w tym 0 i false) przechodzi bez zmian. Identyczna w obu nakładkach.
+function displayText(value) {
+    if (value === null || value === undefined) { return ""; }
+    if (typeof value === "number" && isNaN(value)) { return ""; }
+    if (value === "null" || value === "undefined" || value === "NaN" || value === "None") { return ""; }
+    return value;
+}
+
 function addClassName(element, className) {
   try {
     if (element && element.classList && !element.classList.contains(className)) {
@@ -74,6 +83,7 @@ function getCurrentDate() {
 //   t > E (doliczony czas, tylko Garbarnia):                        E/60 + k', k = ceil((t - E)/60)   (45:05 -> 45+1', 46:01 -> 45+2')
 // periodStartS jest opcjonalny: gdy go brak w danych (stary ładunek), zachowanie jak dotąd (bez wyjątku pierwszej chwili okresu).
 function formatGameTimeDisplay(gameTimeS, periodEndS, periodStartS) {
+    if (typeof gameTimeS !== "number" || !isFinite(gameTimeS)) { return ""; }      // W7f-null: brak czasu to pusty tekst, nie "NaN'"
     var maStart = typeof periodStartS === "number" && isFinite(periodStartS) && periodStartS >= 0;
     if (maStart && gameTimeS <= periodStartS) {
         return (Math.floor(periodStartS / 60) + 1) + "'";

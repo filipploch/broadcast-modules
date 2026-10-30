@@ -36,6 +36,7 @@ const FutsalFormatters = {
         }
 
         let totalTime = elapsedTime + initialTime;
+        if (typeof totalTime !== 'number' || !isFinite(totalTime)) return '';      // W7f-null: brak czasu to pusty tekst, nie "NaN:NaN"
 
         // Handle negative values
         const isNegative = totalTime < 0;
