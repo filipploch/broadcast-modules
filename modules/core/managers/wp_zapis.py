@@ -117,13 +117,21 @@ class Kolejka:
 class WpZapis:
     def __init__(self, app, kolejka_sciezka, ustawienia_sciezka, klient_fabryka, skonfigurowany, zegar=time.time):
         self.app = app
-        self.kolejka = Kolejka(kolejka_sciezka)
+        self._kolejka_sciezka = kolejka_sciezka
+        self._kolejka = None
         self.ustawienia = Path(ustawienia_sciezka)
         self.klient_fabryka = klient_fabryka
         self.skonfigurowany = bool(skonfigurowany)
         self.zegar = zegar
         self._stop = threading.Event()
         self._watek = None
+
+    @property
+    def kolejka(self):
+        """Plik kolejki powstaje dopiero przy pierwszym użyciu (moduł bez aktywnego zapisu, testy i próby nie zostawiają pustych plików w instance)."""
+        if self._kolejka is None:
+            self._kolejka = Kolejka(self._kolejka_sciezka)
+        return self._kolejka
 
     # -- wyłącznik
     def wlaczony(self):
@@ -209,6 +217,8 @@ class WpZapis:
         self.kolejka.ponow_teraz(self.zegar())
 
     def status(self):
+        if not self.skonfigurowany:
+            return {'skonfigurowany': False, 'wlaczony': False, 'w_kolejce': 0, 'najstarszy_s': 0, 'ostatni_blad': None, 'ostatni_ok': None, 'odrzucone': []}
         s = self.kolejka.status(self.zegar())
         s.update({'skonfigurowany': self.skonfigurowany, 'wlaczony': self.wlaczony()})
         return s

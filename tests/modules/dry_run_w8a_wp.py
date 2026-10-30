@@ -168,6 +168,22 @@ try:
     e7 = nowy()
     stan(e7, 1, 'trwa', 4, 4)
     sprawdz('„trwa”: natywny wynik nadal pusty', not mecz(e7)['main_results'])
+
+    # -- 11. klient modułu (WpClient.post_json) rozmawia z prawdziwą trasą: JSON z null, konflikt 409 jako WpError('conflict')
+    sys.path[:0] = [str(REPO / 'modules')]
+    from core.managers.wp_client import WpClient, WpConfig, WpError
+    klient = WpClient(WpConfig(enabled=True, url=f'http://127.0.0.1:{PORT}', user=creds['user'], password=creds['password']), timeout=20)
+    e8 = nowy()
+    odp = klient.post_json(f'bm/v1/event/{e8}/state', {'state': 'nierozpoczety', 'home': None, 'away': None, 'seq': 1})
+    sprawdz('klient modułu: nierozpoczęty z null w wyniku przyjęty', odp.get('ok') is True and odp.get('state') == 'nierozpoczety', odp)
+    odp = klient.post_json(f'bm/v1/event/{e8}/state', {'state': 'trwa', 'home': 1, 'away': 0, 'seq': 2})
+    sprawdz('klient modułu: trwa 1:0', odp.get('live_score') == '1:0', odp)
+    api('POST', f'sportspress/v2/events/{e8}', {'meta': {'bm_locked': True}})
+    try:
+        klient.post_json(f'bm/v1/event/{e8}/state', {'state': 'trwa', 'home': 2, 'away': 0, 'seq': 3})
+        sprawdz('klient modułu: blokada zgłasza WpError(conflict)', False)
+    except WpError as err:
+        sprawdz('klient modułu: blokada zgłasza WpError(conflict) z kodem bm_locked', err.kind == 'conflict' and err.code == 'bm_locked' and 'zablokowany' in str(err), (err.kind, err.code, str(err)))
 finally:
     pid = proc.pid
     subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], capture_output=True)
