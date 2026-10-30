@@ -214,7 +214,26 @@ function testNaglowkaZmiany() {
   }
 }
 
-if (!ZAPISZ) { testFunkcji(); testNaglowkaZmiany(); }
+// ── 2c. pasek zdarzenia (typ 2): skrót drużyny zawodnika w nawiasach tylko gdy niepusty ───────────────────────
+function testPaskaZdarzenia() {
+  const skrotDruzyny = (n, typ, skrot) => {
+    const p = loadOverlayPage(n); p.send('registered', {}); p.advance(100); p.log.length = 0;
+    const payload = { event_image_path: 'static/e.png', game_time: 754, period_limit_s: 2700, period_start_s: 0, player_number: 7, player_name: 'Kowalski', event_type_id: typ, team_name: 'Garbarnia', game_event_id: 5 };
+    if (skrot !== undefined) payload.player_team_short_name = skrot;
+    p.send('show_info', payload);
+    const l = p.log.find((x) => x.startsWith('span#action_player_team_short_name'));
+    return l ? JSON.parse(l.split('	')[2]) : null;
+  };
+  for (const n of NAKLADKI) {
+    const oczek = [[2, 'GAR', '(GAR)'], [2, '', ''], [2, undefined, ''], [2, null, ''], [2, 'None', ''], [2, 'null', ''], [2, 'NaN', ''], [1, 'GAR', ''], [1, '', '']];
+    for (const [typ, skrot, wynik] of oczek) {
+      const got = skrotDruzyny(n, typ, skrot);
+      if (got !== wynik) raportuj(`${n}: pasek zdarzenia (typ ${typ}), skrót ${JSON.stringify(skrot)} = ${JSON.stringify(got)}, oczekiwano ${JSON.stringify(wynik)}`);
+    }
+  }
+}
+
+if (!ZAPISZ) { testFunkcji(); testNaglowkaZmiany(); testPaskaZdarzenia(); }
 let wzorzec = null;
 if (!ZAPISZ) {
   if (!fs.existsSync(WZORZEC)) { console.log('Brak wzorca: uruchom z --zapisz-wzorzec na kodzie sprzed zmiany'); process.exit(2); }

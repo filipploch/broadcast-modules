@@ -976,7 +976,8 @@ ws.onopen = () => {
 
 function actionPlayerTeamShortNameElementGenerator(_playerTeamShortName, _eventTypeId) {
     if (_eventTypeId === 2) {
-        return `(${displayText(_playerTeamShortName)})`;
+        const teamShort = displayText(_playerTeamShortName);
+        return teamShort !== '' ? `(${teamShort})` : '';      // W7f-null: bez pustych nawiasów
     }
     return '';
 }
