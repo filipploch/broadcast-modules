@@ -1,0 +1,179 @@
+"""W8a-0/W8a: trasa bm/v1/event/<id>/state wtyczki bm-pomocnik na PRAWDZIWYM WP (testy PHP zastąpione wywołaniami REST z Pythona, decyzja z planu W8a).
+
+Uruchamia własną, jednorazową instancję WP na porcie 8099 (kod wp-local/wordpress, baza = kopia bazy p8091 w wp-local/databases/p8099, dane logowania z dane-api-nalf.json,
+które dotyczą tej kopii), tworzy własne mecze testowe przez REST SportsPressa i sprawdza zachowanie trasy. Po próbie zatrzymuje TYLKO swój proces (po numerze PID)
+i usuwa bazę p8099. Nie dotyka baz p8091/p8092 ani folderu transmisyjnego. Wymaga wolnego portu 8099."""
+import base64
+import json
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+sys.stdout.reconfigure(encoding='utf-8')
+REPO = pathlib.Path(__file__).resolve().parents[2]
+WPL = REPO / 'wp-local'
+PORT = 8099
+BASE = f'http://127.0.0.1:{PORT}/index.php?rest_route=/'
+DB_DIR = WPL / 'databases' / f'p{PORT}'
+creds = json.loads((WPL / 'dane-api-nalf.json').read_text(encoding='utf-8-sig'))
+TOKEN = base64.b64encode(f"{creds['user']}:{creds['password']}".encode()).decode()
+
+wyniki = []
+
+
+def sprawdz(opis, warunek, szczegol=''):
+    wyniki.append((opis, bool(warunek)))
+    print(('OK   ' if warunek else 'BŁĄD ') + opis + ((' | ' + str(szczegol)) if (not warunek and szczegol != '') else ''))
+
+
+def api(metoda, trasa, dane=None, auth=True, timeout=60):
+    ciało = json.dumps(dane).encode() if dane is not None else None
+    h = {'Content-Type': 'application/json'}
+    if auth:
+        h['Authorization'] = 'Basic ' + TOKEN
+    req = urllib.request.Request(BASE + trasa, data=ciało, headers=h, method=metoda)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read().decode() or 'null')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode())
+        except ValueError:
+            return e.code, None
+
+
+def stan(eid, seq, state, home=None, away=None):
+    return api('POST', f'bm/v1/event/{eid}/state', {'seq': seq, 'state': state, 'home': home, 'away': away})
+
+
+def mecz(eid):
+    return api('GET', f'sportspress/v2/events/{eid}&_fields=id,status,main_results,results,teams,meta')[1]
+
+
+port_zajety = False
+try:
+    with urllib.request.urlopen(f'http://127.0.0.1:{PORT}/', timeout=2):
+        port_zajety = True
+except Exception:
+    pass
+if port_zajety:
+    sys.exit(f'Port {PORT} jest zajęty; zamknij to, co go używa.')
+
+if DB_DIR.exists():
+    shutil.rmtree(DB_DIR)
+DB_DIR.mkdir(parents=True)
+for nazwa in ('.ht.sqlite', '.htaccess'):
+    zrodlo = WPL / 'databases' / 'p8091' / nazwa
+    if zrodlo.exists():
+        shutil.copy2(zrodlo, DB_DIR / nazwa)
+
+proc = subprocess.Popen([str(WPL / 'php' / 'php.exe'), 'wp-cli.phar', '--path=wordpress', 'server', '--host=127.0.0.1', f'--port={PORT}'], cwd=str(WPL),
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+try:
+    for _ in range(60):
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{PORT}/', timeout=5):
+                break
+        except Exception:
+            time.sleep(1)
+    else:
+        sys.exit('WP testowy nie wystartował w 60 s')
+
+    kod, druzyny = api('GET', 'sportspress/v2/teams&per_page=4&_fields=id')
+    t1, t2 = druzyny[0]['id'], druzyny[1]['id']
+
+    def nowy(status='future', teams=None, data='2030-01-01T12:00:00'):
+        k, e = api('POST', 'sportspress/v2/events', {'title': 'Test W8a', 'status': status, 'date': data, 'teams': teams or [t1, t2]})
+        assert k in (200, 201), (k, e)
+        return e['id']
+
+    # -- 1. stan „trwa” z wynikiem na żywo
+    e = nowy()
+    k, o = stan(e, 1, 'trwa', 0, 0)
+    sprawdz('trwa: 200 i stan w odpowiedzi', k == 200 and o['state'] == 'trwa' and o['live_score'] == '0:0' and not o['duplicate'], (k, o))
+    m = mecz(e)
+    sprawdz('trwa: bm_live prawda, bm_state i wynik na żywo w polach meczu', m['meta'].get('bm_live') is True and m['meta'].get('bm_state') == 'trwa' and m['meta'].get('bm_live_score') == '0:0', m['meta'])
+    sprawdz('trwa: natywnego wyniku nie ma, status bez zmian (future)', not m['main_results'] and m['status'] == 'future', (m['main_results'], m['status']))
+    k, o = stan(e, 2, 'trwa', 2, 1)
+    sprawdz('wynik na żywo się zmienia', k == 200 and mecz(e)['meta']['bm_live_score'] == '2:1')
+
+    # -- 2. idempotencja
+    k, o = stan(e, 2, 'trwa', 9, 9)
+    sprawdz('powtórzone seq: potwierdzone bez zmian (duplicate)', k == 200 and o['duplicate'] and mecz(e)['meta']['bm_live_score'] == '2:1', (k, o))
+    k, o = stan(e, 1, 'trwa', 7, 7)
+    sprawdz('starsze seq: ignorowane', k == 200 and o['duplicate'] and mecz(e)['meta']['bm_live_score'] == '2:1')
+
+    # -- 3. zakończenie: natywny wynik tylko tutaj
+    k, o = stan(e, 3, 'zakonczony', 3, 1)
+    m = mecz(e)
+    sprawdz('zakonczony: wynik natywny 3:1, bm_live fałsz, brak wyniku na żywo (mecz z datą w przyszłości zostaje „future”: WordPress tak ustawia status)',
+            k == 200 and m['main_results'] == ['3', '1'] and m['meta'].get('bm_live') is False and not m['meta'].get('bm_live_score') and m['status'] == 'future', (k, m))
+    r = m['results']
+    sprawdz('zakonczony: wyniki drużyn i rezultaty (win/loss)', r[str(t1)]['goals'] == '3' and r[str(t1)]['outcome'] == ['win'] and r[str(t2)]['outcome'] == ['loss'], r)
+    sprawdz('zakonczony: źródło wyniku = moduł', m['meta'].get('bm_result_source') == 'modul' and m['meta'].get('bm_state') == 'zakonczony')
+
+    # -- 4. poprawka wyniku przez moduł (WP nie zmieniono)
+    k, o = stan(e, 4, 'zakonczony', 3, 3)
+    m = mecz(e)
+    sprawdz('poprawka po zakończeniu przez moduł (remis): wynik 3:3, rezultat draw', k == 200 and m['main_results'] == ['3', '3'] and m['results'][str(t1)]['outcome'] == ['draw'], (k, m['main_results']))
+
+    # -- 5. organizator zmienia wynik w WP: moduł nie nadpisuje
+    api('POST', f'sportspress/v2/events/{e}', {'results': {str(t1): {'goals': '5', 'outcome': ['win']}, str(t2): {'goals': '0', 'outcome': ['loss']}}})
+    k, o = stan(e, 5, 'zakonczony', 3, 3)
+    sprawdz('wynik zmieniony przez organizatora: moduł dostaje 409 bm_wp_result z wynikiem WP', k == 409 and o.get('code') == 'bm_wp_result' and o['data'].get('wp_result') == [5, 0], (k, o))
+    sprawdz('wynik organizatora zostaje', mecz(e)['main_results'] == ['5', '0'])
+    k, o = stan(e, 6, 'zakonczony', 5, 0)
+    sprawdz('ten sam wynik co w WP: przyjęty bez zmiany', k == 200 and mecz(e)['main_results'] == ['5', '0'])
+    k, o = stan(e, 7, 'nierozpoczety')
+    sprawdz('cofnięcie do „nierozpoczęty” meczu z wynikiem organizatora: 409', k == 409 and mecz(e)['main_results'] == ['5', '0'], (k, o))
+    k, o = stan(e, 8, 'trwa', 1, 1)
+    sprawdz('„trwa” dla meczu z wynikiem organizatora: 409', k == 409)
+
+    # -- 6. blokada
+    e2 = nowy()
+    api('POST', f'sportspress/v2/events/{e2}', {'meta': {'bm_locked': True}})
+    k, o = stan(e2, 1, 'trwa', 0, 0)
+    sprawdz('bm_locked: 409 bm_locked', k == 409 and o.get('code') == 'bm_locked', (k, o))
+
+    # -- 7. cofnięcie wyniku wpisanego przez moduł
+    e3 = nowy()
+    stan(e3, 1, 'zakonczony', 2, 0)
+    k, o = stan(e3, 2, 'nierozpoczety')
+    m = mecz(e3)
+    sprawdz('cofnięcie meczu zakończonego przez moduł: wynik usunięty, stan nierozpoczęty', k == 200 and not m['main_results'] and m['meta'].get('bm_state') == 'nierozpoczety' and not m['meta'].get('bm_result_source'), (k, m))
+
+    # -- 8. walidacja
+    e4 = nowy()
+    sprawdz('zły stan: 400', stan(e4, 1, 'dziwny')[0] == 400)
+    sprawdz('brak seq: 400', api('POST', f'bm/v1/event/{e4}/state', {'state': 'trwa'})[0] == 400)
+    sprawdz('zakończony bez wyniku: 400', stan(e4, 1, 'zakonczony')[0] == 400)
+    sprawdz('wynik ujemny: 400', stan(e4, 1, 'trwa', -1, 0)[0] == 400)
+    sprawdz('to nie jest mecz: 404', api('POST', f'bm/v1/event/{t1}/state', {'seq': 1, 'state': 'trwa'})[0] == 404)
+    e5 = nowy(teams=[0, 0])
+    k, o = stan(e5, 1, 'trwa', 0, 0)
+    sprawdz('mecz bez ustalonych drużyn („Do ustalenia”): 409 bm_no_teams', k == 409 and o.get('code') == 'bm_no_teams', (k, o))
+    sprawdz('bez logowania: 401/403', api('POST', f'bm/v1/event/{e4}/state', {'seq': 1, 'state': 'trwa'}, auth=False)[0] in (401, 403))
+
+    # -- 9. mecz w przeszłości dostaje status publish po zakończeniu
+    e6 = nowy(status='publish', data='2026-09-01T12:00:00')
+    stan(e6, 1, 'zakonczony', 1, 0)
+    sprawdz('mecz z datą w przeszłości po zakończeniu: publish i wynik 1:0', mecz(e6)['status'] == 'publish' and mecz(e6)['main_results'] == ['1', '0'])
+
+    # -- 10. natywne wyniki nie powstają przed zakończeniem (tabela SportsPressa ich nie zlicza)
+    e7 = nowy()
+    stan(e7, 1, 'trwa', 4, 4)
+    sprawdz('„trwa”: natywny wynik nadal pusty', not mecz(e7)['main_results'])
+finally:
+    pid = proc.pid
+    subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], capture_output=True)
+    time.sleep(1)
+    shutil.rmtree(DB_DIR, ignore_errors=True)
+
+zle = [o for o, ok in wyniki if not ok]
+print(f'\nWYNIK: {"WSZYSTKO ZALICZONE" if not zle else "NIEZALICZONE: " + str(len(zle))} ({len(wyniki)} sprawdzeń)')
+sys.exit(1 if zle else 0)
