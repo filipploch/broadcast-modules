@@ -136,6 +136,11 @@ def register_routes(app, exclude=None):
         if game.status != Game.STATUS_FINISHED:
             game.set_finished()
             db.session.commit()
+        try:                                                   # po zakończeniu meczu żaden zegar nie biegnie (także po nieudanym zatrzymaniu przy końcu części)
+            from core.managers import get_timer_manager
+            get_timer_manager().pause_game_timers(game.id)
+        except Exception as e:
+            logger.warning(f'Zakończenie meczu {game.id}: nie udało się zatrzymać zegarów: {e}')
         return jsonify({'ok': True, 'game_id': game.id, 'status': game.status})
 
     @app.route('/api/status')

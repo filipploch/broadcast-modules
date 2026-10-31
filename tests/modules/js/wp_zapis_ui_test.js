@@ -7,7 +7,7 @@ const vm = require('vm');
 
 const src = fs.readFileSync(path.resolve(__dirname, '..', '..', '..', 'modules', 'static', 'js', 'pages', 'wp-zapis.js'), 'utf8');
 
-function srodowisko(odpowiedzi) {
+function srodowisko(odpowiedzi, wIframe) {
   const posty = [];
   const elementy = [];
   const mk = () => {
@@ -20,7 +20,7 @@ function srodowisko(odpowiedzi) {
   };
   const ctx = {
     __BM_TEST: true,
-    document: { createElement: mk, body: { append() {} }, readyState: 'complete', addEventListener() {} },
+    document: { createElement: mk, __ile: (id) => elementy.filter((e) => e.id === id).length, body: { append() {} }, readyState: 'complete', addEventListener() {} },
     setInterval: () => 0,
     fetch: (url, opts) => {
       if (opts && opts.method === 'POST') posty.push(url);
@@ -31,6 +31,8 @@ function srodowisko(odpowiedzi) {
   };
   ctx.window = ctx;
   ctx.globalThis = ctx;
+  if (wIframe) ctx.top = { wpZapisOdswiez: () => { wIframe.odswiezenia = (wIframe.odswiezenia || 0) + 1; return Promise.resolve(); } };   // global.top !== global: jesteśmy w ramce
+  else ctx.top = ctx;
   vm.createContext(ctx);
   vm.runInContext(src, ctx);
   const znajdz = (id) => elementy.find((e) => e.id === id);
@@ -111,6 +113,30 @@ await ok('przepływ: okno raz, „Nie teraz” zostawia pasek, „Zakończ mecz�
   await new Promise((r) => setTimeout(r, 20));
   assert.deepStrictEqual(e.posty, ['/api/games/7/finish']);
   assert.strictEqual(e.znajdz('mecz-niezakonczony-bar').style.display, 'none');
+});
+
+await ok('iframe (panel boczny) nie tworzy paska ani okna, nie wysyła żądań i zleca odświeżenie oknu głównemu; okno główne tworzy elementy raz', async () => {
+  const nz = { game_id: 7, nazwa: 'A – B', wynik: '2:1', remis_bez_rozstrzygniecia: false };
+  const stan = { ...baza, niezakonczone: [nz] };
+  const rodzic = {};
+  const ramka = srodowisko([stan], rodzic);
+  ramka.ctx.fetch = () => { throw new Error('iframe nie może wysyłać żądań'); };
+  await ramka.UI.odswiez();
+  assert.strictEqual(rodzic.odswiezenia, 1);
+  assert.strictEqual(ramka.znajdz('wp-zapis-bar'), undefined);
+  assert.strictEqual(ramka.znajdz('zakoncz-mecz-okno'), undefined);
+  assert.strictEqual(ramka.znajdz('mecz-niezakonczony-bar'), undefined);
+  await ramka.UI.zakonczMecz();
+  assert.deepStrictEqual(ramka.posty, []);
+  const glowne = srodowisko([stan, stan]);
+  await glowne.UI.odswiez();
+  await glowne.UI.odswiez();
+  for (const id of ['wp-zapis-bar', 'zakoncz-mecz-okno', 'mecz-niezakonczony-bar']) {
+    assert.strictEqual(glowne.ctx.document.__ile(id), 1, id);                 // dokładnie jeden element o danym id
+  }
+  glowne.znajdz('mecz-niezakonczony-zakoncz').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(glowne.posty, ['/api/games/7/finish']);            // jedno żądanie zakończenia
 });
 
 console.log('OK ' + wyniki.length + ' przypadków: ' + wyniki.join('; '));

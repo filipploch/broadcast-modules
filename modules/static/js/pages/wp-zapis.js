@@ -45,8 +45,13 @@
         return e;
     }
 
+    // Panel boczny (lewy iframe) ładuje tę samą stronę: pasek, okno i żądania tworzy wyłącznie okno główne (inaczej wszystko jest podwójne)
+    function oknoGlowne() {
+        try { return global.top === global; } catch (e) { return false; }
+    }
+
     function zbuduj() {
-        if (zbudowane) return;
+        if (zbudowane || !oknoGlowne()) return;
         zbudowane = true;
         el.pasek = stworz('div', 'position:fixed;top:0;right:0;z-index:50;display:none;align-items:center;gap:.5rem;padding:.2rem .6rem;font:12px sans-serif;color:#fff;border-bottom-left-radius:6px;');
         el.pasek.id = 'wp-zapis-bar';
@@ -93,6 +98,7 @@
     }
 
     function zakonczMecz() {
+        if (!oknoGlowne()) return Promise.resolve();
         const m = ostatni && ostatni.niezakonczone && ostatni.niezakonczone[0];
         if (!m) return Promise.resolve();
         return post(`/api/games/${m.game_id}/finish`).then(() => {
@@ -102,6 +108,7 @@
     }
 
     function pokaz(s) {
+        if (!oknoGlowne()) return;
         ostatni = s;
         zbuduj();
         const opis = opisPaska(s);
@@ -131,10 +138,15 @@
     }
 
     function odswiez() {
+        if (!oknoGlowne()) {                                          // iframe: odświeżenie zleca oknu głównemu (np. po zakończeniu ostatniej części w panelu bocznym)
+            try { if (global.top && typeof global.top.wpZapisOdswiez === 'function') return global.top.wpZapisOdswiez(); } catch (e) { /* inna domena: nic */ }
+            return Promise.resolve();
+        }
         return fetch('/api/wp-zapis/status').then(r => r.json()).then(pokaz).catch(() => pokaz({ brak_odpowiedzi: true, niezakonczone: [], odrzucone: [] }));
     }
 
     function start() {
+        if (!oknoGlowne()) return;                                    // iframe: bez własnego odpytywania
         odswiez();
         setInterval(odswiez, ODSWIEZ_MS);
     }

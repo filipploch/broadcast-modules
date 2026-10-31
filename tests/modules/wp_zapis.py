@@ -469,6 +469,43 @@ def make(APP, modul):
                 cm._hub_client = None
                 cm._timer_manager = None
 
+        def test_koniec_czesci_i_meczu_zawsze_zatrzymuje_zegar_nawet_gdy_modul_ma_nieaktualny_stan(self):
+            """Próba W8a-min: po zakończeniu ostatniej części i meczu stoper nadal biegł. Pauza idzie do pluginu zawsze, także gdy pamięć modułu
+            uważa zegar za nieaktywny; zakończenie meczu zatrzymuje wszystkie zegary meczu (główne części i kary)."""
+            from unittest.mock import MagicMock
+            import core.managers as cm
+            import core.managers.session_manager as sm
+            from core.managers.period_manager import PeriodManager
+            from app.managers.timer_manager import TimerManager
+            from app.models import Period
+            cm._hub_client = MagicMock()
+            tm = TimerManager(cm._hub_client)
+            tm._broadcast_penalty_state = lambda *a, **k: None
+            cm._timer_manager = tm
+            wyslane = lambda: [(c.args[1], (c.args[2] or {}).get('timer_id')) for c in cm._hub_client.send_to_plugin.call_args_list]
+            try:
+                PeriodManager().create_default_periods(game_id=self.g1)
+                sm.activate_game(self.g1)
+                p1, p2 = Period.query.filter_by(game_id=self.g1).order_by(Period.period_order).all()[:2]
+                for p in (p1, p2):
+                    self.assertTrue(self.client.post(f'/api/period/{p.id}/start').get_json()['ok'])
+                    tm.timers[p.main_timer_name] = {'id': p.main_timer_name, 'state': 'idle', 'elapsed_time': 0}      # nieaktualny stan w pamięci modułu
+                    cm._hub_client.reset_mock()
+                    self.assertTrue(self.client.post(f'/api/period/{p.id}/finish').get_json()['ok'])
+                    self.assertIn(('pause_timer', p.main_timer_name), wyslane(), f'część {p.period_order}: brak pauzy w pluginie')
+                tm.timers[p2.main_timer_name]['state'] = 'running'
+                cm._hub_client.reset_mock()
+                self.assertEqual(self.client.post(f'/api/games/{self.g1}/finish').get_json()['status'], self.Game.STATUS_FINISHED)
+                self.assertIn(('pause_timer', p2.main_timer_name), wyslane())                                       # zakończenie meczu pauzuje biegnący zegar
+                tm.timers[p2.main_timer_name]['state'] = 'paused'
+                tm.timers.setdefault(p1.main_timer_name, {'id': p1.main_timer_name})['state'] = 'paused'
+                cm._hub_client.reset_mock()
+                self.client.post(f'/api/games/{self.g1}/finish')
+                self.assertEqual(wyslane(), [])                                                                      # zegary już stoją: nic nie wysyłamy
+            finally:
+                cm._hub_client = None
+                cm._timer_manager = None
+
         def test_okno_zakonczenia_zna_remis_bez_rozstrzygniecia_w_pucharze(self):
             from unittest.mock import MagicMock
             import core.managers as cm
@@ -523,6 +560,6 @@ def make_node():
             skrypt = Path(__file__).resolve().parent / 'js' / 'wp_zapis_ui_test.js'
             r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn('OK 5 przypadków', r.stdout)
+            self.assertIn('OK 6 przypadków', r.stdout)
 
     return WpZapisUiNode

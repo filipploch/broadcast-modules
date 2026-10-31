@@ -422,7 +422,10 @@ class PeriodManager:
         main_name = period.main_timer_name
         if main_name:
             timer_state = timer_manager.get_timer_state(main_name)
-            if timer_state and timer_state.get("state") == "running":
+            # Pauza idzie ZAWSZE, gdy moduł nie ma pewności, że zegar stoi: koniec części nie może zostawić biegnącego zegara
+            # (stan w pamięci modułu może być nieaktualny, np. po odtworzeniu zegara przez stronę); pauza zatrzymanego zegara nic nie zmienia
+            if not timer_state or timer_state.get("state") != "paused":
+                logger.info(f'Koniec części: stan zegara {main_name} w module = {(timer_state or {}).get("state")}, wysyłam pauzę do pluginu')
                 timer_manager.pause_timer(main_name)
 
             # Zamroź finalny elapsed w tabeli game_timers — to na tej podstawie
