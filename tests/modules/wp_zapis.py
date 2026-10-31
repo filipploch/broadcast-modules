@@ -562,4 +562,13 @@ def make_node():
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn('OK 6 przypadków', r.stdout)
 
+        def test_zakonczona_czesc_nie_ma_aktywnych_przyciskow_zegara_w_node(self):
+            node = shutil.which('node')
+            if node is None:
+                raise RuntimeError('Brak Node.js w PATH')
+            skrypt = Path(__file__).resolve().parent / 'js' / 'period_lock_test.js'
+            r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('OK 3 przypadków', r.stdout)
+
     return WpZapisUiNode

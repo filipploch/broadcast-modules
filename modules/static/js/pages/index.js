@@ -667,6 +667,7 @@ function updateTimerState(timerId, state) {
             removeClassName(controller, 'nodisplayed');
         }
     });
+    if (window.PeriodLock) window.PeriodLock.zastosuj();      // zakończona część: bez aktywnych przycisków i oznaczenia biegu
 }
 
 // ============================================================================
@@ -968,7 +969,11 @@ function onFinishPeriodDblClick() {
         .then(data => {
             if (!data.ok) {
                 alert(`Błąd kończenia okresu: ${data.error || 'Nieznany błąd'}`);
-            } else if (data.all_finished && typeof window.wpZapisOdswiez === 'function') {
+            } else if (window.period) {
+                window.period.status = 2;                      // zakończona część: START/PAUZA/WZNÓW wyłączone
+                if (window.PeriodLock) window.PeriodLock.zastosuj();
+            }
+            if (data.ok && data.all_finished && typeof window.wpZapisOdswiez === 'function') {
                 window.wpZapisOdswiez();      // W8a: wszystkie części zakończone: od razu okno „Zakończyć mecz?”
             }
             _showPeriodChoiceFrame();
