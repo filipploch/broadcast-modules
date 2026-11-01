@@ -173,6 +173,95 @@ class ImportDoWpTests(unittest.TestCase):
         self.assertEqual(imp.liczniki['mecze'].zmienione, 1)
         self.assertIn('results', self.a.po_zrodle('events', W_TOKU))
 
+    # ---- pierwszeństwo danych (bm_decyduje) i stan na żywo ze źródła
+    def _w_toku_na(self, gole):
+        fx = copy.deepcopy(FX['fixtures'])
+        e = next(x for x in fx['events'] if x['id'] == W_TOKU)
+        sc = next(s for s in e['scores'] if s['type'] == 0)
+        sc['team1'], sc['team2'] = gole
+        return dane(AtrapaSuperscore(fx))
+
+    def test_mecz_w_toku_dostaje_stan_trwa_i_wynik_na_zywo_a_kolejny_import_bez_zmian_nic_nie_wysyla(self):
+        imp = self._importuj()
+        mecz = self.a.po_zrodle('events', W_TOKU)
+        self.assertEqual((mecz['meta']['bm_state'], mecz['meta']['bm_live_score'], mecz['meta']['bm_live']), ('trwa', '1:2', True))
+        self.assertEqual(len(imp.stany_zywo), 4 - 1)                                    # trzy mecze ze stanem: w toku i dwa zakończone (nierozpoczęty bez zapisu)
+        self.assertNotIn('results', mecz)                                               # natywnego wyniku mecz w toku nie dostaje
+        self.assertEqual(self.a.po_zrodle('events', ZAKONCZONY)['meta']['bm_state'], 'zakonczony')
+        self.assertNotIn('bm_state', self.a.po_zrodle('events', NIEROZPOCZETY)['meta'])
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj()
+        self.assertEqual((self.a.stany, imp.stany_zywo), ([], []))
+
+    def test_zmiana_wyniku_na_zywo_w_zrodle_aktualizuje_tylko_wynik_na_zywo_a_tresc_meczu_nie_jest_przepisywana(self):
+        self._importuj()
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj(self._w_toku_na((2, 2)))
+        mecz = self.a.po_zrodle('events', W_TOKU)
+        self.assertEqual(mecz['meta']['bm_live_score'], '2:2')
+        self.assertEqual(self.a.wyczyszczone, [])                                        # bez „clear” i bez POST na sportspress: tylko trasa source-state
+        self.assertEqual(self.a.posty(), [])
+        self.assertEqual(imp.liczniki['mecze'].zmienione, 0)
+
+    def test_mecz_z_flaga_decyduje_nie_dostaje_stanu_ani_wyniku_ze_zrodla_a_roznica_jest_w_raporcie(self):
+        self._importuj()
+        mecz = self.a.po_zrodle('events', W_TOKU)
+        mecz['meta']['bm_decyduje'] = True
+        mecz['meta']['bm_live_score'] = '5:0'                                           # użytkownik wie lepiej
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj(self._w_toku_na((2, 2)))
+        self.assertEqual(mecz['meta']['bm_live_score'], '5:0')
+        self.assertEqual(self.a.stany, [])
+        l = imp.liczniki['mecze']
+        self.assertEqual(l.pominiete, 1)
+        self.assertEqual(len(l.roznice), 1)
+        self.assertIn('źródło: trwa 2:2, WP: trwa 5:0 (RÓŻNICA, zostaje wartość z WP)', l.roznice[0])
+        self.assertIn('decyduje użytkownik', l.roznice[0])
+        self.assertIn('USTALA UŻYTKOWNIK', importuj.raport(imp, False))
+
+    def test_mecz_zakonczony_z_flaga_decyduje_nie_jest_nadpisany_wynikiem_ze_zrodla(self):
+        self._importuj()
+        mecz = self.a.po_zrodle('events', ZAKONCZONY)
+        mecz['meta']['bm_decyduje'] = True
+        fx = copy.deepcopy(FX['fixtures'])
+        e = next(x for x in fx['events'] if x['id'] == ZAKONCZONY)
+        next(s for s in e['scores'] if s['type'] == 0)['team1'] = 7
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj(dane(AtrapaSuperscore(fx)))
+        self.assertEqual((imp.liczniki['mecze'].pominiete, imp.liczniki['mecze'].zmienione), (1, 0))
+        self.assertEqual(self.a.wyczyszczone, [])
+        self.assertEqual(self.a.posty(), [])
+        self.assertIn('RÓŻNICA', imp.liczniki['mecze'].roznice[0])
+
+    def test_mecz_trwajacy_w_wp_bez_flagi_przyjmuje_dane_ze_zrodla_a_nadpisanie_ma_poprzednia_wartosc_z_wp(self):
+        self._importuj()
+        mecz = self.a.po_zrodle('events', ZAKONCZONY)
+        mecz['meta'].update({'bm_state': 'trwa', 'bm_live': True, 'bm_live_score': '0:0'})         # w WP wygląda na trwający (np. równoległy), bez flagi
+        mecz.pop('results', None)
+        mecz['meta']['bm_source_hash'] = 'inny'                                          # wymuś zapis wyniku
+        self.a.wyzeruj_zapytania()
+        imp = self._importuj()
+        l = imp.liczniki['mecze']
+        self.assertEqual((l.pominiete, l.zmienione), (0, 1))
+        self.assertEqual(mecz['meta']['bm_state'], 'zakonczony')
+        self.assertIn('results', mecz)
+        self.assertEqual(len(l.nadpisane), 1)
+        self.assertIn('było w WP: trwa 0:0, ze źródła: zakończony 1:2', l.nadpisane[0])
+        self.assertIn('poprzednia wartość z WP', importuj.raport(imp, False))
+
+    def test_twarda_blokada_bm_locked_nadal_pomija_mecz(self):
+        self._importuj()
+        mecz = self.a.po_zrodle('events', W_TOKU)
+        mecz['meta']['bm_locked'] = True
+        mecz['meta']['bm_live_score'] = '9:9'
+        imp = self._importuj(self._w_toku_na((0, 1)))
+        self.assertEqual(mecz['meta']['bm_live_score'], '9:9')
+        self.assertIn('blokada wyniku (bm_locked)', imp.liczniki['mecze'].roznice[0])
+
+    def test_na_sucho_pokazuje_stan_na_zywo_ale_nic_nie_zapisuje(self):
+        self._importuj(na_sucho=True)
+        self.assertEqual(self.a.stany, [])
+
     def test_zmiana_identyfikatora_zawodnika_w_zrodle_jest_zgloszona_jako_mozliwy_duplikat(self):
         imp = self._importuj()
         self.assertEqual(imp.liczniki['zawodnicy'].duplikaty, [])                       # zwykły import: bez fałszywych alarmów

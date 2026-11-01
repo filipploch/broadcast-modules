@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nalf as zrodlo_nalf  # noqa: E402
 import superscore as zrodlo_superscore  # noqa: E402
-from upsert import Import, nazwa_do_porownania  # noqa: E402
+from upsert import Import, nazwa_do_porownania, tekst_wp  # noqa: E402
 from wp_rest import WpRest, WpRestError, wczytaj_dane_logowania  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
@@ -120,9 +120,48 @@ def nazwa_do_porownania_czytelna(ist):
     return ist['nazwa'].title() if ist.get('nazwa') else f'id WP {ist["id"]}'
 
 
+def tekst_zrodla(m):
+    """Stan i wynik meczu w źródle jako tekst tego samego rodzaju co upsert.tekst_wp (do porównania i raportu)."""
+    t, r = m['teams'], m['results']
+    if len(t) == 2 and all(x in r for x in t):
+        return f"zakończony {r[t[0]]['goals']}:{r[t[1]]['goals']}"
+    z = m.get('zywo') or {}
+    if z.get('stan') == 'trwa':
+        return 'trwa ' + (f"{z['wynik'][0]}:{z['wynik'][1]}" if z.get('wynik') else '(bez wyniku)')
+    return 'nierozpoczęty'
+
+
+def _zapisz_stan_zywo(imp, wp, m, opis, ist, na_sucho):
+    """Źródło podaje stan meczu (Superscore: w toku / zakończony): zapisuje do WP bm_state i wynik na żywo trasą source-state (bez numeru zapisu
+    modułu i bez natywnego wyniku). Pomija mecz zablokowany flagą (bm_decyduje, bm_locked) i mecz, w którym WP ma już to samo."""
+    z = m.get('zywo')
+    if not z or z['stan'] not in ('trwa', 'zakonczony') or (ist and ist['zablokowany']):
+        return
+    wp_id = imp.id_wp['mecze'].get(m['id'])
+    if not wp_id:
+        return
+    if z['stan'] == 'zakonczony' and not m['results']:
+        return                                                   # zakończony bez wyniku w źródle: stanu nie zapisujemy
+    wynik = z.get('wynik') if z['stan'] == 'trwa' else None
+    teraz = (ist or {}).get('wp') or {}
+    if z['stan'] == 'trwa' and teraz.get('stan') == 'trwa' and teraz.get('na_zywo') == (f'{wynik[0]}:{wynik[1]}' if wynik else ''):
+        return
+    if z['stan'] == 'zakonczony' and teraz.get('stan') == 'zakonczony':
+        return
+    imp.stany_zywo.append(f'{opis}: {teraz and tekst_wp(teraz) or "nowy"} -> {tekst_zrodla(m)}')
+    if na_sucho:
+        return
+    try:
+        wp.zadanie('POST', f'bm/v1/event/{wp_id}/source-state', {'state': z['stan'], 'home': wynik[0] if wynik else None, 'away': wynik[1] if wynik else None})
+    except Exception as e:                                      # jeden zły mecz nie przerywa importu
+        imp.liczniki['mecze'].bledy += 1
+        imp.liczniki['mecze'].uwagi.append(f'mecz {m["id"]}: stan ze źródła: {e}')
+
+
 def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=print):
     """Zapisuje do WP dane znormalizowane przez nalf.pobierz_sezon albo superscore.pobierz_sezon. Zwraca obiekt Import z licznikami."""
     imp = Import(wp, zrodlo, na_sucho=na_sucho, log=log)
+    imp.stany_zywo = []
     sezon = dane['sezon']
     wp_sezon = imp.kategorie('sezon', [sezon])[sezon['id']]
     wp_ligi = imp.kategorie('ligi', list(dane['ligi'].values()))
@@ -209,8 +248,12 @@ def importuj_zrodlo(wp, zrodlo, dane, z_zawodnikami=True, na_sucho=False, log=pr
             return body
         payload = {**m, 'z_zawodnikami': z_zawodnikami}
         payload.pop('status', None)                    # publish/future wynika z daty; nie ma wpływać na skrót
+        payload.pop('zywo', None)                      # stan na żywo to osobny zapis (source-state), nie treść rekordu
+        opis = ' - '.join(nazwy.get(t, 'Do ustalenia') for t in m['teams'])
+        ist_meczu = imp.istniejace['mecze'].get(str(m['id']))
         imp.upsert('mecze', TRASY['mecze'], m['id'], payload, body,
-                   przed_aktualizacja=lambda wp_id: wp.zadanie('POST', f'bm/v1/event/{wp_id}/clear'))
+                   przed_aktualizacja=lambda wp_id: wp.zadanie('POST', f'bm/v1/event/{wp_id}/clear'), opis=opis, tekst_zrodla=tekst_zrodla(m))
+        _zapisz_stan_zywo(imp, wp, m, opis, ist_meczu, na_sucho)
     imp.raportuj_brakujace('mecze', [m['id'] for m in dane['mecze']])
     imp.uwagi_zrodla = list(dane.get('uwagi') or [])
     return imp
@@ -233,6 +276,9 @@ def raport(imp, na_sucho):
         wiersze += [f'    - {n}' for n in imp.niepewne_nazwiska[:60]]
         if len(imp.niepewne_nazwiska) > 60:
             wiersze.append(f'    ... i {len(imp.niepewne_nazwiska) - 60} kolejnych')
+    if getattr(imp, 'stany_zywo', None):
+        wiersze.append(f'  STAN I WYNIK NA ŻYWO ZE ŹRÓDŁA ({len(imp.stany_zywo)}), było -> jest:')
+        wiersze += [f'    - {r}' for r in imp.stany_zywo[:40]]
     prz = getattr(imp, 'przynaleznosc', None)
     if prz:
         wiersze.append(f'  przynależność zawodników: {prz["jedna"]} z jedną aktualną drużyną, {len(prz["kilka"])} z kilkoma aktualnymi, '
@@ -255,6 +301,12 @@ def raport(imp, na_sucho):
                            f'(mogą należeć do innych sezonów; nic nie usuwam)')
         for u in licz.uwagi[:10]:
             wiersze.append(f'  ! {u}')
+        if licz.roznice:
+            wiersze.append(f'  MECZE, W KTÓRYCH STAN I WYNIK USTALA UŻYTKOWNIK ({len(licz.roznice)}): import ich nie zmienia, tylko porównuje:')
+            wiersze += [f'    - {r}' for r in licz.roznice[:40]]
+        if licz.nadpisane:
+            wiersze.append(f'  NADPISANE STAN/WYNIK W WP ({len(licz.nadpisane)}), poprzednia wartość z WP:')
+            wiersze += [f'    - {r}' for r in licz.nadpisane[:40]]
         for d in licz.duplikaty[:20]:
             wiersze.append(f'  UWAGA, możliwy duplikat zawodnika: {d}')
         if len(licz.duplikaty) > 20:

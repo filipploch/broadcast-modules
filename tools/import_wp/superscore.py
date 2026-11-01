@@ -120,13 +120,24 @@ def _wyniki_meczu(e, gospodarz, gosc):
     return wynik
 
 
+def _zywo(e):
+    """Stan meczu w źródle: {'stan': nierozpoczety|trwa|zakonczony, 'wynik': (gospodarz, gość) albo None}. Wynik na żywo bierzemy z wyniku typu 0
+    (ten sam, który dla meczu zakończonego jest wynikiem końcowym); do POTWIERDZENIA na meczu w toku (w danych testowych mecz „w toku” to zmieniony zakończony)."""
+    stan = e.get('match_state')
+    if stan == ZAKONCZONY:
+        return {'stan': 'zakonczony', 'wynik': _wynik(e, 0)}
+    if stan == W_TOKU:
+        return {'stan': 'trwa', 'wynik': _wynik(e, 0)}
+    return {'stan': 'nierozpoczety', 'wynik': None}
+
+
 def norm_mecz(e, liga_id, sezon_id):
     g, a = e.get('team1') or {}, e.get('team2') or {}
     gh, ah = _hash(g), _hash(a)
     sek = (e.get('match_date') or {}).get('seconds')
     return {'id': str(e['id']), 'date': czas_lokalny_pl(sek) if sek is not None else '', 'status': '', 'day': '', 'format': 'league',
             'minutes': '', 'leagues': [liga_id], 'seasons': [sezon_id], 'teams': [gh, ah], 'results': _wyniki_meczu(e, gh, ah),
-            'players': [], 'performance': {}}
+            'players': [], 'performance': {}, 'zywo': _zywo(e)}
 
 
 def norm_druzyna(t, nazwy, liga_id, sezon_id):
