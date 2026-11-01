@@ -237,7 +237,30 @@ class WpManager:
                 self._last_apply_at = at
             self._save()
         self._publish()
+        if apply and wynik.get('ok') and wynik.get('zapisano'):
+            self._odswiez_aktywny_mecz()
         return wynik
+
+    def _odswiez_aktywny_mecz(self):
+        """Po zastosowaniu zmian z WP panel i nakładka dostają aktualny wynik meczu aktywnego w sesji (pobranie mogło go zmienić)."""
+        try:
+            from core.extensions import db, socketio
+            from core.managers import get_hub_client, session_manager
+            from core.models.base_game import get_game_model
+            gid = session_manager.current_game_id()
+            game = get_game_model().query.get(gid) if gid else None
+            if game is None:
+                return
+            db.session.refresh(game)
+            payload = {'home_team_goals': game.home_team_goals or 0, 'home_team_value2': getattr(game, 'home_team_red_cards', 0),
+                       'away_team_goals': game.away_team_goals or 0, 'away_team_value2': getattr(game, 'away_team_red_cards', 0)}
+            socketio.emit('scoreboard_data', {'payload': payload})
+            hub = get_hub_client()
+            if hub:
+                hub.broadcast_to_class('game_data_receiver', 'scoreboard_data', payload)
+        except Exception as e:
+            if self.log:
+                self.log.warning(f'Pobieranie z WP: nie udało się odświeżyć wyniku aktywnego meczu: {e}')
 
     # -- tło
     def start(self):

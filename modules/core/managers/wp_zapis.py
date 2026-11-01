@@ -93,6 +93,11 @@ class Kolejka:
         with self._lock, self._polacz() as c:
             c.execute('UPDATE mecze SET nastepna = ? WHERE seq > wyslano_seq', (teraz,))
 
+    def niewyslane(self):
+        """[(game_id, ostatni błąd albo None)] dla meczów z niewysłanymi zmianami (kolejki nie ruszamy)."""
+        with self._lock, self._polacz() as c:
+            return [(r['game_id'], r['blad']) for r in c.execute('SELECT game_id, blad FROM mecze WHERE seq > wyslano_seq ORDER BY game_id')]
+
     def znany(self, game_id):
         with self._lock, self._polacz() as c:
             r = c.execute('SELECT znany FROM mecze WHERE game_id = ?', (game_id,)).fetchone()
@@ -126,6 +131,7 @@ class WpZapis:
         self.zegar = zegar
         self._stop = threading.Event()
         self._watek = None
+        self._wysylka = threading.RLock()                     # jeden przebieg wysyłania naraz (wątek w tle i „wyślij zaległe” przed pobraniem z WP)
 
     @property
     def kolejka(self):
@@ -212,10 +218,26 @@ class WpZapis:
         if not self.skonfigurowany or not self.wlaczony():
             return 0
         teraz = self.zegar() if teraz is None else teraz
-        return sum(self._obsluz(w, teraz) for w in self.kolejka.do_wyslania(teraz))
+        with self._wysylka:
+            return sum(self._obsluz(w, teraz) for w in self.kolejka.do_wyslania(teraz))
 
     def ponow_teraz(self):
         self.kolejka.ponow_teraz(self.zegar())
+
+    def wyslij_zalegle(self):
+        """Przed pobraniem z WP: próbuje wysłać WSZYSTKIE zaległe zapisy (jak „Wyślij teraz”), niczego z kolejki nie usuwa. Zwraca
+        {'niewyslane': {game_id: powód}, 'aktywny': bool}: mecze, dla których po tej próbie nadal są niewysłane zmiany, oraz czy zapis w ogóle działa."""
+        if not self.skonfigurowany:
+            return {'niewyslane': {}, 'aktywny': False}
+        with self._wysylka:
+            self.kolejka.ponow_teraz(self.zegar())
+            try:
+                self.przetworz_raz()
+            except Exception as e:
+                logger.warning(f'Zapis do WP: błąd wysyłania zaległych zapisów przed pobraniem: {e}')
+        wlaczony = self.wlaczony()
+        powody = {gid: ('zapis do WP jest wyłączony' if not wlaczony else (blad or 'WP nie odpowiada')) for gid, blad in self.kolejka.niewyslane()}
+        return {'niewyslane': powody, 'aktywny': wlaczony}
 
     def status(self):
         if not self.skonfigurowany:
