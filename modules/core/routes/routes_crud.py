@@ -692,6 +692,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
         if request.method == 'POST':
             try:
+                if request.form.get('status') is not None:                 # reguły zmiany statusu (te same co w zakładce MECZE), przed jakimkolwiek zapisem
+                    odmowa = game_manager.sprawdz_zmiane_statusu(game_id, int(request.form['status']))
+                    if odmowa:
+                        raise ValueError(odmowa)
                 # Parse date if provided
                 game_date = None
                 if request.form.get('date') and request.form.get('time'):
@@ -1727,6 +1731,9 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         new_status = data.get('status')
         if new_status not in (0, 1, 2):
             return jsonify({'error': 'Nieprawidłowy status (dozwolone: 0, 1, 2)'}), 400
+        odmowa = game_manager.sprawdz_zmiane_statusu(game_id, new_status)
+        if odmowa:
+            return jsonify({'error': odmowa}), 409
         try:
             game.status = new_status
             if new_status == 0:
