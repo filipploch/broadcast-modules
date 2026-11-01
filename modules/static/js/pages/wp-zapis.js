@@ -13,7 +13,7 @@
         if (!s.skonfigurowany) return { kolor: 'szary', tekst: 'Zapis do WP: NIEAKTYWNY' + (s.powod ? ' (' + s.powod + ')' : ''), pokazPonow: false, pokazPrzelacznik: false };
         const n = s.w_kolejce || 0;
         const blad = s.ostatni_blad ? s.ostatni_blad.tekst : '';
-        if (!s.wlaczony) return { kolor: 'szary', tekst: 'Zapis do WP: WYŁĄCZONY' + (n ? ` (niezapisane: ${n})` : ''), pokazPonow: false, pokazPrzelacznik: true };
+        if (!s.wlaczony) return { kolor: 'ostrzegawczy', tekst: 'Zapis do WP wyłączony' + (n ? ` (niezapisane: ${n})` : ''), pokazPonow: false, pokazPrzelacznik: true };
         if (blad || (n > 0 && (s.najstarszy_s || 0) > PROG_CZERWONY_S)) {
             return { kolor: 'czerwony', tekst: `WP: niezapisane: ${n}` + (blad ? ` · błąd: ${blad}` : ''), pokazPonow: n > 0, pokazPrzelacznik: true };
         }
@@ -32,7 +32,8 @@
     }
 
     // ── DOM ─────────────────────────────────────────────────────────────
-    const KOLORY = { zielony: '#1e7e34', zolty: '#b8860b', czerwony: '#b02a37', szary: '#6c757d' };
+    const KOLORY = { zielony: '#1e7e34', zolty: '#b8860b', czerwony: '#b02a37', szary: '#6c757d', ostrzegawczy: '#c2410c' };
+    const POTWIERDZENIE_WYLACZENIA = 'Wyłączyć zapis do WP?\n\nStan i wynik meczów nie będą wysyłane do WP, dopóki zapis nie zostanie włączony ponownie. Zmiany czekają w kolejce i zostaną wysłane po włączeniu.';
     const oferowane = new Set();
     let ostatni = null;
     let zbudowane = false;
@@ -85,7 +86,11 @@
         el.okno.append(karta);
         document.body.append(el.pasek, el.odrzucone, el.nz, el.okno);
         el.ponow.addEventListener('click', () => post('/api/wp-zapis/ponow').then(odswiez));
-        el.przelacz.addEventListener('click', () => post('/api/wp-zapis/wlacznik', { wlaczony: !(ostatni && ostatni.wlaczony) }).then(odswiez));
+        el.przelacz.addEventListener('click', () => {
+            const wlaczony = !!(ostatni && ostatni.wlaczony);
+            if (wlaczony && !global.confirm(POTWIERDZENIE_WYLACZENIA)) return;             // wyłączenie tylko po potwierdzeniu; włączenie bez pytania
+            post('/api/wp-zapis/wlacznik', { wlaczony: !wlaczony }).then(odswiez);
+        });
         const zakoncz = () => zakonczMecz();
         el.nzPrzycisk.addEventListener('click', zakoncz);
         el.oknoTak.addEventListener('click', zakoncz);

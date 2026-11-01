@@ -560,7 +560,7 @@ def make_node():
             skrypt = Path(__file__).resolve().parent / 'js' / 'wp_zapis_ui_test.js'
             r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn('OK 6 przypadków', r.stdout)
+            self.assertIn('OK 7 przypadków', r.stdout)
 
         def test_zakonczona_czesc_nie_ma_aktywnych_przyciskow_zegara_w_node(self):
             node = shutil.which('node')

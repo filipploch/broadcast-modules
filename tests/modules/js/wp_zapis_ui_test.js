@@ -54,8 +54,8 @@ await ok('opis paska: kolory i teksty dla stanów kolejki', () => {
   assert.strictEqual(blad.kolor, 'czerwony');
   assert.ok(blad.tekst.includes('niezapisane: 1') && blad.tekst.includes('brak połączenia z WP') && blad.pokazPonow);
   const wyl = UI.opisPaska({ ...baza, wlaczony: false, w_kolejce: 3 });
-  assert.strictEqual(wyl.kolor, 'szary');
-  assert.ok(wyl.tekst.includes('WYŁĄCZONY') && wyl.tekst.includes('niezapisane: 3'));
+  assert.strictEqual(wyl.kolor, 'ostrzegawczy');
+  assert.ok(wyl.tekst.includes('Zapis do WP wyłączony') && wyl.tekst.includes('niezapisane: 3'));
 });
 
 await ok('pasek jest ZAWSZE widoczny: nieaktywny zapis (z powodem) i brak odpowiedzi modułu to szary pasek bez przycisków', async () => {
@@ -76,6 +76,41 @@ await ok('pasek jest ZAWSZE widoczny: nieaktywny zapis (z powodem) i brak odpowi
   await e2.UI.odswiez();
   assert.strictEqual(e2.znajdz('wp-zapis-bar').style.display, 'flex');
   assert.ok(e2.znajdz('wp-zapis-bar').children[0].textContent.includes('brak odpowiedzi'));
+});
+
+await ok('wyłączenie zapisu tylko po potwierdzeniu (odmowa nic nie wysyła), włączenie bez pytania; wyłączony zapis to ostrzegawczy pasek', async () => {
+  const wlaczony = { ...baza, wlaczony: true };
+  const wylaczony = { ...baza, wlaczony: false, w_kolejce: 2 };
+  // odmowa w oknie potwierdzenia
+  let e = srodowisko([wlaczony]);
+  const pytania = [];
+  e.ctx.confirm = (t) => { pytania.push(t); return false; };
+  await e.UI.odswiez();
+  e.znajdz('wp-zapis-przelacz').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(pytania.length, 1);
+  assert.ok(pytania[0].includes('Wyłączyć zapis do WP?'));
+  assert.deepStrictEqual(e.posty, []);
+  // zgoda: idzie żądanie wyłączenia
+  const odp2 = [wlaczony];
+  odp2.ostatnia = wylaczony;
+  e = srodowisko(odp2);
+  e.ctx.confirm = () => true;
+  await e.UI.odswiez();
+  e.znajdz('wp-zapis-przelacz').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(e.posty, ['/api/wp-zapis/wlacznik']);
+  assert.strictEqual(e.znajdz('wp-zapis-bar').style.background, '#c2410c');
+  assert.ok(e.znajdz('wp-zapis-bar').children[0].textContent.includes('Zapis do WP wyłączony'));
+  // włączenie bez pytania
+  e = srodowisko([wylaczony]);
+  let pytano = false;
+  e.ctx.confirm = () => { pytano = true; return false; };
+  await e.UI.odswiez();
+  e.znajdz('wp-zapis-przelacz').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(pytano, false);
+  assert.deepStrictEqual(e.posty, ['/api/wp-zapis/wlacznik']);
 });
 
 await ok('odrzucone zapisy (409) mają nazwę meczu i powód', () => {
