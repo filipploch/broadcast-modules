@@ -733,14 +733,17 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
                 # Update penalty shootout if exists
                 if game.shootout:
-                    home_penalties = request.form.get('home_team_penalties')
-                    away_penalties = request.form.get('away_team_penalties')
+                    # pola formularza to home/away_team_shootouts (stare nazwy *_penalties też przyjmujemy); puste pole = bez zmiany
+                    home_penalties = request.form.get('home_team_shootouts', request.form.get('home_team_penalties'))
+                    away_penalties = request.form.get('away_team_shootouts', request.form.get('away_team_penalties'))
 
-                    if home_penalties is not None and away_penalties is not None:
+                    if home_penalties not in (None, '') and away_penalties not in (None, ''):
+                        if int(home_penalties) < 0 or int(away_penalties) < 0:
+                            raise ValueError('Wynik rzutów karnych nie może być ujemny')
                         shootout_manager.update_shootout_score(
                             shootout_id=game.shootout.id,
-                            home_penalties=int(home_penalties),
-                            away_penalties=int(away_penalties)
+                            home_shootouts=int(home_penalties),
+                            away_shootouts=int(away_penalties)
                         )
 
                 flash(f'Zaktualizowano mecz', 'success')
