@@ -717,7 +717,11 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 )
 
                 if request.form.get('status') is not None:
-                    game_manager.set_game_status(game_id, int(request.form['status']))
+                    nowy_status = int(request.form['status'])
+                    if (nowy_status == game.STATUS_NOT_STARTED and request.form.get('home_team_goals') and request.form.get('away_team_goals')):
+                        nowy_status = game.STATUS_PENDING                       # wynik w meczu nierozpoczętym = mecz trwa (W8a, E c2)
+                        flash('Stan ustawiono na trwa', 'info')
+                    game_manager.set_game_status(game_id, nowy_status)
 
                 # Każdy zapis tego formularza to ręczna decyzja o danych meczu
                 # (niezależnie czy user wpisał wynik sam, czy tylko poprawił
@@ -1716,8 +1720,15 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         away = body.get('away_team_goals')
         if home is None or away is None:
             return jsonify({'error': 'Wymagane pola: home_team_goals, away_team_goals'}), 400
-        game_manager.update_game(game_id, home_team_goals=int(home), away_team_goals=int(away))
-        return jsonify(game_manager.get_game_by_id(game_id).to_dict())
+        ustawiono_trwa = game.status == game.STATUS_NOT_STARTED       # wynik w meczu nierozpoczętym = mecz trwa (W8a, E c2)
+        if game_manager.update_game(game_id, home_team_goals=int(home), away_team_goals=int(away)) is None:
+            return jsonify({'error': 'Nie udało się zapisać wyniku'}), 500
+        if ustawiono_trwa:
+            game_manager.set_game_status(game_id, game.STATUS_PENDING)
+        odp = game_manager.get_game_by_id(game_id).to_dict()
+        if ustawiono_trwa:
+            odp['info'] = 'Stan ustawiono na trwa'
+        return jsonify(odp)
 
     @app.route('/api/games/<int:game_id>/status', methods=['PATCH'])
     def api_update_game_status(game_id):

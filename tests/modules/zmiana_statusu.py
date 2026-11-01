@@ -120,4 +120,29 @@ def make(APP, modul):
                 self.assertEqual(self.status(self.g2), do)
             self.assertEqual(self.patch(self.g2, 7).status_code, 400)
 
+        # ---- wynik wpisany w meczu nierozpoczętym ustawia „trwa” (E c2)
+        def test_wynik_w_meczu_nierozpoczetym_ustawia_trwa_i_zwraca_komunikat(self):
+            self.assertEqual(self.status(self.g2), self.Game.STATUS_NOT_STARTED)
+            odp = self.client.patch(f'/api/games/{self.g2}/score', json={'home_team_goals': 2, 'away_team_goals': 1})
+            self.assertEqual(odp.status_code, 200)
+            self.assertEqual(odp.get_json()['info'], 'Stan ustawiono na trwa')
+            self.db.session.expire_all()
+            g = self.db.session.get(self.Game, self.g2)
+            self.assertEqual((g.status, g.home_team_goals, g.away_team_goals), (self.Game.STATUS_PENDING, 2, 1))
+
+        def test_poprawka_wyniku_meczu_trwajacego_i_zakonczonego_nie_zmienia_statusu_ani_nie_daje_komunikatu(self):
+            for st in (self.Game.STATUS_PENDING, self.Game.STATUS_FINISHED):
+                g = self.db.session.get(self.Game, self.g2)
+                g.status = st
+                self.db.session.commit()
+                odp = self.client.patch(f'/api/games/{self.g2}/score', json={'home_team_goals': 3, 'away_team_goals': 3})
+                self.assertNotIn('info', odp.get_json())
+                self.assertEqual(self.status(self.g2), st)
+
+        def test_formularz_edycji_wynik_w_meczu_nierozpoczetym_ustawia_trwa(self):
+            g = self.db.session.get(self.Game, self.g2)
+            self.client.post(f'/games/{self.g2}/edit', data={'status': '0', 'home_team_goals': '1', 'away_team_goals': '0',
+                                                             'home_team_id': str(g.home_team_id), 'away_team_id': str(g.away_team_id), 'league_id': str(g.league_id)})
+            self.assertEqual(self.status(self.g2), self.Game.STATUS_PENDING)
+
     return ZmianaStatusu

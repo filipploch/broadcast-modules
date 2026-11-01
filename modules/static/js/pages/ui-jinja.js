@@ -2149,6 +2149,7 @@ function _saveMonitorScore() {
         var gameId = _monitorCurrentGameId;
         _closeMonitorScoreModal();
         _refreshMonitorGame(gameId);
+        if (d.info) alert(d.info);
     })
     .catch(function() { alert('Błąd połączenia'); });
 }
