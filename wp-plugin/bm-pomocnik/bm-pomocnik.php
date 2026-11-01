@@ -14,7 +14,9 @@
  *
  * W8a: stan i wynik meczu z modułu transmisji. Trasa bm/v1/event/<id>/state (POST, wymaga prawa edycji meczu), ciało JSON:
  *   seq (liczba całkowita >= 1, rosnąca per mecz; zapis z seq <= zapisanemu jest potwierdzany bez zmian: idempotencja),
- *   state ("nierozpoczety" | "trwa" | "zakonczony"), home, away (wynik: na żywo przy "trwa", końcowy przy "zakonczony").
+ *   state ("nierozpoczety" | "trwa" | "zakonczony"), home, away (wynik: na żywo przy "trwa", końcowy przy "zakonczony"),
+ *   opcjonalnie pen_home, pen_away (wynik konkursu rzutów karnych, tylko przy "zakonczony"; zwycięzcę liczy WP: wynik, a przy remisie konkurs).
+ * Zwycięzca: bm_winner ("home" | "away" | ""), bm_winner_team (id drużyny w WP), bm_pen_home, bm_pen_away (tylko przy "zakonczony").
  * Pola: bm_state, bm_live_score ("g:o", tylko gdy trwa), bm_seq, bm_result_source ("modul", gdy natywny wynik wpisał moduł), bm_result_hash,
  *   bm_live (zgodność: prawda tylko przy "trwa"), bm_locked (organizator blokuje zapis z modułu: 409).
  * Natywny wynik SportsPressa (sp_results) i status "publish" są ustawiane WYŁĄCZNIE przy "zakonczony". Po zamknięciu meczu wygrywa WP:
@@ -38,10 +40,12 @@ add_action('init', function () {
 	foreach (['bm_live', 'bm_locked'] as $k) {
 		register_post_meta('sp_event', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'boolean']);
 	}
-	foreach (['bm_state', 'bm_live_score', 'bm_result_source', 'bm_result_hash'] as $k) {
+	foreach (['bm_state', 'bm_live_score', 'bm_result_source', 'bm_result_hash', 'bm_winner'] as $k) {
 		register_post_meta('sp_event', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'string']);
 	}
-	register_post_meta('sp_event', 'bm_seq', ['show_in_rest' => true, 'single' => true, 'type' => 'integer']);
+	foreach (['bm_seq', 'bm_pen_home', 'bm_pen_away', 'bm_winner_team'] as $k) {
+		register_post_meta('sp_event', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'integer']);
+	}
 });
 
 const BM_STANY = ['nierozpoczety', 'trwa', 'zakonczony'];
@@ -74,6 +78,9 @@ function bm_state_answer($id, $duplicate) {
 		'ok' => true, 'duplicate' => $duplicate, 'id' => $id, 'seq' => (int) get_post_meta($id, 'bm_seq', true),
 		'state' => (string) get_post_meta($id, 'bm_state', true), 'live_score' => (string) get_post_meta($id, 'bm_live_score', true),
 		'result' => bm_native_score($id, $teams), 'result_source' => (string) get_post_meta($id, 'bm_result_source', true),
+		'winner' => (string) get_post_meta($id, 'bm_winner', true), 'winner_team' => (int) get_post_meta($id, 'bm_winner_team', true),
+		'pen' => [get_post_meta($id, 'bm_pen_home', true) === '' ? null : (int) get_post_meta($id, 'bm_pen_home', true),
+		          get_post_meta($id, 'bm_pen_away', true) === '' ? null : (int) get_post_meta($id, 'bm_pen_away', true)],
 	];
 }
 
@@ -89,6 +96,11 @@ function bm_event_state($req) {
 	$home = (isset($p['home']) && $p['home'] !== '') ? (int) $p['home'] : null;
 	$away = (isset($p['away']) && $p['away'] !== '') ? (int) $p['away'] : null;
 	if (($home !== null && $home < 0) || ($away !== null && $away < 0)) return new WP_Error('bm_bad_score', 'Wynik nie może być ujemny', ['status' => 400]);
+	$pen_home = (isset($p['pen_home']) && $p['pen_home'] !== '') ? (int) $p['pen_home'] : null;
+	$pen_away = (isset($p['pen_away']) && $p['pen_away'] !== '') ? (int) $p['pen_away'] : null;
+	if (($pen_home === null) !== ($pen_away === null) || ($pen_home !== null && ($pen_home < 0 || $pen_away < 0))) {
+		return new WP_Error('bm_bad_pen', 'Wynik konkursu rzutów karnych wymaga obu wartości nieujemnych', ['status' => 400]);
+	}
 
 	if (get_post_meta($id, 'bm_locked', true)) return new WP_Error('bm_locked', 'Wynik tego meczu jest zablokowany w WP', ['status' => 409]);
 	if ($seq <= (int) get_post_meta($id, 'bm_seq', true)) return bm_state_answer($id, true);
@@ -121,9 +133,24 @@ function bm_event_state($req) {
 			update_post_meta($id, 'bm_result_hash', bm_score_hash([$home, $away]));
 			wp_update_post(['ID' => $id, 'post_status' => 'publish']);
 		}
+		// zwycięzca: wynik meczu, a przy remisie konkurs rzutów karnych; bez rozstrzygnięcia puste
+		$zw = '';
+		if ($home > $away) $zw = 'home';
+		elseif ($away > $home) $zw = 'away';
+		elseif ($pen_home !== null && $pen_home !== $pen_away) $zw = $pen_home > $pen_away ? 'home' : 'away';
+		update_post_meta($id, 'bm_winner', $zw);
+		if ($zw !== '') update_post_meta($id, 'bm_winner_team', $zw === 'home' ? $teams[0] : $teams[1]); else delete_post_meta($id, 'bm_winner_team');
+		if ($pen_home !== null) {
+			update_post_meta($id, 'bm_pen_home', $pen_home);
+			update_post_meta($id, 'bm_pen_away', $pen_away);
+		} else {
+			delete_post_meta($id, 'bm_pen_home');
+			delete_post_meta($id, 'bm_pen_away');
+		}
 		update_post_meta($id, 'bm_live', '');
 		delete_post_meta($id, 'bm_live_score');
 	} elseif ($state === 'trwa') {
+		foreach (['bm_winner', 'bm_winner_team', 'bm_pen_home', 'bm_pen_away'] as $k) delete_post_meta($id, $k);
 		update_post_meta($id, 'bm_live', '1');
 		update_post_meta($id, 'bm_live_score', ($home !== null && $away !== null) ? ($home . ':' . $away) : '');
 	} else { // nierozpoczety
@@ -132,6 +159,7 @@ function bm_event_state($req) {
 			delete_post_meta($id, 'bm_result_source');
 			delete_post_meta($id, 'bm_result_hash');
 		}
+		foreach (['bm_winner', 'bm_winner_team', 'bm_pen_home', 'bm_pen_away'] as $k) delete_post_meta($id, $k);
 		update_post_meta($id, 'bm_live', '');
 		delete_post_meta($id, 'bm_live_score');
 	}

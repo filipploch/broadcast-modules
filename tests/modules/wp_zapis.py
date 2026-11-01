@@ -118,6 +118,30 @@ def make(APP, modul):
             self.assertEqual((cialo['state'], cialo['home'], cialo['away']), ('trwa', 2, 0))
             self.assertEqual(self.w_kolejce(), 0)
 
+        def test_konkurs_rzutow_karnych_idzie_do_wp_przy_zakonczeniu_a_zmiana_konkursu_trafia_do_kolejki(self):
+            from app.models import Shootout
+            self.zmien(status=self.Game.STATUS_FINISHED, home_team_goals=2, away_team_goals=2)
+            self.wyslij()
+            ostatni = self.fake.zapytania[-1][1]
+            self.assertNotIn('pen_home', ostatni)                                            # bez konkursu: bez pól konkursu
+            self.db.session.add(Shootout(game_id=self.g1, home_team_shootouts=0, away_team_shootouts=0))
+            self.db.session.commit()
+            self.assertEqual(self.w_kolejce(), 1)                                            # nowy konkurs to zmiana meczu
+            sh = Shootout.query.filter_by(game_id=self.g1).one()
+            sh.home_team_shootouts, sh.away_team_shootouts = 4, 5
+            self.db.session.commit()
+            self.assertEqual(self.w_kolejce(), 1)                                            # zmiany się łączą w jeden wpis
+            self.wyslij()
+            cialo = self.fake.zapytania[-1][1]
+            self.assertEqual((cialo['state'], cialo['home'], cialo['away'], cialo['pen_home'], cialo['pen_away']), ('zakonczony', 2, 2, 4, 5))
+            sh.home_team_shootouts = 6
+            self.db.session.commit()
+            self.wyslij()
+            self.assertEqual(self.fake.zapytania[-1][1]['pen_home'], 6)                      # poprawka konkursu po zakończeniu też idzie do WP
+            self.zmien(status=self.Game.STATUS_PENDING)
+            self.wyslij()
+            self.assertNotIn('pen_home', self.fake.zapytania[-1][1])                         # mecz trwający: bez konkursu
+
         def test_numer_zapisu_rosnie_przy_kazdej_zmianie(self):
             self.zmien(status=self.Game.STATUS_PENDING, home_team_goals=0, away_team_goals=0)
             self.wyslij()

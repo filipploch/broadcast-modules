@@ -178,7 +178,11 @@ class WpZapis:
             return 'Mecz zakończony bez wyniku: uzupełnij wynik'
         elif stan == 'trwa' and (home is None or away is None):
             home = away = None
-        return {'wp_id': str(wp_id), 'state': stan, 'home': home, 'away': away}
+        zad = {'wp_id': str(wp_id), 'state': stan, 'home': home, 'away': away}
+        karne = getattr(game, 'shootout', None)
+        if stan == 'zakonczony' and karne is not None:                     # konkurs rzutów karnych: WP wylicza zwycięzcę (wynik, a przy remisie konkurs)
+            zad['pen_home'], zad['pen_away'] = karne.home_team_shootouts, karne.away_team_shootouts
+        return zad
 
     def _obsluz(self, wiersz, teraz):
         from core.extensions import db
@@ -195,7 +199,7 @@ class WpZapis:
         if isinstance(zad, str):
             self.kolejka.oznacz_odrzucony(gid, seq, zad, teraz)
             return 0
-        tresc = {k: zad[k] for k in ('state', 'home', 'away')}
+        tresc = {k: zad[k] for k in ('state', 'home', 'away', 'pen_home', 'pen_away') if k in zad}
         if self.kolejka.znany(gid) == tresc:                               # WP już ma ten stan: nie wysyłamy drugi raz
             self.kolejka.oznacz_ok(gid, seq, tresc, teraz)
             return 0
@@ -302,6 +306,14 @@ def _zainstaluj_nasluch():
         except Exception:
             return
         ids = session.info.setdefault('bm_wp_zapis_ids', set())
+        try:
+            from core.models.base_shootout import get_shootout_model
+            Shootout = get_shootout_model()
+        except Exception:
+            Shootout = None
+        for obj in list(session.new) + list(session.dirty):               # konkurs rzutów karnych: zmiana wyniku konkursu to zmiana meczu
+            if Shootout is not None and isinstance(obj, Shootout) and obj.game_id is not None:
+                ids.add(obj.game_id)
         for obj in list(session.dirty):
             if isinstance(obj, Game) and obj.id is not None:
                 st = inspect(obj)

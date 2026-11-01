@@ -184,6 +184,43 @@ try:
         sprawdz('klient modułu: blokada zgłasza WpError(conflict)', False)
     except WpError as err:
         sprawdz('klient modułu: blokada zgłasza WpError(conflict) z kodem bm_locked', err.kind == 'conflict' and err.code == 'bm_locked' and 'zablokowany' in str(err), (err.kind, err.code, str(err)))
+
+    # -- 12. rzuty karne i zwycięzca (W8a): zwycięzca z wyniku, a przy remisie z konkursu; pola tylko przy „zakonczony”
+    def stan_k(eid, seq, state, home=None, away=None, ph=None, pa=None):
+        return api('POST', f'bm/v1/event/{eid}/state', {'seq': seq, 'state': state, 'home': home, 'away': away, 'pen_home': ph, 'pen_away': pa})
+    e9 = nowy()
+    k, o = stan_k(e9, 1, 'zakonczony', 2, 1)
+    m = mecz(e9)['meta']
+    sprawdz('zwycięzca z wyniku: bm_winner = home, drużyna gospodarzy, bez konkursu', k == 200 and m.get('bm_winner') == 'home' and m.get('bm_winner_team') == t1 and not m.get('bm_pen_home'), (k, m))
+    k, o = stan_k(e9, 2, 'zakonczony', 2, 2, 4, 5)
+    m = mecz(e9)['meta']
+    sprawdz('remis i konkurs 4:5: zwycięzca = away (drużyna gości), pola konkursu zapisane', k == 200 and m.get('bm_winner') == 'away' and m.get('bm_winner_team') == t2
+            and m.get('bm_pen_home') == 4 and m.get('bm_pen_away') == 5, (k, m))
+    sprawdz('odpowiedź zawiera zwycięzcę i konkurs', o.get('winner') == 'away' and o.get('winner_team') == t2 and o.get('pen') == [4, 5], o)
+    k, o = stan_k(e9, 3, 'zakonczony', 1, 1)
+    m = mecz(e9)['meta']
+    sprawdz('remis bez konkursu: brak zwycięzcy i pól konkursu', k == 200 and m.get('bm_winner') == '' and not m.get('bm_winner_team') and not m.get('bm_pen_home') and o.get('pen') == [None, None], (k, m, o))
+    k, o = stan_k(e9, 4, 'zakonczony', 1, 1, 3, 3)
+    sprawdz('remis w konkursie (3:3) nie wyłania zwycięzcy', k == 200 and mecz(e9)['meta'].get('bm_winner') == '', (k, mecz(e9)['meta']))
+    k, o = stan_k(e9, 5, 'zakonczony', 1, 1, 3, None)
+    sprawdz('konkurs z jedną wartością: 400', k == 400 and o.get('code') == 'bm_bad_pen', (k, o))
+    k, o = stan_k(e9, 6, 'zakonczony', 1, 1, -1, 2)
+    sprawdz('konkurs z wartością ujemną: 400', k == 400, k)
+    stan_k(e9, 7, 'zakonczony', 0, 0, 2, 4)
+    k, o = stan(e9, 8, 'trwa', 1, 0)
+    m = mecz(e9)['meta']
+    sprawdz('cofnięcie do „trwa” kasuje zwycięzcę i konkurs', k == 200 and not m.get('bm_winner') and not m.get('bm_winner_team') and not m.get('bm_pen_home'), (k, m))
+    e10 = nowy()
+    stan_k(e10, 1, 'zakonczony', 0, 0, 5, 3)
+    k, o = stan(e10, 2, 'nierozpoczety')
+    m = mecz(e10)['meta']
+    sprawdz('cofnięcie do „nierozpoczęty” kasuje zwycięzcę i konkurs', k == 200 and not m.get('bm_winner') and not m.get('bm_pen_home'), (k, m))
+    # zwycięzca zostaje po poprawce wyniku organizatora tylko, gdy moduł zapisze ten sam wynik (WP jest właścicielem wyniku)
+    e11 = nowy()
+    stan_k(e11, 1, 'zakonczony', 1, 1, 4, 2)
+    api('POST', f'sportspress/v2/events/{e11}', {'results': {str(t1): {'goals': '3', 'outcome': ['win']}, str(t2): {'goals': '0', 'outcome': ['loss']}}})
+    k, o = stan_k(e11, 2, 'zakonczony', 1, 1, 4, 2)
+    sprawdz('wynik zmieniony przez organizatora: zapis konkursu z modułu nadal 409 (reguła zamknięcia bez zmian)', k == 409 and o.get('code') == 'bm_wp_result', (k, o))
 finally:
     pid = proc.pid
     subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], capture_output=True)
