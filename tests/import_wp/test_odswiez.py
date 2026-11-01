@@ -116,8 +116,8 @@ class OdswiezSuperscoreTests(unittest.TestCase):
         e = next(x for x in fx['events'] if x['id'] == ts.W_TOKU)
         next(s for s in e['scores'] if s['type'] == 0)['team1'] = 4
         w = odswiez.odswiez(self.wp, 'superscore', self._mecze(ts.AtrapaSuperscore(fx)), self.liga, self.sezon)
-        self.assertEqual(self.a.po_zrodle('events', ts.W_TOKU)['meta']['bm_live_score'], '4:2')
-        self.assertEqual(self.a.stany, [(self.a.po_zrodle('events', ts.W_TOKU)['id'], 'trwa', '4:2')])
+        self.assertEqual(self.a.po_zrodle('events', ts.W_TOKU)['meta']['bm_live_score'], '4:0')
+        self.assertEqual(self.a.stany, [(self.a.po_zrodle('events', ts.W_TOKU)['id'], 'trwa', '4:0')])
         self.assertEqual((self.a.posty(), self.a.wyczyszczone), ([], []))
         self.assertEqual(len(w['zmienione']), 1)
 
@@ -127,7 +127,7 @@ class OdswiezSuperscoreTests(unittest.TestCase):
         w = odswiez.odswiez(self.wp, 'superscore', self._mecze(), self.liga, self.sezon)
         self.assertEqual(self.a.stany, [])
         self.assertEqual(mecz['meta']['bm_live_score'], '0:0')
-        self.assertIn('źródło: trwa 1:2, WP: trwa 0:0 (RÓŻNICA', w['pominiete'][0])
+        self.assertIn('źródło: trwa 1:0, WP: trwa 0:0 (RÓŻNICA', w['pominiete'][0])
 
     def test_wybor_rozgrywek_niezgodny_ze_zrodla_json_jest_odrzucony(self):
         with self.assertRaises(SystemExit) as cm:

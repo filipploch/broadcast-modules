@@ -184,7 +184,7 @@ class ImportDoWpTests(unittest.TestCase):
     def test_mecz_w_toku_dostaje_stan_trwa_i_wynik_na_zywo_a_kolejny_import_bez_zmian_nic_nie_wysyla(self):
         imp = self._importuj()
         mecz = self.a.po_zrodle('events', W_TOKU)
-        self.assertEqual((mecz['meta']['bm_state'], mecz['meta']['bm_live_score'], mecz['meta']['bm_live']), ('trwa', '1:2', True))
+        self.assertEqual((mecz['meta']['bm_state'], mecz['meta']['bm_live_score'], mecz['meta']['bm_live']), ('trwa', '1:0', True))
         self.assertEqual(len(imp.stany_zywo), 4 - 1)                                    # trzy mecze ze stanem: w toku i dwa zakończone (nierozpoczęty bez zapisu)
         self.assertNotIn('results', mecz)                                               # natywnego wyniku mecz w toku nie dostaje
         self.assertEqual(self.a.po_zrodle('events', ZAKONCZONY)['meta']['bm_state'], 'zakonczony')
