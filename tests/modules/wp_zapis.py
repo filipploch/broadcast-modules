@@ -142,6 +142,62 @@ def make(APP, modul):
             self.wyslij()
             self.assertNotIn('pen_home', self.fake.zapytania[-1][1])                         # mecz trwający: bez konkursu
 
+        # ---- pierwszeństwo danych: flaga bm_decyduje
+        def test_wybor_meczu_do_transmisji_ustawia_flage_decyduje_razem_ze_stanem_i_wysyla_ja_raz(self):
+            import core.managers.session_manager as sm
+            sm.activate_game(self.g1)
+            self.assertEqual(self.w_kolejce(), 1)
+            self.wyslij()
+            route, cialo = self.fake.zapytania[-1]
+            self.assertEqual((route, cialo['state'], cialo['decyduje']), ('/bm/v1/event/501/state', 'nierozpoczety', True))
+            self.zmien(status=self.Game.STATUS_PENDING, home_team_goals=1, away_team_goals=0)
+            self.wyslij()
+            self.assertNotIn('decyduje', self.fake.zapytania[-1][1])                       # flaga dotarła, dalsze zapisy jej nie niosą
+
+        def test_flaga_decyduje_czeka_w_kolejce_gdy_wp_nie_odpowiada_i_idzie_przy_ponowieniu(self):
+            self.fake.tryb = 'blad500'
+            self.wp_zapis.zglos_decyduje(self.g1, True)
+            self.wyslij()
+            self.assertEqual(self.w_kolejce(), 1)
+            self.fake.tryb = 'ok'
+            self.czas[0] += 100
+            self.wyslij()
+            self.assertTrue(self.fake.zapytania[-1][1]['decyduje'])
+            self.assertEqual(self.w_kolejce(), 0)
+
+        def test_flaga_decyduje_idzie_nawet_gdy_stan_meczu_sie_nie_zmienil(self):
+            self.zmien(status=self.Game.STATUS_PENDING, home_team_goals=0, away_team_goals=0)
+            self.wyslij()
+            ile = len(self.fake.zapytania)
+            self.wp_zapis.zglos_decyduje(self.g1, True)
+            self.wyslij()
+            self.assertEqual(len(self.fake.zapytania), ile + 1)                           # bez flagi to samo byłoby pominięte jako „WP już ma ten stan”
+            self.assertTrue(self.fake.zapytania[-1][1]['decyduje'])
+
+        def test_zdjecie_flagi_wysyla_decyduje_false(self):
+            self.wp_zapis.zglos_decyduje(self.g1, False)
+            self.wyslij()
+            self.assertIs(self.fake.zapytania[-1][1]['decyduje'], False)
+
+        def test_wybor_meczu_bez_aktywnego_zapisu_albo_przy_pobieraniu_nie_zgłasza_flagi(self):
+            from core.managers.wp_zapis import bez_zapisu_do_wp
+            with bez_zapisu_do_wp():
+                self.assertFalse(self.wp_zapis.zglos_decyduje(self.g1, True))
+            self.assertEqual(self.w_kolejce(), 0)
+            self.wp_zapis.ustaw_instancje(None)
+            self.assertFalse(self.wp_zapis.zglos_decyduje(self.g1, True))
+
+        def test_stara_kolejka_bez_kolumny_decyduje_jest_uzupelniana(self):
+            import sqlite3
+            sciezka = self.tmp / 'stara.db'
+            c = sqlite3.connect(sciezka)
+            c.execute('CREATE TABLE mecze (game_id INTEGER PRIMARY KEY, seq INTEGER NOT NULL DEFAULT 0, wyslano_seq INTEGER NOT NULL DEFAULT 0, zgloszono REAL, proba INTEGER NOT NULL DEFAULT 0, nastepna REAL NOT NULL DEFAULT 0, blad TEXT, blad_czas REAL, odrzucone TEXT, odrzucone_czas REAL, znany TEXT)')
+            c.commit()
+            c.close()
+            k = self.wp_zapis.Kolejka(sciezka)
+            k.zglos(7, 1.0, True)
+            self.assertEqual(k.do_wyslania(2.0)[0]['decyduje'], 1)
+
         def test_numer_zapisu_rosnie_przy_kazdej_zmianie(self):
             self.zmien(status=self.Game.STATUS_PENDING, home_team_goals=0, away_team_goals=0)
             self.wyslij()

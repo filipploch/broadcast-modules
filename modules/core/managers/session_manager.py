@@ -242,6 +242,16 @@ def queue_game(game_id, session=None):
     return entry
 
 
+def _wybrano_do_transmisji(game_id):
+    """Mecz wybrany do transmisji: użytkownik jest na miejscu, więc jego stan i wynik mają pierwszeństwo przed źródłem prawdy (flaga bm_decyduje w WP,
+    ustawiana razem z zapisem stanu meczu). Błąd tu nigdy nie przerywa wyboru meczu."""
+    try:
+        from core.managers.wp_zapis import zglos_decyduje
+        zglos_decyduje(game_id, True)
+    except Exception as e:
+        logger.warning(f'Flaga decyduje dla meczu {game_id} nie zgłoszona: {e}')
+
+
 def activate_game(game_id, auto_open=True):
     """Ustawia mecz jako aktywny w otwartej sesji (jedna transakcja).
 
@@ -279,6 +289,7 @@ def activate_game(game_id, auto_open=True):
         entry.ended_at = None
         _inherit_cameras(previous.game_id if previous is not None else None, game_id)
         _commit()
+        _wybrano_do_transmisji(game_id)
         return entry
     except Exception:
         db.session.rollback()
@@ -311,6 +322,8 @@ def next_game():
             queued.started_at = queued.started_at or now
             _inherit_cameras(current.game_id if current is not None else None, queued.game_id)
         _commit()
+        if queued is not None:
+            _wybrano_do_transmisji(queued.game_id)
         return queued
     except Exception:
         db.session.rollback()

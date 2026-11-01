@@ -49,7 +49,9 @@ class Kolejka:
             c.execute('''CREATE TABLE IF NOT EXISTS mecze (
                 game_id INTEGER PRIMARY KEY, seq INTEGER NOT NULL DEFAULT 0, wyslano_seq INTEGER NOT NULL DEFAULT 0, zgloszono REAL,
                 proba INTEGER NOT NULL DEFAULT 0, nastepna REAL NOT NULL DEFAULT 0, blad TEXT, blad_czas REAL,
-                odrzucone TEXT, odrzucone_czas REAL, znany TEXT)''')
+                odrzucone TEXT, odrzucone_czas REAL, znany TEXT, decyduje INTEGER)''')
+            if 'decyduje' not in {r['name'] for r in c.execute('PRAGMA table_info(mecze)')}:      # kolejka sprzed flagi bm_decyduje
+                c.execute('ALTER TABLE mecze ADD COLUMN decyduje INTEGER')
             c.execute('CREATE TABLE IF NOT EXISTS meta (klucz TEXT PRIMARY KEY, wartosc TEXT)')
 
     def _polacz(self):
@@ -57,9 +59,12 @@ class Kolejka:
         c.row_factory = sqlite3.Row
         return c
 
-    def zglos(self, game_id, teraz):
+    def zglos(self, game_id, teraz, decyduje=None):
+        """decyduje: None = bez zmiany flagi bm_decyduje, True/False = ustaw/zdejmij (idzie razem ze stanem meczu, do skutku)."""
         with self._lock, self._polacz() as c:
             c.execute('INSERT OR IGNORE INTO mecze (game_id) VALUES (?)', (game_id,))
+            if decyduje is not None:
+                c.execute('UPDATE mecze SET decyduje = ? WHERE game_id = ?', (1 if decyduje else 0, game_id))
             c.execute('''UPDATE mecze SET seq = seq + 1, proba = 0, nastepna = ?, odrzucone = NULL, odrzucone_czas = NULL,
                          zgloszono = CASE WHEN seq = wyslano_seq OR zgloszono IS NULL THEN ? ELSE zgloszono END WHERE game_id = ?''', (teraz, teraz, game_id))
 
@@ -70,16 +75,17 @@ class Kolejka:
     def oznacz_ok(self, game_id, seq, znany, teraz):
         with self._lock, self._polacz() as c:
             c.execute('UPDATE mecze SET wyslano_seq = MAX(wyslano_seq, ?), znany = ? WHERE game_id = ?', (seq, json.dumps(znany) if znany is not None else None, game_id))
+            c.execute('UPDATE mecze SET decyduje = NULL WHERE game_id = ? AND seq = wyslano_seq', (game_id,))     # flaga dotarła razem ze stanem
             c.execute('UPDATE mecze SET proba = 0, blad = NULL, blad_czas = NULL WHERE game_id = ? AND seq = wyslano_seq', (game_id,))
             c.execute("INSERT OR REPLACE INTO meta (klucz, wartosc) VALUES ('ostatni_ok', ?)", (str(teraz),))
 
     def oznacz_pominiety(self, game_id, seq):
         with self._lock, self._polacz() as c:
-            c.execute('UPDATE mecze SET wyslano_seq = MAX(wyslano_seq, ?) WHERE game_id = ?', (seq, game_id))
+            c.execute('UPDATE mecze SET wyslano_seq = MAX(wyslano_seq, ?), decyduje = NULL WHERE game_id = ?', (seq, game_id))
 
     def oznacz_odrzucony(self, game_id, seq, powod, teraz):
         with self._lock, self._polacz() as c:
-            c.execute('UPDATE mecze SET wyslano_seq = MAX(wyslano_seq, ?), odrzucone = ?, odrzucone_czas = ?, blad = NULL, blad_czas = NULL, proba = 0 WHERE game_id = ?',
+            c.execute('UPDATE mecze SET wyslano_seq = MAX(wyslano_seq, ?), decyduje = NULL, odrzucone = ?, odrzucone_czas = ?, blad = NULL, blad_czas = NULL, proba = 0 WHERE game_id = ?',
                       (seq, powod, teraz, game_id))
 
     def oznacz_blad(self, game_id, tekst, teraz):
@@ -152,8 +158,8 @@ class WpZapis:
         self.ustawienia.write_text(json.dumps({'wlaczony': bool(wartosc)}), encoding='utf-8')
 
     # -- wejście z nasłuchu
-    def zglos(self, game_id):
-        self.kolejka.zglos(int(game_id), self.zegar())
+    def zglos(self, game_id, decyduje=None):
+        self.kolejka.zglos(int(game_id), self.zegar(), decyduje)
 
     # -- treść zapisu budowana z bazy w chwili wysyłania
     def _zadanie(self, game_id):
@@ -194,17 +200,22 @@ class WpZapis:
             finally:
                 db.session.remove()
         if zad is None:
+            logger.info(f'Zapis do WP: mecz {gid} nie ma numeru wydarzenia WP (utworzony ręcznie?), pomijam')
             self.kolejka.oznacz_pominiety(gid, seq)
             return 0
         if isinstance(zad, str):
             self.kolejka.oznacz_odrzucony(gid, seq, zad, teraz)
             return 0
         tresc = {k: zad[k] for k in ('state', 'home', 'away', 'pen_home', 'pen_away') if k in zad}
-        if self.kolejka.znany(gid) == tresc:                               # WP już ma ten stan: nie wysyłamy drugi raz
+        decyduje = wiersz.get('decyduje')
+        if decyduje is None and self.kolejka.znany(gid) == tresc:          # WP już ma ten stan: nie wysyłamy drugi raz (chyba że niesiemy flagę)
             self.kolejka.oznacz_ok(gid, seq, tresc, teraz)
             return 0
         try:
-            odp = self.klient_fabryka().post_json(f"bm/v1/event/{zad['wp_id']}/state", {**tresc, 'seq': seq})
+            cialo = {**tresc, 'seq': seq}
+            if decyduje is not None:
+                cialo['decyduje'] = bool(decyduje)
+            odp = self.klient_fabryka().post_json(f"bm/v1/event/{zad['wp_id']}/state", cialo)
         except WpError as e:
             if e.kind == 'conflict':
                 self.kolejka.oznacz_odrzucony(gid, seq, f'WP odrzucił zapis: {e}', teraz)
@@ -284,6 +295,16 @@ def get_wp_zapis():
 def ustaw_instancje(z):
     global _instancja
     _instancja = z
+
+
+def zglos_decyduje(game_id, wartosc=True):
+    """Pierwszeństwo danych (bm_decyduje): ustawia (True) albo zdejmuje (False) flagę meczu w WP razem z jego stanem, przez kolejkę zapisu.
+    Bez aktywnego zapisu (moduł bez WP, próby, pominięcie z bez_zapisu_do_wp) nic nie robi. Zwraca True, gdy zgłoszono."""
+    z = _instancja
+    if z is None or not z.skonfigurowany or _wyciszony.get():
+        return False
+    z.zglos(game_id, bool(wartosc))
+    return True
 
 
 def _zainstaluj_nasluch():

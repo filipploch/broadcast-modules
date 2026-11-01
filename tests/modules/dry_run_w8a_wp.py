@@ -221,6 +221,41 @@ try:
     api('POST', f'sportspress/v2/events/{e11}', {'results': {str(t1): {'goals': '3', 'outcome': ['win']}, str(t2): {'goals': '0', 'outcome': ['loss']}}})
     k, o = stan_k(e11, 2, 'zakonczony', 1, 1, 4, 2)
     sprawdz('wynik zmieniony przez organizatora: zapis konkursu z modułu nadal 409 (reguła zamknięcia bez zmian)', k == 409 and o.get('code') == 'bm_wp_result', (k, o))
+
+    # -- 13. pierwszeństwo danych: flaga bm_decyduje (ustawiana polem „decyduje” trasy stanu) i trasa stanu ze źródła (import)
+    def zrodlo(eid, state, home=None, away=None):
+        return api('POST', f'bm/v1/event/{eid}/source-state', {'state': state, 'home': home, 'away': away})
+    e12 = nowy()
+    k, o = api('POST', f'bm/v1/event/{e12}/state', {'seq': 1, 'state': 'nierozpoczety', 'decyduje': True})
+    sprawdz('flaga decyduje ustawiona razem ze stanem; odpowiedź ją zawiera', k == 200 and o.get('decyduje') is True and mecz(e12)['meta'].get('bm_decyduje'), (k, o))
+    k, o = stan(e12, 2, 'trwa', 1, 0)
+    sprawdz('zapis stanu bez pola „decyduje” nie rusza flagi', k == 200 and o.get('decyduje') is True, (k, o))
+    k, o = zrodlo(e12, 'trwa', 3, 3)
+    sprawdz('stan ze źródła dla meczu z flagą decyduje: 409, stan i wynik na żywo bez zmian', k == 409 and o.get('code') == 'bm_decyduje'
+            and mecz(e12)['meta'].get('bm_live_score') == '1:0', (k, o, mecz(e12)['meta']))
+    k, o = api('POST', f'bm/v1/event/{e12}/state', {'seq': 3, 'state': 'trwa', 'home': 1, 'away': 0, 'decyduje': False})
+    sprawdz('flaga zdjęta polem decyduje=false', k == 200 and o.get('decyduje') is False and not mecz(e12)['meta'].get('bm_decyduje'), (k, o))
+    e13 = nowy()
+    stan(e13, 1, 'nierozpoczety')
+    seq_przed = mecz(e13)['meta'].get('bm_seq')
+    k, o = zrodlo(e13, 'trwa', 2, 1)
+    m = mecz(e13)['meta']
+    sprawdz('stan ze źródła: trwa 2:1 zapisany (bm_state, bm_live_score, bm_live), bm_seq bez zmian', k == 200 and m.get('bm_state') == 'trwa'
+            and m.get('bm_live_score') == '2:1' and m.get('bm_live') and m.get('bm_seq') == seq_przed, (k, m))
+    k, o = zrodlo(e13, 'trwa', 2, 2)
+    sprawdz('kolejny stan ze źródła nadpisuje wynik na żywo', k == 200 and mecz(e13)['meta'].get('bm_live_score') == '2:2', (k, o))
+    k, o = zrodlo(e13, 'zakonczony', 2, 2)
+    m = mecz(e13)['meta']
+    sprawdz('stan ze źródła „zakonczony”: bm_state zakonczony, wynik na żywo skasowany, natywny wynik nietknięty', k == 200 and m.get('bm_state') == 'zakonczony'
+            and not m.get('bm_live_score') and not m.get('bm_live') and not mecz(e13).get('main_results'), (k, m))
+    k, o = zrodlo(e13, 'nierozpoczety')
+    sprawdz('źródło nie ustawia „nierozpoczety”: 400', k == 400, (k, o))
+    e14 = nowy()
+    api('POST', f'sportspress/v2/events/{e14}', {'meta': {'bm_locked': True}})
+    k, o = zrodlo(e14, 'trwa', 1, 0)
+    sprawdz('stan ze źródła dla meczu z bm_locked: 409', k == 409, (k, o))
+    k, o = stan(e14, 1, 'trwa', 1, 0)
+    sprawdz('bm_locked nadal blokuje zapis z modułu (409 bm_locked): flaga decyduje to osobne pole', k == 409 and o.get('code') == 'bm_locked', (k, o))
 finally:
     pid = proc.pid
     subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], capture_output=True)
