@@ -1029,6 +1029,42 @@ def make(APP):
             self.assertEqual((st['pull']['apply'], st['pull']['label'], st['pulling']), (True, 'Dywizja A — Jesień 2026', False))
             self.assertTrue(st['last_apply_at'])
 
+        def _aktywny_chelmek(self):
+            from unittest import mock
+            from unittest.mock import MagicMock
+            import core.managers.session_manager as sm
+            from core.extensions import socketio
+            Game, _, _, _, _, Team = self.modele()
+            self.client.post('/api/wp/pull', json={'apply': True, 'league_id': L, 'season_id': S})
+            gra = Game.query.filter_by(home_team_id=Team.query.filter_by(name='KS Chełmek').one().id).one()
+            sm.activate_game(gra.id)
+            self.cm._hub_client = MagicMock()
+            self.addCleanup(setattr, self.cm, '_hub_client', None)
+            emit = mock.patch.object(socketio, 'emit')
+            self.emit = emit.start()
+            self.addCleanup(emit.stop)
+            return gra
+
+        def test_po_pobraniu_zmieniajacym_wynik_aktywnego_meczu_panel_i_nakladka_dostaja_nowy_wynik(self):
+            self._aktywny_chelmek()
+            self.wp.znajdz('events', 203)['main_results'] = ['3', '1']
+            wynik = self.client.post('/api/wp/pull', json={'apply': True, 'league_id': L, 'season_id': S}).get_json()
+            self.assertTrue(wynik['zapisano'], wynik)
+            panel = [c for c in self.emit.call_args_list if c.args and c.args[0] == 'scoreboard_data']
+            self.assertEqual(len(panel), 1)
+            self.assertEqual((panel[0].args[1]['payload']['home_team_goals'], panel[0].args[1]['payload']['away_team_goals']), (3, 1))
+            nakladka = [c for c in self.cm._hub_client.broadcast_to_class.call_args_list if c.args[:2] == ('game_data_receiver', 'scoreboard_data')]
+            self.assertEqual(len(nakladka), 1)
+            self.assertEqual((nakladka[0].args[2]['home_team_goals'], nakladka[0].args[2]['away_team_goals']), (3, 1))
+
+        def test_podglad_bez_zapisu_nie_odswieza_panelu_ani_nakladki(self):
+            self._aktywny_chelmek()
+            self.wp.znajdz('events', 203)['main_results'] = ['3', '1']
+            wynik = self.client.post('/api/wp/pull', json={'apply': False, 'league_id': L, 'season_id': S}).get_json()
+            self.assertFalse(wynik['zapisano'])
+            self.assertEqual([c for c in self.emit.call_args_list if c.args and c.args[0] == 'scoreboard_data'], [])
+            self.cm._hub_client.broadcast_to_class.assert_not_called()
+
         def test_pobranie_domyslnej_pary_gdy_nie_podano_numerow(self):
             self.mgr.set_default(L, S)
             wynik = self.client.post('/api/wp/pull', json={'apply': True}).get_json()
