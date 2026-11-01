@@ -122,11 +122,12 @@ class Import:
         return self.id_wp[rodzaj]
 
     # -- istniejące rekordy
-    def wczytaj_istniejace(self, rodzaj, trasa):
+    def wczytaj_istniejace(self, rodzaj, trasa, filtr=None):
+        """filtr: dodatkowe parametry zapytania (np. {'leagues': id, 'seasons': id}: tryb „odśwież wyniki” czyta tylko mecze jednej ligi i sezonu)."""
         wynik = {}
         pola = {'zawodnicy': 'id,meta,title,teams,current_teams,past_teams',      # nazwa i drużyny zawodnika: wykrywanie duplikatów
-                'mecze': 'id,meta,teams,results'}.get(rodzaj, 'id,meta')                  # wynik i drużyny meczu: poprzednia wartość do raportu
-        for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY}):
+                'mecze': 'id,meta,teams,results', 'druzyny': 'id,meta,title'}.get(rodzaj, 'id,meta')                  # wynik i drużyny meczu: poprzednia wartość do raportu
+        for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY, **(filtr or {})}):
             meta = r.get('meta') or {}
             if meta.get('bm_source') == self.zrodlo and meta.get('bm_source_id'):
                 tytul = r.get('title')
@@ -138,7 +139,7 @@ class Import:
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
                                                     'zablokowany': bool(blokada), 'blokada': blokada,
                                                     'wp': _stan_wp(meta, r) if rodzaj == 'mecze' else None,
-                                                    'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t],
+                                                    'nazwa': nazwa_do_porownania(tytul), 'tytul': tytul or '', 'teams': [int(t) for t in r.get('teams') or [] if t],
                                                     'cur': [int(t) for t in r.get('current_teams') or [] if t],
                                                     'past': [int(t) for t in r.get('past_teams') or [] if t],
                                                     'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or '',

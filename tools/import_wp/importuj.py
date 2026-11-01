@@ -122,9 +122,9 @@ def nazwa_do_porownania_czytelna(ist):
 
 def tekst_zrodla(m):
     """Stan i wynik meczu w źródle jako tekst tego samego rodzaju co upsert.tekst_wp (do porównania i raportu)."""
-    t, r = m['teams'], m['results']
-    if len(t) == 2 and all(x in r for x in t):
-        return f"zakończony {r[t[0]]['goals']}:{r[t[1]]['goals']}"
+    t, r = m['teams'], {str(k): v for k, v in m['results'].items()}      # NALF: id drużyn liczbowe, klucze wyników tekstowe
+    if len(t) == 2 and all(str(x) in r and r[str(x)].get('goals') not in (None, '') for x in t):
+        return f"zakończony {r[str(t[0])]['goals']}:{r[str(t[1])]['goals']}"
     z = m.get('zywo') or {}
     if z.get('stan') == 'trwa':
         return 'trwa ' + (f"{z['wynik'][0]}:{z['wynik'][1]}" if z.get('wynik') else '(bez wyniku)')
