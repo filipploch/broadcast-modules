@@ -76,6 +76,51 @@ def register_routes(app, exclude=None):
         wynik = get_wp_manager().pull(bool(data.get('apply')), db, logo_root, folder, kopie, data.get('league_id'), data.get('season_id'))
         return jsonify(wynik)
 
+    # -- W8a2: „Pobierz” ze źródła zewnętrznego (źródło -> WP -> moduł); przycisk jest ukryty, gdy moduł nie ma źródła
+    def _klucz_pary_ligi(league_id):
+        """'liga_wp:sezon_wp' ligi modułu pobranej z WP (LeagueForeignId) albo None."""
+        from core.models.base_league_foreign_id import get_league_foreign_id_model
+        from core.models.base_scraper import get_scraper_model
+        sc = get_scraper_model().get_by_folder('wp')
+        if sc is None:
+            return None
+        w = get_league_foreign_id_model().query.filter_by(scraper_id=sc.id, league_id=int(league_id)).first()
+        return w.foreign_id if w else None
+
+    @app.route('/api/zrodlo/status')
+    def api_zrodlo_status():
+        from core.managers import get_wp_manager, get_zrodlo
+        return jsonify(get_zrodlo().status(get_wp_manager().cfg.enabled))
+
+    @app.route('/api/zrodlo/pobierz', methods=['POST'])
+    def api_zrodlo_pobierz():
+        """Rozpoczyna „Pobierz wyniki” dla ligi (body: league_id; bez niego - wybór domyślny rozgrywek). Praca idzie w tle, stan: /api/zrodlo/status."""
+        import os
+        from pathlib import Path
+        from core.extensions import db
+        from core.managers import get_wp_manager, get_zrodlo
+        z, wp = get_zrodlo(), get_wp_manager()
+        dost, powod = z.dostepne(wp.cfg.enabled)
+        if not dost:
+            return jsonify({'ok': False, 'error': f'Pobieranie ze źródła niedostępne: {powod}.'}), 409
+        league_id = (request.get_json(silent=True) or {}).get('league_id')
+        klucz = _klucz_pary_ligi(league_id) if league_id not in (None, '') else None
+        para, blad = z.rozwiaz(None if league_id in (None, '') else int(league_id), wp.state(), klucz)
+        if blad:
+            return jsonify({'ok': False, 'error': blad}), 409
+        app_obj = current_app._get_current_object()
+        logo_root = Path(__file__).resolve().parents[2] / 'static' / 'images' / 'logos'
+        folder = Path(app_obj.config.get('MODULE_DIR') or os.getcwd()).name
+        kopie = Path(app_obj.config.get('WP_PULL_COPIES_DIR') or Path(app_obj.instance_path) / 'kopie-wp')
+
+        def pobranie(p):
+            with app_obj.app_context():
+                return wp.pull(True, db, logo_root, folder, kopie, p['liga_wp'], p['sezon_wp'])
+        ok, komunikat = z.start(para, pobranie)
+        if not ok:
+            return jsonify({'ok': False, 'error': komunikat}), 409
+        return jsonify({'ok': True, 'status': 'started', 'liga': para['nazwa']}), 202
+
     # -- W8a: zapis stanu i wyniku meczu do WP (kolejka, wyłącznik) i świadome zakończenie meczu
 
     def _nazwa_meczu(game):

@@ -15,6 +15,7 @@ import time
 _lazy_lock = threading.RLock()
 _service_notices = None   # komunikaty usług z HUB-a (OBS, moduł) dla paska w panelu
 _wp_manager = None        # połączenie z instancją WordPressa modułu, lista rozgrywek (WP-2)
+_zrodlo = None            # „Pobierz” ze źródła zewnętrznego (W8a2): lekki import do WP + pobranie z WP
 
 _hub_client            = None
 _timer_manager         = None
@@ -175,6 +176,22 @@ def get_wp_manager():
                 _wp_manager = WpManager(cfg, store, socketio=socketio,
                                         notices=get_service_notices(), logger=current_app.logger)
     return _wp_manager
+
+
+def get_zrodlo():
+    """Zrodlo (W8a2): blok "source" z module.json; singleton na moduł (stan pracy w toku i ostatni wynik). W testach można podstawić
+    app.config['ZRODLO_URUCHOM'] (zamiast podprocesu) i ['ZRODLO_TYP'] (nadpisanie typu źródła)."""
+    global _zrodlo
+    if _zrodlo is None:
+        with _lazy_lock:
+            if _zrodlo is None:
+                import os
+                from core.managers.zrodlo import Zrodlo
+                module_dir = current_app.config.get('MODULE_DIR') or os.getcwd()
+                _zrodlo = Zrodlo(module_dir, uruchom=current_app.config.get('ZRODLO_URUCHOM'))
+                if current_app.config.get('ZRODLO_TYP'):
+                    _zrodlo.typ = current_app.config['ZRODLO_TYP']
+    return _zrodlo
 
 
 def get_service_notices():
@@ -342,12 +359,13 @@ def shutdown_core_managers():
     global _hub_client, _service_notices, _timer_manager, _recorder_manager, _obs_ws_manager, \
            _sequence_manager, _plugin_manager, _current_game_manager, \
            _replay_export_manager, _controller_manager, _helper_relay_client, \
-           _helper_relay_manager, _initialized, _wp_manager
+           _helper_relay_manager, _initialized, _wp_manager, _zrodlo
 
     current_app.logger.info("Shutting down core managers...")
     if _wp_manager is not None:
         _wp_manager.stop()
     _wp_manager            = None
+    _zrodlo                = None
 
     if _hub_client is not None:
         _hub_client.disconnect()

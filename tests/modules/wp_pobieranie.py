@@ -975,13 +975,19 @@ def make(APP):
             self.assertFalse(wynik['ok'])
             self.assertIn('nie ma już w WP', wynik['blad'])
 
-        def test_kopia_pliku_bazy_przed_zapisem_i_tylko_ostatnie_piec(self):
-            for i in range(7):
-                self.wp.event(500 + i, [101, 102], f'2026-12-0{i + 1}T12:00:00', day='4')
-                wynik = self.pobierz()
-                self.assertTrue(wynik['zapisano'])
-                self.assertTrue(wynik['raport']['kopia'])
-            self.assertEqual(len(list(self.kopie.glob('*.db'))), 5)
+        def test_kopia_pliku_bazy_przed_zapisem_z_rozmiarem_i_czasem_i_tylko_ostatnie_n(self):
+            from unittest import mock
+            from core.managers import wp_pull
+            self.assertEqual(wp_pull.KOPII_ZACHOWANYCH, 20)                           # limit sprzątania kopii (klik „Pobierz” w trakcie transmisji)
+            with mock.patch.object(wp_pull, 'KOPII_ZACHOWANYCH', 3):
+                for i in range(5):
+                    self.wp.event(500 + i, [101, 102], f'2026-12-0{i + 1}T12:00:00', day='4')
+                    wynik = self.pobierz()
+                    self.assertTrue(wynik['zapisano'])
+                    self.assertTrue(wynik['raport']['kopia'])
+                    self.assertGreater(wynik['kopia_kb'], 0)
+                    self.assertGreaterEqual(wynik['kopia_ms'], 0)
+            self.assertEqual(len(list(self.kopie.glob('*.db'))), 3)
 
         def test_ten_sam_klient_nie_dotyka_drugiej_pary(self):
             self.wp.event(600, [101, 102], leagues=(2,), seasons=(S,))
