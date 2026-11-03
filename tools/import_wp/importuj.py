@@ -152,6 +152,8 @@ def _zapisz_stan_zywo(imp, wp, m, opis, ist, na_sucho):
         return                                                   # WP też uważa mecz za nierozpoczęty i nie ma wyniku natywnego: nic do zmiany
     if z['stan'] == 'zakonczony' and teraz.get('stan') == 'zakonczony':
         return
+    if z['stan'] == 'zakonczony' and not teraz.get('stan') and teraz.get('wynik') and teraz['wynik'] == tekst_zrodla(m).split(' ', 1)[1]:
+        return                                                   # WP ma już ten wynik natywny (stan niejawny, mecz z pełnego importu): bez zapisu, oszczędza kilkadziesiąt żądań do php -S
     imp.stany_zywo.append(f'{opis}: {teraz and tekst_wp(teraz) or "nowy"} -> {tekst_zrodla(m)}')
     if na_sucho:
         return

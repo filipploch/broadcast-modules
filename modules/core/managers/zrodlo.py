@@ -98,6 +98,9 @@ class Zrodlo:
         if not skrypt.is_file():
             return {'ok': False, 'blad': f'Brak narzędzia importu ({skrypt.name}) w tej wersji.'}
         polecenie = [self.python, str(skrypt), self.modul_id, '--liga', para['liga'], '--sezon', para['sezon'], '--json']
+        cache = os.environ.get('BM_ZRODLO_CACHE')                      # tylko próby ręczne: udawane źródło z katalogu (produkcja czyta źródło na żywo)
+        if cache:
+            polecenie += ['--cache', cache, '--stare-dane-ok']
         env = dict(os.environ, PYTHONIOENCODING='utf-8')
         try:
             r = subprocess.run(polecenie, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=TIMEOUT_S, env=env,
