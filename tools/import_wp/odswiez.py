@@ -131,8 +131,19 @@ def _id_kategorii(wp, rodzaj, slug):
     return None
 
 
+def _flaga_brak(wp, wp_id, wartosc, na_sucho):
+    if not na_sucho:
+        wp.zaktualizuj(importuj.TRASY['mecze'], wp_id, {'meta': {'bm_zrodlo_brak': bool(wartosc)}})
+
+
+def _odwolany(m):
+    """Mecz nietypowy w źródle (odwołany, przełożony, przerwany): Superscore wg pary (match_state, match_status), NALF wg statusu wpisu (inny niż publish/future)."""
+    return bool((m.get('zywo') or {}).get('nietypowy')) or (m.get('status') or '') not in ('', 'publish', 'future')
+
+
 def odswiez(wp, zrodlo, mecze, liga, sezon, na_sucho=False):
-    """Zapisuje do WP stan i wynik meczów, które już w WP są. Zwraca słownik z podsumowaniem (zmienione, pominięte, bez zmian, brak w WP, błędy)."""
+    """Zapisuje do WP stan i wynik meczów, które już w WP są. Mecze, które zniknęły ze źródła albo zostały w nim odwołane, dostają flagę bm_zrodlo_brak
+    (NIGDY nie są usuwane). Zwraca słownik z podsumowaniem."""
     imp = Import(wp, zrodlo, na_sucho=na_sucho, log=lambda *a: None)
     imp.stany_zywo = []
     id_liga = _id_kategorii(wp, 'liga', f'{zrodlo}-l{liga}')
@@ -143,19 +154,36 @@ def odswiez(wp, zrodlo, mecze, liga, sezon, na_sucho=False):
     nazwy_dr = {sid: ist['tytul'] for sid, ist in istn_dr.items()}
     for sid, ist in istn_dr.items():
         imp.id_wp['druzyny'][sid] = ist['id']
-    imp.wczytaj_istniejace('mecze', importuj.TRASY['mecze'], {'leagues': id_liga, 'seasons': id_sezon})
-    wynik = {'zmienione': [], 'bez_zmian': 0, 'pominiete': [], 'brak_w_wp': [], 'bledy': []}
+    istn_m = imp.wczytaj_istniejace('mecze', importuj.TRASY['mecze'], {'leagues': id_liga, 'seasons': id_sezon})
+    wynik = {'zmienione': [], 'bez_zmian': 0, 'pominiete': [], 'brak_w_wp': [], 'bledy': [], 'zniknely': [], 'odwolane': [], 'wrocily': [],
+             'bez_wyniku_w_zrodle': [], 'ostrzezenia': []}
+    ids_zrodla = set()
     for m in mecze:
+        ids_zrodla.add(str(m['id']))
         opis = ' - '.join(nazwy_dr.get(str(t)) or 'Do ustalenia' for t in m['teams'])
-        ist = imp.istniejace['mecze'].get(str(m['id']))
+        ist = istn_m.get(str(m['id']))
         zr = importuj.tekst_zrodla(m)
         if ist is None:
             wynik['brak_w_wp'].append(f'{opis}: źródło: {zr}')
             continue
+        try:                                                      # flaga „brak w źródle” to nie stan ani wynik: ustawiana także przy meczu z flagą decyduje
+            if _odwolany(m) and not ist['brak_w_zrodle']:
+                _flaga_brak(wp, ist['id'], True, na_sucho)
+                wynik['odwolane'].append(f'{opis}: odwołany/nietypowy w źródle (status {(m.get("zywo") or {}).get("status", m.get("status"))}), oznaczony bm_zrodlo_brak, mecz zostaje w WP')
+            elif not _odwolany(m) and ist['brak_w_zrodle']:
+                _flaga_brak(wp, ist['id'], False, na_sucho)
+                wynik['wrocily'].append(f'{opis}: znów jest w źródle, zdjęto flagę bm_zrodlo_brak')
+        except Exception as e:
+            wynik['bledy'].append(f'{opis}: flaga bm_zrodlo_brak: {e}')
         w_wp = tekst_wp(ist['wp'])
         if ist['zablokowany']:
             wynik['pominiete'].append(f'{opis}: źródło: {zr}, WP: {w_wp} ' + ('(zgodne)' if zr == w_wp else '(RÓŻNICA, zostaje wartość z WP)') + f' [{ist["blokada"]}]')
             continue
+        if 'zywo' not in m and not m['results'] and zr != w_wp:   # źródło bez stanu (NALF) i bez wyniku: to nie dowód, że mecz się nie odbył; nic nie czyścimy
+            wynik['bez_wyniku_w_zrodle'].append(f'{opis}: źródło bez wyniku, WP: {w_wp} (nie zmieniam)')
+            continue
+        if _odwolany(m):
+            continue                                              # mecz nietypowy: stanu i wyniku nie ruszamy
         imp.id_wp['mecze'][m['id']] = ist['id']
         przed = len(imp.stany_zywo)
         try:
@@ -172,6 +200,20 @@ def odswiez(wp, zrodlo, mecze, liga, sezon, na_sucho=False):
             wynik['zmienione'].append(f'{opis}: było w WP: {w_wp}, ze źródła: {zr}')
         else:
             wynik['bez_zmian'] += 1
+    znane = {sid: ist for sid, ist in istn_m.items()}
+    brakuje = [sid for sid in znane if sid not in ids_zrodla]
+    if brakuje and len(ids_zrodla) * 2 < len(znane):             # źródło oddało mniej niż połowę znanych meczów: to raczej awaria źródła, nie zniknięcia
+        wynik['ostrzezenia'].append(f'Źródło zwróciło {len(ids_zrodla)} z {len(znane)} znanych meczów: nie oznaczam {len(brakuje)} meczów jako zniklych (podejrzenie awarii źródła).')
+    else:
+        for sid in brakuje:
+            ist = znane[sid]
+            if ist['brak_w_zrodle']:
+                continue
+            try:
+                _flaga_brak(wp, ist['id'], True, na_sucho)
+                wynik['zniknely'].append(f'mecz źródła {sid} (id WP {ist["id"]}): nie ma go już w źródle, oznaczony bm_zrodlo_brak, mecz zostaje w WP ({tekst_wp(ist["wp"])})')
+            except Exception as e:
+                wynik['bledy'].append(f'mecz źródła {sid}: flaga bm_zrodlo_brak: {e}')
     wynik['bledy'] += imp.liczniki['mecze'].uwagi
     return wynik
 
@@ -184,14 +226,17 @@ def podsumowanie(nazwa, zrodlo, liczba_meczow, zapytania, wynik, na_sucho):
     w.append(f'Bez zmian: {wynik["bez_zmian"]}')
     w.append(f'Pominięte, bo stan i wynik ustala użytkownik (w tym mecz transmitowany): {len(wynik["pominiete"])}' + ('' if not wynik['pominiete'] else ':'))
     w += [f'  - {p}' for p in wynik['pominiete']]
-    if wynik['brak_w_wp']:
-        w.append(f'Mecze ze źródła, których nie ma w WP ({len(wynik["brak_w_wp"])}; nie tworzę ich, użyj pełnego importu):')
-        w += [f'  - {p}' for p in wynik['brak_w_wp'][:20]]
+    for klucz, tytul in (('zniknely', 'ZNIKNĘŁY ZE ŹRÓDŁA (oznaczone bm_zrodlo_brak, nic nie usunięto)'), ('odwolane', 'ODWOŁANE/NIETYPOWE W ŹRÓDLE (oznaczone bm_zrodlo_brak)'),
+                         ('wrocily', 'WRÓCIŁY DO ŹRÓDŁA (zdjęto flagę)'), ('bez_wyniku_w_zrodle', 'ŹRÓDŁO BEZ WYNIKU, A WP MA WYNIK (nie zmieniono)'),
+                         ('brak_w_wp', 'MECZE ZE ŹRÓDŁA, KTÓRYCH NIE MA W WP (nie tworzę ich, użyj pełnego importu)')):
+        if wynik.get(klucz):
+            w.append(f'{tytul}: {len(wynik[klucz])}:')
+            w += [f'  - {p}' for p in wynik[klucz][:20]]
+    for o in wynik.get('ostrzezenia') or []:
+        w.append(f'UWAGA: {o}')
     if wynik['bledy']:
         w.append(f'BŁĘDY ({len(wynik["bledy"])}):')
         w += [f'  - {b}' for b in wynik['bledy'][:20]]
-    if wynik['zmienione'] and not na_sucho:
-        w.append('Aby zmiany zobaczył moduł: „Pobierz z WP” (strona Rozgrywki WP).')
     return '\n'.join(w)
 
 
@@ -203,39 +248,56 @@ def main(argv=None):
     ap.add_argument('--sezon', help='id sezonu w źródle (domyślnie z bieżącego wyboru rozgrywek modułu)')
     ap.add_argument('--cache', help='katalog pamięci podręcznej źródła (do prób; wymaga --na-sucho albo --stare-dane-ok)')
     ap.add_argument('--stare-dane-ok', action='store_true')
+    ap.add_argument('--json', action='store_true', help='jedna linia JSON na standardowym wyjściu (dla modułu): {"ok", "blad", "tekst", "wynik", ...}')
     a = ap.parse_args(argv)
+
+    def blad(tekst, kod=2):
+        if a.json:
+            print(json.dumps({'ok': False, 'blad': tekst}, ensure_ascii=False))
+            return kod
+        sys.exit(tekst)
+
     if a.cache and not a.na_sucho and not a.stare_dane_ok:
-        sys.exit('Odmowa: --cache w prawdziwym odświeżeniu czytałby stare dane zamiast stanu źródła na żywo. Bez --cache albo --na-sucho; świadomie: --stare-dane-ok.')
+        return blad('Odmowa: --cache w prawdziwym odświeżeniu czytałby stare dane zamiast stanu źródła na żywo. Bez --cache albo --na-sucho; świadomie: --stare-dane-ok.')
     klucz = a.modul or rozpoznaj_modul()
     if not klucz:
-        sys.exit('Nie rozpoznaję działającego modułu. Uruchom: odswiez-wyniki.bat nalf   albo   odswiez-wyniki.bat garbarnia')
+        return blad('Nie rozpoznaję działającego modułu. Uruchom: odswiez-wyniki.bat nalf   albo   odswiez-wyniki.bat garbarnia')
     folder = ZRODLA[klucz]['modul']
     wybor = {'liga': a.liga, 'sezon': a.sezon, 'nazwa': f'liga {a.liga}, sezon {a.sezon}'} if a.liga and a.sezon else wybor_rozgrywek(folder)
     if not wybor:
-        sys.exit(f'Moduł {folder} nie ma wybranych rozgrywek WP (strona Rozgrywki WP) i nie podano --liga ze --sezon.')
+        return blad(f'Moduł {folder} nie ma wybranych rozgrywek WP (strona Rozgrywki WP) i nie podano --liga ze --sezon.')
     wp, port, mod_id = importuj.polacz_z_wp(folder)
     port_env = os.environ.get('BM_WP_PORT')
     if port_env:
         wp.url = f'http://127.0.0.1:{int(port_env)}'               # próby na kopii WP (np. 8099)
     zrodlo = ZRODLA[klucz].get('zrodlo', klucz)
-    print(f'Odświeżanie wyników: {wybor["nazwa"]}, moduł {mod_id}, WP 127.0.0.1:{port_env or port}{" [NA SUCHO]" if a.na_sucho else ""}')
+    if not a.json:
+        print(f'Odświeżanie wyników: {wybor["nazwa"]}, moduł {mod_id}, WP 127.0.0.1:{port_env or port}{" [NA SUCHO]" if a.na_sucho else ""}')
+    start = time.time()
     try:
         with Blokada(importuj.wp_dir() / 'odswiez-wyniki.lock'):
             try:
                 mecze, zapytania = pobierz_ze_zrodla(klucz, wybor['liga'], wybor['sezon'], a.cache)
-            except SystemExit:
-                raise
+            except SystemExit as e:
+                return blad(str(e.code))
             except Exception as e:
-                sys.exit(f'ŹRÓDŁO NIE ODPOWIADA ({e}). Nic nie zmieniono w WP; spróbuj później albo wpisz dane ręcznie w module.')
+                return blad(f'ŹRÓDŁO NIE ODPOWIADA ({e}). Nic nie zmieniono w WP; spróbuj później albo wpisz dane ręcznie w module.')
             if not mecze:
-                sys.exit('Źródło nie zwróciło żadnych meczów tej ligi i sezonu. Nic nie zmieniono.')
+                return blad('Źródło nie zwróciło żadnych meczów tej ligi i sezonu. Nic nie zmieniono.')
             try:
                 wynik = odswiez(wp, zrodlo, mecze, wybor['liga'], wybor['sezon'], a.na_sucho)
             except WpRestError as e:
-                sys.exit(f'Błąd rozmowy z WP: {e}. Czy instancja WP działa?')
+                return blad(f'Błąd rozmowy z WP: {e}. Czy instancja WP działa?')
+            except SystemExit as e:
+                return blad(str(e.code))
     except Zajete as e:
-        sys.exit(str(e))
-    print(podsumowanie(wybor['nazwa'], zrodlo, len(mecze), zapytania, wynik, a.na_sucho))
+        return blad(str(e))
+    tekst = podsumowanie(wybor['nazwa'], zrodlo, len(mecze), zapytania, wynik, a.na_sucho)
+    if a.json:
+        print(json.dumps({'ok': not wynik['bledy'], 'blad': '', 'tekst': tekst, 'wynik': wynik, 'zrodlo_odpowiadalo': True, 'meczow_w_zrodle': len(mecze),
+                          'zapytania': zapytania, 'czas_s': round(time.time() - start, 1), 'na_sucho': bool(a.na_sucho)}, ensure_ascii=False))
+    else:
+        print(tekst)
     return 1 if wynik['bledy'] else 0
 
 

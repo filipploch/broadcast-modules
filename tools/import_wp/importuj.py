@@ -135,8 +135,10 @@ def _zapisz_stan_zywo(imp, wp, m, opis, ist, na_sucho):
     """Źródło podaje stan meczu (Superscore: w toku / zakończony): zapisuje do WP bm_state i wynik na żywo trasą source-state (bez numeru zapisu
     modułu i bez natywnego wyniku). Pomija mecz zablokowany flagą (bm_decyduje, bm_locked) i mecz, w którym WP ma już to samo."""
     z = m.get('zywo')
-    if not z or z['stan'] not in ('trwa', 'zakonczony') or (ist and ist['zablokowany']):
+    if not z or z['stan'] not in ('nierozpoczety', 'trwa', 'zakonczony') or (ist and ist['zablokowany']):
         return
+    if z['stan'] == 'nierozpoczety' and z.get('nietypowy'):
+        return                                                   # mecz odwołany/przełożony w źródle: stanu nie ruszamy (tylko flaga bm_zrodlo_brak i raport)
     wp_id = imp.id_wp['mecze'].get(m['id'])
     if not wp_id:
         return
@@ -144,8 +146,10 @@ def _zapisz_stan_zywo(imp, wp, m, opis, ist, na_sucho):
         return                                                   # zakończony bez wyniku w źródle: stanu nie zapisujemy
     wynik = z.get('wynik') if z['stan'] == 'trwa' else None
     teraz = (ist or {}).get('wp') or {}
-    if z['stan'] == 'trwa' and teraz.get('stan') == 'trwa' and teraz.get('na_zywo') == (f'{wynik[0]}:{wynik[1]}' if wynik else ''):
+    if z['stan'] == 'trwa' and teraz.get('stan') == 'trwa' and teraz.get('na_zywo') == (f'{wynik[0]}:{wynik[1]}' if wynik else '') and not teraz.get('wynik'):
         return
+    if z['stan'] == 'nierozpoczety' and teraz.get('stan') not in ('trwa', 'zakonczony') and not teraz.get('wynik'):
+        return                                                   # WP też uważa mecz za nierozpoczęty i nie ma wyniku natywnego: nic do zmiany
     if z['stan'] == 'zakonczony' and teraz.get('stan') == 'zakonczony':
         return
     imp.stany_zywo.append(f'{opis}: {teraz and tekst_wp(teraz) or "nowy"} -> {tekst_zrodla(m)}')

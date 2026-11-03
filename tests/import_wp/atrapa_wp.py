@@ -17,6 +17,7 @@ class AtrapaWp:
         self.blad_dla = None                            # callable(kolekcja, body) -> True => odpowiedź 500
         self.wyczyszczone = []
         self.stany = []                                 # (id meczu, stan, wynik na żywo) zapisane trasą source-state
+        self.wyczyszczone_wyniki = []                   # mecze, którym source-state wyczyścił natywny wynik
         atrapa = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -75,6 +76,10 @@ class AtrapaWp:
             meta = ev.setdefault('meta', {})
             if meta.get('bm_locked') or meta.get('bm_decyduje'):
                 return 409, {'code': 'bm_decyduje'}, {}
+            if body['state'] != 'zakonczony':                # jak w bm-pomocnik.php: natywny wynik istnieje tylko dla meczów zakończonych
+                for k in ('players', 'performance', 'results'):
+                    ev.pop(k, None)
+                self.wyczyszczone_wyniki.append(int(m.group(1)))
             meta['bm_state'] = body['state']
             meta['bm_live_score'] = f"{body['home']}:{body['away']}" if body['state'] == 'trwa' and body.get('home') is not None else ''
             meta['bm_live'] = body['state'] == 'trwa'

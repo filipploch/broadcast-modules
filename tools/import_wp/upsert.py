@@ -137,7 +137,7 @@ class Import:
                 else:
                     blokada = 'blokada wyniku albo mecz trwa' if (meta.get('bm_locked') or meta.get('bm_live')) else ''
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
-                                                    'zablokowany': bool(blokada), 'blokada': blokada,
+                                                    'zablokowany': bool(blokada), 'blokada': blokada, 'brak_w_zrodle': bool(meta.get('bm_zrodlo_brak')),
                                                     'wp': _stan_wp(meta, r) if rodzaj == 'mecze' else None,
                                                     'nazwa': nazwa_do_porownania(tytul), 'tytul': tytul or '', 'teams': [int(t) for t in r.get('teams') or [] if t],
                                                     'cur': [int(t) for t in r.get('current_teams') or [] if t],
