@@ -3,7 +3,8 @@
     pobierz(wyniki, liga) = lekki import do WP (tools/import_wp/odswiez.py w PODPROCESIE, limit 120 s, blokada pliku przed podwójnym uruchomieniem)
                             + automatyczne „Pobierz z WP” tej samej pary (kopia bazy, zaległa kolejka zapisu idzie przed pobraniem).
 
-Źródło deklaruje blok "source" w module.json: {"typ": "nalffutsal" | "superscore" | "brak"}. Bez źródła (typ "brak" albo brak bloku) przycisk jest ukryty.
+Źródło deklaruje plik source.json obok module.json: {"typ": "nalffutsal" | "superscore" | "brak"}. Bez źródła (typ "brak" albo brak pliku) przycisk jest ukryty.
+(Nie w module.json: HUB czyta module.json ściśle i odrzuca moduł z nieznanym polem.)
 Liga i sezon w źródle wynikają ze slugów w WP (nalf-l19, nalf-s61); parę (liga WP, sezon WP) daje LeagueForeignId ligi modułu albo wybór domyślny rozgrywek.
 Praca idzie w wątku (klik nie blokuje panelu); panel odpytuje stan trasą /api/zrodlo/status. Nic nie działa w tle bez kliknięcia."""
 import json
@@ -24,14 +25,15 @@ PREFIKS = {'nalffutsal': 'nalf', 'superscore': 'superscore'}          # prefiks 
 
 
 def wczytaj_blok_zrodla(module_dir):
-    """(typ, id modułu) z <module_dir>/module.json; typ 'brak' gdy bloku nie ma albo jest nieznany. Nigdy nie zgłasza wyjątku."""
-    try:
-        d = json.loads((Path(module_dir) / 'module.json').read_text(encoding='utf-8-sig'))
-    except (OSError, ValueError):
-        return 'brak', ''
-    blok = d.get('source')
-    typ = str(blok.get('typ') or 'brak') if isinstance(blok, dict) else 'brak'
-    return (typ if typ in TYPY else 'brak'), str(d.get('id') or '')
+    """(typ, id modułu): typ z <module_dir>/source.json, id z module.json; typ 'brak', gdy pliku nie ma, jest uszkodzony albo typ jest nieznany. Nigdy nie zgłasza wyjątku."""
+    def czytaj(nazwa):
+        try:
+            d = json.loads((Path(module_dir) / nazwa).read_text(encoding='utf-8-sig'))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+    typ = str(czytaj('source.json').get('typ') or 'brak')
+    return (typ if typ in TYPY else 'brak'), str(czytaj('module.json').get('id') or '')
 
 
 def id_ze_sluga(slug, prefiks, litera):

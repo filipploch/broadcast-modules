@@ -11,8 +11,5 @@
   "wp": {
     "port": 8091,
     "title": "NALF"
-  },
-  "source": {
-    "typ": "nalffutsal"
   }
 }

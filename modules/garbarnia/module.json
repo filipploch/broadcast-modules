@@ -11,8 +11,5 @@
   "wp": {
     "port": 8092,
     "title": "Garbarnia"
-  },
-  "source": {
-    "typ": "superscore"
   }
 }

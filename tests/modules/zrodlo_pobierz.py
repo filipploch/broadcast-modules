@@ -69,7 +69,7 @@ def make(APP, modul):
             self.fail('praca nie skończyła się')
 
         # ---- deklaracja źródła i ukrywanie
-        def test_blok_source_w_module_json_obu_modulow(self):
+        def test_deklaracja_zrodla_w_source_json_obu_modulow(self):
             from core.managers.zrodlo import wczytaj_blok_zrodla
             katalog = Path(APP.config.get('MODULE_DIR'))
             typ, mid = wczytaj_blok_zrodla(katalog)
@@ -77,9 +77,17 @@ def make(APP, modul):
             tmp = Path(tempfile.mkdtemp(prefix='bm-zrodlo-'))
             self.assertEqual(wczytaj_blok_zrodla(tmp), ('brak', ''))                       # brak pliku
             (tmp / 'module.json').write_text(json.dumps({'id': 'x'}), encoding='utf-8')
-            self.assertEqual(wczytaj_blok_zrodla(tmp), ('brak', 'x'))                      # brak bloku
-            (tmp / 'module.json').write_text(json.dumps({'id': 'x', 'source': {'typ': 'cos'}}), encoding='utf-8')
-            self.assertEqual(wczytaj_blok_zrodla(tmp)[0], 'brak')                          # nieznany typ
+            self.assertEqual(wczytaj_blok_zrodla(tmp), ('brak', 'x'))                      # brak pliku source.json
+            (tmp / 'source.json').write_text(json.dumps({'typ': 'cos'}), encoding='utf-8')
+            self.assertEqual(wczytaj_blok_zrodla(tmp), ('brak', 'x'))                      # nieznany typ
+            (tmp / 'source.json').write_text('to nie json', encoding='utf-8')
+            self.assertEqual(wczytaj_blok_zrodla(tmp), ('brak', 'x'))                      # uszkodzony plik
+            (tmp / 'source.json').write_text(json.dumps({'typ': 'superscore'}), encoding='utf-8')
+            self.assertEqual(wczytaj_blok_zrodla(tmp), ('superscore', 'x'))
+
+        def test_module_json_nie_ma_pola_source_bo_hub_czyta_go_scisle(self):
+            katalog = Path(APP.config.get('MODULE_DIR'))
+            self.assertNotIn('source', json.loads((katalog / 'module.json').read_text(encoding='utf-8-sig')))
 
         def test_status_ze_zrodlem_i_bez(self):
             s = self.client.get('/api/zrodlo/status').get_json()
