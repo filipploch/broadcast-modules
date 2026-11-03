@@ -23,6 +23,8 @@
  *   w polu "decyduje" (true/false) trasy stanu: automatycznie przy wyborze meczu do transmisji albo jawnie z zakładki MECZE. Importer pomija taki mecz i tylko raportuje różnicę.
  *   bm_locked zostaje twardą blokadą zapisu z modułu (409). Trasa bm/v1/event/<id>/source-state (POST, ciało: state, home, away) służy importerowi do zapisu
  *   stanu i wyniku NA ŻYWO ze źródła (nie rusza bm_seq ani natywnego wyniku); odpowiada 409 dla meczu z bm_decyduje albo bm_locked.
+ * bm_zrodlo_brak (flaga meczu, ustawiana przez import): mecz zniknął ze źródła albo został w nim odwołany. Mecz nigdy nie jest usuwany; tabela (W8b) wyłącza
+ *   z tabeli live mecz niezakończony z tą flagą, a zakończony zostaje w tabeli z ostrzeżeniem.
  * Natywny wynik SportsPressa (sp_results) i status "publish" są ustawiane WYŁĄCZNIE przy "zakonczony". Po zamknięciu meczu wygrywa WP:
  *   wynik, którego moduł nie wpisał albo który zmieniono po zapisie z modułu, nie jest nadpisywany (409 bm_wp_result).
  */
@@ -41,7 +43,7 @@ add_action('init', function () {
 	foreach (['bm_first_name', 'bm_last_name'] as $k) {
 		register_post_meta('sp_player', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'string']);
 	}
-	foreach (['bm_live', 'bm_locked', 'bm_decyduje'] as $k) {
+	foreach (['bm_live', 'bm_locked', 'bm_decyduje', 'bm_zrodlo_brak'] as $k) {
 		register_post_meta('sp_event', $k, ['show_in_rest' => true, 'single' => true, 'type' => 'boolean']);
 	}
 	foreach (['bm_state', 'bm_live_score', 'bm_result_source', 'bm_result_hash', 'bm_winner'] as $k) {
@@ -156,6 +158,11 @@ function bm_event_state($req) {
 		update_post_meta($id, 'bm_live', '');
 		delete_post_meta($id, 'bm_live_score');
 	} elseif ($state === 'trwa') {
+		if ($source === 'modul') {      // natywny wynik zapisany wcześniej przez moduł nie może zostać w meczu, który znów trwa
+			delete_post_meta($id, 'sp_results');
+			delete_post_meta($id, 'bm_result_source');
+			delete_post_meta($id, 'bm_result_hash');
+		}
 		foreach (['bm_winner', 'bm_winner_team', 'bm_pen_home', 'bm_pen_away'] as $k) delete_post_meta($id, $k);
 		update_post_meta($id, 'bm_live', '1');
 		update_post_meta($id, 'bm_live_score', ($home !== null && $away !== null) ? ($home . ':' . $away) : '');
@@ -181,12 +188,15 @@ function bm_event_source_state($req) {
 	$p = $req->get_json_params();
 	if (!is_array($p)) $p = [];
 	$state = isset($p['state']) ? (string) $p['state'] : '';
-	if (!in_array($state, ['trwa', 'zakonczony'], true)) return new WP_Error('bm_bad_state', 'Źródło może ustawić tylko stan trwa albo zakonczony', ['status' => 400]);
+	if (!in_array($state, ['nierozpoczety', 'trwa', 'zakonczony'], true)) return new WP_Error('bm_bad_state', 'Nieprawidłowy stan meczu', ['status' => 400]);
 	if (get_post_meta($id, 'bm_locked', true) || get_post_meta($id, 'bm_decyduje', true)) {
 		return new WP_Error('bm_decyduje', 'Stan i wynik tego meczu ustala użytkownik (blokada albo flaga decyduje)', ['status' => 409]);
 	}
 	$home = (isset($p['home']) && $p['home'] !== '') ? (int) $p['home'] : null;
 	$away = (isset($p['away']) && $p['away'] !== '') ? (int) $p['away'] : null;
+	if ($state !== 'zakonczony') {      // natywny wynik istnieje tylko dla meczów zakończonych: powrót do „nierozpoczęty”/„trwa” (także z importu) czyści wynik i zwycięzcę
+		foreach (['sp_results', 'bm_result_source', 'bm_result_hash', 'bm_winner', 'bm_winner_team', 'bm_pen_home', 'bm_pen_away'] as $k) delete_post_meta($id, $k);
+	}
 	if ($state === 'trwa') {
 		update_post_meta($id, 'bm_live', '1');
 		update_post_meta($id, 'bm_live_score', ($home !== null && $away !== null) ? ($home . ':' . $away) : '');
