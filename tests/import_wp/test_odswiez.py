@@ -84,7 +84,7 @@ class OdswiezNalfTests(unittest.TestCase):
         w = self._odswiez(self._mecze())
         self.assertEqual(len(w['brak_w_wp']), 1)
         self.assertEqual(self.a.posty(), [])
-        self.assertIn('nie ma w WP', odswiez.podsumowanie('x', 'nalf', 3, 1, w, False))
+        self.assertIn('NIE MA W WP', odswiez.podsumowanie('x', 'nalf', 3, 1, w, False))
 
     def test_na_sucho_pokazuje_zmiane_ale_niczego_nie_zapisuje(self):
         w = self._odswiez(self._mecze(gole='9'), na_sucho=True)
@@ -97,6 +97,87 @@ class OdswiezNalfTests(unittest.TestCase):
         w = self._odswiez(self._mecze(gole='9'))
         self.assertEqual(len(w['bledy']), 1)
         self.assertIn('BŁĘDY (1)', odswiez.podsumowanie('x', 'nalf', 3, 1, w, False))
+
+
+class OdswiezZnikajaceITrybJsonTests(unittest.TestCase):
+    def setUp(self):
+        self.a = AtrapaWp()
+        self.addCleanup(self.a.zamknij)
+        self.wp = WpRest(f'http://127.0.0.1:{self.a.port}', 'operator', 'tajne')
+        importuj.importuj_nalf(self.wp, tn.dane_zrodla(), log=lambda *x: None)
+        self.mecz = self.a.po_zrodle('events', tn.ROZEGRANY)
+
+    def _od(self, mecze, **kw):
+        return odswiez.odswiez(self.wp, 'nalf', mecze, 19, 61, **kw)
+
+    def test_mecz_ktory_zniknal_ze_zrodla_dostaje_flage_i_nie_jest_usuwany(self):
+        reszta = [m for m in tn.dane_zrodla()['mecze'] if m['id'] != tn.PRZYSZLY]
+        w = self._od(reszta)
+        self.assertEqual(len(w['zniknely']), 1)
+        przyszly = self.a.po_zrodle('events', tn.PRZYSZLY)
+        self.assertIsNotNone(przyszly)                                       # nic nie usunięto
+        self.assertTrue(przyszly['meta']['bm_zrodlo_brak'])
+        self.a.wyzeruj_zapytania()
+        w = self._od(reszta)                                                 # kolejny raz: flaga już jest, nic nie wysyłamy
+        self.assertEqual(w['zniknely'], [])
+        self.assertEqual(self.a.posty(), [])
+
+    def test_mecz_ktory_wrocil_do_zrodla_traci_flage(self):
+        przyszly = self.a.po_zrodle('events', tn.PRZYSZLY)
+        przyszly['meta']['bm_zrodlo_brak'] = True
+        w = self._od(tn.dane_zrodla()['mecze'])
+        self.assertEqual(len(w['wrocily']), 1)
+        self.assertFalse(przyszly['meta']['bm_zrodlo_brak'])
+
+    def test_zrodlo_ktore_oddalo_mniej_niz_polowe_znanych_meczow_nie_flaguje_zniknietych(self):
+        w = self._od([m for m in tn.dane_zrodla()['mecze'] if m['id'] == tn.ROZEGRANY])
+        self.assertEqual(w['zniknely'], [])
+        self.assertTrue(any('awarii źródła' in o for o in w['ostrzezenia']))
+        self.assertNotIn('bm_zrodlo_brak', self.a.po_zrodle('events', tn.PRZYSZLY)['meta'])
+
+    def test_mecz_odwolany_w_nalf_wpis_nie_publish_dostaje_flage_a_jego_wynik_nie_jest_ruszany(self):
+        mecze = tn.dane_zrodla()['mecze']
+        m = next(x for x in mecze if x['id'] == tn.ROZEGRANY)
+        m['status'] = 'draft'
+        m['results']['7612']['goals'] = '9'
+        w = self._od(mecze)
+        self.assertEqual(len(w['odwolane']), 1)
+        self.assertTrue(self.mecz['meta']['bm_zrodlo_brak'])
+        self.assertEqual(self.mecz['results'][str(self.mecz['teams'][0])]['goals'], '4')      # wynik bez zmian
+
+    def test_nalf_bez_wyniku_w_zrodle_nie_czysci_wyniku_w_wp(self):
+        mecze = tn.dane_zrodla()['mecze']
+        next(x for x in mecze if x['id'] == tn.ROZEGRANY)['results'] = {}
+        w = self._od(mecze)
+        self.assertEqual(len(w['bez_wyniku_w_zrodle']), 1)
+        self.assertIn('results', self.mecz)
+        self.assertEqual(self.a.wyczyszczone_wyniki, [])
+
+    def test_flaga_brak_jest_ustawiana_takze_dla_meczu_z_flaga_decyduje(self):
+        self.mecz['meta']['bm_decyduje'] = True
+        mecze = [m for m in tn.dane_zrodla()['mecze'] if m['id'] != tn.ROZEGRANY]
+        w = self._od(mecze)
+        self.assertEqual(len(w['zniknely']), 1)                              # flaga to nie stan ani wynik
+        self.assertTrue(self.mecz['meta']['bm_zrodlo_brak'])
+
+    def test_tryb_json_zwraca_jedna_linie_z_wynikiem_a_blad_zrodla_tez_jako_json(self):
+        import io
+        from contextlib import redirect_stdout
+        tmp = Path(tempfile.mkdtemp(prefix='bm-odswiez-json-'))
+        with mock.patch.object(odswiez.importuj, 'wp_dir', return_value=tmp),                 mock.patch.object(odswiez.importuj, 'polacz_z_wp', return_value=(self.wp, 8091, 'nalf')),                 mock.patch.object(odswiez, 'pobierz_ze_zrodla', return_value=(tn.dane_zrodla()['mecze'], 2)):
+            bufor = io.StringIO()
+            with redirect_stdout(bufor):
+                kod = odswiez.main(['nalf', '--liga', '19', '--sezon', '61', '--json'])
+        dane = json.loads(bufor.getvalue())
+        self.assertEqual((kod, dane['ok'], dane['zrodlo_odpowiadalo'], dane['meczow_w_zrodle']), (0, True, True, 3))
+        self.assertIn('wynik', dane)
+        with mock.patch.object(odswiez.importuj, 'wp_dir', return_value=tmp),                 mock.patch.object(odswiez.importuj, 'polacz_z_wp', return_value=(self.wp, 8091, 'nalf')),                 mock.patch.object(odswiez, 'pobierz_ze_zrodla', side_effect=OSError('brak sieci')):
+            bufor = io.StringIO()
+            with redirect_stdout(bufor):
+                kod = odswiez.main(['nalf', '--liga', '19', '--sezon', '61', '--json'])
+        dane = json.loads(bufor.getvalue())
+        self.assertEqual((kod, dane['ok']), (2, False))
+        self.assertIn('ŹRÓDŁO NIE ODPOWIADA', dane['blad'])
 
 
 class OdswiezSuperscoreTests(unittest.TestCase):
@@ -128,6 +209,32 @@ class OdswiezSuperscoreTests(unittest.TestCase):
         self.assertEqual(self.a.stany, [])
         self.assertEqual(mecz['meta']['bm_live_score'], '0:0')
         self.assertIn('źródło: trwa 1:0, WP: trwa 0:0 (RÓŻNICA', w['pominiete'][0])
+
+    def test_zrodlo_mowi_nierozpoczety_a_wp_ma_wynik_czyszczenie_przez_source_state_z_poprzednia_wartoscia(self):
+        zak = self.a.po_zrodle('events', ts.ZAKONCZONY)
+        self.assertIn('results', zak)
+        fx = copy.deepcopy(ts.FX['fixtures'])
+        e = next(x for x in fx['events'] if x['id'] == ts.ZAKONCZONY)
+        e['match_state'], e['scores'], e['match_status'] = 0, [], 0
+        w = odswiez.odswiez(self.wp, 'superscore', self._mecze(ts.AtrapaSuperscore(fx)), self.liga, self.sezon)
+        self.assertNotIn('results', zak)                                     # natywny wynik wyczyszczony
+        self.assertEqual(zak['meta']['bm_state'], 'nierozpoczety')
+        self.assertTrue(any('było w WP: zakończony' in z and 'ze źródła: nierozpoczęty' in z for z in w['zmienione']))
+
+    def test_mecz_nierozpoczety_w_zrodle_i_w_wp_nie_generuje_zapisu(self):
+        self.a.wyzeruj_zapytania()
+        odswiez.odswiez(self.wp, 'superscore', self._mecze(), self.liga, self.sezon)
+        self.assertEqual([s for s in self.a.stany if s[0] == self.a.po_zrodle('events', ts.NIEROZPOCZETY)['id']], [])
+
+    def test_mecz_superscore_w_nietypowym_statusie_jest_flagowany_a_jego_stan_nie_zmieniany(self):
+        fx = copy.deepcopy(ts.FX['fixtures'])
+        e = next(x for x in fx['events'] if x['id'] == ts.NIEROZPOCZETY)
+        e['match_status'] = 5                                                # np. przełożony
+        w = odswiez.odswiez(self.wp, 'superscore', self._mecze(ts.AtrapaSuperscore(fx)), self.liga, self.sezon)
+        mecz = self.a.po_zrodle('events', ts.NIEROZPOCZETY)
+        self.assertTrue(mecz['meta']['bm_zrodlo_brak'])
+        self.assertEqual(len(w['odwolane']), 1)
+        self.assertIn('status 5', w['odwolane'][0])
 
     def test_wybor_rozgrywek_niezgodny_ze_zrodla_json_jest_odrzucony(self):
         with self.assertRaises(SystemExit) as cm:

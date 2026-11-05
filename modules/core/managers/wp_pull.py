@@ -2,7 +2,7 @@
 
 - Dane z WP czytane są w całości przed jakimkolwiek zapisem (zerwane połączenie = baza nietknięta).
 - Ta sama procedura robi podgląd (apply=False: niczego nie zapisuje, nowe rekordy to atrapy z ujemnym id) i zapis (apply=True: jedna
-  transakcja, przed nią kopia pliku bazy w instance/kopie-wp, ostatnie 5). Zapis zawsze poprzedza podgląd, więc raport z zapisu zgadza się z podglądem.
+  transakcja, przed nią kopia pliku bazy w instance/kopie-wp, ostatnie 20). Zapis zawsze poprzedza podgląd, więc raport z zapisu zgadza się z podglądem.
 - Nigdy nie usuwa: rekordy modułu powiązane z WP, których WP już nie ma, trafiają do raportu.
 - Powiązania z WP: istniejące tabele *_foreign_ids ze źródłem „wp” (folder wp); klucz to numer rekordu w WP, dla ligi „liga:sezon”.
 - Mecz trwający lub rozpoczęty w module nie jest zmieniany; zakończony dostaje korekty z WP (jawnie w raporcie); WP bez wyniku nie kasuje wyniku modułu.
@@ -17,6 +17,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,7 +30,7 @@ from core.utils.wp_names import nazwa_14, numer_rundy, podziel_nazwisko_imie, te
 SCRAPER_NAME = 'WordPress/SportsPress'
 SCRAPER_FOLDER = 'wp'
 KOPIE_DIR = 'kopie-wp'
-KOPII_ZACHOWANYCH = 5
+KOPII_ZACHOWANYCH = 20          # baza ma ok. 1 MB, kopia przez API SQLite trwa dziesiątki milisekund; więcej kopii, bo „Pobierz” bywa klikane w trakcie transmisji
 PLIK_STANU_NUMEROW = 'wp_numery.json'
 LIMIT_LISTY = 200                  # dłuższe listy w raporcie są ucinane (liczniki zostają dokładne)
 LOGO_PREFIX = 'static/images/logos/'
@@ -660,7 +661,7 @@ class Pobieranie:
 
 
 def kopia_bazy(db, kopie_dir):
-    """Kopia pliku bazy SQLite przed zapisem (API kopii SQLite, bezpieczna przy otwartej bazie); zostaje ostatnie 5. Zwraca ścieżkę albo None."""
+    """Kopia pliku bazy SQLite przed zapisem (API kopii SQLite, bezpieczna przy otwartej bazie); zostaje ostatnie 20. Zwraca ścieżkę albo None."""
     sciezka = db.engine.url.database
     if not sciezka or sciezka == ':memory:' or not os.path.isfile(sciezka):
         return None
@@ -722,7 +723,9 @@ def _pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopi
             db.session.rollback()
             if not apply or not podglad['zmieniono']:
                 return {'ok': True, 'zapisano': False, 'raport': podglad, 'pobrano': dane['pobrano']}
+            t_kopii = time.monotonic()
             kopia = kopia_bazy(db, kopie_dir)
+            kopia_ms = round((time.monotonic() - t_kopii) * 1000)
             try:
                 pobranie = Pobieranie(db, dane, logo_root, logo_folder, apply=True, numery_stan=slad, status_stanu=status)
                 raport = pobranie.wykonaj()
@@ -737,7 +740,11 @@ def _pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopi
                 zapisz_stan_numerow(sciezka_stanu, nowy_seq, {**(slad or {}), **pobranie.numery_wp})
             except OSError as e:
                 raport['ostrzezenia'].append(f'Nie zapisano pliku stanu numerów ({e}); przy następnym pobraniu pojawi się ostrzeżenie o rozjeździe.')
-            return {'ok': True, 'zapisano': True, 'raport': raport, 'pobrano': dane['pobrano']}
+            try:
+                kopia_kb = round(os.path.getsize(kopia) / 1024) if kopia else 0
+            except OSError:
+                kopia_kb = 0
+            return {'ok': True, 'zapisano': True, 'raport': raport, 'pobrano': dane['pobrano'], 'kopia_kb': kopia_kb, 'kopia_ms': kopia_ms}
         except Exception as e:
             db.session.rollback()
             return {'ok': False, 'zapisano': False, 'blad': f'Pobieranie przerwane, baza bez zmian: {type(e).__name__}: {e}'}

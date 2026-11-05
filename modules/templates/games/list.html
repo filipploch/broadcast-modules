@@ -15,6 +15,7 @@
         <span>{% if league %}Mecze - {{ league.name }}{% else %}Wszystkie Mecze{% endif %}</span>
         <div class="actions">
             {% if league %}
+                <button type="button" id="zrodlo-pobierz-btn" class="btn btn-success" style="display:none;" title="Pobierz wyniki ze źródła (stan, wynik) do WP i modułu">⬇ Pobierz</button>
                 {% if config.LEGACY_IMPORT_ENABLED %}{{ scraper_cascade('games', 'Scrapuj mecze', game_scrapers) }}{% else %}<a href="{{ url_for('wp_competitions') }}" class="btn btn-success wp-pull-link" title="Pobierz rozgrywki, drużyny, zawodników i mecze z WP">⬇ Pobierz z WP</a>{% endif %}
                 {% if has_game_conflicts_review %}
                 <a href="{{ url_for('review_game_conflicts', league_id=league.id) }}" class="btn {{ 'btn-danger' if open_game_conflicts_count else 'btn-secondary' }}">
@@ -105,4 +106,13 @@
     {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/pages/game-status.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pages/zrodlo-pobierz.js') }}"></script>
+<script>
+    (function () {
+        var btn = document.getElementById('zrodlo-pobierz-btn');
+        if (btn && typeof ZrodloPobierz !== 'undefined') {
+            ZrodloPobierz.podlacz(btn, { leagueId: function () { return _leagueId; }, poZakonczeniu: function () { refreshGamesTable(); } });
+        }
+    })();
+</script>
 {% endblock %}

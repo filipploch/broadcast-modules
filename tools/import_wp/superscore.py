@@ -123,12 +123,15 @@ def _wyniki_meczu(e, gospodarz, gosc):
 def _zywo(e):
     """Stan meczu w źródle: {'stan': nierozpoczety|trwa|zakonczony, 'wynik': (gospodarz, gość) albo None}. Wynik na żywo bierzemy z wyniku typu 0
     (ten sam, który dla meczu zakończonego jest wynikiem końcowym); do POTWIERDZENIA na meczu w toku (w danych testowych mecz „w toku” to zmieniony zakończony)."""
-    stan = e.get('match_state')
+    stan, status = e.get('match_state'), e.get('match_status')
+    # obserwowane pary (match_state, match_status): (0, 0) nierozpoczęty, (1, 7) druga połowa, (2, 100) zakończony; inne dla stanu 0 lub 2 to mecz nietypowy
+    # (np. odwołany, przełożony, przerwany), który import tylko flaguje (bm_zrodlo_brak) i zgłasza w raporcie; stan 1 z innym statusem (przerwa itd.) jest normalnym meczem w toku
+    nietypowy = (stan == NIEROZPOCZETY and status not in (0, None)) or (stan == ZAKONCZONY and status not in (100, None))
     if stan == ZAKONCZONY:
-        return {'stan': 'zakonczony', 'wynik': _wynik(e, 0)}
+        return {'stan': 'zakonczony', 'wynik': _wynik(e, 0), 'status': status, 'nietypowy': nietypowy}
     if stan == W_TOKU:
-        return {'stan': 'trwa', 'wynik': _wynik(e, 0)}
-    return {'stan': 'nierozpoczety', 'wynik': None}
+        return {'stan': 'trwa', 'wynik': _wynik(e, 0), 'status': status, 'nietypowy': False}
+    return {'stan': 'nierozpoczety', 'wynik': None, 'status': status, 'nietypowy': nietypowy}
 
 
 def norm_mecz(e, liga_id, sezon_id):

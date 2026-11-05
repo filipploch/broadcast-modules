@@ -15,9 +15,9 @@ Z = json.loads((Path(__file__).resolve().parent / 'dane' / 'superscore_zywo.json
 class ZywoZPrawdziwegoZrodlaTests(unittest.TestCase):
     def test_stany_i_wynik_na_zywo_sa_mapowane_na_trasy_source_state(self):
         n = lambda e: superscore.norm_mecz(e, 'liga', 'sezon')
-        self.assertEqual(n(Z['trwajace'])['zywo'], {'stan': 'trwa', 'wynik': (1, 0)})
-        self.assertEqual(n(Z['zakonczone'])['zywo'], {'stan': 'zakonczony', 'wynik': (0, 2)})
-        self.assertEqual(n(Z['nierozpoczete'])['zywo'], {'stan': 'nierozpoczety', 'wynik': None})
+        self.assertEqual(n(Z['trwajace'])['zywo'], {'stan': 'trwa', 'wynik': (1, 0), 'status': 7, 'nietypowy': False})
+        self.assertEqual(n(Z['zakonczone'])['zywo'], {'stan': 'zakonczony', 'wynik': (0, 2), 'status': 100, 'nietypowy': False})
+        self.assertEqual(n(Z['nierozpoczete'])['zywo'], {'stan': 'nierozpoczety', 'wynik': None, 'status': 0, 'nietypowy': False})
         self.assertEqual(n(Z['trwajace'])['results'], {})                      # mecz w toku nie dostaje natywnego wyniku końcowego
 
     def test_wlasciwosci_meczu_w_toku_w_prawdziwej_odpowiedzi(self):

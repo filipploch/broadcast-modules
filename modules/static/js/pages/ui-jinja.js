@@ -1836,34 +1836,17 @@ function _buildGamesView(data, container) {
     var scrapeSuprescoreBtn = document.createElement('button');
     scrapeSuprescoreBtn.type = 'button';
     scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
-    scrapeSuprescoreBtn.title = 'Pobierz wyniki z superscore.live';
-    scrapeSuprescoreBtn.style.cssText = 'font-size:10px;cursor:pointer;';
-    scrapeSuprescoreBtn.onclick = function() {
-        var leagueId = _gamesTab.leagueId || 1;
-        scrapeSuprescoreBtn.disabled = true;
-        scrapeSuprescoreBtn.textContent = '⏳';
-        fetch('/leagues/' + leagueId + '/games/scrape-superscore')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.status === 'started') {
-                    scrapeSuprescoreBtn.textContent = '✓';
-                    setTimeout(function() {
-                        scrapeSuprescoreBtn.disabled = false;
-                        scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
-                    }, 3000);
-                } else {
-                    scrapeSuprescoreBtn.disabled = false;
-                    scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
-                    alert(data.error || 'Błąd scrapowania');
-                }
-            })
-            .catch(function(e) {
-                scrapeSuprescoreBtn.disabled = false;
-                scrapeSuprescoreBtn.textContent = '⬇ Pobierz';
-                alert('Błąd: ' + e.message);
-            });
-    };
+    scrapeSuprescoreBtn.title = 'Pobierz wyniki ze źródła (stan, wynik) do WP i modułu';
+    scrapeSuprescoreBtn.style.cssText = 'font-size:10px;cursor:pointer;display:none;';          // ukryty, dopóki moduł nie potwierdzi źródła
     leagueBar.appendChild(scrapeSuprescoreBtn);
+    if (typeof ZrodloPobierz !== 'undefined') {                  // W8a2: źródło -> WP -> moduł (dawne trasy scrape-* są wyłączone)
+        ZrodloPobierz.podlacz(scrapeSuprescoreBtn, {
+            leagueId: function() { return _gamesTab.leagueId; },
+            poZakonczeniu: function() {
+                showUiMonitorContent('games', { league_id: _gamesTab.leagueId, date_from: _gamesTab.dateFrom, date_to: _gamesTab.dateTo });
+            },
+        });
+    }
 
     // Panel dat — floating, nie przesuwa elementów poniżej
     var dateBar = document.createElement('div');
