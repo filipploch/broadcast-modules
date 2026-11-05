@@ -216,6 +216,25 @@ with Instancja() as wp:
         sprawdz(f'Złoty wzorzec NALF 5.11.2026, {dyw}: jedyna różnica względem pozycji na stronie organizatora to ' + ('Drink Team (wg regulaminu 3, na stronie 2)' if dyw.endswith('B') else 'brak różnic'),
                 roznice == (['Drink Team'] if dyw.endswith('B') else []), roznice)
 
+    # ---- 5.12: remis trzech i więcej drużyn: mała tabela między zainteresowanymi (testy syntetyczne; wyniki porównane z niezależnym wyliczeniem i z ręcznie policzoną kolejnością)
+    # cykl: A-B 2:0, B-C 1:0, C-A 1:0: po 3 pkt, w małej tabeli różne bilanse bramek: A +1, C 0, B -1; bez innych meczów
+    K, t, wiersze = mini_liga('m3cykl', [(0, 1, (2, 0)), (1, 2, (1, 0)), (2, 0, (1, 0))])
+    sprawdz('5.12 trzy drużyny, cykl wyników i różne bilanse bramek: mała tabela rozstrzyga kryterium b (A, C, B; pozycje 1, 2, 3, bez pełnego remisu)',
+            wiersze == [('Aaa', 1), ('Ccc', 2), ('Bbb', 3)] and not t['needs_draw'], wiersze)
+    porownaj('5.12 cykl: tabela zgodna z niezależnym wyliczeniem', K, 'final', oczekiwana_tabela(K.mecze, 'final'))
+    # cykl z identycznymi bilansami: A-B, B-C, C-A po 1:0: małe tabele równe we wszystkich kryteriach: pełny remis trzech (wspólna pozycja 1, flaga losowania)
+    K, t, wiersze = mini_liga('m3pelny', [(0, 1, (1, 0)), (1, 2, (1, 0)), (2, 0, (1, 0))])
+    sprawdz('5.12 trzy drużyny, cykl 1:0 bez różnic: pełny remis a-d (wspólna pozycja 1, flaga „wymaga losowania”)', [r['pos'] for r in t['rows']] == [1, 1, 1] and t['needs_draw'] is True
+            and all(r['pelny_remis'] for r in t['rows']), [(r['name'], r['pos'], r['pelny_remis']) for r in t['rows']])
+    # mała tabela przed różnicą bramek ogółem: A, B, C po 6 pkt; w małej tabeli A 6, B 3, C 0; różnica ogółem wskazałaby C (+16 wobec +1)
+    K, t, wiersze = mini_liga('m3mala', [(0, 1, (1, 0)), (0, 2, (1, 0)), (1, 2, (1, 0)), (3, 0, (1, 0)), (1, 3, (1, 0)), (2, 3, (9, 0)), (3, 2, (0, 9))], n=4)
+    sprawdz('5.12 trzy drużyny po 6 pkt: o kolejności decyduje mała tabela (A 6, B 3, C 0), nie różnica bramek ogółem (C +16); D z 3 pkt czwarta',
+            wiersze == [('Aaa', 1), ('Bbb', 2), ('Ccc', 3), ('Ddd', 4)] and [r['pts'] for r in t['rows']] == [6, 6, 6, 3] and [r['gd'] for r in t['rows']] == [1, 1, 16, -18], [(r['name'], r['pos'], r['pts'], r['gd']) for r in t['rows']])
+    porownaj('5.12 mała tabela przed różnicą ogółem: zgodne z niezależnym wyliczeniem', K, 'final', oczekiwana_tabela(K.mecze, 'final', nazwy=K.NAZWY))
+    # cztery drużyny z równymi punktami (mała tabela 4): wszystkie mecze wzajemne 1:0 w cyklu dwóch trójek niezależnych od pozostałych: kolejność z niezależnego wyliczenia
+    K, t, wiersze = mini_liga('m4', [(0, 1, (1, 0)), (1, 2, (2, 0)), (2, 3, (1, 0)), (3, 0, (3, 0)), (0, 2, (1, 1)), (1, 3, (0, 0))], n=4)
+    porownaj('5.12 cztery drużyny z równymi punktami: kolejność, pozycje i flagi zgodne z niezależnym wyliczeniem (jeden przebieg małej tabeli)', K, 'final', oczekiwana_tabela(K.mecze, 'final', nazwy=K.NAZWY))
+
     # przypadki brzegowe z próby ręcznej na prawdziwych danych kopii (Dywizja A): duplikat, drużyna spoza ligi, flaga, kosz, a potem cofnięcie (proba_tabela_przygotuj.py)
     import tempfile
     import proba_tabela_przygotuj as pp
