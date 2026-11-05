@@ -228,7 +228,7 @@ with Instancja() as wp:
     pp.wykonaj('wszystko', api=wp.api, sciezka_stanu=stan_pliku, wypisz=lambda *a: None)
     k, po = wp.api('GET', kdyw)
     typy = sorted({w['typ'] for w in po['warnings']})
-    sprawdz('przypadki brzegowe na danych kopii: ostrzeżenia o duplikacie, drużynie spoza ligi i zniknięciu ze źródła', typy == ['druzyna_spoza_ligi', 'duplikat_meczu', 'zniknal_ze_zrodla'], typy)
+    sprawdz('przypadki brzegowe na danych kopii: dokładnie 3 ostrzeżenia (duplikat, drużyna spoza ligi, zniknięcie ze źródła)', typy == ['druzyna_spoza_ligi', 'duplikat_meczu', 'zniknal_ze_zrodla'] and len(po['warnings']) == 3, [(w['typ'], w['mecz']) for w in po['warnings']])
     sprawdz('liczba meczów w tabeli: +1 duplikat, +1 mecz z obcą drużyną, −1 mecz w koszu; mecz z flagą zostaje', po['matches_counted'] == przed['matches_counted'] + 1, (przed['matches_counted'], po['matches_counted']))
     sprawdz('mecz z drużyną spoza ligi nie dodaje wiersza obcej drużyny do tabeli', all('Obca' not in r['name'] for r in po['rows']) and len(po['rows']) == len(przed['rows']), [r['name'] for r in po['rows']])
     pp.wykonaj('cofnij', api=wp.api, sciezka_stanu=stan_pliku, wypisz=lambda *a: None)
