@@ -279,26 +279,115 @@ def make(APP):
             self.assertEqual(self.g3.date, datetime(2026, 9, 26, 19, 0))
             self.assertEqual(r['liczniki']['mecze']['zaktualizowano'], 1)
 
-        def test_mecz_w_toku_w_module_jest_pomijany(self):
+        def _zapis(self, dzialajacy=True):
+            """Zapis do WP z prawdziwą kolejką i atrapą klienta: dzialajacy=False oznacza, że WP nie odpowiada (zmiany zostają w kolejce)."""
+            from core.managers import wp_zapis
+            from core.managers.wp_client import WpError
+
+            class Klient:
+                def post_json(self, route, body):
+                    if not dzialajacy:
+                        raise WpError('unreachable', 'brak połączenia z WP')
+                    return {'ok': True}
+            z = wp_zapis.WpZapis(APP, self.tmp / 'kolejka.db', self.tmp / 'zapis.json', lambda: Klient(), True)
+            wp_zapis.ustaw_instancje(z)
+            self.addCleanup(wp_zapis.ustaw_instancje, None)
+            return z
+
+        def test_mecz_trwajacy_w_module_przyjmuje_wynik_z_wp_gdy_zapis_dziala_i_nic_nie_czeka_w_kolejce(self):
+            self._zapis()
             self.g3.status = self.Game.STATUS_PENDING
             self.db.session.commit()
             self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
             r = self.pobierz()['raport']
             self.db.session.refresh(self.g3)
-            self.assertEqual((self.g3.home_team_goals, self.g3.status), (None, self.Game.STATUS_PENDING))
-            self.assertEqual(len(r['pominiete']), 1)
-            self.assertIn('trwa', r['pominiete'][0])
+            self.assertEqual((self.g3.home_team_goals, self.g3.away_team_goals, self.g3.status), (5, 0, self.Game.STATUS_FINISHED))
+            self.assertEqual(r['pominiete'], [])
 
-        def test_mecz_z_bm_live_w_wp_jest_pomijany(self):
+        def test_mecz_trwajacy_w_module_przy_nieaktywnym_zapisie_jest_pomijany_z_komunikatem(self):
+            """Bez zapisu do WP nie ma gwarancji, że wynik trwającego meczu w WP nie jest starszy: zostaje pominięty (inne mecze idą normalnie)."""
+            self.g3.status = self.Game.STATUS_PENDING
+            self.g3.home_team_goals = 1
+            self.db.session.commit()
+            self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
+            r = self.pobierz()['raport']
+            self.db.session.refresh(self.g3)
+            self.assertEqual((self.g3.home_team_goals, self.g3.status), (1, self.Game.STATUS_PENDING))
+            self.assertEqual(len(r['pominiete']), 1)
+            self.assertIn('zapis do WP', r['pominiete'][0])
+
+        def test_rownolegly_mecz_trwa_tylko_w_wp_przyjmuje_stan_i_wynik_na_zywo(self):
+            self._zapis()
+            e = self.wp.znajdz('events', 203)
+            e['meta']['bm_state'] = 'trwa'
+            e['meta']['bm_live_score'] = '2:1'
+            self.pobierz()
+            self.db.session.refresh(self.g3)
+            self.assertEqual((self.g3.status, self.g3.home_team_goals, self.g3.away_team_goals), (self.Game.STATUS_PENDING, 2, 1))
+            e['meta']['bm_live_score'] = '3:1'                                                 # kolejna zmiana w WP w trakcie meczu
+            self.pobierz()
+            self.db.session.refresh(self.g3)
+            self.assertEqual((self.g3.status, self.g3.home_team_goals, self.g3.away_team_goals), (self.Game.STATUS_PENDING, 3, 1))
+
+        def test_mecz_z_bm_live_w_wp_przyjmuje_zmiane(self):
+            self._zapis()
             self.wp.znajdz('events', 203)['meta']['bm_live'] = True
             self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
             r = self.pobierz()['raport']
             self.db.session.refresh(self.g3)
-            self.assertEqual(self.g3.home_team_goals, None)
-            self.assertEqual(len(r['pominiete']), 1)
+            self.assertEqual((self.g3.home_team_goals, self.g3.away_team_goals), (5, 0))
+            self.assertEqual(r['pominiete'], [])
 
-        def test_mecz_aktywny_w_otwartej_sesji_jest_pomijany(self):
+        def test_mecz_z_niewyslana_kolejka_jest_pominiety_z_komunikatem_a_pozostale_sa_pobierane(self):
+            z = self._zapis(dzialajacy=False)
+            self.g3.status = self.Game.STATUS_PENDING
+            self.g3.home_team_goals = 1
+            self.g3.away_team_goals = 0
+            self.db.session.commit()
+            z.zglos(self.g3.id)                                                                  # zmiana modułu czeka w kolejce, WP nie odpowiada
+            self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
+            self.wp.znajdz('events', 201)['main_results'] = ['3', '2']                         # inny mecz: korekta normalnie
+            r = self.pobierz()['raport']
+            self.db.session.refresh(self.g3)
+            self.db.session.refresh(self.g1)
+            self.assertEqual((self.g3.home_team_goals, self.g3.status), (1, self.Game.STATUS_PENDING))
+            self.assertEqual((self.g1.home_team_goals, self.g1.away_team_goals), (3, 2))
+            self.assertEqual(len(r['pominiete']), 1)
+            self.assertIn('niewysłane zmiany', r['pominiete'][0])
+            self.assertEqual(z.kolejka.niewyslane()[0][0], self.g3.id)                          # kolejki pobieranie nie rusza
+
+        def test_przed_pobraniem_zalegle_zapisy_sa_wysylane_a_mecz_potem_przyjmuje_wp(self):
+            z = self._zapis(dzialajacy=True)
+            z.zglos(self.g3.id)                                                                  # zaległy zapis; WP działa
+            self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
+            r = self.pobierz()['raport']
+            self.assertEqual(z.kolejka.niewyslane(), [])                                        # wysłane tuż przed pobraniem
+            self.db.session.refresh(self.g3)
+            self.assertEqual((self.g3.home_team_goals, self.g3.away_team_goals), (5, 0))
+            self.assertEqual(r['pominiete'], [])
+
+        def test_pobranie_nie_kasuje_ani_nie_nadpisuje_czesci_zegarow_zdarzen_i_skladu_meczu(self):
+            from app.models import GameEvent, GamePlayer, GameTimer, Period
+            self._zapis()
+            self.g3.status = self.Game.STATUS_PENDING
+            self.g3.home_team_goals = 1
+            self.db.session.commit()
+            self.db.session.add(Period(game_id=self.g3.id, period_order=1, description='1. połowa', status=1))
+            self.db.session.add(GameTimer(game_id=self.g3.id, timer_type='main', plugin_timer_id='zegar-testowy', elapsed_time_ms=61000, limit_ms=1200000, state='running'))
+            gracz = self.modele()[3].query.first()
+            self.db.session.add(GamePlayer(player_id=gracz.id, game_id=self.g3.id, team_id=gracz.team_id, number=9))
+            self.db.session.commit()
+            ile = lambda: tuple(model.query.filter_by(game_id=self.g3.id).count() for model in (Period, GameTimer, GameEvent, GamePlayer))
+            przed = ile()
+            self.wp.znajdz('events', 203)['main_results'] = None                                # WP: nierozpoczęty, bez wyniku
+            self.pobierz()
+            self.assertEqual(ile(), przed)
+            self.assertEqual(GameTimer.query.filter_by(plugin_timer_id='zegar-testowy').one().elapsed_time_ms, 61000)
+            self.assertEqual(Period.query.filter_by(game_id=self.g3.id).one().status, 1)
+
+        def test_mecz_aktywny_w_otwartej_sesji_przyjmuje_zmiane_z_adnotacja_na_antenie(self):
             from app.models import BroadcastSession, SessionGame
+            self._zapis()
             s = BroadcastSession(status='live', open_slot=1)
             self.db.session.add(s)
             self.db.session.flush()
@@ -307,18 +396,20 @@ def make(APP):
             self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
             r = self.pobierz()['raport']
             self.db.session.refresh(self.g3)
-            self.assertEqual(self.g3.home_team_goals, None)
-            self.assertIn('sesji', r['pominiete'][0])
+            self.assertEqual((self.g3.home_team_goals, self.g3.away_team_goals), (5, 0))
+            self.assertEqual(r['pominiete'], [])
+            self.assertTrue(any('NA ANTENIE' in z for z in r['zmiany']))
 
-        def test_mecz_rozpoczety_w_module_ale_niezakonczony_jest_pomijany(self):
+        def test_mecz_przygotowany_do_transmisji_ale_nierozpoczety_przyjmuje_zmiane(self):
             from app.models import Period
+            self._zapis()
             self.db.session.add(Period(game_id=self.g3.id, period_order=1, description='1. połowa'))
             self.db.session.commit()
             self.wp.znajdz('events', 203)['main_results'] = ['5', '0']
             r = self.pobierz()['raport']
             self.db.session.refresh(self.g3)
-            self.assertEqual(self.g3.home_team_goals, None)
-            self.assertIn('rozpoczęty', r['pominiete'][0])
+            self.assertEqual((self.g3.home_team_goals, self.g3.away_team_goals), (5, 0))
+            self.assertEqual(r['pominiete'], [])
 
         def test_zakonczony_mecz_dostaje_korekte_wyniku_z_jawnym_wpisem(self):
             self.wp.znajdz('events', 201)['main_results'] = ['3', '2']
@@ -482,7 +573,7 @@ def make(APP):
             wpis = next(x for x in r['zwolnieni'] if 'Wolnicki' in x)
             self.assertIn('nadal w kadrze meczu nierozpoczętego', wpis)
 
-        def test_zwolnienie_wstrzymane_gdy_zawodnik_jest_w_kadrze_meczu_rozpoczetego_w_module(self):
+        def test_zwolnienie_nie_jest_wstrzymywane_dla_meczu_rozpoczetego_w_module_a_na_antenie_jest_tylko_adnotacja(self):
             from app.models import Period
             self._zawodnik([101], [])
             self.pobierz()
@@ -493,8 +584,11 @@ def make(APP):
             team_przed = gracz.team_id
             self._zwolnij_wp([777], [101])
             r = self.pobierz()['raport']
-            self.assertEqual(self._gracz('Wolnicki').team_id, team_przed)
-            self.assertTrue(any('Wolnicki' in x and 'trwa albo jest rozpoczęty' in x for x in r['zwolnieni']))
+            self.assertNotEqual(self._gracz('Wolnicki').team_id, team_przed)                   # zwolnienie wykonane, bez blokady
+            wpis = next(x for x in r['zwolnieni'] if 'Wolnicki' in x)
+            self.assertNotIn('NA ANTENIE', wpis)
+            from app.models import GamePlayer
+            self.assertEqual({pg.team_id for pg in GamePlayer.query.filter_by(player_id=gracz.id)}, {team_przed})      # skład meczowy bez zmian
 
         def test_podglad_zwolnienia_niczego_nie_zapisuje_ale_wypisuje_zwolnionego(self):
             self._zawodnik([101], [])
@@ -881,13 +975,19 @@ def make(APP):
             self.assertFalse(wynik['ok'])
             self.assertIn('nie ma już w WP', wynik['blad'])
 
-        def test_kopia_pliku_bazy_przed_zapisem_i_tylko_ostatnie_piec(self):
-            for i in range(7):
-                self.wp.event(500 + i, [101, 102], f'2026-12-0{i + 1}T12:00:00', day='4')
-                wynik = self.pobierz()
-                self.assertTrue(wynik['zapisano'])
-                self.assertTrue(wynik['raport']['kopia'])
-            self.assertEqual(len(list(self.kopie.glob('*.db'))), 5)
+        def test_kopia_pliku_bazy_przed_zapisem_z_rozmiarem_i_czasem_i_tylko_ostatnie_n(self):
+            from unittest import mock
+            from core.managers import wp_pull
+            self.assertEqual(wp_pull.KOPII_ZACHOWANYCH, 20)                           # limit sprzątania kopii (klik „Pobierz” w trakcie transmisji)
+            with mock.patch.object(wp_pull, 'KOPII_ZACHOWANYCH', 3):
+                for i in range(5):
+                    self.wp.event(500 + i, [101, 102], f'2026-12-0{i + 1}T12:00:00', day='4')
+                    wynik = self.pobierz()
+                    self.assertTrue(wynik['zapisano'])
+                    self.assertTrue(wynik['raport']['kopia'])
+                    self.assertGreater(wynik['kopia_kb'], 0)
+                    self.assertGreaterEqual(wynik['kopia_ms'], 0)
+            self.assertEqual(len(list(self.kopie.glob('*.db'))), 3)
 
         def test_ten_sam_klient_nie_dotyka_drugiej_pary(self):
             self.wp.event(600, [101, 102], leagues=(2,), seasons=(S,))
@@ -934,6 +1034,42 @@ def make(APP):
             st = self.client.get('/api/wp/state').get_json()
             self.assertEqual((st['pull']['apply'], st['pull']['label'], st['pulling']), (True, 'Dywizja A — Jesień 2026', False))
             self.assertTrue(st['last_apply_at'])
+
+        def _aktywny_chelmek(self):
+            from unittest import mock
+            from unittest.mock import MagicMock
+            import core.managers.session_manager as sm
+            from core.extensions import socketio
+            Game, _, _, _, _, Team = self.modele()
+            self.client.post('/api/wp/pull', json={'apply': True, 'league_id': L, 'season_id': S})
+            gra = Game.query.filter_by(home_team_id=Team.query.filter_by(name='KS Chełmek').one().id).one()
+            sm.activate_game(gra.id)
+            self.cm._hub_client = MagicMock()
+            self.addCleanup(setattr, self.cm, '_hub_client', None)
+            emit = mock.patch.object(socketio, 'emit')
+            self.emit = emit.start()
+            self.addCleanup(emit.stop)
+            return gra
+
+        def test_po_pobraniu_zmieniajacym_wynik_aktywnego_meczu_panel_i_nakladka_dostaja_nowy_wynik(self):
+            self._aktywny_chelmek()
+            self.wp.znajdz('events', 203)['main_results'] = ['3', '1']
+            wynik = self.client.post('/api/wp/pull', json={'apply': True, 'league_id': L, 'season_id': S}).get_json()
+            self.assertTrue(wynik['zapisano'], wynik)
+            panel = [c for c in self.emit.call_args_list if c.args and c.args[0] == 'scoreboard_data']
+            self.assertEqual(len(panel), 1)
+            self.assertEqual((panel[0].args[1]['payload']['home_team_goals'], panel[0].args[1]['payload']['away_team_goals']), (3, 1))
+            nakladka = [c for c in self.cm._hub_client.broadcast_to_class.call_args_list if c.args[:2] == ('game_data_receiver', 'scoreboard_data')]
+            self.assertEqual(len(nakladka), 1)
+            self.assertEqual((nakladka[0].args[2]['home_team_goals'], nakladka[0].args[2]['away_team_goals']), (3, 1))
+
+        def test_podglad_bez_zapisu_nie_odswieza_panelu_ani_nakladki(self):
+            self._aktywny_chelmek()
+            self.wp.znajdz('events', 203)['main_results'] = ['3', '1']
+            wynik = self.client.post('/api/wp/pull', json={'apply': False, 'league_id': L, 'season_id': S}).get_json()
+            self.assertFalse(wynik['zapisano'])
+            self.assertEqual([c for c in self.emit.call_args_list if c.args and c.args[0] == 'scoreboard_data'], [])
+            self.cm._hub_client.broadcast_to_class.assert_not_called()
 
         def test_pobranie_domyslnej_pary_gdy_nie_podano_numerow(self):
             self.mgr.set_default(L, S)

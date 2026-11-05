@@ -2,7 +2,7 @@
 
 - Dane z WP czytane są w całości przed jakimkolwiek zapisem (zerwane połączenie = baza nietknięta).
 - Ta sama procedura robi podgląd (apply=False: niczego nie zapisuje, nowe rekordy to atrapy z ujemnym id) i zapis (apply=True: jedna
-  transakcja, przed nią kopia pliku bazy w instance/kopie-wp, ostatnie 5). Zapis zawsze poprzedza podgląd, więc raport z zapisu zgadza się z podglądem.
+  transakcja, przed nią kopia pliku bazy w instance/kopie-wp, ostatnie 20). Zapis zawsze poprzedza podgląd, więc raport z zapisu zgadza się z podglądem.
 - Nigdy nie usuwa: rekordy modułu powiązane z WP, których WP już nie ma, trafiają do raportu.
 - Powiązania z WP: istniejące tabele *_foreign_ids ze źródłem „wp” (folder wp); klucz to numer rekordu w WP, dla ligi „liga:sezon”.
 - Mecz trwający lub rozpoczęty w module nie jest zmieniany; zakończony dostaje korekty z WP (jawnie w raporcie); WP bez wyniku nie kasuje wyniku modułu.
@@ -10,11 +10,14 @@
 - Numer zawodnika: pusty numer z WP nie kasuje numeru z modułu; numer zmieniony ręcznie w module po ostatnim pobraniu nie jest nadpisywany
   (raport „numer ręczny różny od WP”). Ślad ostatnio pobranych numerów: plik instance/wp_numery.json, spięty z bazą numerem w PRAGMA user_version
   (bez migracji; kopia bazy przywrócona albo brak/uszkodzenie pliku = numery traktowane jako niezmienione ręcznie, z ostrzeżeniem w raporcie)."""
+import contextvars
 import json
+import logging
 import os
 import re
 import sqlite3
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,12 +30,14 @@ from core.utils.wp_names import nazwa_14, numer_rundy, podziel_nazwisko_imie, te
 SCRAPER_NAME = 'WordPress/SportsPress'
 SCRAPER_FOLDER = 'wp'
 KOPIE_DIR = 'kopie-wp'
-KOPII_ZACHOWANYCH = 5
+KOPII_ZACHOWANYCH = 20          # baza ma ok. 1 MB, kopia przez API SQLite trwa dziesiątki milisekund; więcej kopii, bo „Pobierz” bywa klikane w trakcie transmisji
 PLIK_STANU_NUMEROW = 'wp_numery.json'
 LIMIT_LISTY = 200                  # dłuższe listy w raporcie są ucinane (liczniki zostają dokładne)
 LOGO_PREFIX = 'static/images/logos/'
 
 _lock = threading.Lock()
+# Wynik wysłania zaległych zapisów do WP przed pobraniem (W8a, D): {'niewyslane': {game_id: powód}, 'aktywny': bool}; ustawia pobierz_pare
+_ochrona_zapisu = contextvars.ContextVar('bm_wp_pull_ochrona', default={'niewyslane': {}, 'aktywny': False})
 
 
 def _kat_licznik():
@@ -367,7 +372,7 @@ class Pobieranie:
         wp_ids_druzyn = set(druzyny)
         odwrot_dr = {v: k for k, v in self.fid['druzyna'].items()}          # id drużyny modułu -> id WP (tekst)
         self._stan_modulu()
-        trwajace = self._mecze_trwajace()
+        trwajace = set(self.aktywne)                    # tylko do adnotacji „na antenie” w raporcie, bez blokady
         for z in sorted(d['zawodnicy'], key=lambda x: int(x['id'])):
             wid = int(z['id'])
             tytul = tekst((z.get('title') or {}).get('rendered'))
@@ -443,13 +448,6 @@ class Pobieranie:
                 if zm:
                     self.r['zmiany'].append(f'zawodnik {nazwisko} {imie}: ' + ', '.join(zm))
 
-    def _mecze_trwajace(self):
-        """Mecze, w których nie wolno zmieniać drużyn: aktywne w otwartej sesji albo rozpoczęte w module i niezakończone."""
-        m = self.m
-        rozpoczete_niezakonczone = {r[0] for r in self.db.session.query(m.Game.id).filter(
-            m.Game.id.in_(self.rozpoczete), m.Game.status != m.Game.STATUS_FINISHED)} if self.rozpoczete else set()
-        return set(self.aktywne) | rozpoczete_niezakonczone
-
     def _zwolnij_z_druzyny(self, obj, tytul, aktualne_wp, wp_ids_druzyn, odwrot_dr, trwajace, druzyny):
         """Zawodnik modułu powiązany z WP, w parze nie ma już aktualnej drużyny: jeśli jego obecna drużyna modułu należy do pary, przechodzi do
         swojej aktualnej drużyny z WP istniejącej w module (najniższy numer WP), a gdy takiej nie ma, zostaje bez drużyny. Rekord nie jest usuwany;
@@ -464,10 +462,7 @@ class Pobieranie:
         nazwy = {o.id: o.name for o in druzyny.values()}
         nazwa_obecnej = nazwy.get(obj.team_id) or self.db.session.get(m.Team, obj.team_id).name
         mecze = [r[0] for r in self.db.session.query(m.GamePlayer.game_id).filter_by(player_id=obj.id)] if obj.id and obj.id > 0 else []
-        if any(g in trwajace for g in mecze):
-            self.r['zwolnieni'].append(f'zawodnik {tytul}: zostaje w drużynie {nazwa_obecnej} (jest w kadrze meczu, który trwa albo jest rozpoczęty w module); '
-                                       f'zwolnienie przy następnym pobraniu')
-            return
+        na_antenie = [g for g in mecze if g in trwajace]
         zm = self._ustaw(obj, team_id=nowa)
         self.zwolnieni_ids.add(obj.id)
         cel = (nazwy.get(nowa) or self.db.session.get(m.Team, nowa).name) if nowa else 'bez drużyny'
@@ -475,7 +470,8 @@ class Pobieranie:
         for g in (self.db.session.query(m.Game).filter(m.Game.id.in_(mecze), m.Game.status == m.Game.STATUS_NOT_STARTED) if mecze else []):
             nierozpoczete.append(f'{g.home_team.name} – {g.away_team.name}' + (f' ({g.date:%Y-%m-%d})' if g.date else ''))
         self.r['zwolnieni'].append(f'zawodnik {tytul}: zwolniony z drużyny {nazwa_obecnej}, teraz: {cel}'
-                                   + (f'; nadal w kadrze meczu nierozpoczętego: {"; ".join(nierozpoczete)}' if nierozpoczete else ''))
+                                   + (f'; nadal w kadrze meczu nierozpoczętego: {"; ".join(nierozpoczete)}' if nierozpoczete else '')
+                                   + ('; NA ANTENIE: jest w kadrze meczu aktywnego w sesji (skład meczowy bez zmian)' if na_antenie else ''))
         if zm:
             self.licz['zawodnicy']['zaktualizowano'] += 1
             self.r['zmiany'].append(f'zawodnik {tytul}: drużyna {nazwa_obecnej} → {cel}')
@@ -485,10 +481,8 @@ class Pobieranie:
         m, db = self.m, self.db
         otwarte = [s.id for s in m.Session.query.filter(m.Session.open_slot.isnot(None))]
         self.aktywne = {r[0] for r in db.session.query(m.SessionGame.game_id).filter(
-            m.SessionGame.session_id.in_(otwarte), m.SessionGame.status == 'active')} if otwarte else set()
-        self.rozpoczete = ({r[0] for r in db.session.query(m.Period.game_id).distinct()}
-                           | {r[0] for r in db.session.query(m.GameEvent.game_id).distinct()}
-                           | {r[0] for r in db.session.query(m.GameTimer.game_id).distinct() if r[0] is not None})
+            m.SessionGame.session_id.in_(otwarte), m.SessionGame.status == 'active')} if otwarte else set()      # mecz „na antenie”: tylko adnotacja w raporcie
+        self.ochrona = _ochrona_zapisu.get()
 
     @staticmethod
     def _data(tekst_daty):
@@ -496,6 +490,17 @@ class Pobieranie:
             return datetime.fromisoformat(str(tekst_daty)[:19])
         except ValueError:
             return None
+
+    def _stan_z_wp(self, meta, wynik):
+        """(status modułu, (gole gospodarzy, gole gości) albo None) z danych WP: wynik końcowy = zakończony; bm_state „trwa” = trwa z wynikiem na żywo;
+        inaczej nierozpoczęty."""
+        G = self.m.Game
+        if wynik is not None:
+            return G.STATUS_FINISHED, wynik
+        if str(meta.get('bm_state') or '') == 'trwa':
+            zywy = re.fullmatch(r'\s*(\d+)\s*:\s*(\d+)\s*', str(meta.get('bm_live_score') or ''))
+            return G.STATUS_PENDING, ((int(zywy.group(1)), int(zywy.group(2))) if zywy else (0, 0))
+        return G.STATUS_NOT_STARTED, None
 
     @staticmethod
     def _wynik(mecz):
@@ -546,22 +551,26 @@ class Pobieranie:
                 self.r['zmiany'].append(f'dodano mecz {dom.name} – {gosc.name} ({str(e.get("date") or "")[:10]})')
                 continue
             nazwa = nazwa_meczu(g)
-            if bool(meta.get('bm_live')) or g.id in self.aktywne or g.status == m.Game.STATUS_PENDING:
-                powod = 'aktywny w sesji transmisji' if g.id in self.aktywne else 'trwa'
-                self.r['pominiete'].append(f'{nazwa}: mecz {powod}, nie zmieniono')
-                self.licz['mecze']['pominieto'] += 1
-                continue
-            if g.status != m.Game.STATUS_FINISHED and g.id in self.rozpoczete:
-                self.r['pominiete'].append(f'{nazwa}: mecz rozpoczęty w module, nie zmieniono')
+            # jedyna ochrona danych modułu: niewysłane zmiany tego meczu (kolejka zapisu do WP; pobierz_pare wysłała je tuż przed pobraniem)
+            powod_niewyslane = self.ochrona['niewyslane'].get(g.id)
+            if powod_niewyslane is None and g.status == m.Game.STATUS_PENDING and not self.ochrona['aktywny']:
+                powod_niewyslane = 'zapis do WP jest wyłączony lub nieaktywny, więc wynik trwającego meczu może być nowszy niż w WP'
+            if powod_niewyslane is not None:
+                self.r['pominiete'].append(f'{nazwa}: mecz ma niewysłane zmiany do WP ({powod_niewyslane}), nie zmieniono')
                 self.licz['mecze']['pominieto'] += 1
                 continue
             if g.status == m.Game.STATUS_FINISHED:
                 self._mecz_zakonczony(g, nazwa, dom, gosc, wynik, data)
                 continue
-            gole = wynik or (None, None)
-            zm = self._ustaw(g, home_team_id=dom.id, away_team_id=gosc.id, league_id=liga.id, date=data, round=runda,
-                             status=m.Game.STATUS_FINISHED if wynik else m.Game.STATUS_NOT_STARTED,
-                             home_team_goals=gole[0], away_team_goals=gole[1])
+            # mecz nierozpoczęty albo trwający w module: stan i wynik na żywo bierzemy z WP (bm_state, bm_live_score); części, zegar, zdarzenia
+            # i skład meczowy zostają nietknięte (pobieranie nie zna ich i niczego nie kasuje)
+            stan_wp, gole = self._stan_z_wp(meta, wynik)
+            pola = dict(home_team_id=dom.id, away_team_id=gosc.id, league_id=liga.id, date=data, round=runda, status=stan_wp)
+            if gole is not None or stan_wp == m.Game.STATUS_NOT_STARTED:
+                pola.update(home_team_goals=(gole or (None, None))[0], away_team_goals=(gole or (None, None))[1])
+            zm = self._ustaw(g, **pola)
+            if g.id in self.aktywne and zm:
+                zm.append('NA ANTENIE: zmiana dotyczy meczu aktywnego w sesji')
             self.licz['mecze']['zaktualizowano' if zm else 'bez_zmian'] += 1
             if zm:
                 self.r['zmiany'].append(f'mecz {nazwa}: ' + ', '.join(zm))
@@ -652,7 +661,7 @@ class Pobieranie:
 
 
 def kopia_bazy(db, kopie_dir):
-    """Kopia pliku bazy SQLite przed zapisem (API kopii SQLite, bezpieczna przy otwartej bazie); zostaje ostatnie 5. Zwraca ścieżkę albo None."""
+    """Kopia pliku bazy SQLite przed zapisem (API kopii SQLite, bezpieczna przy otwartej bazie); zostaje ostatnie 20. Zwraca ścieżkę albo None."""
     sciezka = db.engine.url.database
     if not sciezka or sciezka == ':memory:' or not os.path.isfile(sciezka):
         return None
@@ -674,7 +683,26 @@ def kopia_bazy(db, kopie_dir):
     return str(cel)
 
 
-def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply, stan_numerow=None):
+def pobierz_pare(*args, **kwargs):
+    """Jak _pobierz_pare, ale zmiany meczów z odczytu WP nie trafiają do kolejki zapisu do WP (ochrona przed pętlą WP -> moduł -> WP, W8a)."""
+    from core.managers.wp_zapis import bez_zapisu_do_wp, get_wp_zapis
+    ochrona = {'niewyslane': {}, 'aktywny': False}
+    z = get_wp_zapis()
+    if z is not None:
+        try:
+            ochrona = z.wyslij_zalegle()                # najpierw do WP idą zaległe zapisy modułu: pobranie nie może ich nadpisać (kolejki nie ruszamy)
+        except Exception as e:
+            logging.getLogger(__name__).warning(f'Pobieranie z WP: nie udało się wysłać zaległych zapisów: {e}')
+            ochrona = {'niewyslane': {gid: str(e) for gid, _ in z.kolejka.niewyslane()}, 'aktywny': False}
+    token = _ochrona_zapisu.set(ochrona)
+    try:
+        with bez_zapisu_do_wp():
+            return _pobierz_pare(*args, **kwargs)
+    finally:
+        _ochrona_zapisu.reset(token)
+
+
+def _pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie_dir, apply, stan_numerow=None):
     """Podgląd (apply=False) albo zapis jednej pary. Zwraca {'ok': bool, 'zapisano': bool, 'raport': {...}, 'blad': str}. Nie zgłasza wyjątków."""
     if not _lock.acquire(blocking=False):
         return {'ok': False, 'zapisano': False, 'blad': 'Pobieranie z WP już trwa'}
@@ -695,7 +723,9 @@ def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie
             db.session.rollback()
             if not apply or not podglad['zmieniono']:
                 return {'ok': True, 'zapisano': False, 'raport': podglad, 'pobrano': dane['pobrano']}
+            t_kopii = time.monotonic()
             kopia = kopia_bazy(db, kopie_dir)
+            kopia_ms = round((time.monotonic() - t_kopii) * 1000)
             try:
                 pobranie = Pobieranie(db, dane, logo_root, logo_folder, apply=True, numery_stan=slad, status_stanu=status)
                 raport = pobranie.wykonaj()
@@ -710,7 +740,11 @@ def pobierz_pare(client, db, league_id, season_id, logo_root, logo_folder, kopie
                 zapisz_stan_numerow(sciezka_stanu, nowy_seq, {**(slad or {}), **pobranie.numery_wp})
             except OSError as e:
                 raport['ostrzezenia'].append(f'Nie zapisano pliku stanu numerów ({e}); przy następnym pobraniu pojawi się ostrzeżenie o rozjeździe.')
-            return {'ok': True, 'zapisano': True, 'raport': raport, 'pobrano': dane['pobrano']}
+            try:
+                kopia_kb = round(os.path.getsize(kopia) / 1024) if kopia else 0
+            except OSError:
+                kopia_kb = 0
+            return {'ok': True, 'zapisano': True, 'raport': raport, 'pobrano': dane['pobrano'], 'kopia_kb': kopia_kb, 'kopia_ms': kopia_ms}
         except Exception as e:
             db.session.rollback()
             return {'ok': False, 'zapisano': False, 'blad': f'Pobieranie przerwane, baza bez zmian: {type(e).__name__}: {e}'}

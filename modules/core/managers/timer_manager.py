@@ -257,6 +257,21 @@ class TimerManager:
             current_app.logger.info(f'⏸️  Paused timer: {timer_id}')
         return success
 
+    def pause_game_timers(self, game_id):
+        """Zatrzymuje (pauza w pluginie) wszystkie zegary meczu: główne zegary części i zegary kar. Wołane przy zakończeniu meczu:
+        po zakończeniu meczu żaden zegar nie może biegnąć. Pauza zatrzymanego zegara nic nie zmienia."""
+        from core.models.base_period import get_period_model
+        Period = get_period_model()
+        ids = [p.main_timer_name for p in Period.query.filter_by(game_id=game_id).all() if p.main_timer_name]
+        GameTimer = _get_gametimer()
+        ids += [gt.plugin_timer_id for gt in GameTimer.query.filter_by(game_id=game_id).all()
+                if gt.plugin_timer_id and gt.state in (GameTimer.STATE_RUNNING, GameTimer.STATE_IDLE)]
+        for timer_id in dict.fromkeys(ids):
+            state = (self.get_timer_state(timer_id) or {}).get('state')
+            if state != 'paused':
+                self.pause_timer(timer_id)
+        return len(ids)
+
     def resume_timer(self, timer_id):
         success = self.hub_client.send_to_plugin(
             self.timer_plugin_id, 'resume_timer', {'timer_id': timer_id}
@@ -866,6 +881,14 @@ class TimerManager:
                 if period and period.status == Period.STATUS_NOT_STARTED:
                     period.status = Period.STATUS_PENDING
                     db.session.commit()
+                # W8a: START zegara głównego oznacza też, że mecz trwa (stan „trwa” trafia do WP przez nasłuch zmian modelu Game),
+                # niezależnie od drogi startu (przycisk START, dwuklik, wznowienie po odświeżeniu); mecz zakończony zostaje zakończony
+                if period:
+                    from core.models.base_game import get_game_model
+                    game = get_game_model().query.get(period.game_id)
+                    if game and game.status == game.STATUS_NOT_STARTED:
+                        game.set_live()
+                        db.session.commit()
 
             # Log próbek TYLKO głównego timera okresu (nie kar) — do zamiany
             # czasu meczowego na czas ścienny (patrz base_timer_sample.py).

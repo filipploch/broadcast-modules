@@ -302,6 +302,35 @@ class GameManager:
             logger.error(f"Error updating game score: {e}")
             return None
 
+    def sprawdz_zmiane_statusu(self, game_id, nowy_status):
+        """Reguły zmiany statusu meczu z zakładki MECZE i z formularza edycji (W8a, C). Zwraca komunikat odmowy albo None.
+        1. Zakończenie (-> 2) meczu aktywnego w sesji z BIEGNĄCYM zegarem jest odrzucone: kończy się go w panelu głównym („Zakończ mecz”).
+        2. Cofnięcie na nierozpoczęty (-> 0) jest odrzucone, gdy mecz ma zdarzenia albo rozpoczęte części (zostałyby dane bez statusu)."""
+        from core.managers import get_timer_manager, session_manager
+        from core.models.base_game_event import get_game_event_model
+        from core.models.base_game_timer import get_game_timer_model
+        from core.models.base_period import get_period_model
+        Game, Period, GameTimer = _get_game(), get_period_model(), get_game_timer_model()
+        game = self.get_game_by_id(game_id)
+        if not game or nowy_status == game.status:
+            return None
+        if nowy_status == Game.STATUS_FINISHED and session_manager.current_game_id() == game.id:
+            okresy = Period.query.filter_by(game_id=game.id).all()
+            tm = get_timer_manager()
+            biegnie = any(((tm.get_timer_state(p.main_timer_name) or {}).get('state') == 'running') for p in okresy if p.main_timer_name)
+            biegnie = biegnie or GameTimer.query.filter_by(game_id=game.id, timer_type=GameTimer.TYPE_MAIN, state=GameTimer.STATE_RUNNING).count() > 0
+            if biegnie:
+                return ('Ten mecz jest teraz transmitowany i jego zegar działa. Nie kończ go z listy: zatrzymaj zegar i zakończ mecz w panelu głównym '
+                        '(przycisk „Zakończ mecz”).')
+        if nowy_status == Game.STATUS_NOT_STARTED:
+            zdarzenia = get_game_event_model().query.filter_by(game_id=game.id).count()
+            czesci = Period.query.filter(Period.game_id == game.id, Period.status != Period.STATUS_NOT_STARTED).count()
+            if zdarzenia or czesci:
+                return (f'Mecz ma zdarzenia ({zdarzenia}) albo rozpoczęte części ({czesci}), więc nie można go cofnąć na „nierozpoczęty”. Aby wyczyścić mecz: '
+                        'usuń jego zdarzenia, zresetuj rozpoczęte części (🔄 Resetuj w oknie wyboru części) i dopiero wtedy ustaw „nierozpoczęty”; '
+                        'jeśli mecz trzeba całkowicie wycofać, przywróć bazę z kopii.')
+        return None
+
     def set_game_status(self, game_id, status):
         """
         Set game status

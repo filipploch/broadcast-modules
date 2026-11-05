@@ -692,6 +692,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
         if request.method == 'POST':
             try:
+                if request.form.get('status') is not None:                 # reguły zmiany statusu (te same co w zakładce MECZE), przed jakimkolwiek zapisem
+                    odmowa = game_manager.sprawdz_zmiane_statusu(game_id, int(request.form['status']))
+                    if odmowa:
+                        raise ValueError(odmowa)
                 # Parse date if provided
                 game_date = None
                 if request.form.get('date') and request.form.get('time'):
@@ -713,7 +717,11 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 )
 
                 if request.form.get('status') is not None:
-                    game_manager.set_game_status(game_id, int(request.form['status']))
+                    nowy_status = int(request.form['status'])
+                    if (nowy_status == game.STATUS_NOT_STARTED and request.form.get('home_team_goals') and request.form.get('away_team_goals')):
+                        nowy_status = game.STATUS_PENDING                       # wynik w meczu nierozpoczętym = mecz trwa (W8a, E c2)
+                        flash('Stan ustawiono na trwa', 'info')
+                    game_manager.set_game_status(game_id, nowy_status)
 
                 # Każdy zapis tego formularza to ręczna decyzja o danych meczu
                 # (niezależnie czy user wpisał wynik sam, czy tylko poprawił
@@ -725,14 +733,17 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
 
                 # Update penalty shootout if exists
                 if game.shootout:
-                    home_penalties = request.form.get('home_team_penalties')
-                    away_penalties = request.form.get('away_team_penalties')
+                    # pola formularza to home/away_team_shootouts (stare nazwy *_penalties też przyjmujemy); puste pole = bez zmiany
+                    home_penalties = request.form.get('home_team_shootouts', request.form.get('home_team_penalties'))
+                    away_penalties = request.form.get('away_team_shootouts', request.form.get('away_team_penalties'))
 
-                    if home_penalties is not None and away_penalties is not None:
+                    if home_penalties not in (None, '') and away_penalties not in (None, ''):
+                        if int(home_penalties) < 0 or int(away_penalties) < 0:
+                            raise ValueError('Wynik rzutów karnych nie może być ujemny')
                         shootout_manager.update_shootout_score(
                             shootout_id=game.shootout.id,
-                            home_penalties=int(home_penalties),
-                            away_penalties=int(away_penalties)
+                            home_shootouts=int(home_penalties),
+                            away_shootouts=int(away_penalties)
                         )
 
                 flash(f'Zaktualizowano mecz', 'success')
@@ -1712,8 +1723,15 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         away = body.get('away_team_goals')
         if home is None or away is None:
             return jsonify({'error': 'Wymagane pola: home_team_goals, away_team_goals'}), 400
-        game_manager.update_game(game_id, home_team_goals=int(home), away_team_goals=int(away))
-        return jsonify(game_manager.get_game_by_id(game_id).to_dict())
+        ustawiono_trwa = game.status == game.STATUS_NOT_STARTED       # wynik w meczu nierozpoczętym = mecz trwa (W8a, E c2)
+        if game_manager.update_game(game_id, home_team_goals=int(home), away_team_goals=int(away)) is None:
+            return jsonify({'error': 'Nie udało się zapisać wyniku'}), 500
+        if ustawiono_trwa:
+            game_manager.set_game_status(game_id, game.STATUS_PENDING)
+        odp = game_manager.get_game_by_id(game_id).to_dict()
+        if ustawiono_trwa:
+            odp['info'] = 'Stan ustawiono na trwa'
+        return jsonify(odp)
 
     @app.route('/api/games/<int:game_id>/status', methods=['PATCH'])
     def api_update_game_status(game_id):
@@ -1727,6 +1745,9 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
         new_status = data.get('status')
         if new_status not in (0, 1, 2):
             return jsonify({'error': 'Nieprawidłowy status (dozwolone: 0, 1, 2)'}), 400
+        odmowa = game_manager.sprawdz_zmiane_statusu(game_id, new_status)
+        if odmowa:
+            return jsonify({'error': odmowa}), 409
         try:
             game.status = new_status
             if new_status == 0:
@@ -2147,10 +2168,8 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
                 all_finished = all(p.status == Period.STATUS_FINISHED for p in all_periods)
             
                 if all_finished:
-                    # All periods finished - finish the game
-                    game.set_finished()
-                    db.session.commit()
-                    flash(f'Zakończono {period.description}. Mecz zakończony!', 'success')
+                    # W8a: mecz kończy świadome kliknięcie operatora (okno „Zakończyć mecz?” albo pasek „Mecz nie jest zakończony”), nie koniec ostatniego okresu
+                    flash(f'Zakończono {period.description}. Wszystkie części zakończone: zakończ mecz w panelu.', 'success')
                 else:
                     flash(f'Zakończono {period.description}', 'success')
         
@@ -2190,6 +2209,10 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             game = Game.query.get(period.game_id)
             if game:
                 score_changed = False
+                if game.status == Game.STATUS_NOT_STARTED:
+                    # W8a: start pierwszej (dowolnej) części oznacza, że mecz trwa; stan trafia do WP przez nasłuch zmian
+                    game.set_live()
+                    score_changed = True
                 if game.home_team_goals is None:
                     game.home_team_goals = 0
                     score_changed = True
@@ -2253,12 +2276,12 @@ def register_routes(app, exclude=None, team_manager=None, scraper_ui=None):
             # pozwala index() i socket handlerowi poprawnie załadować dane meczu.
             # current_period_id zostanie nadpisane przy starcie kolejnego periodu.
             game = Game.query.get(period.game_id)
+            all_finished = False
             if game:
                 all_periods = game.get_periods_list()
-                if all(p.status == Period.STATUS_FINISHED for p in all_periods):
-                    game.set_finished()
-                    db.session.commit()
-            return jsonify({'ok': True})
+                all_finished = bool(all_periods) and all(p.status == Period.STATUS_FINISHED for p in all_periods)
+            # W8a: mecz kończy świadome kliknięcie operatora (POST /api/games/<id>/finish); odpowiedź mówi tylko, że wszystkie części są zakończone
+            return jsonify({'ok': True, 'all_finished': all_finished, 'game_id': game.id if game else None})
         except Exception as e:
             logger.error(f"API error finishing period {period_id}: {e}")
             return jsonify({'error': str(e)}), 500

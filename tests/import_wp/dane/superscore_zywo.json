@@ -1,0 +1,1406 @@
+{
+ "opis": "Przycięte odpowiedzi PRAWDZIWEGO Superscore z 2026-11-01 (A-League Kobiety 26/27, endpoint fixtures/season i fixtures/overview): po jednym zdarzeniu zakończonym, nierozpoczętym i trwającym (druga połowa, 1:0, live_minute) oraz odpowiedź meczu (overview) bez statystyk.",
+ "zakonczone": {
+  "team2_red_cards_count": {
+   "value": 0
+  },
+  "team1_red_cards_count": {
+   "value": 0
+  },
+  "match_date_status": 0,
+  "betradar_id": {
+   "value": "br:match:73928158"
+  },
+  "score_coverage_type": 0,
+  "live_minute": null,
+  "match_date": {
+   "nanos": 0,
+   "seconds": 1793505600
+  },
+  "offer_id": {
+   "value": "ax:match:15354561"
+  },
+  "sport": "soccer",
+  "red_cards_count": {
+   "value": 0
+  },
+  "match_state": 2,
+  "tournament_round": null,
+  "table_id": {
+   "value": "34BPUYjkiDGkbVmaWv1Nb"
+  },
+  "leading_team": 2,
+  "date_modified": {
+   "nanos": 472218000,
+   "seconds": 1793512361
+  },
+  "scores": [
+   {
+    "team2": 2,
+    "team1": 0,
+    "type": 0
+   },
+   {
+    "team2": 2,
+    "team1": 0,
+    "type": 1
+   },
+   {
+    "team2": 0,
+    "team1": 0,
+    "type": 2
+   },
+   {
+    "team2": 2,
+    "team1": 0,
+    "type": 6
+   }
+  ],
+  "tournament": null,
+  "match_status": 100,
+  "team2": {
+   "short_code": {
+    "value": "WSW"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "western-sydney-wanderers-w"
+    },
+    "hash": {
+     "value": "vlj09agt"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Western Sydney Wanderers (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Western Sydney Wanderers (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Western Sydney Wanderers (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "WSW"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Western Sydney Wanderers (K)",
+   "id": "nTcLbPovVyVsFAFuovkq2"
+  },
+  "team1": {
+   "short_code": {
+    "value": "CAN"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "canberra-united-w"
+    },
+    "hash": {
+     "value": "n19dhla5"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Canberra United (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Canberra United (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Canberra United (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "CAN"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Canberra United (K)",
+   "id": "7aSqsWYpJXDpVCpGgf8f9R"
+  },
+  "tournament_id": {
+   "value": "ax:tournament:6328"
+  },
+  "sport_id": null,
+  "season": {
+   "end_date": {
+    "nanos": 0,
+    "seconds": 1810468800
+   },
+   "start_date": {
+    "nanos": 0,
+    "seconds": 1792238400
+   },
+   "competition_id": "78XZtE0hEf7DXXZTdOkijY",
+   "year": {
+    "value": "26/27"
+   },
+   "features": [
+    10,
+    34
+   ],
+   "name": "A-League, Kobiety 26/27",
+   "id": "34B2944QbjAwolOnUYi3C"
+  },
+  "competition": {
+   "seo_id": {
+    "slug": {
+     "value": "women-a-league"
+    },
+    "hash": {
+     "value": "urkptws0"
+    }
+   },
+   "tournament_ids": [
+    "ax:tournament:7915",
+    "ax:tournament:6328"
+   ],
+   "competition_type": 1,
+   "country_code": {
+    "value": "AUS"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 5
+    },
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 6
+    }
+   ],
+   "name": "A-League (K)",
+   "id": "78XZtE0hEf7DXXZTdOkijY"
+  },
+  "week": {
+   "value": "3"
+  },
+  "category": {
+   "sport": "soccer",
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [],
+   "name": "Australia",
+   "id": "5fWmh1eeGEcMLyoM2UF8q1"
+  },
+  "features": [
+   0,
+   1,
+   2,
+   13,
+   24,
+   33
+  ],
+  "symbol": [],
+  "round": null,
+  "id": "34AxsGxGgdd4pKj6Wpy73"
+ },
+ "nierozpoczete": {
+  "team2_red_cards_count": null,
+  "team1_red_cards_count": null,
+  "match_date_status": 0,
+  "betradar_id": {
+   "value": "br:match:73928354"
+  },
+  "score_coverage_type": 0,
+  "live_minute": null,
+  "match_date": {
+   "nanos": 0,
+   "seconds": 1807419600
+  },
+  "offer_id": null,
+  "sport": "soccer",
+  "red_cards_count": null,
+  "match_state": 0,
+  "tournament_round": null,
+  "table_id": {
+   "value": "34BPUYjkiDGkbVmaWv1Nb"
+  },
+  "leading_team": 0,
+  "date_modified": {
+   "nanos": 267656000,
+   "seconds": 1793450642
+  },
+  "scores": [],
+  "tournament": null,
+  "match_status": 0,
+  "team2": {
+   "short_code": {
+    "value": "ADE"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "adelaide-united-w"
+    },
+    "hash": {
+     "value": "6fg5yd40"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Adelaide United (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Adelaide United (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Adelaide United (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "ADE"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Adelaide United (K)",
+   "id": "4Ypcrxd2qWpw34y3a304uA"
+  },
+  "team1": {
+   "short_code": {
+    "value": "MCY"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "melbourne-city-w"
+    },
+    "hash": {
+     "value": "ud6ui1sg"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Melbourne City (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Melbourne City (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Melbourne City (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "MCY"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Melbourne City (K)",
+   "id": "cJWUNAIq7oVGtpjF97qtl"
+  },
+  "tournament_id": {
+   "value": "ax:tournament:6328"
+  },
+  "sport_id": null,
+  "season": {
+   "end_date": {
+    "nanos": 0,
+    "seconds": 1810468800
+   },
+   "start_date": {
+    "nanos": 0,
+    "seconds": 1792238400
+   },
+   "competition_id": "78XZtE0hEf7DXXZTdOkijY",
+   "year": {
+    "value": "26/27"
+   },
+   "features": [
+    10,
+    34
+   ],
+   "name": "A-League, Kobiety 26/27",
+   "id": "34B2944QbjAwolOnUYi3C"
+  },
+  "competition": {
+   "seo_id": {
+    "slug": {
+     "value": "women-a-league"
+    },
+    "hash": {
+     "value": "urkptws0"
+    }
+   },
+   "tournament_ids": [
+    "ax:tournament:7915",
+    "ax:tournament:6328"
+   ],
+   "competition_type": 1,
+   "country_code": {
+    "value": "AUS"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 5
+    },
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 6
+    }
+   ],
+   "name": "A-League (K)",
+   "id": "78XZtE0hEf7DXXZTdOkijY"
+  },
+  "week": {
+   "value": "22"
+  },
+  "category": {
+   "sport": "soccer",
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [],
+   "name": "Australia",
+   "id": "5fWmh1eeGEcMLyoM2UF8q1"
+  },
+  "features": [
+   2,
+   33
+  ],
+  "symbol": [],
+  "round": null,
+  "id": "34AxvVVXbVtFou4i0bPIg"
+ },
+ "trwajace": {
+  "team2_red_cards_count": {
+   "value": 0
+  },
+  "team1_red_cards_count": {
+   "value": 0
+  },
+  "match_date_status": 0,
+  "betradar_id": {
+   "value": "br:match:73928160"
+  },
+  "score_coverage_type": 0,
+  "live_minute": {
+   "extra_seconds": null,
+   "anchor_date": {
+    "nanos": 702713000,
+    "seconds": 1793520226
+   },
+   "elapsed_seconds": 3593,
+   "max_seconds": 5400
+  },
+  "match_date": {
+   "nanos": 0,
+   "seconds": 1793515500
+  },
+  "offer_id": {
+   "value": "ax:match:15499983"
+  },
+  "sport": "soccer",
+  "red_cards_count": {
+   "value": 0
+  },
+  "match_state": 1,
+  "tournament_round": null,
+  "table_id": {
+   "value": "34BPUYjkiDGkbVmaWv1Nb"
+  },
+  "leading_team": 1,
+  "date_modified": {
+   "nanos": 786923000,
+   "seconds": 1793519334
+  },
+  "scores": [
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 0
+   },
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 1
+   },
+   {
+    "team2": 0,
+    "team1": 0,
+    "type": 2
+   },
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 6
+   }
+  ],
+  "tournament": null,
+  "match_status": 7,
+  "team2": {
+   "short_code": {
+    "value": "NEW"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "newcastle-jets-w"
+    },
+    "hash": {
+     "value": "5a4zrq0j"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "NEW"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Newcastle Jets (K)",
+   "id": "3D8hARnHMKk0oOyZqdg0T9"
+  },
+  "team1": {
+   "short_code": {
+    "value": "MVC"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "melbourne-victory-w"
+    },
+    "hash": {
+     "value": "zwvtg5md"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "MVC"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Melbourne Victory (K)",
+   "id": "IjR4Vkue4R7o8vJ7Fryk1"
+  },
+  "tournament_id": {
+   "value": "ax:tournament:6328"
+  },
+  "sport_id": null,
+  "season": {
+   "end_date": {
+    "nanos": 0,
+    "seconds": 1810468800
+   },
+   "start_date": {
+    "nanos": 0,
+    "seconds": 1792238400
+   },
+   "competition_id": "78XZtE0hEf7DXXZTdOkijY",
+   "year": {
+    "value": "26/27"
+   },
+   "features": [
+    10,
+    34
+   ],
+   "name": "A-League, Kobiety 26/27",
+   "id": "34B2944QbjAwolOnUYi3C"
+  },
+  "competition": {
+   "seo_id": {
+    "slug": {
+     "value": "women-a-league"
+    },
+    "hash": {
+     "value": "urkptws0"
+    }
+   },
+   "tournament_ids": [
+    "ax:tournament:7915",
+    "ax:tournament:6328"
+   ],
+   "competition_type": 1,
+   "country_code": {
+    "value": "AUS"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 5
+    },
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 6
+    }
+   ],
+   "name": "A-League (K)",
+   "id": "78XZtE0hEf7DXXZTdOkijY"
+  },
+  "week": {
+   "value": "3"
+  },
+  "category": {
+   "sport": "soccer",
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [],
+   "name": "Australia",
+   "id": "5fWmh1eeGEcMLyoM2UF8q1"
+  },
+  "features": [
+   0,
+   1,
+   2,
+   13,
+   24,
+   33
+  ],
+  "symbol": [],
+  "round": null,
+  "id": "34AxsBpHsfjbIaRS8o8dc"
+ },
+ "overview_trwajacy": {
+  "match_date_status": 0,
+  "team1_manager": {
+   "country_code": {
+    "value": "WAL"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "Jeffrey Hopkins"
+     },
+     "type": 1
+    }
+   ],
+   "name": "Hopkins, Jeffrey",
+   "id": "77xdzsdAH2IjrW9PBF6xhP"
+  },
+  "live_minute": {
+   "extra_seconds": null,
+   "anchor_date": {
+    "nanos": 44437000,
+    "seconds": 1793520213
+   },
+   "elapsed_seconds": 3580,
+   "max_seconds": 5400
+  },
+  "symbol": [],
+  "team2": {
+   "short_code": {
+    "value": "NEW"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "newcastle-jets-w"
+    },
+    "hash": {
+     "value": "5a4zrq0j"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Newcastle Jets (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "NEW"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Newcastle Jets (K)",
+   "id": "3D8hARnHMKk0oOyZqdg0T9"
+  },
+  "highlights_provider": 0,
+  "team2_manager": {
+   "country_code": {
+    "value": "ENG"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "Stephen Hoyle"
+     },
+     "type": 1
+    }
+   ],
+   "name": "Hoyle, Stephen",
+   "id": "3u1staWYGCMX3pnyVW1lHu"
+  },
+  "stadium_name": {
+   "value": "AAMI Park"
+  },
+  "id": "34AxsBpHsfjbIaRS8o8dc",
+  "scores": [
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 0
+   },
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 1
+   },
+   {
+    "team2": 0,
+    "team1": 0,
+    "type": 2
+   },
+   {
+    "team2": 0,
+    "team1": 1,
+    "type": 6
+   }
+  ],
+  "tournament": null,
+  "stadium": null,
+  "category": {
+   "sport": "soccer",
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [],
+   "name": "Australia",
+   "id": "5fWmh1eeGEcMLyoM2UF8q1"
+  },
+  "covered_from": 0,
+  "highlights_available": false,
+  "pitch_conditions": 1,
+  "offer_id": {
+   "value": "ax:match:15499983"
+  },
+  "referees": [
+   {
+    "country_code": {
+     "value": "AUS"
+    },
+    "type": 1,
+    "name": "Williams, Caitlin",
+    "id": "6pzSp7mw7CuPFYyZZCUZfZ"
+   }
+  ],
+  "team1": {
+   "short_code": {
+    "value": "MVC"
+   },
+   "seo_id": {
+    "slug": {
+     "value": "melbourne-victory-w"
+    },
+    "hash": {
+     "value": "zwvtg5md"
+    }
+   },
+   "sport": "soccer",
+   "virtual": {
+    "value": false
+   },
+   "country_code": {
+    "value": "AUS"
+   },
+   "sport_id": null,
+   "features": [
+    20
+   ],
+   "names": [
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 1
+    },
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 2
+    },
+    {
+     "value": {
+      "string_value": "Melbourne Victory (K)"
+     },
+     "type": 3
+    },
+    {
+     "value": {
+      "string_value": "MVC"
+     },
+     "type": 4
+    }
+   ],
+   "type": 2,
+   "name": "Melbourne Victory (K)",
+   "id": "IjR4Vkue4R7o8vJ7Fryk1"
+  },
+  "attendance": null,
+  "match_date": {
+   "nanos": 0,
+   "seconds": 1793515500
+  },
+  "weather_conditions": 1,
+  "tournament_id": {
+   "value": "ax:tournament:6328"
+  },
+  "match_state": 1,
+  "competition": {
+   "tournament_ids": [
+    "ax:tournament:7915",
+    "ax:tournament:6328"
+   ],
+   "seo_id": {
+    "slug": {
+     "value": "women-a-league"
+    },
+    "hash": {
+     "value": "urkptws0"
+    }
+   },
+   "competition_type": 1,
+   "country_code": {
+    "value": "AUS"
+   },
+   "names": [
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 5
+    },
+    {
+     "value": {
+      "string_value": "A-League (K)"
+     },
+     "type": 6
+    }
+   ],
+   "name": "A-League (K)",
+   "id": "78XZtE0hEf7DXXZTdOkijY"
+  },
+  "score_coverage_type": 0,
+  "match_status": 7,
+  "table_id": {
+   "value": "34BPUYjkiDGkbVmaWv1Nb"
+  },
+  "venue": {
+   "country_code": {
+    "value": "AUS"
+   },
+   "city": {
+    "value": "Melbourne"
+   },
+   "name": "AAMI Park",
+   "id": "5QDbA2w2I3ZZClt8pD276i"
+  },
+  "season": {
+   "end_date": {
+    "nanos": 0,
+    "seconds": 1810468800
+   },
+   "start_date": {
+    "nanos": 0,
+    "seconds": 1792238400
+   },
+   "competition_id": "78XZtE0hEf7DXXZTdOkijY",
+   "year": {
+    "value": "26/27"
+   },
+   "features": [
+    10,
+    34
+   ],
+   "name": "A-League, Kobiety 26/27",
+   "id": "34B2944QbjAwolOnUYi3C"
+  },
+  "betradar_id": {
+   "value": "br:match:73928160"
+  },
+  "leading_team": 3,
+  "features": [
+   0,
+   1,
+   2,
+   13,
+   24,
+   33
+  ],
+  "live_events": [
+   {
+    "highlight_id": null,
+    "secondary": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_off_target"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_off_target"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_off_target"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t}",
+      "args": [
+       "stats.football.match.shot_off_target"
+      ]
+     }
+    },
+    "subtype": 0,
+    "side": 2,
+    "added_time": null,
+    "minute": {
+     "value": 51
+    },
+    "main": null,
+    "primary": null,
+    "type": 9,
+    "id": {
+     "value": "6371566264"
+    }
+   },
+   {
+    "highlight_id": null,
+    "secondary": null,
+    "subtype": 0,
+    "side": 0,
+    "added_time": null,
+    "minute": {
+     "value": 45
+    },
+    "main": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} **1:0**",
+         "args": [
+          "stats.football.match.first_half_score"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} **1:0**",
+         "args": [
+          "stats.football.match.first_half_score"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} **1:0**",
+         "args": [
+          "stats.football.match.first_half_score"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t} **1:0**",
+      "args": [
+       "stats.football.match.first_half_score"
+      ]
+     }
+    },
+    "primary": null,
+    "type": 7,
+    "id": {
+     "value": "6371542666"
+    }
+   },
+   {
+    "highlight_id": null,
+    "secondary": null,
+    "subtype": 0,
+    "side": 1,
+    "added_time": {
+     "value": 2
+    },
+    "minute": {
+     "value": 45
+    },
+    "main": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t} 7",
+      "args": [
+       "stats.football.match.corner_event"
+      ]
+     }
+    },
+    "primary": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 7",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t} 7",
+      "args": [
+       "stats.football.match.corner_event"
+      ]
+     }
+    },
+    "type": 14,
+    "id": {
+     "value": "6371541971"
+    }
+   },
+   {
+    "highlight_id": null,
+    "secondary": null,
+    "subtype": 0,
+    "side": 1,
+    "added_time": null,
+    "minute": {
+     "value": 45
+    },
+    "main": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t} 6",
+      "args": [
+       "stats.football.match.corner_event"
+      ]
+     }
+    },
+    "primary": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t} 6",
+         "args": [
+          "stats.football.match.corner_event"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t} 6",
+      "args": [
+       "stats.football.match.corner_event"
+      ]
+     }
+    },
+    "type": 14,
+    "id": {
+     "value": "6371540682"
+    }
+   },
+   {
+    "highlight_id": null,
+    "secondary": {
+     "texts": [
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_on_target"
+         ]
+        }
+       },
+       "type": 1
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_on_target"
+         ]
+        }
+       },
+       "type": 2
+      },
+      {
+       "value": {
+        "text_value": {
+         "val": "{t}",
+         "args": [
+          "stats.football.match.shot_on_target"
+         ]
+        }
+       },
+       "type": 3
+      }
+     ],
+     "super_id": null,
+     "player_id": null,
+     "text": {
+      "val": "{t}",
+      "args": [
+       "stats.football.match.shot_on_target"
+      ]
+     }
+    },
+    "subtype": 0,
+    "side": 2,
+    "added_time": null,
+    "minute": {
+     "value": 44
+    },
+    "main": null,
+    "primary": null,
+    "type": 10,
+    "id": {
+     "value": "6371539805"
+    }
+   }
+  ]
+ }
+}

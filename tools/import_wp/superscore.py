@@ -120,13 +120,27 @@ def _wyniki_meczu(e, gospodarz, gosc):
     return wynik
 
 
+def _zywo(e):
+    """Stan meczu w źródle: {'stan': nierozpoczety|trwa|zakonczony, 'wynik': (gospodarz, gość) albo None}. Wynik na żywo bierzemy z wyniku typu 0
+    (ten sam, który dla meczu zakończonego jest wynikiem końcowym); do POTWIERDZENIA na meczu w toku (w danych testowych mecz „w toku” to zmieniony zakończony)."""
+    stan, status = e.get('match_state'), e.get('match_status')
+    # obserwowane pary (match_state, match_status): (0, 0) nierozpoczęty, (1, 7) druga połowa, (2, 100) zakończony; inne dla stanu 0 lub 2 to mecz nietypowy
+    # (np. odwołany, przełożony, przerwany), który import tylko flaguje (bm_zrodlo_brak) i zgłasza w raporcie; stan 1 z innym statusem (przerwa itd.) jest normalnym meczem w toku
+    nietypowy = (stan == NIEROZPOCZETY and status not in (0, None)) or (stan == ZAKONCZONY and status not in (100, None))
+    if stan == ZAKONCZONY:
+        return {'stan': 'zakonczony', 'wynik': _wynik(e, 0), 'status': status, 'nietypowy': nietypowy}
+    if stan == W_TOKU:
+        return {'stan': 'trwa', 'wynik': _wynik(e, 0), 'status': status, 'nietypowy': False}
+    return {'stan': 'nierozpoczety', 'wynik': None, 'status': status, 'nietypowy': nietypowy}
+
+
 def norm_mecz(e, liga_id, sezon_id):
     g, a = e.get('team1') or {}, e.get('team2') or {}
     gh, ah = _hash(g), _hash(a)
     sek = (e.get('match_date') or {}).get('seconds')
     return {'id': str(e['id']), 'date': czas_lokalny_pl(sek) if sek is not None else '', 'status': '', 'day': '', 'format': 'league',
             'minutes': '', 'leagues': [liga_id], 'seasons': [sezon_id], 'teams': [gh, ah], 'results': _wyniki_meczu(e, gh, ah),
-            'players': [], 'performance': {}}
+            'players': [], 'performance': {}, 'zywo': _zywo(e)}
 
 
 def norm_druzyna(t, nazwy, liga_id, sezon_id):

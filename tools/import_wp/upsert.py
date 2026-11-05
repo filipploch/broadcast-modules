@@ -2,7 +2,8 @@
 
 Każdy zapisany rekord (drużyna, zawodnik, mecz) ma w WP pola własne bm_source, bm_source_id i bm_source_hash (wtyczka bm-pomocnik).
 Przy kolejnym imporcie rekord jest dopasowywany po (źródło, identyfikator); gdy skrót treści się nie zmienił, nic nie jest wysyłane.
-Nic nie jest usuwane: rekordy, których nie ma już w źródle, trafiają do raportu. Mecz z bm_locked albo bm_live jest pomijany.
+Nic nie jest usuwane: rekordy, których nie ma już w źródle, trafiają do raportu. Mecz z bm_locked albo bm_decyduje (stan i wynik ustala użytkownik)
+jest pomijany, a różnica między źródłem a WP trafia do raportu; sam stan „trwa” (bm_state, bm_live) meczu nie blokuje.
 Liga i sezon (kategorie SportsPressa) są dopasowywane po slugu nadawanym przez importer: <źródło>-l<id> i <źródło>-s<id>."""
 import hashlib
 import html
@@ -10,6 +11,34 @@ import json
 
 WERSJA_IMPORTU = 1        # zmiana sposobu budowania rekordów wymusza ponowny zapis (wchodzi do skrótu)
 STATUSY = 'publish,future,draft,pending,private'
+
+
+def _wynik_natywny(rekord):
+    """Natywny wynik meczu z REST SportsPressa jako 'g:o' (kolejność drużyn z pola teams) albo ''."""
+    druzyny, wyniki = rekord.get('teams') or [], rekord.get('results')
+    if len(druzyny) < 2 or not isinstance(wyniki, dict):
+        return ''
+    gole = []
+    for t in druzyny[:2]:
+        w = wyniki.get(str(t))
+        g = w.get('goals') if isinstance(w, dict) else None
+        if g in (None, '') or not str(g).lstrip('-').isdigit():
+            return ''
+        gole.append(str(int(g)))
+    return ':'.join(gole)
+
+
+def _stan_wp(meta, rekord):
+    """Stan meczu w WP do raportu: {'stan': bm_state, 'na_zywo': bm_live_score, 'wynik': natywny 'g:o'}."""
+    return {'stan': meta.get('bm_state') or '', 'na_zywo': meta.get('bm_live_score') or '', 'wynik': _wynik_natywny(rekord)}
+
+
+def tekst_wp(wp):
+    if wp.get('stan') == 'trwa':
+        return 'trwa ' + (wp.get('na_zywo') or '(bez wyniku)')
+    if wp.get('wynik'):
+        return 'zakończony ' + wp['wynik']
+    return 'nierozpoczęty'
 
 
 def nazwa_do_porownania(tekst):
@@ -50,6 +79,8 @@ class Licznik:
         self.nie_ma_w_zrodle = []
         self.uwagi = []
         self.duplikaty = []
+        self.roznice = []            # mecze pominięte (decyduje użytkownik / blokada): co jest w źródle, a co w WP
+        self.nadpisane = []          # mecze zapisane do WP: poprzednia wartość stanu/wyniku z WP
 
     def linia(self):
         return (f'{self.nowe} nowych, {self.zmienione} zmienionych, {self.bez_zmian} bez zmian, {self.pominiete} pominiętych, '
@@ -91,17 +122,24 @@ class Import:
         return self.id_wp[rodzaj]
 
     # -- istniejące rekordy
-    def wczytaj_istniejace(self, rodzaj, trasa):
+    def wczytaj_istniejace(self, rodzaj, trasa, filtr=None):
+        """filtr: dodatkowe parametry zapytania (np. {'leagues': id, 'seasons': id}: tryb „odśwież wyniki” czyta tylko mecze jednej ligi i sezonu)."""
         wynik = {}
-        pola = 'id,meta,title,teams,current_teams,past_teams' if rodzaj == 'zawodnicy' else 'id,meta'      # nazwa i drużyny zawodnika: wykrywanie duplikatów
-        for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY}):
+        pola = {'zawodnicy': 'id,meta,title,teams,current_teams,past_teams',      # nazwa i drużyny zawodnika: wykrywanie duplikatów
+                'mecze': 'id,meta,teams,results', 'druzyny': 'id,meta,title'}.get(rodzaj, 'id,meta')                  # wynik i drużyny meczu: poprzednia wartość do raportu
+        for r in self.wp.pobierz_wszystko(trasa, {'_fields': pola, 'status': STATUSY, **(filtr or {})}):
             meta = r.get('meta') or {}
             if meta.get('bm_source') == self.zrodlo and meta.get('bm_source_id'):
                 tytul = r.get('title')
                 tytul = tytul.get('rendered') if isinstance(tytul, dict) else tytul
+                if rodzaj == 'mecze':       # mecz blokują tylko flagi (twarda blokada i „decyduje użytkownik”), nie stan trwa ani bm_live
+                    blokada = 'blokada wyniku (bm_locked)' if meta.get('bm_locked') else ('decyduje użytkownik (bm_decyduje)' if meta.get('bm_decyduje') else '')
+                else:
+                    blokada = 'blokada wyniku albo mecz trwa' if (meta.get('bm_locked') or meta.get('bm_live')) else ''
                 wynik[str(meta['bm_source_id'])] = {'id': r['id'], 'hash': meta.get('bm_source_hash') or '',
-                                                    'zablokowany': bool(meta.get('bm_locked')) or bool(meta.get('bm_live')),
-                                                    'nazwa': nazwa_do_porownania(tytul), 'teams': [int(t) for t in r.get('teams') or [] if t],
+                                                    'zablokowany': bool(blokada), 'blokada': blokada, 'brak_w_zrodle': bool(meta.get('bm_zrodlo_brak')),
+                                                    'wp': _stan_wp(meta, r) if rodzaj == 'mecze' else None,
+                                                    'nazwa': nazwa_do_porownania(tytul), 'tytul': tytul or '', 'teams': [int(t) for t in r.get('teams') or [] if t],
                                                     'cur': [int(t) for t in r.get('current_teams') or [] if t],
                                                     'past': [int(t) for t in r.get('past_teams') or [] if t],
                                                     'imie': meta.get('bm_first_name') or '', 'nazwisko': meta.get('bm_last_name') or '',
@@ -109,8 +147,9 @@ class Import:
         self.istniejace[rodzaj] = wynik
         return wynik
 
-    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None, wymus=False):
-        """Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać (wymus=True: zapis także przy niezmienionym skrócie, np. niespójna lista drużyn w WP); przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
+    def upsert(self, rodzaj, trasa, src_id, payload, buduj_body, przed_aktualizacja=None, wymus=False, opis=None, tekst_zrodla=None):
+        """opis: nazwa rekordu do raportu; tekst_zrodla: stan i wynik meczu w źródle (do raportu różnic i poprzednich wartości).
+        Tworzy albo aktualizuje rekord; zwraca id w WP (0 na sucho dla nowych). buduj_body() wołane tylko, gdy trzeba zapisać (wymus=True: zapis także przy niezmienionym skrócie, np. niespójna lista drużyn w WP); przed_aktualizacja(id_wp) czyści stare dane rekordu (mecz)."""
         licz = self.liczniki[rodzaj]
         h = skrot(payload)
         ist = self.istniejace[rodzaj].get(str(src_id))
@@ -128,12 +167,18 @@ class Import:
             self.id_wp[rodzaj][src_id] = ist['id']
             if ist['zablokowany']:
                 licz.pominiete += 1
-                licz.uwagi.append(f'{rodzaj} {src_id}: pominięty (blokada wyniku albo mecz trwa)')
+                licz.uwagi.append(f'{rodzaj} {src_id}: pominięty ({ist["blokada"]})')
+                if tekst_zrodla is not None and ist.get('wp') is not None:
+                    w_wp = tekst_wp(ist['wp'])
+                    licz.roznice.append(f'{opis or src_id}: źródło: {tekst_zrodla}, WP: {w_wp}' + (' (zgodne)' if w_wp == tekst_zrodla else ' (RÓŻNICA, zostaje wartość z WP)')
+                                        + f' [{ist["blokada"]}]')
                 return ist['id']
             if ist['hash'] == h and not wymus:
                 licz.bez_zmian += 1
                 return ist['id']
             licz.zmienione += 1
+            if tekst_zrodla is not None and ist.get('wp') is not None and tekst_wp(ist['wp']) != tekst_zrodla:
+                licz.nadpisane.append(f'{opis or src_id}: było w WP: {tekst_wp(ist["wp"])}, ze źródła: {tekst_zrodla}')
             if not self.na_sucho:
                 if przed_aktualizacja:
                     przed_aktualizacja(ist['id'])

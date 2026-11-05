@@ -285,7 +285,23 @@ class ImportDoWpTests(unittest.TestCase):
         self.assertEqual(mecz['results'][wp_druzyna]['goals'], '9')
         self.assertNotIn(str(imp.id_wp['zawodnicy'][6811]), mecz['performance'][wp_druzyna])
 
-    def test_mecz_z_blokada_wyniku_albo_trwajacy_jest_pomijany(self):
+    def test_mecz_trwajacy_w_wp_bez_flag_przyjmuje_wynik_ze_zrodla_a_flaga_decyduje_go_pomija(self):
+        self._importuj()
+        mecz = self.wp_atrapa.po_zrodle('events', ROZEGRANY)
+        mecz['meta'].update({'bm_live': True, 'bm_state': 'trwa'})                     # trwanie samo w sobie nie blokuje importu
+        d = dane_zrodla()
+        next(x for x in d['mecze'] if x['id'] == ROZEGRANY)['results']['7612']['goals'] = '9'
+        imp = self._importuj(d)
+        self.assertEqual(imp.liczniki['mecze'].zmienione, 1)
+        self.assertEqual(mecz['results'][str(imp.id_wp['druzyny'][7612])]['goals'], '9')
+        self.assertTrue(any('było w WP' in n for n in imp.liczniki['mecze'].nadpisane))
+        mecz['meta']['bm_decyduje'] = True
+        next(x for x in d['mecze'] if x['id'] == ROZEGRANY)['results']['7612']['goals'] = '3'
+        imp = self._importuj(d)
+        self.assertEqual((imp.liczniki['mecze'].pominiete, imp.liczniki['mecze'].zmienione), (1, 0))
+        self.assertEqual(mecz['results'][str(imp.id_wp['druzyny'][7612])]['goals'], '9')
+
+    def test_mecz_z_blokada_wyniku_jest_pomijany(self):
         self._importuj()
         mecz = self.wp_atrapa.po_zrodle('events', ROZEGRANY)
         mecz['meta']['bm_locked'] = True

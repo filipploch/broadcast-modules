@@ -16,6 +16,8 @@ class AtrapaWp:
         self.zapytania = []                             # (metoda, trasa, body)
         self.blad_dla = None                            # callable(kolekcja, body) -> True => odpowiedź 500
         self.wyczyszczone = []
+        self.stany = []                                 # (id meczu, stan, wynik na żywo) zapisane trasą source-state
+        self.wyczyszczone_wyniki = []                   # mecze, którym source-state wyczyścił natywny wynik
         atrapa = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -66,6 +68,23 @@ class AtrapaWp:
                 ev.pop(k, None)
             self.wyczyszczone.append(int(m.group(1)))
             return 200, {'cleared': int(m.group(1))}, {}
+        m = re.fullmatch(r'bm/v1/event/(\d+)/source-state', trasa)
+        if m and metoda == 'POST':                      # jak trasa w bm-pomocnik.php: 409 dla bm_decyduje/bm_locked, bez ruszania bm_seq i natywnego wyniku
+            ev = self.dane['events'].get(int(m.group(1)))
+            if ev is None:
+                return 404, {'code': 'bm_not_event'}, {}
+            meta = ev.setdefault('meta', {})
+            if meta.get('bm_locked') or meta.get('bm_decyduje'):
+                return 409, {'code': 'bm_decyduje'}, {}
+            if body['state'] != 'zakonczony':                # jak w bm-pomocnik.php: natywny wynik istnieje tylko dla meczów zakończonych
+                for k in ('players', 'performance', 'results'):
+                    ev.pop(k, None)
+                self.wyczyszczone_wyniki.append(int(m.group(1)))
+            meta['bm_state'] = body['state']
+            meta['bm_live_score'] = f"{body['home']}:{body['away']}" if body['state'] == 'trwa' and body.get('home') is not None else ''
+            meta['bm_live'] = body['state'] == 'trwa'
+            self.stany.append((int(m.group(1)), body['state'], meta['bm_live_score']))
+            return 200, {'ok': True}, {}
         m = re.fullmatch(r'sportspress/v2/(\w+)(?:/(\d+))?', trasa)
         if not m or m.group(1) not in KOLEKCJE:
             return 404, {'code': 'rest_no_route'}, {}
@@ -104,6 +123,7 @@ class AtrapaWp:
     def wyzeruj_zapytania(self):
         self.zapytania.clear()
         self.wyczyszczone.clear()
+        self.stany.clear()
 
     def po_zrodle(self, kol, src_id):
         for o in self.dane[kol].values():

@@ -420,14 +420,26 @@
      "value": 0
     },
     "match_date_status": 0,
-    "betradar_id": null,
+    "betradar_id": {
+     "value": "br:match:73928160"
+    },
     "score_coverage_type": 0,
-    "live_minute": null,
+    "live_minute": {
+     "extra_seconds": null,
+     "anchor_date": {
+      "nanos": 702713000,
+      "seconds": 1793520226
+     },
+     "elapsed_seconds": 3593,
+     "max_seconds": 5400
+    },
     "match_date": {
      "nanos": 0,
      "seconds": 1792850400
     },
-    "offer_id": null,
+    "offer_id": {
+     "value": "ax:match:15499983"
+    },
     "sport": "soccer",
     "red_cards_count": {
      "value": 0
@@ -437,35 +449,35 @@
     "table_id": {
      "value": "33lvYo0ca7A3WAZOoKUL4"
     },
-    "leading_team": 2,
+    "leading_team": 1,
     "date_modified": {
-     "nanos": 968166000,
-     "seconds": 1792857188
+     "nanos": 786923000,
+     "seconds": 1793519334
     },
     "scores": [
      {
-      "team2": 2,
+      "team2": 0,
       "team1": 1,
       "type": 0
      },
      {
-      "team2": 1,
-      "team1": 0,
+      "team2": 0,
+      "team1": 1,
       "type": 1
      },
      {
-      "team2": 1,
-      "team1": 1,
+      "team2": 0,
+      "team1": 0,
       "type": 2
      },
      {
-      "team2": 2,
+      "team2": 0,
       "team1": 1,
       "type": 6
      }
     ],
     "tournament": null,
-    "match_status": 100,
+    "match_status": 7,
     "team2": {
      "short_code": {
       "value": "KAB"
@@ -572,7 +584,9 @@
      "name": "MKS Trzebinia",
      "id": "4DDogccaJ7TdDNQ2N1Qhu9"
     },
-    "tournament_id": null,
+    "tournament_id": {
+     "value": "ax:tournament:6328"
+    },
     "sport_id": null,
     "season": {
      "end_date": null,
@@ -619,18 +633,21 @@
      "name": "5. Liga małopolska zachód",
      "id": "4RC19QK6hD3R9tzeDWjojz"
     },
-    "week": null,
+    "week": {
+     "value": "3"
+    },
     "category": null,
     "features": [
      0,
      1,
      2,
+     13,
      24,
      33
     ],
     "symbol": [],
     "round": null,
-    "id": "LIVE0000000000000000"
+    "id": "34AxsBpHsfjbIaRS8o8dc"
    },
    {
     "team2_red_cards_count": {
@@ -994,7 +1011,7 @@
  ],
  "finished_id": "33lvYrP4xFiwva1Gvrbe9",
  "notstarted_id": "33lvYjg3x1WKHiCYQFBN3",
- "live_id": "LIVE0000000000000000",
+ "live_id": "34AxsBpHsfjbIaRS8o8dc",
  "draw_id": "33lvZ1uRPoMxFxvkYQ1ZV",
  "squad_dup": {
   "defenders": [],
@@ -1050,5 +1067,6 @@
     "position": 0
    }
   ]
- }
+ },
+ "uwaga_live": "Mecz w toku to PRAWDZIWE zdarzenie Superscore z 2026-11-01 (match_state 1, match_status 7, scores type 0/1/2/6, live_minute); drużyny, liga, sezon i data podmienione na dane tej fixtury, by nie zmieniać liczby drużyn w testach. Pełne zdarzenie: superscore_zywo.json."
 }

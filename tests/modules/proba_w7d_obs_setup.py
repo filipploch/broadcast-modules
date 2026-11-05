@@ -71,6 +71,8 @@ def zapisz_konfiguracje():
         'obs': {'enabled': False, 'path': '', 'ws_port': 0, 'process_name': ''},                 # HUB nie zarządza OBS
         'wol': {'enabled': False, 'mac': '', 'broadcast_addr': '255.255.255.255:9'},
         'plugins_config': str(BASE / 'hub' / 'config' / 'plugins.json'), 'state_file': str(BASE / 'uslugi.json'),
+        # folder WP z danymi logowania modułu: bez tego HUB szuka go w folderze próby (wp-local względem hub.json) i zapis do WP jest cicho nieaktywny
+        'wp_dir': str(REPO / 'wp-local'),
     }
     (BASE / 'hub.json').write_text(json.dumps(hub_cfg, indent=2, ensure_ascii=False), encoding='utf-8')
     shutil.copy(REPO / 'plugins' / 'timer-plugin' / 'config.json', BASE / 'timer-plugin' / 'config.json')
@@ -144,6 +146,8 @@ if %tries% GEQ 120 (echo BLAD: modul nie wystartowal w 120 s. Sprawdz okno "Prob
 ping -n 2 127.0.0.1 >nul
 goto :wait_loop
 :ready
+rem samokontrola po starcie modulu (ustawia ja skrypt proby, np. uruchom-w8a.bat): wypisuje stan zapisu do WP albo powod, dla ktorego nie dziala
+if defined BM_PO_STARCIE call "%BM_PO_STARCIE%"
 echo.
 echo ================================================================
 echo  Gotowe. Panel: http://localhost:8081      HUB: http://localhost:8080
