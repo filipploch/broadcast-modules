@@ -93,6 +93,43 @@ with Instancja() as wp:
     sprawdz('przykład: B przed A mimo gorszej różnicy bramek (kolejność niezależnego wyliczenia = tabela WP)', nazwy.index('Bbb') < nazwy.index('Aaa') if 'Bbb' in nazwy and 'Aaa' in nazwy else False, nazwy)
     sprawdz('pozycja = numer wiersza także przy remisie punktowym (SAH2H daje wspólną pozycję, pomijamy ją)', [r['pos'] for r in o['rows']] == list(range(1, len(o['rows']) + 1)))
 
+    # ---- etap 2: ostrzeżenia spójności (d); nie blokują, tabela zawsze się liczy
+    W = Liga(wp, nazwa='ostrz')
+    W.dodaj(0, 1, (2, 0), stan='zakonczony')                         # zwykły mecz
+    id_dup1 = W.dodaj(2, 3, (1, 0), stan='zakonczony')               # duplikat: ta sama para dwa razy, oba z wynikiem
+    id_dup2 = W.dodaj(2, 3, (1, 0), stan='zakonczony')
+    id_dup_pusty = W.dodaj(4, 5, None, stan='nierozpoczety')         # duplikat zapowiedzi (bez wyniku): liczy się 0 razy
+    W.dodaj(4, 5, None, stan='nierozpoczety')
+    k, obcy = wp.api('POST', 'sportspress/v2/teams', {'title': 'Zzz Obca', 'status': 'publish'})   # drużyna bez ligi i sezonu
+    id_obcy = W.dodaj(None, None, (3, 1), stan='zakonczony', druzyny=[W.druzyny[4], obcy['id']])
+    id_resz_n = W.dodaj(1, 2, (4, 0), stan='nierozpoczety')          # resztkowy wynik w nierozpoczętym
+    id_resz_t = W.dodaj(3, 4, (2, 0), stan='trwa', na_zywo='1:0')    # resztkowy wynik natywny w trwającym (z wynikiem na żywo)
+    id_bez_w = W.dodaj(5, 0, None, stan='zakonczony')                # zakończony bez wyniku
+    id_bez_zywo = W.dodaj(5, 1, None, stan='trwa')                   # trwa bez wyniku na żywo
+    id_znik_z = W.dodaj(0, 3, (1, 1), stan='zakonczony', flaga=True) # zniknął ze źródła, zakończony: zostaje
+    id_znik_t = W.dodaj(2, 4, None, stan='trwa', na_zywo='2:2', flaga=True)   # zniknął ze źródła, trwa: wyłączony z live
+
+    def typ(o, t, mecz=None):
+        return [w for w in o['warnings'] if w['typ'] == t and (mecz is None or w['mecz_id'] == mecz)]
+    k, fo = W.tabela('final')
+    k, lv = W.tabela('live')
+    sprawdz('ostrzeżenia nie blokują: tabela jest policzona w obu trybach', k == 200 and len(fo['rows']) == 6 and len(lv['rows']) == 6, (k, fo.get('rows') and len(fo['rows'])))
+    sprawdz('ostrzeżenie: duplikat meczu (para liczona dwa razy)', len(typ(fo, 'duplikat_meczu', id_dup1)) == 1 and 'liczona wielokrotnie (2 razy)' in typ(fo, 'duplikat_meczu', id_dup1)[0]['wplyw'], typ(fo, 'duplikat_meczu'))
+    sprawdz('duplikat zapowiedzi bez wyników: ostrzeżenie z wpływem „liczony 0 raz”', len(typ(fo, 'duplikat_meczu', id_dup_pusty)) == 1 and 'liczony 0 raz' in typ(fo, 'duplikat_meczu', id_dup_pusty)[0]['wplyw'], typ(fo, 'duplikat_meczu'))
+    sprawdz('ostrzeżenie: drużyna spoza ligi', len(typ(fo, 'druzyna_spoza_ligi', id_obcy)) == 1 and 'Zzz Obca' in typ(fo, 'druzyna_spoza_ligi', id_obcy)[0]['opis'], typ(fo, 'druzyna_spoza_ligi'))
+    sprawdz('ostrzeżenie: resztkowy wynik w meczu nierozpoczętym (wynik pominięty)', len(typ(fo, 'wynik_resztkowy', id_resz_n)) == 1 and typ(fo, 'wynik_resztkowy', id_resz_n)[0]['wplyw'] == 'wynik pominięty', typ(fo, 'wynik_resztkowy'))
+    sprawdz('ostrzeżenie: resztkowy wynik natywny w meczu trwającym', len(typ(fo, 'wynik_resztkowy', id_resz_t)) == 1)
+    sprawdz('ostrzeżenie: zakończony bez wyniku', len(typ(fo, 'zakonczony_bez_wyniku', id_bez_w)) == 1 and typ(fo, 'zakonczony_bez_wyniku', id_bez_w)[0]['wplyw'] == 'nie liczy się do tabeli')
+    sprawdz('trwa bez wyniku na żywo: ostrzeżenie tylko w trybie live', len(typ(lv, 'trwa_bez_wyniku_na_zywo', id_bez_zywo)) == 1 and typ(fo, 'trwa_bez_wyniku_na_zywo') == [], (typ(lv, 'trwa_bez_wyniku_na_zywo'), typ(fo, 'trwa_bez_wyniku_na_zywo')))
+    sprawdz('ostrzeżenie: zniknął ze źródła, zakończony zostaje w tabeli (final i live)', len(typ(fo, 'zniknal_ze_zrodla', id_znik_z)) == 1 and typ(fo, 'zniknal_ze_zrodla', id_znik_z)[0]['wplyw'] == 'zostaje w tabeli' and len(typ(lv, 'zniknal_ze_zrodla', id_znik_z)) == 1)
+    sprawdz('ostrzeżenie: zniknął ze źródła, trwający wyłączony z tabeli live (w final bez ostrzeżenia)', len(typ(lv, 'zniknal_ze_zrodla', id_znik_t)) == 1 and 'wyłączony' in typ(lv, 'zniknal_ze_zrodla', id_znik_t)[0]['wplyw'] and typ(fo, 'zniknal_ze_zrodla', id_znik_t) == [])
+    sprawdz('pola ostrzeżenia: typ, mecz_id, mecz (nazwa), opis, wplyw', all(set(w) == {'typ', 'mecz_id', 'mecz', 'opis', 'wplyw'} for w in fo['warnings']) and all(w['mecz'] for w in fo['warnings'] if w['typ'] != 'konfiguracja'))
+    sprawdz('mecz bez żadnego problemu nie ma ostrzeżeń', not [w for w in fo['warnings'] if w['mecz_id'] == W.mecze[0]['id']])
+    g = Liga(wp, nazwa='czysta')
+    g.dodaj(0, 1, (1, 0), stan='zakonczony')
+    k, cz = g.tabela('live')
+    sprawdz('czysta liga: pusta lista ostrzeżeń', k == 200 and cz['warnings'] == [], cz.get('warnings'))
+
     # ---- błędy
     k, o = wp.api('GET', f'bm/v1/table&league={L.liga}&season={L.sezon}&mode=zly')
     sprawdz('zły tryb: 400', k == 400, (k, o))
