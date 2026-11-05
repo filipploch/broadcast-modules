@@ -121,6 +121,48 @@ def register_routes(app, exclude=None):
             return jsonify({'ok': False, 'error': komunikat}), 409
         return jsonify({'ok': True, 'status': 'started', 'liga': para['nazwa']}), 202
 
+    # -- W8b: tabela ligowa z WP na żądanie (źródło prawdy o tabeli; moduł jej nie liczy, nic nie buforuje i nie odświeża w tle)
+    @app.route('/api/wp-tabela')
+    def api_wp_tabela():
+        """Tabela ligi modułu z WP (bm/v1/table). Query: league_id (liga modułu), mode=final|live. Sukces: {ok, mode, rows (pola jak dotąd w panelu),
+        warnings, computed_at, engine, matches_counted, live_matches}. Błąd: {ok: false, error, kind} z kodem 404 (liga bez tabeli, np. puchar),
+        409 (liga nie pochodzi z WP) albo 503 (WP nie odpowiada, odrzucił logowanie, zła wersja wtyczki); panel pokazuje wtedy wyraźny komunikat."""
+        from core.managers import get_wp_manager
+        from core.managers.wp_client import WpClient, WpError
+        mode = request.args.get('mode', 'final')
+        if mode not in ('final', 'live'):
+            return jsonify({'ok': False, 'error': 'Tryb tabeli musi być final albo live.', 'kind': 'param'}), 400
+        try:
+            league_id = int(request.args.get('league_id'))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'Brak wybranej ligi.', 'kind': 'param'}), 400
+        wp = get_wp_manager()
+        if not wp.cfg.enabled:
+            return jsonify({'ok': False, 'error': 'Ten moduł nie ma własnej instancji WP.', 'kind': 'brak_wp'}), 409
+        klucz = _klucz_pary_ligi(league_id)
+        if not klucz:
+            return jsonify({'ok': False, 'error': 'Ta liga nie pochodzi z WP: najpierw „Pobierz z WP” (strona Rozgrywki WP).', 'kind': 'nie_z_wp'}), 409
+        liga_wp, sezon_wp = klucz.split(':', 1)
+        try:
+            odp = WpClient(wp.cfg, timeout=20).get_json('bm/v1/table', {'league': liga_wp, 'season': sezon_wp, 'mode': mode})
+        except WpError as e:
+            if e.kind == 'http' and e.code == 'bm_no_table':
+                return jsonify({'ok': False, 'error': 'Rozgrywki tej ligi nie mają tabeli (np. puchar).', 'kind': 'brak_tabeli'}), 404
+            if e.kind == 'http' and e.code == 'rest_no_route':
+                return jsonify({'ok': False, 'error': 'WP nie ma trasy tabeli: wtyczka bm-pomocnik w WP jest w starej wersji.', 'kind': 'stara_wtyczka'}), 503
+            powod = {'connection': 'WP nie odpowiada', 'auth': 'WP odrzucił dane logowania'}.get(e.kind, 'Błąd rozmowy z WP')
+            return jsonify({'ok': False, 'error': f'Tabela niedostępna: {powod} ({e}).', 'kind': e.kind}), 503
+        if not isinstance(odp, dict) or not isinstance(odp.get('rows'), list):
+            return jsonify({'ok': False, 'error': 'Tabela niedostępna: WP zwrócił odpowiedź w nieoczekiwanym formacie.', 'kind': 'format'}), 503
+
+        def wiersz(r):               # nazwy pól jak w dotychczasowej tabeli panelu i nakładek
+            return {'position': r.get('pos'), 'wp_team_id': r.get('team_id'), 'team_name': r.get('name') or '', 'team_name_14': r.get('name14') or r.get('name') or '',
+                    'team_short_name': r.get('short') or '', 'games': r.get('p', 0), 'wins': r.get('w', 0), 'draws': r.get('d', 0), 'loses': r.get('l', 0),
+                    'goals_scored': r.get('f', 0), 'goals_lost': r.get('a', 0), 'goal_difference': r.get('gd', 0), 'points': r.get('pts', 0), 'away_wins': r.get('wa', 0)}
+        return jsonify({'ok': True, 'mode': odp.get('mode', mode), 'rows': [wiersz(r) for r in odp['rows']], 'warnings': odp.get('warnings') or [],
+                        'computed_at': odp.get('computed_at', ''), 'engine': odp.get('engine', ''), 'matches_counted': odp.get('matches_counted', 0),
+                        'live_matches': odp.get('live_matches', 0)})
+
     # -- W8a: zapis stanu i wyniku meczu do WP (kolejka, wyłącznik) i świadome zakończenie meczu
 
     def _nazwa_meczu(game):

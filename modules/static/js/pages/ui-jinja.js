@@ -2165,11 +2165,22 @@ function _renderStandingsTab(tabId, data, container) {
 
     var groupNr = _gamesTab.maxGroupNr || 1;
     console.log('[standings] leagueId=' + leagueId + ' group_nr=' + groupNr + ' virtual=' + virtual);
-    fetch('/api/leagues/' + leagueId + '/standings?group_nr=' + groupNr)
-    .then(function(r) { return r.json(); })
+    // W8b: tabela z WP na żądanie (final = oficjalna, live = wirtualna); bez WP w pliku wp-tabela.js zostaje dotychczasowa trasa modułu
+    var zadanie = (typeof WpTabela !== 'undefined')
+        ? WpTabela.dane(leagueId, virtual)
+        : fetch('/api/leagues/' + leagueId + '/standings?group_nr=' + groupNr).then(function(r) { return r.json(); });
+    zadanie
     .then(function(d) {
         console.log('[standings] response:', d);
         container.innerHTML = '';
+        if (d.blad) {                                   // WP nie odpowiada / liga bez tabeli: wyraźny komunikat, bez przycisku wysyłania
+            var err = document.createElement('div');
+            err.id = 'wp-tabela-blad';
+            err.style.cssText = 'color:#fff;background:#b02a37;padding:8px;margin:4px;font-size:12px;text-align:center;';
+            err.textContent = d.blad;
+            container.appendChild(err);
+            return;
+        }
 
         // Przycisk wysyłania do overlay (obsługa w przyszłości)
         var sendBtn = document.createElement('button');
@@ -2181,6 +2192,21 @@ function _renderStandingsTab(tabId, data, container) {
             return function() { _sendStandingsToOverlay(capturedTabId, capturedD); };
         })(tabId, d);
         container.appendChild(sendBtn);
+
+        if (d.zrodlo === 'wp') {                        // nagłówek: skąd i kiedy policzona; ostrzeżenia spójności nie blokują wysłania
+            var info = document.createElement('p');
+            info.id = 'wp-tabela-info';
+            info.style.cssText = 'color:#8ab4f8;font-size:10px;padding:2px 6px;margin:0;';
+            info.textContent = 'Tabela z WP' + (d.computed_at ? ' policzona ' + WpTabela.godzina(d.computed_at) : '') + '.';
+            container.appendChild(info);
+            if (d.warnings && d.warnings.length) {
+                var ost = document.createElement('div');
+                ost.id = 'wp-tabela-ostrzezenia';
+                ost.style.cssText = 'color:#f0ad4e;font-size:10px;padding:4px 6px;margin:2px 4px;border:1px solid #f0ad4e;';
+                ost.textContent = 'Ostrzeżenia (' + d.warnings.length + '), nie blokują wysłania: ' + WpTabela.opisOstrzezen(d.warnings).join(' · ');
+                container.appendChild(ost);
+            }
+        }
 
         var rows = virtual ? d.virtual : d.official;
         if (!rows || rows.length === 0) {

@@ -119,7 +119,11 @@ class WpClient:
                 except (ValueError, OSError):
                     odp = {}
                 raise WpError('conflict', str((odp or {}).get('message') or 'konflikt z WP'), str((odp or {}).get('code') or ''), (odp or {}).get('data'))
-            raise WpError('http', f'WP odpowiedział błędem HTTP {e.code}')
+            try:                                                   # trasy bm-pomocnik zwracają kod i opis błędu (np. bm_no_table przy 404)
+                odp = json.loads(e.read().decode('utf-8'))
+            except (ValueError, OSError):
+                odp = {}
+            raise WpError('http', f'WP odpowiedział błędem HTTP {e.code}', str((odp or {}).get('code') or '') if isinstance(odp, dict) else '')
         except (urllib.error.URLError, OSError) as e:
             raise WpError('connection', f'brak połączenia z WP ({self.cfg.url}): {getattr(e, "reason", e)}')
         try:
@@ -142,6 +146,11 @@ class WpClient:
             if page >= pages:
                 return out
             page += 1
+
+    def get_json(self, route, params=None):
+        """GET trasy bm-pomocnik (np. tabela); zwraca odpowiedź jako słownik."""
+        data, _ = self._request(route, params)
+        return data
 
     def post_json(self, route, body):
         """POST z ciałem JSON (trasy bm-pomocnik); zwraca odpowiedź jako słownik."""
