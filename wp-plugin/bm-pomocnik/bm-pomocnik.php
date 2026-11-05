@@ -254,6 +254,12 @@ function bm_table_compute($league, $season, $mode, $criteria) {
 		'orderby' => 'ID', 'order' => 'ASC', 'meta_query' => [['key' => 'sp_format', 'value' => ['league'], 'compare' => 'IN']], 'tax_query' => [
 			'relation' => 'AND', ['taxonomy' => 'sp_league', 'field' => 'term_id', 'terms' => [$league]], ['taxonomy' => 'sp_season', 'field' => 'term_id', 'terms' => [$season]]]]);
 
+	// W tabeli tylko drużyny, które mają mecz w tej lidze i sezonie (import NALF przypisuje drużynom wszystkie ligi; bez tego dostalibyśmy wiersze z 0 meczów)
+	$w_meczach = [];
+	foreach ($event_ids as $eid) foreach ((array) get_post_meta($eid, 'sp_team', false) as $t) if ((int) $t > 0) $w_meczach[(int) $t] = true;
+	$druzyny_tabeli = array_values(array_filter($team_ids, fn($t) => isset($w_meczach[$t])));
+	if (!$druzyny_tabeli) $druzyny_tabeli = $team_ids;      // liga bez żadnych meczów: wszystkie drużyny z termami
+
 	$ov = [];                 // id meczu => wyniki podstawiane zamiast natywnych (pusta tablica = mecz nie liczy się)
 	$ostrz = [];
 	$liczone = 0; $live = 0;
@@ -334,9 +340,10 @@ function bm_table_compute($league, $season, $mode, $criteria) {
 		$ostrz[] = ['typ' => 'konfiguracja', 'mecz_id' => 0, 'mecz' => '', 'opis' => 'Brak dodatku Advanced H2H albo kryteriów „' . $criteria . '”: użyto tabeli SportsPressa bez bezpośrednich spotkań przed różnicą bramek.', 'wplyw' => 'kolejność przy remisie może odbiegać od regulaminu'];
 	}
 
-	$f_meta = function ($v, $oid, $key, $single) use (&$ov, $criteria) {
+	$f_meta = function ($v, $oid, $key, $single) use (&$ov, $criteria, $druzyny_tabeli) {
 		if ($oid == BM_TABELA_VID) {
-			$map = ['sp_select' => 'auto', 'sp_orderby' => 'default', 'sp_order' => 'ASC', 'sp_event_status' => ['publish', 'future'], 'sp_date' => 0, 'sah2h_criteria' => $criteria];
+			if ($key === 'sp_team') return $druzyny_tabeli;       // wybór ręczny: lista drużyn z meczami (get_post_meta(..., false) zwraca listę wartości)
+			$map = ['sp_select' => 'manual', 'sp_orderby' => 'default', 'sp_order' => 'ASC', 'sp_event_status' => ['publish', 'future'], 'sp_date' => 0, 'sah2h_criteria' => $criteria];
 			return array_key_exists($key, $map) ? [$map[$key]] : $v;
 		}
 		if ($key === 'sp_results' && isset($ov[$oid])) return [$ov[$oid]];

@@ -162,4 +162,13 @@ def make_node():
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn('OK 5 przypadków', r.stdout)
 
+        def test_widok_tabeli_w_node(self):
+            node = shutil.which('node')
+            if node is None:
+                raise RuntimeError('Brak Node.js w PATH')
+            skrypt = Path(__file__).resolve().parent / 'js' / 'tabela_widok_test.js'
+            r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('OK 4 przypadków', r.stdout)
+
     return WpTabelaNode

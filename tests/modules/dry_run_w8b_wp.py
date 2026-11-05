@@ -21,12 +21,14 @@ def porownaj(opis, liga, mode, kolejnosc_stat):
     """Tabela z WP kontra niezależne wyliczenie (kolejność i statystyki)."""
     k, o = liga.tabela(mode)
     kol, st = kolejnosc_stat
+    uczestnicy = {x for m in liga.mecze for x in (m['h'], m['g']) if x is not None}      # tabela ma tylko drużyny, które mają jakikolwiek mecz w lidze
+    kol = [i for i in kol if i in uczestnicy]
     if k != 200:
         sprawdz(opis, False, (k, o))
         return o
     ids = [r['team_id'] for r in o['rows']]
     oczek = [liga.druzyny[i] for i in kol]
-    statystyki_ok = all(all(r[c] == st[kol[n]][c] for c in ('p', 'w', 'd', 'l', 'f', 'a', 'gd', 'pts')) for n, r in enumerate(o['rows']))
+    statystyki_ok = len(o['rows']) == len(kol) and all(all(r[c] == st[kol[n]][c] for c in ('p', 'w', 'd', 'l', 'f', 'a', 'gd', 'pts')) for n, r in enumerate(o['rows']))
     sprawdz(opis, ids == oczek and statystyki_ok and [r['pos'] for r in o['rows']] == list(range(1, len(kol) + 1)),
             ([r['name'] for r in o['rows']], [liga.NAZWY[i] for i in kol], [(r['name'], r['pts'], r['gd']) for r in o['rows']]))
     return o
@@ -160,6 +162,15 @@ with Instancja() as wp:
         sprawdz(f'tabela final z WP zgodna z tabelą organizatora NALF (stan na {org.get("stan_na", "?")})', mapa[:len(wzor)] == wzor, [(a, b) for a, b in zip(mapa, wzor) if a != b][:5])
     else:
         print('POMINIĘTO porównanie z tabelą organizatora NALF: brak fixtury (tests/modules/zlote_wzorce/organizator_nalf_dywizja_a.json, wiersze puste)')
+
+    # drużyna z termami ligi i sezonu, ale BEZ meczów w tej lidze (jak drużyny NALF przypisane do wszystkich lig): nie ma wiersza z zerem meczów
+    Z = Liga(wp, n=4, nazwa='bez-meczow')
+    Z.dodaj(0, 1, (1, 0), stan='zakonczony')
+    k, zo = Z.tabela('final')
+    sprawdz('drużyny bez meczów w lidze nie trafiają do tabeli (tylko A i B z meczem)', k == 200 and sorted(r['name'] for r in zo['rows']) == ['Aaa', 'Bbb'], (k, [r['name'] for r in zo['rows']]))
+    Z2 = Liga(wp, n=3, nazwa='bez-meczow-2')
+    k, zo = Z2.tabela('final')
+    sprawdz('liga bez żadnych meczów: wszystkie drużyny z termami (tabela zerowa)', k == 200 and len(zo['rows']) == 3 and all(r['p'] == 0 for r in zo['rows']), (k, zo.get('rows')))
 
     # ---- błędy
     k, o = wp.api('GET', f'bm/v1/table&league={L.liga}&season={L.sezon}&mode=zly')
