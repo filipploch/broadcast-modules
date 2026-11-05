@@ -130,6 +130,37 @@ with Instancja() as wp:
     k, cz = g.tabela('live')
     sprawdz('czysta liga: pusta lista ostrzeżeń', k == 200 and cz['warnings'] == [], cz.get('warnings'))
 
+    # ---- etap 5: złote wzorce (tests/modules/zlote_wzorce/z*.json): ręcznie policzona tabela oczekiwana dla final i live + lista ostrzeżeń
+    import json
+    katalog = pathlib.Path(__file__).resolve().parent / 'zlote_wzorce'
+    for plik in sorted(katalog.glob('z*.json')):
+        wz = json.loads(plik.read_text(encoding='utf-8'))
+        G = Liga(wp, n=len(wz['druzyny']), nazwa=plik.stem[:2])
+        G.NAZWY = wz['druzyny']
+        for m in wz['mecze']:
+            G.dodaj(m['h'], m['g'], tuple(m['wynik']) if m.get('wynik') else None, stan=m.get('stan'), na_zywo=m.get('na_zywo'), flaga=m.get('flaga', False))
+        for tryb in ('final', 'live'):
+            k, o = G.tabela(tryb)
+            oczek = wz[tryb]
+            nazwy_wp = {G.druzyny[i]: wz['druzyny'][i] for i in range(len(wz['druzyny']))}
+            kolejnosc = [nazwy_wp[r['team_id']] for r in o['rows']]
+            tabela = {nazwy_wp[r['team_id']]: {'p': r['p'], 'pts': r['pts'], 'gd': r['gd']} for r in o['rows']}
+            ostrz = sorted(w['typ'] for w in o['warnings'] if w['typ'] != 'konfiguracja')
+            sprawdz(f'{wz["nazwa"]} [{tryb}]: kolejność, statystyki i ostrzeżenia zgodne ze wzorcem',
+                    k == 200 and kolejnosc == oczek['kolejnosc'] and tabela == oczek['tabela'] and ostrz == sorted(oczek['ostrzezenia']), (k, kolejnosc, tabela, ostrz))
+
+    # porównanie z tabelą organizatora NALF (fixtura dostarczona przez właściciela; pusta = pominięte)
+    org = json.loads((katalog / 'organizator_nalf_dywizja_a.json').read_text(encoding='utf-8'))
+    if org.get('wiersze'):
+        k, l = wp.api('GET', f'sportspress/v2/leagues&slug={org["liga_slug"]}&_fields=id')
+        k2, sz = wp.api('GET', f'sportspress/v2/seasons&slug={org["sezon_slug"]}&_fields=id')
+        k3, t = wp.api('GET', f'bm/v1/table&league={l[0]["id"]}&season={sz[0]["id"]}&mode=final')
+        mapa = [(r['pos'], r['name'], r['p'], r['w'], r['d'], r['l'], r['f'], r['a'], r['pts']) for r in t['rows']]
+        wzor = [(w['poz'], w['druzyna'], w['m'], w['w'], w['r'], w['p'], w['bz'], w['bs'], w['pkt']) for w in org['wiersze']]
+        sprawdz(f'tabela final z WP zgodna z tabelą organizatora NALF (stan na {org.get("stan_na", "?")})', mapa[:len(wzor)] == wzor, [(a, b) for a, b in zip(mapa, wzor) if a != b][:5])
+    else:
+        print('POMINIĘTO porównanie z tabelą organizatora NALF: brak fixtury (tests/modules/zlote_wzorce/organizator_nalf_dywizja_a.json, wiersze puste)')
+
     # ---- błędy
     k, o = wp.api('GET', f'bm/v1/table&league={L.liga}&season={L.sezon}&mode=zly')
     sprawdz('zły tryb: 400', k == 400, (k, o))

@@ -1,0 +1,21 @@
+{
+  "nazwa": "Z2: widmowe „trwa” (bez wyniku na żywo) i trwający z wynikiem na żywo",
+  "opis": "A-B 1:0 i C-D 0:0 zakończone; A-C trwa BEZ wyniku na żywo (widmo: nie liczy się nigdzie); B-D trwa z wynikiem na żywo 2:1 (tylko live).",
+  "druzyny": ["Aaa", "Bbb", "Ccc", "Ddd"],
+  "mecze": [
+    {"h": 0, "g": 1, "wynik": [1, 0], "stan": "zakonczony"},
+    {"h": 2, "g": 3, "wynik": [0, 0], "stan": "zakonczony"},
+    {"h": 0, "g": 2, "stan": "trwa"},
+    {"h": 1, "g": 3, "stan": "trwa", "na_zywo": "2:1"}
+  ],
+  "final": {
+    "kolejnosc": ["Aaa", "Ccc", "Ddd", "Bbb"],
+    "tabela": {"Aaa": {"p": 1, "pts": 3, "gd": 1}, "Ccc": {"p": 1, "pts": 1, "gd": 0}, "Ddd": {"p": 1, "pts": 1, "gd": 0}, "Bbb": {"p": 1, "pts": 0, "gd": -1}},
+    "ostrzezenia": []
+  },
+  "live": {
+    "kolejnosc": ["Aaa", "Bbb", "Ccc", "Ddd"],
+    "tabela": {"Aaa": {"p": 1, "pts": 3, "gd": 1}, "Bbb": {"p": 2, "pts": 3, "gd": 0}, "Ccc": {"p": 1, "pts": 1, "gd": 0}, "Ddd": {"p": 2, "pts": 1, "gd": -1}},
+    "ostrzezenia": ["trwa_bez_wyniku_na_zywo"]
+  }
+}
