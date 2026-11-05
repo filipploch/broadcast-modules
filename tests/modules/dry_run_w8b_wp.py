@@ -194,26 +194,47 @@ with Instancja() as wp:
                     k == 200 and kolejnosc == oczek['kolejnosc'] and tabela == oczek['tabela'] and ostrz == sorted(oczek['ostrzezenia'])
                     and pozycje == oczek.get('pozycje', list(range(1, len(kolejnosc) + 1))), (k, kolejnosc, pozycje, tabela, ostrz))
 
-    # porównanie z tabelą organizatora NALF (fixtura dostarczona przez właściciela; pusta = pominięte)
-    org = json.loads((katalog / 'organizator_nalf_dywizja_a.json').read_text(encoding='utf-8'))
-    if org.get('wiersze'):
-        k, l = wp.api('GET', f'sportspress/v2/leagues&slug={org["liga_slug"]}&_fields=id')
-        k2, sz = wp.api('GET', f'sportspress/v2/seasons&slug={org["sezon_slug"]}&_fields=id')
-        k3, t = wp.api('GET', f'bm/v1/table&league={l[0]["id"]}&season={sz[0]["id"]}&mode=final')
-        mapa = [(r['pos'], r['name'], r['p'], r['w'], r['d'], r['l'], r['f'], r['a'], r['pts']) for r in t['rows']]
-        wzor = [(w['poz'], w['druzyna'], w['m'], w['w'], w['r'], w['p'], w['bz'], w['bs'], w['pkt']) for w in org['wiersze']]
-        sprawdz(f'tabela final z WP zgodna z tabelą organizatora NALF (stan na {org.get("stan_na", "?")})', mapa[:len(wzor)] == wzor, [(a, b) for a, b in zip(mapa, wzor) if a != b][:5])
-    else:
-        print('POMINIĘTO porównanie z tabelą organizatora NALF: brak fixtury (tests/modules/zlote_wzorce/organizator_nalf_dywizja_a.json, wiersze puste)')
+    # złoty wzorzec NALF ze stanu 5.11.2026 (WAŻNY TYLKO DLA TEGO STANU): mecze z API organizatora + tabele organizatora; tabela final z kodu kontra kolumna „wg regulaminu”
+    import html
+    nalf = json.loads((katalog / 'nalf_2026-11-05.json').read_text(encoding='utf-8'))
+    for dyw, dane in nalf['dywizje'].items():
+        druzyny = sorted({m['gospodarz'] for m in dane['mecze']} | {m['gosc'] for m in dane['mecze']})
 
-    # drużyna z termami ligi i sezonu, ale BEZ meczów w tej lidze (jak drużyny NALF przypisane do wszystkich lig): nie ma wiersza z zerem meczów
-    Z = Liga(wp, n=4, nazwa='bez-meczow')
-    Z.dodaj(0, 1, (1, 0), stan='zakonczony')
-    k, zo = Z.tabela('final')
-    sprawdz('drużyny bez meczów w lidze nie trafiają do tabeli (tylko A i B z meczem)', k == 200 and sorted(r['name'] for r in zo['rows']) == ['Aaa', 'Bbb'], (k, [r['name'] for r in zo['rows']]))
-    Z2 = Liga(wp, n=3, nazwa='bez-meczow-2')
-    k, zo = Z2.tabela('final')
-    sprawdz('liga bez żadnych meczów: wszystkie drużyny z termami (tabela zerowa)', k == 200 and len(zo['rows']) == 3 and all(r['p'] == 0 for r in zo['rows']), (k, zo.get('rows')))
+        class LigaNalf(Liga):
+            NAZWY = druzyny
+        N = LigaNalf(wp, n=len(druzyny), nazwa='nalf' + dyw[-1].lower())
+        idx = {nazwa: i for i, nazwa in enumerate(druzyny)}
+        for m in dane['mecze']:
+            N.dodaj(idx[m['gospodarz']], idx[m['gosc']], tuple(m['wynik']), stan='zakonczony', data=m['data'] + 'T12:00:00')
+        k, t = N.tabela('final')
+        wiersze = [(html.unescape(r['name']), r['p'], r['w'], r['d'], r['l'], r['f'], r['a'], r['pts'], r['pos']) for r in t['rows']] if k == 200 else []
+        oczek = [(w['druzyna'], w['m'], w['z'], w['r'], w['p'], w['gz'], w['gs'], w['pkt'], w['poz_regulamin']) for w in dane['tabela']]
+        sprawdz(f'Złoty wzorzec NALF 5.11.2026, {dyw}: kolejność, statystyki (M, Z, R, P, GZ, GS, Pkt) i pozycje wg regulaminu zgodne z kodem', k == 200 and wiersze == oczek
+                and not any(r['pelny_remis'] for r in t['rows']) and t['needs_draw'] is False, [(a, b) for a, b in zip(wiersze, oczek) if a != b][:4] or (k, len(wiersze), len(oczek)))
+        poz_strony = {w['druzyna']: w['poz_strona'] for w in dane['tabela']}
+        roznice = sorted(n for (n, *_, poz) in wiersze if poz != poz_strony[n])
+        sprawdz(f'Złoty wzorzec NALF 5.11.2026, {dyw}: jedyna różnica względem pozycji na stronie organizatora to ' + ('Drink Team (wg regulaminu 3, na stronie 2)' if dyw.endswith('B') else 'brak różnic'),
+                roznice == (['Drink Team'] if dyw.endswith('B') else []), roznice)
+
+    # przypadki brzegowe z próby ręcznej na prawdziwych danych kopii (Dywizja A): duplikat, drużyna spoza ligi, flaga, kosz, a potem cofnięcie (proba_tabela_przygotuj.py)
+    import tempfile
+    import proba_tabela_przygotuj as pp
+    k, l = wp.api('GET', 'sportspress/v2/leagues&slug=nalf-l19&_fields=id')
+    k, sz = wp.api('GET', 'sportspress/v2/seasons&slug=nalf-s61&_fields=id')
+    kdyw = f'bm/v1/table&league={l[0]["id"]}&season={sz[0]["id"]}&mode=final'
+    k, przed = wp.api('GET', kdyw)
+    stan_pliku = pathlib.Path(tempfile.mkdtemp(prefix='bm-proba-tabela-')) / 'stan.json'
+    sprawdz('kopia: Dywizja A przed przypadkami brzegowymi nie ma ostrzeżeń', k == 200 and przed['warnings'] == [] and przed['matches_counted'] > 0, (k, przed.get('warnings')))
+    pp.wykonaj('wszystko', api=wp.api, sciezka_stanu=stan_pliku, wypisz=lambda *a: None)
+    k, po = wp.api('GET', kdyw)
+    typy = sorted({w['typ'] for w in po['warnings']})
+    sprawdz('przypadki brzegowe na danych kopii: ostrzeżenia o duplikacie, drużynie spoza ligi i zniknięciu ze źródła', typy == ['druzyna_spoza_ligi', 'duplikat_meczu', 'zniknal_ze_zrodla'], typy)
+    sprawdz('liczba meczów w tabeli: +1 duplikat, +1 mecz z obcą drużyną, −1 mecz w koszu; mecz z flagą zostaje', po['matches_counted'] == przed['matches_counted'] + 1, (przed['matches_counted'], po['matches_counted']))
+    sprawdz('mecz z drużyną spoza ligi nie dodaje wiersza obcej drużyny do tabeli', all('Obca' not in r['name'] for r in po['rows']) and len(po['rows']) == len(przed['rows']), [r['name'] for r in po['rows']])
+    pp.wykonaj('cofnij', api=wp.api, sciezka_stanu=stan_pliku, wypisz=lambda *a: None)
+    k, wroc = wp.api('GET', kdyw)
+    sprawdz('cofnięcie przywraca tabelę i ostrzeżenia sprzed przypadków brzegowych', [(r['name'], r['pos'], r['p'], r['pts'], r['gd']) for r in wroc['rows']] == [(r['name'], r['pos'], r['p'], r['pts'], r['gd']) for r in przed['rows']]
+            and wroc['warnings'] == [] and wroc['matches_counted'] == przed['matches_counted'], (wroc['matches_counted'], wroc['warnings']))
 
     # ---- błędy
     k, o = wp.api('GET', f'bm/v1/table&league={L.liga}&season={L.sezon}&mode=zly')

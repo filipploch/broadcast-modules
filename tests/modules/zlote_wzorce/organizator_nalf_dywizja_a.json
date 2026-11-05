@@ -1,8 +1,0 @@
-{
-  "opis": "MIEJSCE NA FIXTURĘ: aktualna tabela organizatora NALF (Dywizja A, sezon Jesień 2026), dostarczana przez właściciela. Test porównuje ją z tabelą final z WP dla tej samej ligi i sezonu (slugi w WP: nalf-l19, nalf-s61); WP musi mieć te same mecze (import i „Pobierz” na ten sam dzień). Format wierszy: poz, druzyna (nazwa jak w WP), m, w, r, p, bz, bs, pkt. Pusta lista wierszy = porównanie pominięte.",
-  "zrodlo": "",
-  "stan_na": "",
-  "liga_slug": "nalf-l19",
-  "sezon_slug": "nalf-s61",
-  "wiersze": []
-}
