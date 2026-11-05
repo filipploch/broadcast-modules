@@ -12,9 +12,9 @@ from urllib.parse import parse_qs, urlparse
 import harness
 
 ODP = {'ok': True, 'mode': 'final', 'league': 820, 'season': 819, 'criteria': 't1-nalf', 'computed_at': '2026-11-05T12:34:56+00:00', 'engine': 'SAH2H',
-       'matches_counted': 6, 'live_matches': 0, 'columns': [{'klucz': 'pts', 'nazwa': 'Pts', 'etykieta': 'Pkt'}],
+       'matches_counted': 6, 'live_matches': 0, 'needs_draw': True, 'interpretacja': {'wariant': 'do potwierdzenia z organizatorem'}, 'columns': [{'klucz': 'pts', 'nazwa': 'Pts', 'etykieta': 'Pkt'}],
        'rows': [{'pos': 1, 'team_id': 7, 'name': 'Nowy Ład', 'name14': 'Nowy Ład', 'short': 'NOW', 'p': 7, 'w': 6, 'd': 1, 'l': 0, 'f': 52, 'a': 14, 'gd': 38, 'pts': 19, 'wa': 3},
-                {'pos': 2, 'team_id': 8, 'name': 'Boanerges Kraków', 'name14': 'Boanerges', 'short': 'BOA', 'p': 6, 'w': 5, 'd': 1, 'l': 0, 'f': 31, 'a': 13, 'gd': 18, 'pts': 16, 'wa': 2}],
+                {'pos': 2, 'team_id': 8, 'name': 'Boanerges Kraków', 'name14': 'Boanerges', 'short': 'BOA', 'p': 6, 'w': 5, 'd': 1, 'l': 0, 'f': 31, 'a': 13, 'gd': 18, 'pts': 16, 'wa': 2, 'pelny_remis': True}],
        'warnings': [{'typ': 'duplikat_meczu', 'mecz_id': 5, 'mecz': 'A - B', 'opis': 'Ta sama para występuje 2 razy.', 'wplyw': 'liczona wielokrotnie (2 razy)'}]}
 
 
@@ -91,6 +91,8 @@ def make(APP, modul):
                               r['goals_scored'], r['goals_lost'], r['goal_difference'], r['points']), (1, 'Nowy Ład', 'Nowy Ład', 'NOW', 7, 6, 1, 0, 52, 14, 38, 19))
             self.assertEqual(d['rows'][1]['team_name_14'], 'Boanerges')
             self.assertEqual((d['engine'], d['matches_counted'], d['computed_at']), ('SAH2H', 6, '2026-11-05T12:34:56+00:00'))
+            self.assertEqual((r['pelny_remis'], d['rows'][1]['pelny_remis'], d['needs_draw']), (False, True, True))              # flaga pełnego remisu i losowania
+            self.assertIn('do potwierdzenia', d['interpretacja']['wariant'])
             self.assertEqual(d['warnings'][0]['typ'], 'duplikat_meczu')                                      # ostrzeżenia z WP dochodzą do panelu bez zmian
 
         def test_tryb_live_idzie_do_wp_i_kazde_zadanie_to_nowe_zapytanie_bez_bufora(self):
@@ -169,6 +171,6 @@ def make_node():
             skrypt = Path(__file__).resolve().parent / 'js' / 'tabela_widok_test.js'
             r = subprocess.run([node, str(skrypt)], capture_output=True, text=True, encoding='utf-8', timeout=120)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn('OK 4 przypadków', r.stdout)
+            self.assertIn('OK 5 przypadków', r.stdout)
 
     return WpTabelaNode

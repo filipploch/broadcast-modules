@@ -156,10 +156,23 @@ def oczekiwana_tabela(mecze, mode, nazwy=Liga.NAZWY):
                     m[x][1] += f - c
         return m
     kolejnosc = []
+    klucz = {}
     for pts in sorted({s['pts'] for s in st.values()}, reverse=True):
         grupa = [i for i in st if st[i]['pts'] == pts]
         if len(grupa) > 1:
             mm = mala(set(grupa))
             grupa.sort(key=lambda i: (-mm[i][0], -mm[i][1], -st[i]['gd'], -st[i]['f'], nazwy[i]))
+            for i in grupa:
+                klucz[i] = (mm[i][0], mm[i][1], st[i]['gd'], st[i]['f'])
         kolejnosc += grupa
-    return kolejnosc, st
+    # pozycje: kolejne numery; wspólna (numeracja 1,2,2,4) tylko przy pełnym remisie a-d; flaga „wymaga losowania” tylko dla drużyn z rozegranym meczem
+    pozycje, remis = {}, set()
+    for n, i in enumerate(kolejnosc):
+        if n and st[i]['pts'] == st[kolejnosc[n - 1]]['pts'] and i in klucz and klucz.get(kolejnosc[n - 1]) == klucz[i]:
+            pozycje[i] = pozycje[kolejnosc[n - 1]]
+        else:
+            pozycje[i] = n + 1
+    for i in kolejnosc:
+        if sum(1 for j in kolejnosc if pozycje[j] == pozycje[i]) > 1 and st[i]['p'] > 0:
+            remis.add(i)
+    return kolejnosc, st, pozycje, remis

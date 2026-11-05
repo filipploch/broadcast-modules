@@ -27,7 +27,7 @@ function srodowisko(odpowiedzi) {
 }
 
 const wiersz = (n) => ({ position: n, team_name: 'D' + n, points: 10 - n });
-const oficjalna = { ok: true, mode: 'final', rows: [wiersz(1), wiersz(2)], warnings: [], computed_at: '2026-11-05T12:34:56+00:00', engine: 'SAH2H', live_matches: 0 };
+const oficjalna = { ok: true, mode: 'final', rows: [wiersz(1), wiersz(2)], warnings: [], computed_at: '2026-11-05T12:34:56+00:00', engine: 'SAH2H', live_matches: 0, needs_draw: true, interpretacja: { wariant: 'do potwierdzenia' } };
 const wirtualna = { ok: true, mode: 'live', rows: [wiersz(2), wiersz(1)], warnings: [{ mecz: 'A - B', opis: 'Mecz trwa, ale nie ma wyniku na żywo.', wplyw: 'pominięty w tabeli live' }], computed_at: '2026-11-05T12:35:00+00:00', engine: 'SAH2H', live_matches: 1 };
 const eq = (a, b) => assert.deepStrictEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
 const wyniki = [];
@@ -40,6 +40,7 @@ await ok('tabela oficjalna: jedno żądanie final, dane w kształcie widoku', as
   eq(e.zadania, ['/api/wp-tabela?league_id=12&mode=final']);
   eq(d.official.map((r) => r.team_name), ['D1', 'D2']);
   eq([d.virtual, d.has_live, d.zrodlo, d.engine], [[], false, 'wp', 'SAH2H']);
+  eq([d.needs_draw, d.interpretacja.wariant], [true, 'do potwierdzenia']);
 });
 
 await ok('tabela wirtualna: dwa żądania (final i live), has_live z liczby meczów live, ostrzeżenia z trybu live', async () => {

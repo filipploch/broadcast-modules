@@ -24,6 +24,7 @@
                 official: oficjalna.rows, virtual: wirt ? wirt.rows : [], has_live: !!(wirt && wirt.live_matches > 0),
                 live_matches: wirt ? wirt.live_matches : 0, warnings: ostrzezenia, computed_at: (wirt || oficjalna).computed_at || '',
                 engine: (wirt || oficjalna).engine || '', zrodlo: 'wp',
+                needs_draw: !!(wirt ? wirt.needs_draw : oficjalna.needs_draw), interpretacja: (wirt || oficjalna).interpretacja || {},
             };
         });
     }

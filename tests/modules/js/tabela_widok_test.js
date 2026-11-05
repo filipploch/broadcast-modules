@@ -40,8 +40,8 @@ function uruchom(odpowiedzi) {
   return { ctx, wyslane, zadania };
 }
 
-const wiersz = (n, nazwa) => ({ position: n, team_name: nazwa, team_name_14: nazwa, team_short_name: nazwa.slice(0, 3).toUpperCase(), games: 2, wins: 1, draws: 1, loses: 0, goals_scored: 3, goals_lost: 1, goal_difference: 2, points: 4 });
-const ok = (rows, warnings = [], live = 0) => ({ json: { ok: true, mode: 'final', rows, warnings, computed_at: '2026-11-05T12:34:56+00:00', engine: 'SAH2H', live_matches: live } });
+const wiersz = (n, nazwa, remis = false) => ({ pelny_remis: remis, position: n, team_name: nazwa, team_name_14: nazwa, team_short_name: nazwa.slice(0, 3).toUpperCase(), games: 2, wins: 1, draws: 1, loses: 0, goals_scored: 3, goals_lost: 1, goal_difference: 2, points: 4 });
+const ok = (rows, warnings = [], live = 0, losowanie = false) => ({ json: { ok: true, mode: 'final', needs_draw: losowanie, rows, warnings, computed_at: '2026-11-05T12:34:56+00:00', engine: 'SAH2H', live_matches: live } });
 const eq = (x, y) => assert.deepStrictEqual(JSON.parse(JSON.stringify(x)), JSON.parse(JSON.stringify(y)));
 const czeka = () => new Promise((r) => setTimeout(r, 20));
 const wyniki = [];
@@ -91,6 +91,23 @@ await przypadek('tabela wirtualna: pobiera final i live, ma notkę o trwających
   eq(e.wyslane[0][0], 'virtual');
   eq([e.wyslane[0][1].official[0].team_name, e.wyslane[0][1].virtual[0].team_name], ['Alfa', 'Beta']);
   assert.ok(kontener.children.some((c) => (c.textContent || '').includes('trwających meczów')) || kontener._html.includes('trwających meczów'));
+});
+
+await przypadek('pełny remis: wspólna pozycja z gwiazdką i wiersz „wymaga losowania”; bez remisu bez wiersza', async () => {
+  const e = uruchom(() => ok([wiersz(1, 'Alfa'), wiersz(2, 'Beta', true), wiersz(2, 'Gama', true), wiersz(4, 'Delta')], [], 0, true));
+  const kontener = el();
+  e.ctx._renderStandingsTab('table', { league_id: 7 }, kontener);
+  await czeka();
+  const los = kontener.children.find((c) => c.id === 'wp-tabela-losowanie');
+  assert.ok(los && los.textContent.includes('wymaga losowania'));
+  const tabela = kontener.children.find((c) => c.children && c.children.length === 2);
+  const komorki = tabela.children[1].children.map((tr) => tr._html.match(/>([0-9*]+)<\/td>/)[1]);
+  eq(komorki, ['1', '2*', '2*', '4']);
+  const e2 = uruchom(() => ok([wiersz(1, 'Alfa'), wiersz(2, 'Beta')]));
+  const k2 = el();
+  e2.ctx._renderStandingsTab('table', { league_id: 7 }, k2);
+  await czeka();
+  assert.ok(!k2.children.some((c) => c.id === 'wp-tabela-losowanie'));
 });
 
 await przypadek('brak wybranej ligi: komunikat bez żądań do WP', async () => {

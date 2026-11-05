@@ -2199,6 +2199,13 @@ function _renderStandingsTab(tabId, data, container) {
             info.style.cssText = 'color:#8ab4f8;font-size:10px;padding:2px 6px;margin:0;';
             info.textContent = 'Tabela z WP' + (d.computed_at ? ' policzona ' + WpTabela.godzina(d.computed_at) : '') + '.';
             container.appendChild(info);
+            if (d.needs_draw) {                         // pełny remis w kryteriach a-d (regulamin 5.11): wspólna pozycja i losowanie (e)
+                var los = document.createElement('p');
+                los.id = 'wp-tabela-losowanie';
+                los.style.cssText = 'color:#f0ad4e;font-size:10px;padding:2px 6px;margin:0;';
+                los.textContent = '* Pełny remis w kryteriach a-d: wspólna pozycja, wymaga losowania (e).';
+                container.appendChild(los);
+            }
             if (d.warnings && d.warnings.length) {
                 var ost = document.createElement('div');
                 ost.id = 'wp-tabela-ostrzezenia';
@@ -2242,7 +2249,7 @@ function _renderStandingsTab(tabId, data, container) {
             tr.style.borderBottom = '1px solid #2a2a2a';
             var br = row.goal_difference > 0 ? '+' + row.goal_difference : row.goal_difference;
             tr.innerHTML =
-                '<td style="padding:3px 2px;text-align:center;color:#aaa;">' + (idx + 1) + '</td>' +
+                '<td style="padding:3px 2px;text-align:center;color:#aaa;">' + (row.position || (idx + 1)) + (row.pelny_remis ? '*' : '') + '</td>' +
                 '<td style="padding:3px 4px;">' + (row.team_short_name || row.team_name) + '</td>' +
                 '<td style="padding:3px 2px;text-align:center;">' + row.games + '</td>' +
                 '<td style="padding:3px 2px;text-align:center;">' + row.wins + '</td>' +

@@ -12,6 +12,11 @@ from wp_instancja import Instancja, Liga, oczekiwana_tabela  # noqa: E402
 wyniki = []
 
 
+def typ_ostrz(o, t):
+    return [w for w in o['warnings'] if w['typ'] == t]
+
+
+
 def sprawdz(opis, warunek, szczegol=''):
     wyniki.append((opis, bool(warunek)))
     print(('OK   ' if warunek else 'BŁĄD ') + opis + ((' | ' + str(szczegol)[:600]) if (not warunek and szczegol != '') else ''))
@@ -20,7 +25,7 @@ def sprawdz(opis, warunek, szczegol=''):
 def porownaj(opis, liga, mode, kolejnosc_stat):
     """Tabela z WP kontra niezależne wyliczenie (kolejność i statystyki)."""
     k, o = liga.tabela(mode)
-    kol, st = kolejnosc_stat
+    kol, st, poz, remis = kolejnosc_stat
     uczestnicy = {x for m in liga.mecze for x in (m['h'], m['g']) if x is not None}      # tabela ma tylko drużyny, które mają jakikolwiek mecz w lidze
     kol = [i for i in kol if i in uczestnicy]
     if k != 200:
@@ -29,8 +34,14 @@ def porownaj(opis, liga, mode, kolejnosc_stat):
     ids = [r['team_id'] for r in o['rows']]
     oczek = [liga.druzyny[i] for i in kol]
     statystyki_ok = len(o['rows']) == len(kol) and all(all(r[c] == st[kol[n]][c] for c in ('p', 'w', 'd', 'l', 'f', 'a', 'gd', 'pts')) for n, r in enumerate(o['rows']))
-    sprawdz(opis, ids == oczek and statystyki_ok and [r['pos'] for r in o['rows']] == list(range(1, len(kol) + 1)),
-            ([r['name'] for r in o['rows']], [liga.NAZWY[i] for i in kol], [(r['name'], r['pts'], r['gd']) for r in o['rows']]))
+    # pozycje i flagi pełnego remisu: oracle liczy je dla wszystkich drużyn, tabela ma tylko uczestników; numeracja 1,2,2,4 liczona od wierszy tabeli
+    pozycje_oczek = []
+    for n, i in enumerate(kol):
+        pozycje_oczek.append(pozycje_oczek[n - 1] if n and poz[i] == poz[kol[n - 1]] else n + 1)
+    pozycje_ok = [r['pos'] for r in o['rows']] == pozycje_oczek
+    remis_ok = {r['team_id'] for r in o['rows'] if r['pelny_remis']} == {liga.druzyny[i] for i in remis if i in uczestnicy} and o['needs_draw'] == bool(remis & uczestnicy)
+    sprawdz(opis, ids == oczek and statystyki_ok and pozycje_ok and remis_ok,
+            ([r['name'] for r in o['rows']], [liga.NAZWY[i] for i in kol], [(r['name'], r['pos'], r['pts'], r['gd'], r['pelny_remis']) for r in o['rows']], pozycje_oczek))
     return o
 
 
@@ -93,7 +104,37 @@ with Instancja() as wp:
     o = porownaj('remis w punktach: bezpośrednie spotkania przed różnicą bramek ogółem (zgodnie z regulaminem NALF)', H, 'final', oczekiwana_tabela(H.mecze, 'final'))
     nazwy = [r['name'] for r in o['rows']]
     sprawdz('przykład: B przed A mimo gorszej różnicy bramek (kolejność niezależnego wyliczenia = tabela WP)', nazwy.index('Bbb') < nazwy.index('Aaa') if 'Bbb' in nazwy and 'Aaa' in nazwy else False, nazwy)
-    sprawdz('pozycja = numer wiersza także przy remisie punktowym (SAH2H daje wspólną pozycję, pomijamy ją)', [r['pos'] for r in o['rows']] == list(range(1, len(o['rows']) + 1)))
+    sprawdz('remis w punktach rozstrzygnięty kryterium a: pozycje są kolejnymi numerami (bez wspólnej), brak flagi pełnego remisu', [r['pos'] for r in o['rows']] == list(range(1, len(o['rows']) + 1))
+            and not any(r['pelny_remis'] for r in o['rows']) and o['needs_draw'] is False and not typ_ostrz(o, 'pelny_remis'), [(r['name'], r['pos']) for r in o['rows']])
+
+    # ---- kryteria b, c, d po kolei i pełny remis (regulamin 5.11; pozycja wspólna TYLKO przy pełnym remisie a-d)
+    def mini_liga(nazwa, mecze, n=3):
+        K = Liga(wp, n=n, nazwa=nazwa)
+        for h, g, w in mecze:
+            K.dodaj(h, g, w, stan='zakonczony')
+        k, t = K.tabela('final')
+        return K, t, [(r['name'], r['pos']) for r in t['rows']]
+    # b: po 3 pkt z meczów bezpośrednich (A wygrało 1:0, B 2:0); różnica w meczach bezpośrednich: B +1, A -1
+    K, t, wiersze = mini_liga('kb', [(0, 1, (1, 0)), (1, 0, (2, 0))])
+    sprawdz('kryterium b: równe punkty i bilans bezpośredni, decyduje różnica bramek w meczach bezpośrednich (B przed A), pozycje 1 i 2', wiersze == [('Bbb', 1), ('Aaa', 2)] and not t['needs_draw'], wiersze)
+    # c: mecz bezpośredni remis, A i B po 4 pkt, różnica bramek ogółem A +3, B +1
+    K, t, wiersze = mini_liga('kc', [(0, 1, (1, 1)), (0, 2, (3, 0)), (1, 2, (1, 0))])
+    sprawdz('kryterium c: remis bezpośredni, decyduje różnica bramek ogółem (A przed B), pozycje 1 i 2', wiersze[:2] == [('Aaa', 1), ('Bbb', 2)] and not t['needs_draw'], wiersze)
+    # d: mecz bezpośredni remis, różnica ogółem równa (+1), A strzeliło 3, B 2
+    K, t, wiersze = mini_liga('kd', [(0, 1, (1, 1)), (0, 2, (2, 1)), (1, 2, (1, 0))])
+    sprawdz('kryterium d: równa różnica bramek ogółem, decyduje większa liczba strzelonych bramek (A przed B), pozycje 1 i 2', wiersze[:2] == [('Aaa', 1), ('Bbb', 2)] and not t['needs_draw'], wiersze)
+    # pełny remis: A-B 0:0, C-D 2:0 i 0:2 (rewanż): A i B po 1 pkt, C i D po 3 pkt, wszystkie kryteria a-d równe w obu parach
+    K, t, wiersze = mini_liga('kpr', [(0, 1, (0, 0)), (2, 3, (2, 0)), (3, 2, (2, 0))], n=4)
+    sprawdz('pełny remis a-d (równe punkty, bilans bezpośredni, różnica i bramki): wspólne pozycje 1,1,3,3 i flaga „wymaga losowania”', [r['pos'] for r in t['rows']] == [1, 1, 3, 3] and t['needs_draw'] is True
+            and all(r['pelny_remis'] for r in t['rows']) and len(typ_ostrz(t, 'pelny_remis')) == 2, [(r['name'], r['pos'], r['pelny_remis']) for r in t['rows']])
+    sprawdz('ostrzeżenie o pełnym remisie wymienia drużyny, „wymaga losowania” i wspólną pozycję', 'losowania' in typ_ostrz(t, 'pelny_remis')[0]['opis'] and 'Ccc' in typ_ostrz(t, 'pelny_remis')[0]['opis']
+            and typ_ostrz(t, 'pelny_remis')[0]['wplyw'] == 'wspólna pozycja 1', typ_ostrz(t, 'pelny_remis'))
+    sprawdz('odpowiedź opisuje przyjęte czytanie niejasnych zapisów jako wariant do potwierdzenia', 'do potwierdzenia' in t['interpretacja']['wariant'] and 'różnica bramek (nie iloraz)' in t['interpretacja']['b_stosunek']
+            and 'jeden przebieg' in t['interpretacja']['mala_tabela_5_12'], t['interpretacja'])
+    # drużyny bez żadnego meczu (początek sezonu): wspólna pozycja, ale bez flagi losowania
+    K, t, wiersze = mini_liga('kzero', [], n=3)
+    sprawdz('liga bez rozegranych meczów: wspólna pozycja 1 dla wszystkich, ale bez flagi „wymaga losowania”', [r['pos'] for r in t['rows']] == [1, 1, 1] and t['needs_draw'] is False and not typ_ostrz(t, 'pelny_remis'),
+            [(r['name'], r['pos']) for r in t['rows']])
 
     # ---- etap 2: ostrzeżenia spójności (d); nie blokują, tabela zawsze się liczy
     W = Liga(wp, nazwa='ostrz')
@@ -148,8 +189,10 @@ with Instancja() as wp:
             kolejnosc = [nazwy_wp[r['team_id']] for r in o['rows']]
             tabela = {nazwy_wp[r['team_id']]: {'p': r['p'], 'pts': r['pts'], 'gd': r['gd']} for r in o['rows']}
             ostrz = sorted(w['typ'] for w in o['warnings'] if w['typ'] != 'konfiguracja')
-            sprawdz(f'{wz["nazwa"]} [{tryb}]: kolejność, statystyki i ostrzeżenia zgodne ze wzorcem',
-                    k == 200 and kolejnosc == oczek['kolejnosc'] and tabela == oczek['tabela'] and ostrz == sorted(oczek['ostrzezenia']), (k, kolejnosc, tabela, ostrz))
+            pozycje = [r['pos'] for r in o['rows']]
+            sprawdz(f'{wz["nazwa"]} [{tryb}]: kolejność, pozycje, statystyki i ostrzeżenia zgodne ze wzorcem',
+                    k == 200 and kolejnosc == oczek['kolejnosc'] and tabela == oczek['tabela'] and ostrz == sorted(oczek['ostrzezenia'])
+                    and pozycje == oczek.get('pozycje', list(range(1, len(kolejnosc) + 1))), (k, kolejnosc, pozycje, tabela, ostrz))
 
     # porównanie z tabelą organizatora NALF (fixtura dostarczona przez właściciela; pusta = pominięte)
     org = json.loads((katalog / 'organizator_nalf_dywizja_a.json').read_text(encoding='utf-8'))

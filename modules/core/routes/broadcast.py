@@ -158,10 +158,10 @@ def register_routes(app, exclude=None):
         def wiersz(r):               # nazwy pól jak w dotychczasowej tabeli panelu i nakładek
             return {'position': r.get('pos'), 'wp_team_id': r.get('team_id'), 'team_name': r.get('name') or '', 'team_name_14': r.get('name14') or r.get('name') or '',
                     'team_short_name': r.get('short') or '', 'games': r.get('p', 0), 'wins': r.get('w', 0), 'draws': r.get('d', 0), 'loses': r.get('l', 0),
-                    'goals_scored': r.get('f', 0), 'goals_lost': r.get('a', 0), 'goal_difference': r.get('gd', 0), 'points': r.get('pts', 0), 'away_wins': r.get('wa', 0)}
+                    'goals_scored': r.get('f', 0), 'goals_lost': r.get('a', 0), 'goal_difference': r.get('gd', 0), 'points': r.get('pts', 0), 'away_wins': r.get('wa', 0), 'pelny_remis': bool(r.get('pelny_remis'))}
         return jsonify({'ok': True, 'mode': odp.get('mode', mode), 'rows': [wiersz(r) for r in odp['rows']], 'warnings': odp.get('warnings') or [],
                         'computed_at': odp.get('computed_at', ''), 'engine': odp.get('engine', ''), 'matches_counted': odp.get('matches_counted', 0),
-                        'live_matches': odp.get('live_matches', 0)})
+                        'live_matches': odp.get('live_matches', 0), 'needs_draw': bool(odp.get('needs_draw')), 'interpretacja': odp.get('interpretacja') or {}})
 
     # -- W8a: zapis stanu i wyniku meczu do WP (kolejka, wyłącznik) i świadome zakończenie meczu
 

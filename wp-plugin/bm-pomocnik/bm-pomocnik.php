@@ -216,7 +216,8 @@ function bm_event_source_state($req) {
  * Reguły jawnego stanu (bm_state): ZAKONCZONY liczy się zawsze (także z flagą bm_zrodlo_brak, z ostrzeżeniem); mecz z natywnym wynikiem bez bm_state to stan niejawny =
  * zakończony (mecze z pełnego importu). NIEROZPOCZĘTY nigdy (także z resztkowym wynikiem natywnym). TRWA: tryb final nigdy, tryb live tylko z niepustym wynikiem na żywo
  * (bm_live_score) i bez flagi bm_zrodlo_brak; wynik na żywo jest podstawiany w pamięci. Wersje pinowane: SportsPress 2.7.31, Advanced H2H 2.2.0 (zależność od wnętrza klas).
- * Pozycja w odpowiedzi = numer wiersza (SAH2H daje drużynom z równymi punktami wspólną pozycję; losowanie poza systemem).
+ * Pozycje (regulamin NALF 5.11-5.12): kolejne numery; wspólna pozycja TYLKO przy pełnym remisie w kryteriach a-d (wtedy wiersze mają pelny_remis, odpowiedź needs_draw=true,
+ * ostrzeżenie „pelny_remis”: wymaga losowania). Niejasne zapisy regulaminu (bilans, stosunek bramek, mała tabela) czytane tak, jak opisuje pole interpretacja: wariant do potwierdzenia.
  * Odpowiedź: mode, columns (klucz, nazwa, etykieta), rows, matches_counted, live_matches, warnings (typ, mecz, opis, wplyw), engine, criteria, computed_at.
  * ------------------------------------------------------------------------------------------------------------------------------------------------ */
 const BM_TABELA_VID = 900000001;
@@ -263,6 +264,7 @@ function bm_table_compute($league, $season, $mode, $criteria) {
 	$ov = [];                 // id meczu => wyniki podstawiane zamiast natywnych (pusta tablica = mecz nie liczy się)
 	$ostrz = [];
 	$liczone = 0; $live = 0;
+	$mecze_liczone = [];      // [drużyna 1, drużyna 2, bramki 1, bramki 2] meczów, które realnie weszły do tabeli
 	$pary = [];
 	$nazwa_meczu = function ($id, $teams) {
 		$n = array_map(fn($t) => $t ? get_the_title($t) : '?', $teams);
@@ -318,6 +320,13 @@ function bm_table_compute($league, $season, $mode, $criteria) {
 				}
 			} else {
 				$ov[$id] = [];
+			}
+		}
+		if ($liczy && count($teams) >= 2) {
+			if ($rodzaj === 'trwa' && $zywo !== null) {
+				$mecze_liczone[] = [$teams[0], $teams[1], $zywo[0], $zywo[1]];
+			} elseif (is_array($res) && isset($res[$teams[0]]['goals'], $res[$teams[1]]['goals'])) {
+				$mecze_liczone[] = [$teams[0], $teams[1], (int) $res[$teams[0]]['goals'], (int) $res[$teams[1]]['goals']];
 			}
 		}
 		if ($liczy) { $liczone++; if (count($teams) >= 2 && isset($pary[$teams[0] . '-' . $teams[1]])) $pary[$teams[0] . '-' . $teams[1]][count($pary[$teams[0] . '-' . $teams[1]]) - 1]['liczony'] = true; }
@@ -383,7 +392,54 @@ function bm_table_compute($league, $season, $mode, $criteria) {
 		foreach ($kolumny as $k) $w[$k['klucz']] = isset($r[$k['klucz']]) && is_numeric($r[$k['klucz']]) ? (int) $r[$k['klucz']] : 0;
 		$wiersze[] = $w;
 	}
-	return ['rows' => $wiersze, 'columns' => $kolumny, 'warnings' => $ostrz, 'matches_counted' => $liczone, 'live_matches' => $live, 'engine' => $engine];
+	// Pozycje (regulamin NALF 5.11): kolejne numery; WSPÓLNA pozycja tylko przy pełnym remisie we wszystkich kryteriach a-d, wtedy flaga „wymaga losowania” (e).
+	// Klucz remisu drużyn o równych punktach (a: punkty z meczów bezpośrednich między nimi, b: różnica bramek w tych meczach, c: różnica bramek ogółem, d: bramki strzelone ogółem);
+	// mała tabela liczona dla całej grupy o równych punktach, jak w kryteriach SAH2H (jeden przebieg).
+	$wg_pkt = [];
+	foreach ($wiersze as $i => $w) $wg_pkt[$w['pts']][] = $i;
+	$klucz = [];
+	foreach ($wg_pkt as $idx) {
+		if (count($idx) < 2) continue;
+		$mini = [];
+		foreach ($idx as $i) $mini[$wiersze[$i]['team_id']] = [0, 0];
+		foreach ($mecze_liczone as [$a, $b, $ga, $gb]) {
+			if ($a === $b || !isset($mini[$a], $mini[$b])) continue;
+			$mini[$a][0] += $ga > $gb ? 3 : ($ga === $gb ? 1 : 0);
+			$mini[$b][0] += $gb > $ga ? 3 : ($ga === $gb ? 1 : 0);
+			$mini[$a][1] += $ga - $gb;
+			$mini[$b][1] += $gb - $ga;
+		}
+		foreach ($idx as $i) $klucz[$wiersze[$i]['team_id']] = [$mini[$wiersze[$i]['team_id']][0], $mini[$wiersze[$i]['team_id']][1], $wiersze[$i]['gd'], $wiersze[$i]['f']];
+	}
+	foreach ($wiersze as $i => &$w) {
+		$w['pelny_remis'] = false;
+		$poprzedni = $i > 0 ? $wiersze[$i - 1] : null;
+		if ($poprzedni !== null && $w['pts'] === $poprzedni['pts'] && isset($klucz[$w['team_id']], $klucz[$poprzedni['team_id']]) && $klucz[$w['team_id']] === $klucz[$poprzedni['team_id']]) {
+			$w['pos'] = $poprzedni['pos'];
+		} else {
+			$w['pos'] = $i + 1;
+		}
+	}
+	unset($w);
+	$po_pozycji = [];
+	foreach ($wiersze as $i => $w) $po_pozycji[$w['pos']][] = $i;
+	$potrzeba_losowania = false;
+	foreach ($po_pozycji as $poz => $idx) {
+		if (count($idx) < 2 || $wiersze[$idx[0]]['p'] === 0) continue;       // drużyny bez rozegranego meczu (początek sezonu) nie wymagają losowania
+		$potrzeba_losowania = true;
+		foreach ($idx as $i) $wiersze[$i]['pelny_remis'] = true;
+		$ostrz[] = ['typ' => 'pelny_remis', 'mecz_id' => 0, 'mecz' => '', 'opis' => 'Pełny remis w kryteriach a-d (punkty, bilans bezpośredni, różnica bramek ogółem, bramki strzelone): ' . implode(', ', array_map(fn($i) => $wiersze[$i]['name'], $idx)) . '; wymaga losowania (e).', 'wplyw' => 'wspólna pozycja ' . $poz];
+	}
+	$interpretacja = [
+		'wariant' => 'do potwierdzenia z organizatorem (regulamin 5.11-5.12 nie rozstrzyga)',
+		'a_bilans' => 'punkty z meczów bezpośrednich między zainteresowanymi zespołami (3/1/0), bez podziału gospodarz/gość, wszystkie takie mecze w sezonie',
+		'b_stosunek' => 'różnica bramek (nie iloraz) w meczach bezpośrednich w całym sezonie',
+		'c_d' => 'różnica bramek i bramki strzelone we wszystkich meczach ligowych tej ligi i sezonu',
+		'mala_tabela_5_12' => 'jeden przebieg małej tabeli dla całej grupy o równych punktach (bez ponownego liczenia dla podgrup); w małej tabeli kolejno punkty i różnica bramek z meczów bezpośrednich',
+		'pozycje' => 'kolejne numery; wspólna pozycja (numeracja 1,2,2,4) tylko przy pełnym remisie a-d, z flagą pelny_remis',
+	];
+	return ['rows' => $wiersze, 'columns' => $kolumny, 'warnings' => $ostrz, 'matches_counted' => $liczone, 'live_matches' => $live, 'engine' => $engine,
+		'needs_draw' => $potrzeba_losowania, 'interpretacja' => $interpretacja];
 }
 
 function bm_table_endpoint($req) {
