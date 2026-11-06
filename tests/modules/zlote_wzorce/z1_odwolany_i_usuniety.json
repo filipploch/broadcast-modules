@@ -1,0 +1,22 @@
+{
+  "nazwa": "Z1: mecze odwołane i usunięte ze źródła (flaga bm_zrodlo_brak)",
+  "opis": "A-B 2:0 i C-D 1:1 zwykłe; A-C 3:1 zakończony z flagą (zniknął ze źródła: ZOSTAJE w tabeli); B-D nierozpoczęty z flagą (odwołany: ignorowany); D-A trwa 2:0 na żywo z flagą (live go pomija).",
+  "druzyny": ["Aaa", "Bbb", "Ccc", "Ddd"],
+  "mecze": [
+    {"h": 0, "g": 1, "wynik": [2, 0], "stan": "zakonczony"},
+    {"h": 2, "g": 3, "wynik": [1, 1], "stan": "zakonczony"},
+    {"h": 0, "g": 2, "wynik": [3, 1], "stan": "zakonczony", "flaga": true},
+    {"h": 1, "g": 3, "stan": "nierozpoczety", "flaga": true},
+    {"h": 3, "g": 0, "stan": "trwa", "na_zywo": "2:0", "flaga": true}
+  ],
+  "final": {
+    "kolejnosc": ["Aaa", "Ddd", "Ccc", "Bbb"],
+    "tabela": {"Aaa": {"p": 2, "pts": 6, "gd": 4}, "Ddd": {"p": 1, "pts": 1, "gd": 0}, "Ccc": {"p": 2, "pts": 1, "gd": -2}, "Bbb": {"p": 1, "pts": 0, "gd": -2}},
+    "ostrzezenia": ["zniknal_ze_zrodla"]
+  },
+  "live": {
+    "kolejnosc": ["Aaa", "Ddd", "Ccc", "Bbb"],
+    "tabela": {"Aaa": {"p": 2, "pts": 6, "gd": 4}, "Ddd": {"p": 1, "pts": 1, "gd": 0}, "Ccc": {"p": 2, "pts": 1, "gd": -2}, "Bbb": {"p": 1, "pts": 0, "gd": -2}},
+    "ostrzezenia": ["zniknal_ze_zrodla", "zniknal_ze_zrodla"]
+  }
+}

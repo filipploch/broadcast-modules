@@ -1,0 +1,21 @@
+{
+  "nazwa": "Z3: wynik resztkowy w meczu nierozpoczętym oraz stan niejawny",
+  "opis": "A-B 1:1 i C-D 2:0 zakończone; A-C 5:0 w meczu NIEROZPOCZĘTYM (resztkowy wynik natywny: ignorowany w obu trybach); B-D 3:0 bez bm_state (stan niejawny = zakończony, jak mecze z pełnego importu).",
+  "druzyny": ["Aaa", "Bbb", "Ccc", "Ddd"],
+  "mecze": [
+    {"h": 0, "g": 1, "wynik": [1, 1], "stan": "zakonczony"},
+    {"h": 2, "g": 3, "wynik": [2, 0], "stan": "zakonczony"},
+    {"h": 0, "g": 2, "wynik": [5, 0], "stan": "nierozpoczety"},
+    {"h": 1, "g": 3, "wynik": [3, 0]}
+  ],
+  "final": {
+    "kolejnosc": ["Bbb", "Ccc", "Aaa", "Ddd"],
+    "tabela": {"Bbb": {"p": 2, "pts": 4, "gd": 3}, "Ccc": {"p": 1, "pts": 3, "gd": 2}, "Aaa": {"p": 1, "pts": 1, "gd": 0}, "Ddd": {"p": 2, "pts": 0, "gd": -5}},
+    "ostrzezenia": ["wynik_resztkowy"]
+  },
+  "live": {
+    "kolejnosc": ["Bbb", "Ccc", "Aaa", "Ddd"],
+    "tabela": {"Bbb": {"p": 2, "pts": 4, "gd": 3}, "Ccc": {"p": 1, "pts": 3, "gd": 2}, "Aaa": {"p": 1, "pts": 1, "gd": 0}, "Ddd": {"p": 2, "pts": 0, "gd": -5}},
+    "ostrzezenia": ["wynik_resztkowy"]
+  }
+}

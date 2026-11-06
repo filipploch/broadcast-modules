@@ -25,6 +25,7 @@
  *   stanu i wyniku NA ŻYWO ze źródła (nie rusza bm_seq ani natywnego wyniku); odpowiada 409 dla meczu z bm_decyduje albo bm_locked.
  * bm_zrodlo_brak (flaga meczu, ustawiana przez import): mecz zniknął ze źródła albo został w nim odwołany. Mecz nigdy nie jest usuwany; tabela (W8b) wyłącza
  *   z tabeli live mecz niezakończony z tą flagą, a zakończony zostaje w tabeli z ostrzeżeniem.
+ * W8b: GET bm/v1/table?league&season&mode=final|live: tabela ligowa na żądanie (wirtualna, baza bez zmian), opis przy funkcji bm_table_compute.
  * Natywny wynik SportsPressa (sp_results) i status "publish" są ustawiane WYŁĄCZNIE przy "zakonczony". Po zamknięciu meczu wygrywa WP:
  *   wynik, którego moduł nie wpisał albo który zmieniono po zapisie z modułu, nie jest nadpisywany (409 bm_wp_result).
  */
@@ -208,7 +209,259 @@ function bm_event_source_state($req) {
 	return bm_state_answer($id, false);
 }
 
+/* ------------------------------------------------------------------------------------------------------------------------------------------------
+ * W8b: tabela ligowa NA ŻĄDANIE: GET bm/v1/table?league=<id termu ligi>&season=<id termu sezonu>&mode=final|live[&criteria=<slug kryteriów SAH2H>]
+ * Tabela WIRTUALNA: klasa tabeli SportsPressa (z dodatkiem Advanced H2H i kryteriami "t1-nalf": bezpośrednie spotkania przed różnicą bramek ogółem) liczona na
+ * identyfikatorze bez wpisu w bazie; metadane tabeli, termy ligi i sezonu oraz wyniki meczów (sp_results) podstawia filtr odczytu NA CZAS JEDNEGO ŻĄDANIA. Baza bez zmian.
+ * Reguły jawnego stanu (bm_state): ZAKONCZONY liczy się zawsze (także z flagą bm_zrodlo_brak, z ostrzeżeniem); mecz z natywnym wynikiem bez bm_state to stan niejawny =
+ * zakończony (mecze z pełnego importu). NIEROZPOCZĘTY nigdy (także z resztkowym wynikiem natywnym). TRWA: tryb final nigdy, tryb live tylko z niepustym wynikiem na żywo
+ * (bm_live_score) i bez flagi bm_zrodlo_brak; wynik na żywo jest podstawiany w pamięci. Wersje pinowane: SportsPress 2.7.31, Advanced H2H 2.2.0 (zależność od wnętrza klas).
+ * Pozycje (regulamin NALF 5.11-5.12): kolejne numery; wspólna pozycja TYLKO przy pełnym remisie w kryteriach a-d (wtedy wiersze mają pelny_remis, odpowiedź needs_draw=true,
+ * ostrzeżenie „pelny_remis”: wymaga losowania). Niejasne zapisy regulaminu (bilans, stosunek bramek, mała tabela) czytane tak, jak opisuje pole interpretacja: wariant do potwierdzenia.
+ * Odpowiedź: mode, columns (klucz, nazwa, etykieta), rows, matches_counted, live_matches, warnings (typ, mecz, opis, wplyw), engine, criteria, computed_at.
+ * ------------------------------------------------------------------------------------------------------------------------------------------------ */
+const BM_TABELA_VID = 900000001;
+const BM_TABELA_KOLUMNY = ['p' => 'M', 'w' => 'W', 'd' => 'R', 'l' => 'P', 'f' => 'BZ', 'a' => 'BS', 'gd' => 'RB', 'pts' => 'Pkt', 'wa' => 'WyW'];
+
+/** Czy wynik natywny meczu ma rezultat (outcome) którejkolwiek drużyny: tak liczy SportsPress. */
+function bm_table_ma_wynik($res) {
+	if (!is_array($res)) return false;
+	foreach ($res as $row) if (is_array($row) && !empty($row['outcome'])) return true;
+	return false;
+}
+
+/** Wynik na żywo "g:o" -> [g, o] albo null. */
+function bm_table_live_score($s) {
+	return (is_string($s) && preg_match('/^(\d+):(\d+)$/', $s, $m)) ? [(int) $m[1], (int) $m[2]] : null;
+}
+
+/** Natywny wynik złożony z wyniku na żywo (tylko w pamięci jednego żądania). */
+function bm_table_wynik_z_zywo($teams, $g, $o) {
+	$r = $g > $o ? ['win', 'loss'] : ($g < $o ? ['loss', 'win'] : ['draw', 'draw']);
+	return [$teams[0] => ['goals' => (string) $g, 'outcome' => [$r[0]]], $teams[1] => ['goals' => (string) $o, 'outcome' => [$r[1]]]];
+}
+
+/** Wynik: ['rows','columns','warnings','matches_counted','live_matches','engine'] albo WP_Error. Nic nie zapisuje w bazie. */
+function bm_table_compute($league, $season, $mode, $criteria) {
+	$lt = get_term($league, 'sp_league');
+	$st = get_term($season, 'sp_season');
+	if (!($lt instanceof WP_Term) || !($st instanceof WP_Term)) return new WP_Error('bm_no_table', 'Nie ma takiej ligi albo sezonu w WP', ['status' => 404]);
+	$team_ids = array_map('intval', get_posts(['post_type' => 'sp_team', 'numberposts' => -1, 'posts_per_page' => -1, 'fields' => 'ids', 'tax_query' => [
+		'relation' => 'AND', ['taxonomy' => 'sp_league', 'field' => 'term_id', 'terms' => [$league]], ['taxonomy' => 'sp_season', 'field' => 'term_id', 'terms' => [$season]]]]));
+	if (!$team_ids) return new WP_Error('bm_no_table', 'Brak tabeli: liga i sezon nie mają drużyn', ['status' => 404]);
+	if (!class_exists('SP_League_Table')) return new WP_Error('bm_no_sportspress', 'SportsPress nie jest aktywny', ['status' => 500]);
+
+	$event_ids = get_posts(['post_type' => 'sp_event', 'post_status' => ['publish', 'future'], 'numberposts' => -1, 'posts_per_page' => -1, 'fields' => 'ids',
+		'orderby' => 'ID', 'order' => 'ASC', 'meta_query' => [['key' => 'sp_format', 'value' => ['league'], 'compare' => 'IN']], 'tax_query' => [
+			'relation' => 'AND', ['taxonomy' => 'sp_league', 'field' => 'term_id', 'terms' => [$league]], ['taxonomy' => 'sp_season', 'field' => 'term_id', 'terms' => [$season]]]]);
+
+	// W tabeli tylko drużyny, które mają mecz w tej lidze i sezonie (import NALF przypisuje drużynom wszystkie ligi; bez tego dostalibyśmy wiersze z 0 meczów)
+	$w_meczach = [];
+	foreach ($event_ids as $eid) foreach ((array) get_post_meta($eid, 'sp_team', false) as $t) if ((int) $t > 0) $w_meczach[(int) $t] = true;
+	$druzyny_tabeli = array_values(array_filter($team_ids, fn($t) => isset($w_meczach[$t])));
+	if (!$druzyny_tabeli) $druzyny_tabeli = $team_ids;      // liga bez żadnych meczów: wszystkie drużyny z termami
+
+	$ov = [];                 // id meczu => wyniki podstawiane zamiast natywnych (pusta tablica = mecz nie liczy się)
+	$ostrz = [];
+	$liczone = 0; $live = 0;
+	$mecze_liczone = [];      // [drużyna 1, drużyna 2, bramki 1, bramki 2] meczów, które realnie weszły do tabeli
+	$pary = [];
+	$nazwa_meczu = function ($id, $teams) {
+		$n = array_map(fn($t) => $t ? get_the_title($t) : '?', $teams);
+		return ($n[0] ?? '?') . ' - ' . ($n[1] ?? '?');
+	};
+	$dodaj = function ($typ, $id, $teams, $opis, $wplyw) use (&$ostrz, $nazwa_meczu) {
+		$ostrz[] = ['typ' => $typ, 'mecz_id' => $id, 'mecz' => $nazwa_meczu($id, $teams), 'opis' => $opis, 'wplyw' => $wplyw];
+	};
+	foreach ($event_ids as $id) {
+		$teams = array_values(array_map('intval', array_filter((array) get_post_meta($id, 'sp_team', false))));
+		$res = get_post_meta($id, 'sp_results', true);
+		$ma_wynik = bm_table_ma_wynik($res);
+		$stan = (string) get_post_meta($id, 'bm_state', true);
+		$flaga = (bool) get_post_meta($id, 'bm_zrodlo_brak', true);
+		$zywo = bm_table_live_score((string) get_post_meta($id, 'bm_live_score', true));
+		$rodzaj = ($stan === 'zakonczony' || ($stan === '' && $ma_wynik)) ? 'zakonczony' : ($stan === 'trwa' ? 'trwa' : 'nierozpoczety');
+		if (count($teams) >= 2 && $teams[0] > 0 && $teams[1] > 0) {
+			$pary[$teams[0] . '-' . $teams[1]][] = ['id' => $id, 'liczony' => false];
+			foreach (array_slice($teams, 0, 2) as $t) {
+				if (!in_array($t, $team_ids, true)) {
+					$dodaj('druzyna_spoza_ligi', $id, $teams, 'Drużyna „' . get_the_title($t) . '” nie należy do tej ligi i sezonu; SportsPress liczy ten mecz tylko dla drużyny z ligi.', 'liczony dla drużyny z ligi');
+				}
+			}
+		}
+		$liczy = false;
+		if ($rodzaj === 'zakonczony') {
+			if ($stan === 'zakonczony' && !$ma_wynik) {
+				$dodaj('zakonczony_bez_wyniku', $id, $teams, 'Mecz oznaczony jako zakończony nie ma wyniku w WP.', 'nie liczy się do tabeli');
+			} else {
+				$liczy = true;
+				if ($flaga) $dodaj('zniknal_ze_zrodla', $id, $teams, 'Mecz zakończony zniknął ze źródła albo został w nim odwołany (flaga bm_zrodlo_brak).', 'zostaje w tabeli');
+			}
+		} elseif ($rodzaj === 'nierozpoczety') {
+			if ($ma_wynik) {
+				$ov[$id] = [];
+				$dodaj('wynik_resztkowy', $id, $teams, 'Mecz nierozpoczęty ma wynik natywny (resztka po poprawce stanu).', 'wynik pominięty');
+			}
+		} else {          // trwa
+			if ($ma_wynik) {
+				$ov[$id] = [];
+				$dodaj('wynik_resztkowy', $id, $teams, 'Mecz trwający ma wynik natywny jak zakończony (resztka po poprawce stanu).', 'wynik pominięty');
+			}
+			if ($mode === 'live') {
+				if ($flaga) {
+					$ov[$id] = [];
+					$dodaj('zniknal_ze_zrodla', $id, $teams, 'Mecz niezakończony zniknął ze źródła albo został w nim odwołany (flaga bm_zrodlo_brak).', 'wyłączony z tabeli live');
+				} elseif ($zywo !== null && count($teams) >= 2 && $teams[0] > 0 && $teams[1] > 0) {
+					$ov[$id] = bm_table_wynik_z_zywo($teams, $zywo[0], $zywo[1]);
+					$liczy = true; $live++;
+				} else {
+					$ov[$id] = [];
+					$dodaj('trwa_bez_wyniku_na_zywo', $id, $teams, 'Mecz trwa, ale nie ma wyniku na żywo.', 'pominięty w tabeli live');
+				}
+			} else {
+				$ov[$id] = [];
+			}
+		}
+		if ($liczy && count($teams) >= 2) {
+			if ($rodzaj === 'trwa' && $zywo !== null) {
+				$mecze_liczone[] = [$teams[0], $teams[1], $zywo[0], $zywo[1]];
+			} elseif (is_array($res) && isset($res[$teams[0]]['goals'], $res[$teams[1]]['goals'])) {
+				$mecze_liczone[] = [$teams[0], $teams[1], (int) $res[$teams[0]]['goals'], (int) $res[$teams[1]]['goals']];
+			}
+		}
+		if ($liczy) { $liczone++; if (count($teams) >= 2 && isset($pary[$teams[0] . '-' . $teams[1]])) $pary[$teams[0] . '-' . $teams[1]][count($pary[$teams[0] . '-' . $teams[1]]) - 1]['liczony'] = true; }
+	}
+	foreach ($pary as $klucz => $lista) {
+		if (count($lista) < 2) continue;
+		$ids = array_column($lista, 'id');
+		$liczone_kopie = count(array_filter($lista, fn($x) => $x['liczony']));
+		[$a, $b] = array_map('intval', explode('-', $klucz));
+		$dodaj('duplikat_meczu', $ids[0], [$a, $b], 'Ta sama para gospodarz-gość występuje ' . count($lista) . ' razy (mecze ' . implode(', ', $ids) . ').',
+			$liczone_kopie >= 2 ? 'liczona wielokrotnie (' . $liczone_kopie . ' razy)' : 'liczony ' . $liczone_kopie . ' raz');
+	}
+
+	$engine = 'SP';
+	$klasa = 'SP_League_Table';
+	if (class_exists('SAH2H_League_Table') && get_page_by_path($criteria, OBJECT, 'sah2h_criteria')) {
+		$klasa = 'SAH2H_League_Table';
+		$engine = 'SAH2H';
+	} else {
+		$ostrz[] = ['typ' => 'konfiguracja', 'mecz_id' => 0, 'mecz' => '', 'opis' => 'Brak dodatku Advanced H2H albo kryteriów „' . $criteria . '”: użyto tabeli SportsPressa bez bezpośrednich spotkań przed różnicą bramek.', 'wplyw' => 'kolejność przy remisie może odbiegać od regulaminu'];
+	}
+
+	$f_meta = function ($v, $oid, $key, $single) use (&$ov, $criteria, $druzyny_tabeli) {
+		if ($oid == BM_TABELA_VID) {
+			if ($key === 'sp_team') return $druzyny_tabeli;       // wybór ręczny: lista drużyn z meczami (get_post_meta(..., false) zwraca listę wartości)
+			$map = ['sp_select' => 'manual', 'sp_orderby' => 'default', 'sp_order' => 'ASC', 'sp_event_status' => ['publish', 'future'], 'sp_date' => 0, 'sah2h_criteria' => $criteria];
+			return array_key_exists($key, $map) ? [$map[$key]] : $v;
+		}
+		if ($key === 'sp_results' && isset($ov[$oid])) return [$ov[$oid]];
+		return $v;
+	};
+	$f_terms = function ($terms, $pid, $tax) use ($lt, $st) {
+		return $pid == BM_TABELA_VID ? [$tax === 'sp_league' ? $lt : $st] : $terms;
+	};
+	add_filter('get_post_metadata', $f_meta, 10, 4);
+	add_filter('get_the_terms', $f_terms, 10, 3);
+	// get_the_terms() kończy się wcześnie, gdy get_post() nie znajdzie wpisu: wirtualny wpis tabeli trafia więc na czas żądania do pamięci podręcznej obiektów
+	wp_cache_set(BM_TABELA_VID, (object) ['ID' => BM_TABELA_VID, 'post_type' => 'sp_table', 'post_status' => 'publish', 'post_title' => '', 'filter' => 'raw'], 'posts');
+	try {
+		$tabela = new $klasa(new WP_Post((object) ['ID' => BM_TABELA_VID, 'post_type' => 'sp_table', 'post_status' => 'publish']));
+		if ($klasa === 'SAH2H_League_Table') $tabela->h2h_criteria = $criteria;
+		$dane = $tabela->data();
+	} finally {
+		remove_filter('get_post_metadata', $f_meta, 10);
+		remove_filter('get_the_terms', $f_terms, 10);
+		wp_cache_delete(BM_TABELA_VID, 'posts');
+	}
+	unset($dane[0]);                 // wiersz 0 to etykiety kolumn SportsPressa
+	$kolumny = [];
+	$tytuly = [];
+	foreach (get_posts(['post_type' => 'sp_column', 'numberposts' => -1, 'posts_per_page' => -1, 'orderby' => 'menu_order', 'order' => 'ASC', 'post_status' => 'publish']) as $c) $tytuly[$c->post_name] = $c->post_title;
+	foreach (BM_TABELA_KOLUMNY as $klucz => $etykieta) {
+		if (isset($tytuly[$klucz])) $kolumny[] = ['klucz' => $klucz, 'nazwa' => $tytuly[$klucz], 'etykieta' => $etykieta];
+	}
+	$wiersze = [];
+	$poz = 0;
+	foreach ($dane as $team_id => $r) {
+		$poz++;
+		$tytul = get_the_title($team_id);
+		$w = ['pos' => $poz, 'team_id' => (int) $team_id, 'name' => $tytul,
+			'name14' => (string) (get_post_meta($team_id, 'bm_name14', true) ?: mb_substr($tytul, 0, 14)),
+			'short' => (string) (get_post_meta($team_id, 'bm_short_name', true) ?: mb_strtoupper(mb_substr($tytul, 0, 3)))];
+		foreach ($kolumny as $k) $w[$k['klucz']] = isset($r[$k['klucz']]) && is_numeric($r[$k['klucz']]) ? (int) $r[$k['klucz']] : 0;
+		$wiersze[] = $w;
+	}
+	// Pozycje (regulamin NALF 5.11): kolejne numery; WSPÓLNA pozycja tylko przy pełnym remisie we wszystkich kryteriach a-d, wtedy flaga „wymaga losowania” (e).
+	// Klucz remisu drużyn o równych punktach (a: punkty z meczów bezpośrednich między nimi, b: różnica bramek w tych meczach, c: różnica bramek ogółem, d: bramki strzelone ogółem);
+	// mała tabela liczona dla całej grupy o równych punktach, jak w kryteriach SAH2H (jeden przebieg).
+	$wg_pkt = [];
+	foreach ($wiersze as $i => $w) $wg_pkt[$w['pts']][] = $i;
+	$klucz = [];
+	foreach ($wg_pkt as $idx) {
+		if (count($idx) < 2) continue;
+		$mini = [];
+		foreach ($idx as $i) $mini[$wiersze[$i]['team_id']] = [0, 0];
+		foreach ($mecze_liczone as [$a, $b, $ga, $gb]) {
+			if ($a === $b || !isset($mini[$a], $mini[$b])) continue;
+			$mini[$a][0] += $ga > $gb ? 3 : ($ga === $gb ? 1 : 0);
+			$mini[$b][0] += $gb > $ga ? 3 : ($ga === $gb ? 1 : 0);
+			$mini[$a][1] += $ga - $gb;
+			$mini[$b][1] += $gb - $ga;
+		}
+		foreach ($idx as $i) $klucz[$wiersze[$i]['team_id']] = [$mini[$wiersze[$i]['team_id']][0], $mini[$wiersze[$i]['team_id']][1], $wiersze[$i]['gd'], $wiersze[$i]['f']];
+	}
+	foreach ($wiersze as $i => &$w) {
+		$w['pelny_remis'] = false;
+		$poprzedni = $i > 0 ? $wiersze[$i - 1] : null;
+		if ($poprzedni !== null && $w['pts'] === $poprzedni['pts'] && isset($klucz[$w['team_id']], $klucz[$poprzedni['team_id']]) && $klucz[$w['team_id']] === $klucz[$poprzedni['team_id']]) {
+			$w['pos'] = $poprzedni['pos'];
+		} else {
+			$w['pos'] = $i + 1;
+		}
+	}
+	unset($w);
+	$po_pozycji = [];
+	foreach ($wiersze as $i => $w) $po_pozycji[$w['pos']][] = $i;
+	$potrzeba_losowania = false;
+	foreach ($po_pozycji as $poz => $idx) {
+		if (count($idx) < 2 || $wiersze[$idx[0]]['p'] === 0) continue;       // drużyny bez rozegranego meczu (początek sezonu) nie wymagają losowania
+		$potrzeba_losowania = true;
+		foreach ($idx as $i) $wiersze[$i]['pelny_remis'] = true;
+		$ostrz[] = ['typ' => 'pelny_remis', 'mecz_id' => 0, 'mecz' => '', 'opis' => 'Pełny remis w kryteriach a-d (punkty, bilans bezpośredni, różnica bramek ogółem, bramki strzelone): ' . implode(', ', array_map(fn($i) => $wiersze[$i]['name'], $idx)) . '; wymaga losowania (e).', 'wplyw' => 'wspólna pozycja ' . $poz];
+	}
+	$interpretacja = [
+		'wariant' => 'do potwierdzenia z organizatorem (regulamin 5.11-5.12 nie rozstrzyga)',
+		'a_bilans' => 'punkty z meczów bezpośrednich między zainteresowanymi zespołami (3/1/0), bez podziału gospodarz/gość, wszystkie takie mecze w sezonie',
+		'b_stosunek' => 'różnica bramek (nie iloraz) w meczach bezpośrednich w całym sezonie',
+		'c_d' => 'różnica bramek i bramki strzelone we wszystkich meczach ligowych tej ligi i sezonu',
+		'mala_tabela_5_12' => 'jeden przebieg małej tabeli dla całej grupy o równych punktach (bez ponownego liczenia dla podgrup); w małej tabeli kolejno punkty i różnica bramek z meczów bezpośrednich',
+		'pozycje' => 'kolejne numery; wspólna pozycja (numeracja 1,2,2,4) tylko przy pełnym remisie a-d, z flagą pelny_remis',
+	];
+	return ['rows' => $wiersze, 'columns' => $kolumny, 'warnings' => $ostrz, 'matches_counted' => $liczone, 'live_matches' => $live, 'engine' => $engine,
+		'needs_draw' => $potrzeba_losowania, 'interpretacja' => $interpretacja];
+}
+
+function bm_table_endpoint($req) {
+	$mode = (string) ($req['mode'] ?: 'final');
+	if (!in_array($mode, ['final', 'live'], true)) return new WP_Error('bm_bad_mode', 'mode musi być final albo live', ['status' => 400]);
+	$league = (int) $req['league'];
+	$season = (int) $req['season'];
+	if ($league < 1 || $season < 1) return new WP_Error('bm_bad_params', 'Wymagane: league i season (identyfikatory termów)', ['status' => 400]);
+	$criteria = (string) ($req['criteria'] ?: get_option('bm_table_criteria', 't1-nalf'));
+	$t0 = microtime(true);
+	$w = bm_table_compute($league, $season, $mode, sanitize_title($criteria));
+	if (is_wp_error($w)) return $w;
+	return ['ok' => true, 'mode' => $mode, 'league' => $league, 'season' => $season, 'criteria' => sanitize_title($criteria), 'computed_at' => gmdate('c'),
+		'ms' => (int) round((microtime(true) - $t0) * 1000)] + $w;
+}
+
 add_action('rest_api_init', function () {
+	register_rest_route('bm/v1', '/table', [
+		'methods' => 'GET',
+		'permission_callback' => fn() => current_user_can('edit_posts'),
+		'callback' => 'bm_table_endpoint',
+	]);
 	register_rest_route('bm/v1', '/event/(?P<id>\d+)/source-state', [
 		'methods' => 'POST',
 		'permission_callback' => fn($req) => current_user_can('edit_post', (int) $req['id']),
